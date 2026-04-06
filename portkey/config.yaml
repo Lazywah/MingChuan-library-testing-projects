@@ -1,0 +1,86 @@
+# ==============================================================================
+# ZH: AI 訓練平台 - Portkey LLM Gateway 設定
+# EN: AI Training Platform - Portkey LLM Gateway Configuration
+#
+# ZH: 用途：統一管理多個雲端 LLM API Provider 的路由與金鑰
+# EN: Purpose: Unified routing and key management for multiple cloud LLM APIs
+#
+# ZH: 支援的 Provider：
+# EN: Supported Providers:
+#   - Anthropic (Claude)
+#   - OpenAI (ChatGPT)
+#   - Google AI (Gemini)
+#   - Gamma
+#   - Ollama (本地備用 | local fallback)
+#
+# ZH: 流程：Open WebUI → Portkey → 雲端 API / Ollama
+# EN: Flow: Open WebUI → Portkey → Cloud API / Ollama
+# ==============================================================================
+
+version: "1"
+
+# ZH: 上游 Provider 定義 | EN: Upstream provider definitions
+providers:
+  # ------------------------------------------------------------------
+  # ZH: Anthropic - Claude 系列模型
+  # EN: Anthropic - Claude model family
+  # ------------------------------------------------------------------
+  - name: anthropic
+    type: anthropic
+    api_key: "${ANTHROPIC_API_KEY}"
+    retry:
+      attempts: 3
+      backoff_factor: 2
+
+  # ------------------------------------------------------------------
+  # ZH: OpenAI - ChatGPT 系列模型
+  # EN: OpenAI - ChatGPT model family
+  # ------------------------------------------------------------------
+  - name: openai
+    type: openai
+    api_key: "${OPENAI_API_KEY}"
+    retry:
+      attempts: 3
+      backoff_factor: 2
+
+  # ------------------------------------------------------------------
+  # ZH: Google AI - Gemini 系列模型
+  # EN: Google AI - Gemini model family
+  # ------------------------------------------------------------------
+  - name: google
+    type: google
+    api_key: "${GOOGLE_API_KEY}"
+    retry:
+      attempts: 3
+      backoff_factor: 2
+
+  # ------------------------------------------------------------------
+  # ZH: Ollama - 本地推理引擎 (備用)
+  # EN: Ollama - Local inference engine (fallback)
+  # ------------------------------------------------------------------
+  - name: ollama-local
+    type: ollama
+    base_url: http://ollama:11434
+    retry:
+      attempts: 2
+      backoff_factor: 1
+
+# ZH: 路由規則 | EN: Routing rules
+routes:
+  # ZH: 預設路由：轉發到 Ollama 本地推理
+  # EN: Default route: forward to local Ollama inference
+  - name: default
+    path: "/*"
+    provider: ollama-local
+
+# ZH: 監控設定 | EN: Monitoring configuration
+monitoring:
+  enabled: true
+  log_level: info
+  metrics:
+    enabled: true
+    port: 9090
+
+# ZH: Token 計數 (用量追蹤) | EN: Token counting (usage tracking)
+token_counting:
+  enabled: true

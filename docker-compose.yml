@@ -1,0 +1,188 @@
+# ==============================================================================
+# ZH: AI 訓練平台 - Docker Compose 服務編排
+# EN: AI Training Platform - Docker Compose Service Orchestration
+#
+# ZH: 用途：定義所有容器的啟動設定、網路、Volume 掛載
+# EN: Purpose: Define all container configs, networking, and volume mounts
+#
+# ZH: 容器清單 (5 個)：
+# EN: Container list (5):
+#   1. nginx         - 反向代理 | Reverse proxy
+#   2. job-scheduler - Auth + Jobs + 排程 | Auth + Jobs + Scheduler
+#   3. open-webui    - AI 聊天前端 | AI chat frontend
+#   4. portkey       - LLM API Gateway
+#   5. ollama        - 本地推理引擎 | Local inference engine
+#
+# ZH: 注意：正式部署 Ubuntu 時，取消 ollama 的 GPU 相關註解
+# EN: Note: For Ubuntu production, uncomment ollama GPU settings
+# ==============================================================================
+
+services:
+  # ============================================================================
+  # ZH: Nginx - 反向代理 (統一入口)
+  # EN: Nginx - Reverse Proxy (single entry point)
+  # ZH: 流程：接收所有 HTTP 請求 → 依路徑轉發到對應服務
+  # EN: Flow: Receive all HTTP requests → route by path to services
+  # ============================================================================
+  nginx:
+    image: nginx:alpine
+    container_name: ai-platform-nginx
+    ports:
+      - "80:80"
+    volumes:
+      - ./infrastructure/nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      job-scheduler:
+        condition: service_healthy
+      open-webui:
+        condition: service_started
+    networks:
+      - ai-platform-net
+    restart: unless-stopped
+
+  # ============================================================================
+  # ZH: Job Scheduler - 主服務 (Auth + Jobs + 排程)
+  # EN: Job Scheduler - Main service (Auth + Jobs + Scheduler)
+  # ZH: 流程：
+  #   1. 啟動時建立 SQLite 表
+  #   2. 啟動背景排程迴圈 (每 10 秒檢查佇列)
+  #   3. 提供 Auth API + Jobs API
+  # EN: Flow:
+  #   1. Create SQLite tables on startup
+  #   2. Start background scheduler loop (check queue every 10s)
+  #   3. Serve Auth API + Jobs API
+  # ============================================================================
+  job-scheduler:
+    build:
+      context: ./job-scheduler
+      dockerfile: Dockerfile
+    container_name: ai-platform-scheduler
+    ports:
+      - "8002:8000"
+    environment:
+      # ZH: 資料庫 | EN: Database
+      DATABASE_PATH: ${DATABASE_PATH:-/data/ai_platform.db}
+      # ZH: JWT 認證 | EN: JWT Authentication
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY}
+      JWT_ALGORITHM: ${JWT_ALGORITHM:-HS256}
+      ACCESS_TOKEN_EXPIRE_MINUTES: ${ACCESS_TOKEN_EXPIRE_MINUTES:-120}
+      # ZH: Token 額度 | EN: Token quota
+      DEFAULT_MONTHLY_TOKEN_LIMIT: ${DEFAULT_MONTHLY_TOKEN_LIMIT:-5000000}
+      TOKEN_RESET_DAY: ${TOKEN_RESET_DAY:-1}
+      # ZH: GPU 設定 | EN: GPU settings
+      GPU_MOCK_MODE: ${GPU_MOCK_MODE:-true}
+      GPU_SERVER_1_HOST: ${GPU_SERVER_1_HOST:-192.168.1.100}
+      GPU_SERVER_2_HOST: ${GPU_SERVER_2_HOST:-192.168.1.101}
+      GPU_SERVER_USERNAME: ${GPU_SERVER_USERNAME:-gpu_admin}
+      SSH_KEY_PATH: ${SSH_KEY_PATH:-/root/.ssh/id_rsa}
+      # ZH: 排程器 | EN: Scheduler
+      MAX_CONCURRENT_JOBS: ${MAX_CONCURRENT_JOBS:-4}
+      JOB_CHECK_INTERVAL: ${JOB_CHECK_INTERVAL:-10}
+      # ZH: 日誌 | EN: Logging
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+    volumes:
+      # ZH: SQLite 資料庫共享目錄 | EN: SQLite database shared directory
+      - ./data:/data:rw
+      # ZH: 開發環境：掛載程式碼以支援熱更新 (正式環境移除)
+      # EN: Dev: mount code for hot-reload (remove in production)
+      - ./job-scheduler/app:/app/app:ro
+    networks:
+      - ai-platform-net
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  # ============================================================================
+  # ZH: Open WebUI - AI 聊天前端
+  # EN: Open WebUI - AI Chat Frontend
+  # ZH: 流程：使用者瀏覽器 → Open WebUI → Portkey → 雲端 LLM
+  # EN: Flow: User browser → Open WebUI → Portkey → Cloud LLM
+  # ============================================================================
+  open-webui:
+    image: ghcr.io/open-webui/open-webui:main
+    container_name: ai-platform-webui
+    ports:
+      - "3000:8080"
+    environment:
+      # ZH: 透過 Portkey Gateway 連接 LLM | EN: Connect LLM via Portkey
+      OLLAMA_API_BASE_URL: http://portkey:8000
+      WEBUI_AUTH: "True"
+      WEBUI_SECRET_KEY: ${WEBUI_SECRET_KEY}
+      ENABLE_COMMUNITY_SHARING: "False"
+    volumes:
+      - open-webui-data:/app/backend/data
+    depends_on:
+      - portkey
+    networks:
+      - ai-platform-net
+    restart: unless-stopped
+
+  # ============================================================================
+  # ZH: Portkey - LLM API Gateway (多模型路由)
+  # EN: Portkey - LLM API Gateway (multi-model routing)
+  # ZH: 流程：接收 Open WebUI 請求 → 路由到 Claude/Gemini/ChatGPT/Ollama
+  # EN: Flow: Receive Open WebUI requests → route to Claude/Gemini/ChatGPT/Ollama
+  # ZH: 注意：此容器需要外網連接 (連接雲端 API)
+  # EN: Note: This container requires internet access (cloud API connection)
+  # ============================================================================
+  portkey:
+    image: portkeyai/gateway:latest
+    container_name: ai-platform-portkey
+    ports:
+      - "8000:8000"
+    environment:
+      PORT: "8000"
+      LOG_LEVEL: info
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-placeholder}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-placeholder}
+      GOOGLE_API_KEY: ${GOOGLE_API_KEY:-placeholder}
+      GAMMA_API_KEY: ${GAMMA_API_KEY:-placeholder}
+    volumes:
+      - ./portkey/config.yaml:/app/config.yaml:ro
+    depends_on:
+      - ollama
+    networks:
+      - ai-platform-net
+    restart: unless-stopped
+
+  # ============================================================================
+  # ZH: Ollama - 本地 LLM 推理引擎
+  # EN: Ollama - Local LLM Inference Engine
+  # ZH: 流程：Portkey 將請求轉發至此 → 本地模型推理 → 回傳結果
+  # EN: Flow: Portkey forwards requests → local model inference → return result
+  # ZH: 用途：免費本地推理備用方案，不耗用雲端 API 額度
+  # EN: Purpose: Free local inference fallback, no cloud API quota consumed
+  # ============================================================================
+  ollama:
+    image: ollama/ollama:latest
+    container_name: ai-platform-ollama
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama-data:/root/.ollama
+    networks:
+      - ai-platform-net
+    restart: unless-stopped
+    # ZH: 正式部署 (Ubuntu + NVIDIA GPU) 時取消以下註解
+    # EN: Uncomment below for production (Ubuntu + NVIDIA GPU)
+    # runtime: nvidia
+    # environment:
+    #   - NVIDIA_VISIBLE_DEVICES=all
+
+# ==============================================================================
+# ZH: 網路設定 | EN: Network configuration
+# ==============================================================================
+networks:
+  ai-platform-net:
+    driver: bridge
+
+# ==============================================================================
+# ZH: 持久化 Volume | EN: Persistent volumes
+# ==============================================================================
+volumes:
+  open-webui-data:
+  ollama-data:

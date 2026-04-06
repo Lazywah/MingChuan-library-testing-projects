@@ -1,0 +1,39 @@
+# ==============================================================================
+# ZH: AI 訓練平台 - Git 忽略規則
+# EN: AI Training Platform - Git Ignore Rules
+# ==============================================================================
+
+# ZH: 環境變數 (含敏感資訊) | EN: Environment variables (contains secrets)
+.env
+
+# ZH: SQLite 資料庫檔案 | EN: SQLite database files
+data/*.db
+data/*.db-wal
+data/*.db-shm
+
+# ZH: Python 快取 | EN: Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyo
+
+# ZH: 虛擬環境 | EN: Virtual environments
+.venv/
+venv/
+env/
+
+# ZH: IDE 設定 | EN: IDE settings
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# ZH: 作業系統產生的檔案 | EN: OS generated files
+.DS_Store
+Thumbs.db
+
+# ZH: Docker 產生的暫存 | EN: Docker generated temp files
+*.log
+
+# ZH: 備份檔案 | EN: Backup files
+backups/

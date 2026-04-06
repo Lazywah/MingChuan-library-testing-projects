@@ -1,0 +1,29 @@
+# ==============================================================================
+# ZH: Job Scheduler 服務 - Python 依賴清單
+# EN: Job Scheduler Service - Python Dependencies
+# ==============================================================================
+
+# ZH: Web 框架 | EN: Web framework
+fastapi==0.104.1
+uvicorn[standard]==0.24.0
+
+# ZH: 資料驗證 | EN: Data validation
+pydantic==2.5.0
+pydantic-settings==2.1.0
+email-validator==2.1.0
+
+# ZH: 資料庫 ORM | EN: Database ORM
+sqlalchemy==2.0.23
+aiosqlite==0.19.0
+
+# ZH: SSH 客戶端 (GPU 伺服器連線) | EN: SSH client (GPU server connection)
+paramiko==3.4.0
+
+# ZH: 認證相關 | EN: Authentication
+python-jose[cryptography]==3.3.0
+passlib[bcrypt]==1.7.4
+python-multipart==0.0.6
+bcrypt==4.1.2
+
+# ZH: 工具 | EN: Utilities
+python-dotenv==1.0.0
