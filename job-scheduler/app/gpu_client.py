@@ -104,7 +104,9 @@ class MockGPUClient(BaseGPUClient):
     """
 
     def __init__(self, host: str, **kwargs):
-        super().__init__(host, **kwargs)
+        # Only pass known arguments to super().__init__
+        safe_kwargs = {k: v for k, v in kwargs.items() if k in ["port", "username"]}
+        super().__init__(host, **safe_kwargs)
         self._progress = 0.0
 
     async def connect(self) -> bool:
