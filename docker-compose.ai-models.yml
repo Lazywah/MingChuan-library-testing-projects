@@ -1,0 +1,79 @@
+# ==============================================================================
+# ZH: AI 訓練平台 - AI 模塊編排 (符合架構設計: 註1 模組化提供替換彈性)
+# EN: AI Training Platform - AI Module Orchestration (Note 1 Modularity)
+#
+# ZH: 包含所有使用者在瀏覽器終端內會接觸到的 AI 推理服務
+# EN: Contains all AI inference services used by users in browser terminal
+#
+# ZH: 容器：
+#   1. open-webui   - AI 聊天前端介面
+#   2. portkey      - LLM API / 模型請求分流網關
+#   3. ollama       - 本地備援模型推理引擎
+# ==============================================================================
+
+services:
+  open-webui:
+    image: ghcr.io/open-webui/open-webui:main
+    container_name: ai-platform-webui
+    ports:
+      - "3000:8080"
+    environment:
+      # ZH: 透過 Portkey Gateway 連接 LLM | EN: Connect LLM via Portkey
+      OLLAMA_API_BASE_URL: http://portkey:8000
+      WEBUI_AUTH: "True"
+      WEBUI_SECRET_KEY: ${WEBUI_SECRET_KEY:-defaul-secret-key-please-change}
+      ENABLE_COMMUNITY_SHARING: "False"
+    volumes:
+      - open-webui-data:/app/backend/data
+    depends_on:
+      - portkey
+    networks:
+      - ai-platform-net
+    restart: unless-stopped
+
+  portkey:
+    image: portkeyai/gateway:latest
+    container_name: ai-platform-portkey
+    ports:
+      - "8000:8000"
+    environment:
+      PORT: "8000"
+      LOG_LEVEL: info
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-placeholder}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-placeholder}
+      GOOGLE_API_KEY: ${GOOGLE_API_KEY:-placeholder}
+      GAMMA_API_KEY: ${GAMMA_API_KEY:-placeholder}
+    volumes:
+      - ./portkey/config.yaml:/app/config.yaml:ro
+    depends_on:
+      - ollama
+    networks:
+      - ai-platform-net
+    restart: unless-stopped
+
+  ollama:
+    image: ollama/ollama:latest
+    container_name: ai-platform-ollama
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama-data:/root/.ollama
+    networks:
+      - ai-platform-net
+    restart: unless-stopped
+    # ZH: 正式部署 (Ubuntu + NVIDIA GPU) 時取消以下註解
+    # EN: Uncomment below for production (Ubuntu + NVIDIA GPU)
+    # runtime: nvidia
+    # environment:
+    #   - NVIDIA_VISIBLE_DEVICES=all
+
+    # ==============================================================================
+networks:
+  ai-platform-net:
+    # ZH: 強制使用外部既有的網路，確保與核心層級相通 
+    # EN: Force external network to connect with core layer
+    external: true
+
+volumes:
+  open-webui-data:
+  ollama-data:

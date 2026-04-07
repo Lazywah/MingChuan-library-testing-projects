@@ -1,0 +1,39 @@
+# ==============================================================================
+# ZH: 資源層 (High-End GPU Servers) 排程政策與硬體組態
+# EN: Resource Layer Scheduling Policy & Hardware Configuration
+# 
+# ZH: 依據架構圖設計，將資源層的配置獨立拆分以便於維護與擴展
+# EN: According to the architecture diagram, resource config is separated for easier maintenance
+# ==============================================================================
+
+# ZH: 佇列排程參數 | EN: Queue Scheduling Parameters
+scheduling:
+  max_concurrent_jobs: 4              # ZH: 整個叢集最多同時運行的任務數
+  job_check_interval_seconds: 10      # ZH: 背景排程輪詢間隔 (秒)
+  allow_students: true                # ZH: 學生是否開放申請排程
+  max_epochs_per_job: 1000            # ZH: 每筆任務最高迭代次數
+  max_batch_size: 512                 # ZH: 最高批次大小限制
+
+# ZH: 本地開發與除錯模式開關 (非 ssh 直連) | EN: Local mock mode toggle
+mock_mode: true
+
+# ZH: 資源層 GPU 運算節點池 | EN: Resource Layer GPU Compute Node Pool
+# ZH: 架構圖硬體規格：AMD EPYC Genoa + 256GB ECC + NVIDIA RTX 5090 * 2
+nodes:
+  - id: "gpu-node-01"
+    host: "192.168.1.100"
+    username: "gpu_admin"
+    ssh_key_path: "/root/.ssh/id_rsa"
+    hardware:
+      gpu: "NVIDIA RTX 5090 (32GB) x2"
+      memory_gb: 256
+      cpu_cores: 32
+
+  - id: "gpu-node-02"
+    host: "192.168.1.101"
+    username: "gpu_admin"
+    ssh_key_path: "/root/.ssh/id_rsa"
+    hardware:
+      gpu: "NVIDIA RTX 5090 (32GB) x2"
+      memory_gb: 256
+      cpu_cores: 32

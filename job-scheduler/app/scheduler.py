@@ -9,27 +9,16 @@ ZH: 流程：
     ┌─────────────────────────────────────────────────────┐
     │ 排程器背景迴圈 (每 JOB_CHECK_INTERVAL 秒)            │
     │                                                       │
-    │ 1. 查詢正在執行的任務數量 (running_count)              │
-    │ 2. 若 running_count < MAX_CONCURRENT_JOBS (4)        │
+    │ 1. 從 SCHEDULER_POLICY 取出 MAX_CONCURRENT_JOBS       │
+    │ 2. 若 running_count < MAX_CONCURRENT_JOBS            │
     │ 3. 取出最高優先級的 pending 任務                       │
     │ 4. 依序嘗試分配 GPU：                                 │
-    │    a. 連線 GPU 伺服器                                 │
+    │    a. 連線 GPU 伺服器 (讀取 YAML policy)              │
     │    b. 查詢可用 GPU                                    │
     │    c. 分配成功 → status=running → 啟動訓練            │
     │    d. 分配失敗 → status=queued (等待下次檢查)          │
     │ 5. 等待 interval 秒後重複                             │
     └─────────────────────────────────────────────────────┘
-
-ZH: 模組化設計：
-    - 排程邏輯完全獨立，不依賴 HTTP 路由
-    - 透過 start_scheduler() / stop_scheduler() 控制生命週期
-    - GPU Client 透過工廠函式注入，可替換為任何後端
-    - 移除此模組不會影響 Auth 和 CRUD 功能
-EN: Modular design:
-    - Scheduling logic is fully independent, not tied to HTTP routes
-    - Lifecycle controlled via start_scheduler() / stop_scheduler()
-    - GPU Client injected via factory function, swappable to any backend
-    - Removing this module won't affect Auth and CRUD features
 ==============================================================================
 """
 
@@ -37,7 +26,7 @@ import asyncio
 import logging
 from typing import Optional
 
-from .config import settings
+from .config import settings, SCHEDULER_POLICY
 from .database import SessionLocal
 from . import crud
 from .gpu_client import get_gpu_client, BaseGPUClient
@@ -59,31 +48,29 @@ async def _process_single_job(job, db):
     gpu_client: Optional[BaseGPUClient] = None
 
     try:
-        # ZH: Step 1: 嘗試連線 GPU 伺服器 | EN: Step 1: Try connecting to GPU server
-        servers = [
-            (settings.GPU_SERVER_1_HOST, "GPU-Server-1"),
-            (settings.GPU_SERVER_2_HOST, "GPU-Server-2"),
-        ]
+        # ZH: Step 1: 從 Policy 讀取 GPU 伺服器池 | EN: Step 1: Read GPU nodes from Policy
+        nodes = SCHEDULER_POLICY.get("nodes", [])
+        mock_mode = SCHEDULER_POLICY.get("mock_mode", True)
 
         assigned_server = None
         assigned_gpu = None
 
-        for host, name in servers:
+        for node in nodes:
             gpu_client = get_gpu_client(
-                host=host,
-                mock_mode=settings.GPU_MOCK_MODE,
-                username=settings.GPU_SERVER_USERNAME,
-                key_path=settings.SSH_KEY_PATH
+                host=node.get("host"),
+                mock_mode=mock_mode,
+                username=node.get("username", "gpu_admin"),
+                key_path=node.get("ssh_key_path", "/root/.ssh/id_rsa")
             )
 
             if await gpu_client.connect():
                 available = await gpu_client.get_available_gpus()
                 if available:
-                    assigned_server = name
+                    assigned_server = node.get("id", "Unknown-Node")
                     assigned_gpu = available[0]
                     logger.info(
-                        f"ZH: 任務 {job.id[:8]} 分配到 {name} GPU-{assigned_gpu} | "
-                        f"EN: Job {job.id[:8]} assigned to {name} GPU-{assigned_gpu}"
+                        f"ZH: 任務 {job.id[:8]} 分配到 {assigned_server} GPU-{assigned_gpu} | "
+                        f"EN: Job {job.id[:8]} assigned to {assigned_server} GPU-{assigned_gpu}"
                     )
                     break
                 else:
@@ -156,8 +143,13 @@ async def _scheduler_loop():
                 # ZH: 查詢正在執行的任務數 | EN: Get running job count
                 running_count = crud.get_running_jobs_count(db)
 
-                # ZH: 若有空閒位置，處理待處理任務 | EN: If slots available, process pending jobs
-                slots_available = settings.MAX_CONCURRENT_JOBS - running_count
+                # ZH: 動態取得政策設定的最大同時任務數
+                # EN: Dynamically get max concurrent jobs from policy
+                sched_config = SCHEDULER_POLICY.get("scheduling", {})
+                max_jobs = sched_config.get("max_concurrent_jobs", 4)
+                interval = sched_config.get("job_check_interval_seconds", 10)
+
+                slots_available = max_jobs - running_count
 
                 if slots_available > 0:
                     pending_jobs = crud.get_pending_jobs(db)
@@ -181,43 +173,26 @@ async def _scheduler_loop():
             logger.error(f"ZH: 排程器迴圈錯誤: {e} | EN: Scheduler loop error: {e}")
 
         # ZH: 等待下次檢查 | EN: Wait for next check
-        await asyncio.sleep(settings.JOB_CHECK_INTERVAL)
+        sched_config = SCHEDULER_POLICY.get("scheduling", {})
+        interval = sched_config.get("job_check_interval_seconds", 10)
+        await asyncio.sleep(interval)
 
     logger.info("ZH: 排程器已停止 | EN: Scheduler stopped")
 
 
 # ==============================================================================
-# ZH: 排程器生命週期控制 (積木式 - 可在 main.py 中啟用/停用)
-# EN: Scheduler lifecycle control (building-block - enable/disable in main.py)
+# ZH: 排程器生命週期控制
+# EN: Scheduler lifecycle control
 # ==============================================================================
 
 async def start_scheduler():
-    """
-    ZH: 啟動排程器背景任務
-    EN: Start scheduler background task
-
-    ZH: 在 main.py 的 @app.on_event("startup") 中呼叫
-    EN: Called in main.py's @app.on_event("startup")
-    """
     global _scheduler_task, _scheduler_running
     _scheduler_running = True
     _scheduler_task = asyncio.create_task(_scheduler_loop())
-    logger.info(
-        f"ZH: 排程器已啟動 (間隔={settings.JOB_CHECK_INTERVAL}秒, "
-        f"最大並發={settings.MAX_CONCURRENT_JOBS}) | "
-        f"EN: Scheduler started (interval={settings.JOB_CHECK_INTERVAL}s, "
-        f"max_concurrent={settings.MAX_CONCURRENT_JOBS})"
-    )
+    logger.info(f"ZH: 排程器背景工作已啟動 | EN: Scheduler background task started")
 
 
 async def stop_scheduler():
-    """
-    ZH: 停止排程器背景任務
-    EN: Stop scheduler background task
-
-    ZH: 在 main.py 的 @app.on_event("shutdown") 中呼叫
-    EN: Called in main.py's @app.on_event("shutdown")
-    """
     global _scheduler_task, _scheduler_running
     _scheduler_running = False
     if _scheduler_task:
