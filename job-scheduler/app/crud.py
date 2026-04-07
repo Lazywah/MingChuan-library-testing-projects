@@ -356,3 +356,12 @@ def _calculate_next_reset_date() -> datetime:
         else:
             return now.replace(month=now.month + 1, day=reset_day,
                              hour=0, minute=0, second=0, microsecond=0)
+# ==============================================================================
+# ZH: 聊天紀錄 CRUD | EN: Chat History CRUD
+# ==============================================================================
+
+def create_chat_history(db: Session, chat: models.ChatHistory) -> models.ChatHistory:
+    """ZH: 建立單筆對話紀錄 | EN: Create a single chat history record"""
+    db.add(chat)
+    # ZH: 注意：此處不呼叫 commit()，由呼叫者控制事務 | EN: Caller handles commit
+    return chat

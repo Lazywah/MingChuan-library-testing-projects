@@ -140,3 +140,29 @@ class JobCancelResponse(BaseModel):
     """ZH: 任務取消回應 | EN: Job cancel response"""
     job_id: str
     status: str                                      # ZH: 取消後狀態 | EN: Status after cancel
+
+
+# ==============================================================================
+# ZH: 聊天相關 Schema | EN: Chat Schemas
+# ==============================================================================
+
+class ChatMessage(BaseModel):
+    """ZH: 單筆對話訊息 | EN: Single chat message"""
+    role: str                                        # ZH: user / assistant
+    content: str                                     # ZH: 訊息內容 | EN: Message content
+
+
+class ChatRequest(BaseModel):
+    """ZH: 聊天請求 | EN: Chat request"""
+    model_id: str                                    # ZH: 模型識別碼 (gemini-1.5, llama3)
+    messages: List[ChatMessage]                      # ZH: 對話歷史 | EN: Message history
+    stream: Optional[bool] = True                    # ZH: 是否串流 | EN: Request streaming
+
+
+class ChatHistoryResponse(BaseModel):
+    """ZH: 歷史對話紀錄回應 | EN: Chat history response"""
+    session_id: str
+    messages: List[ChatMessage]
+
+    class Config:
+        from_attributes = True

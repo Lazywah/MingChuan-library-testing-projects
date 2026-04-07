@@ -140,6 +140,10 @@ app.include_router(auth.router, prefix="/api/v1/auth")
 # ZH: Module 5 路由：訓練任務管理 | EN: Module 5 routes: Training job management
 app.include_router(jobs.router, prefix="/api/v1/jobs")
 
+# ZH: 新增聊天助理路由 | EN: Chat assistant routes
+from .routers import chat
+app.include_router(chat.router, prefix="/api/v1/chat")
+
 
 # ==============================================================================
 # ZH: 健康檢查端點 | EN: Health check endpoint

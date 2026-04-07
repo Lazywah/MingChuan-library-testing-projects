@@ -4,6 +4,7 @@
 const API_BASE = '/api/v1';
 let authToken = localStorage.getItem('ai_hud_token') || null;
 let pollInterval = null;
+let chatMessages = []; // ZH: 記憶體內對話歷史 | EN: In-memory chat history
 
 // ZH: i18n 翻譯字典 | EN: i18n Translation Dictionary
 const TRANSLATIONS = {
@@ -12,9 +13,13 @@ const TRANSLATIONS = {
         label_username: "使用者名稱",
         label_password: "密碼",
         btn_login: "傳送授權",
+        // 導覽
+        nav_dashboard: "儀表板",
+        nav_assistant: "AI 助手",
+        // 儀表板
         token_overview: "代幣資源概況",
         token_used: "已使用",
-        token_limit: "總管額",
+        token_limit: "總配額",
         token_reset: "重置日期",
         job_compose: "建立新任務",
         label_job_name: "任務名稱",
@@ -28,6 +33,13 @@ const TRANSLATIONS = {
         btn_dispatch: "派發任務",
         pipeline_active: "運行管線 / 佇列",
         msg_no_signal: "無訊號 / 佇列空閒",
+        // AI 助手
+        chat_config: "助手設定",
+        label_ai_model: "選擇 AI 模型",
+        chat_welcome: "哈囉！我是 AI 助手，今天有什麼我可以幫您的嗎？",
+        btn_clear_chat: "清除對話",
+        placeholder_chat: "輸入訊息...",
+        // 提示
         toast_auth_ok: "連線建立成功",
         toast_auth_fail: "授權失敗",
         toast_job_ok: "任務已成功派發",
@@ -44,6 +56,10 @@ const TRANSLATIONS = {
         label_username: "Username",
         label_password: "Password",
         btn_login: "Submit Auth",
+        // Navigation
+        nav_dashboard: "Dashboard",
+        nav_assistant: "Assistant",
+        // Dashboard
         token_overview: "Token Resources",
         token_used: "Used",
         token_limit: "Limit",
@@ -60,6 +76,13 @@ const TRANSLATIONS = {
         btn_dispatch: "Dispatch Task",
         pipeline_active: "Active Pipeline",
         msg_no_signal: "No Signal / Queue Empty",
+        // Assistant
+        chat_config: "Assistant Config",
+        label_ai_model: "Select AI Model",
+        chat_welcome: "Hello! I am your AI assistant. How can I help you today?",
+        btn_clear_chat: "Clear History",
+        placeholder_chat: "Type a message...",
+        // Toasts
         toast_auth_ok: "Connection Established",
         toast_auth_fail: "Authentication Failed",
         toast_job_ok: "Task Dispatched Successfully",
@@ -77,7 +100,7 @@ let currentLang = localStorage.getItem('ai_hud_lang') || 'zh';
 let currentTheme = localStorage.getItem('ai_hud_theme') || 'dark';
 
 // DOM Elements
-const bodyEl = document.documentElement; // ZH: 使用 root 用於 data-theme | EN: using root for data-theme
+const bodyEl = document.documentElement;
 const toggleLangBtns = document.querySelectorAll('.toggle-lang-btn');
 const toggleThemeBtns = document.querySelectorAll('.toggle-theme-btn');
 
@@ -90,9 +113,13 @@ const toastEl = document.getElementById('toast');
 const toastMsg = document.getElementById('toast-msg');
 const toastIcon = document.getElementById('toast-icon');
 
-// HUD Data Nodes
+// HUD/Nav Nodes
+const tabBtns = document.querySelectorAll('.tab-btn');
+const pageViews = document.querySelectorAll('.page-view');
 const userDisplay = document.getElementById('user-display');
 const userRole = document.getElementById('user-role');
+
+// Dashboard Nodes
 const tokenPercent = document.getElementById('token-percent');
 const tokenRingFill = document.getElementById('token-ring-fill');
 const tokenUsed = document.getElementById('token-used');
@@ -104,6 +131,13 @@ const refreshJobsBtn = document.getElementById('refresh-jobs-btn');
 const submitJobBtn = document.getElementById('submit-job-btn');
 const eyeToggle = document.getElementById('eye-toggle');
 
+// Assistant Nodes
+const chatHistoryEl = document.getElementById('chat-history');
+const chatForm = document.getElementById('chat-form');
+const chatInput = document.getElementById('chat-input');
+const chatModelSelect = document.getElementById('chat-model-select');
+const clearChatBtn = document.getElementById('clear-chat-btn');
+
 // =========================
 // ZH: 初始化階段 | EN: Initialization Phase
 // =========================
@@ -114,6 +148,35 @@ document.addEventListener('DOMContentLoaded', () => {
         checkAuth();
     }
 });
+
+// =========================
+// ZH: 導覽與分頁切換 | EN: Navigation & Tab Switching
+// =========================
+tabBtns.forEach(btn => {
+    btn.addEventListener('click', () => {
+        const targetTab = btn.getAttribute('data-tab');
+        switchTab(targetTab);
+    });
+});
+
+function switchTab(tabId) {
+    // ZH: 更新按鈕狀態 | EN: Update button states
+    tabBtns.forEach(b => {
+        if(b.getAttribute('data-tab') === tabId) b.classList.add('active');
+        else b.classList.remove('active');
+    });
+
+    // ZH: 更新視圖狀態 | EN: Update view states
+    pageViews.forEach(p => {
+        if(p.id === `${tabId}-page`) p.classList.add('active');
+        else p.classList.remove('active');
+    });
+
+    // ZH: 進入特定分頁的額外邏輯 | EN: Extra logic for specific tabs
+    if(tabId === 'assistant') {
+        chatHistoryEl.scrollTop = chatHistoryEl.scrollHeight;
+    }
+}
 
 // =========================
 // ZH: 主題與多語系引擎 | EN: Theme & Language Engines
@@ -129,7 +192,6 @@ toggleLangBtns.forEach(btn => {
     btn.addEventListener('click', () => {
         currentLang = currentLang === 'zh' ? 'en' : 'zh';
         applyLanguage(currentLang);
-        // ZH: 如果已經登入，刷新任務列表以獲取最新翻譯狀態 | EN: Refresh jobs list to update status translations if logged in
         if(authToken && !dashView.classList.contains('hidden')) {
             fetchJobs();
         }
@@ -150,9 +212,11 @@ function applyLanguage(lang) {
     const dict = TRANSLATIONS[lang];
     document.querySelectorAll('[data-i18n]').forEach(el => {
         const key = el.getAttribute('data-i18n');
-        if(dict[key]) {
-            el.textContent = dict[key];
-        }
+        if(dict[key]) el.textContent = dict[key];
+    });
+    document.querySelectorAll('[data-i18n-placeholder]').forEach(el => {
+        const key = el.getAttribute('data-i18n-placeholder');
+        if(dict[key]) el.placeholder = dict[key];
     });
 }
 
@@ -202,19 +266,18 @@ function formatDate(dateStr) {
 // =========================
 loginForm.addEventListener('submit', async (e) => {
     e.preventDefault();
-    const user = document.getElementById('username').value;
-    const pass = document.getElementById('password').value;
-    
+    const userValue = document.getElementById('username').value;
+    const passValue = document.getElementById('password').value;
     loginBtn.disabled = true;
 
     try {
         const formData = new URLSearchParams();
-        formData.append('username', user);
-        formData.append('password', pass);
+        formData.append('username', userValue);
+        formData.append('password', passValue);
 
         const res = await fetch(`${API_BASE}/auth/login`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            headers: { 'Content-Type': 'application/x-form-urlencoded' },
             body: formData
         });
 
@@ -249,6 +312,7 @@ async function checkAuth() {
         if (!res.ok) throw new Error('expired');
         await fetchDashboardData();
         switchToDashboard();
+        fetchChatHistory(); // ZH: 載入聊天紀錄 | EN: Load chat history
     } catch {
         logoutBtn.click();
     }
@@ -259,7 +323,8 @@ function switchToDashboard() {
     setTimeout(() => {
         dashView.classList.remove('hidden');
         if(pollInterval) clearInterval(pollInterval);
-        pollInterval = setInterval(fetchJobs, 5000); // ZH: 輪詢任務狀態 | EN: Poll job status
+        pollInterval = setInterval(fetchJobs, 5000);
+        switchTab('dashboard');
     }, 400);
 }
 function switchToLogin() {
@@ -419,3 +484,122 @@ window.cancelJob = async function(jobId) {
         showToast('toast_job_fail', true);
     }
 };
+
+// =========================
+// ZH: AI 助手邏輯 | EN: AI Assistant Logic
+// =========================
+chatForm.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const prompt = chatInput.value.trim();
+    if(!prompt) return;
+
+    chatInput.value = '';
+    chatInput.style.height = '60px';
+
+    // ZH: 顯示使用的訊息 | EN: Display user message
+    const userMsg = { role: 'user', content: prompt };
+    chatMessages.push(userMsg);
+    renderBubble(userMsg);
+
+    // ZH: 建立空的 AI 氣泡準備填入 | EN: Create empty AI bubble for streaming
+    const aiBubble = createBubble('assistant', '');
+    const contentEl = aiBubble.querySelector('.bubble-content');
+    chatHistoryEl.appendChild(aiBubble);
+    chatHistoryEl.scrollTop = chatHistoryEl.scrollHeight;
+
+    try {
+        const response = await fetch(`${API_BASE}/chat/completions`, {
+            method: 'POST',
+            headers: { 
+                'Authorization': `Bearer ${authToken}`,
+                'Content-Type': 'application/json' 
+            },
+            body: JSON.stringify({
+                model_id: chatModelSelect.value,
+                messages: chatMessages,
+                stream: true
+            })
+        });
+
+        if(!response.ok) throw new Error('Stream Error');
+
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let aiFullText = '';
+
+        while(true) {
+            const { value, done } = await reader.read();
+            if(done) break;
+
+            const chunk = decoder.decode(value);
+            const lines = chunk.split('\n');
+            
+            for(const line of lines) {
+                if(line.startsWith('data: ')) {
+                    const dataStr = line.replace('data: ', '').trim();
+                    if(dataStr === '[DONE]') continue;
+                    try {
+                        const json = JSON.parse(dataStr);
+                        const content = json.choices[0].delta.content || '';
+                        aiFullText += content;
+                        contentEl.textContent = aiFullText; // ZH: 實時更新文字 | EN: Update text in real-time
+                        chatHistoryEl.scrollTop = chatHistoryEl.scrollHeight;
+                    } catch(e) {}
+                }
+            }
+        }
+        
+        chatMessages.push({ role: 'assistant', content: aiFullText });
+
+    } catch (err) {
+        contentEl.textContent = "Error occurred during AI generation.";
+        contentEl.classList.add('error');
+    }
+});
+
+function renderBubble(msg) {
+    const bubble = createBubble(msg.role, msg.content);
+    chatHistoryEl.appendChild(bubble);
+    chatHistoryEl.scrollTop = chatHistoryEl.scrollHeight;
+}
+
+function createBubble(role, content) {
+    const div = document.createElement('div');
+    div.className = role === 'user' ? 'user-bubble' : 'ai-bubble';
+    div.innerHTML = `<div class="bubble-content">${content}</div>`;
+    return div;
+}
+
+async function fetchChatHistory() {
+    try {
+        const res = await fetch(`${API_BASE}/chat/history`, {
+            headers: { 'Authorization': `Bearer ${authToken}` }
+        });
+        if(res.ok) {
+            const history = await res.json();
+            chatMessages = history;
+            // ZH: 清空並重新渲染 (保留 Welcome) | EN: Clear and re-render (keep welcome)
+            const welcomeMsg = chatHistoryEl.querySelector('.intro');
+            chatHistoryEl.innerHTML = '';
+            if(welcomeMsg) chatHistoryEl.appendChild(welcomeMsg);
+            
+            history.forEach(msg => renderBubble(msg));
+        }
+    } catch(e) {}
+}
+
+clearChatBtn.addEventListener('click', () => {
+    if(!confirm('Clear conversation?')) return;
+    chatHistoryEl.innerHTML = `
+        <div class="ai-bubble intro">
+            <div class="bubble-content" data-i18n="chat_welcome">${t('chat_welcome')}</div>
+        </div>
+    `;
+    chatMessages = [];
+});
+
+// ZH: 自動調整 Input 高度 | EN: Auto auto-resize textarea
+chatInput.addEventListener('input', () => {
+    chatInput.style.height = '60px';
+    chatInput.style.height = (chatInput.scrollHeight) + 'px';
+});

@@ -69,43 +69,51 @@
         </div>
     </div>
 
-    <!-- ZH: 視圖: HUD 儀表板主介面 | EN: VIEW: Main Dashboard HUD -->
+    <!-- ZH: 視圖: HUD 介面主容器 | EN: VIEW: MAIN HUD Container -->
     <div id="dashboard-view" class="view-container hidden">
         <div class="hud-container main-content">
             
-            <!-- ZH: 頂部狀態列 | EN: Header Section -->
             <header>
-                <span>
+                <span class="header-left">
                     <div class="logo-image">
-                        <ion-icon name="hardware-chip-outline" style="font-size: 50px; color: white; display: flex; align-items:center; justify-content:center; height: 100%;"></ion-icon>
+                        <ion-icon name="hardware-chip-outline" style="font-size: 40px; color: white;"></ion-icon>
                     </div>
-                    <div class="logo">AI_TRAIN</div>
+                    <div class="logo">AI_BASE</div>
                 </span>
+
+                <!-- ZH: 分頁切換導覽 | EN: Tab Navigation -->
+                <div class="header-center">
+                    <button class="tab-btn active" id="tab-dash" data-tab="dashboard">
+                        <ion-icon name="apps-outline"></ion-icon>
+                        <span data-i18n="nav_dashboard">Dashboard</span>
+                    </button>
+                    <button class="tab-btn" id="tab-chat" data-tab="assistant">
+                        <ion-icon name="chatbubbles-outline"></ion-icon>
+                        <span data-i18n="nav_assistant">Assistant</span>
+                    </button>
+                </div>
                 
-                <nav>
+                <nav class="header-right">
                     <div class="user-info">
                         <ion-icon name="person-circle-outline"></ion-icon>
                         <span id="user-display">USER</span>
                         <span id="user-role" class="badge">ROLE</span>
                     </div>
                     
-                    <!-- ZH: 語言切換 | EN: Language Toggle -->
                     <button class="icon-action toggle-lang-btn" title="切換語言 / Toggle Language">
                         <ion-icon name="language-outline"></ion-icon>
                     </button>
-                    <!-- ZH: 主題切換 | EN: Theme Toggle -->
                     <button class="icon-action toggle-theme-btn" title="切換主題 / Toggle Theme">
                         <ion-icon name="moon-outline"></ion-icon>
                     </button>
-                    <!-- ZH: 登出操作 | EN: Logout Action -->
                     <button class="icon-action" id="logout-btn" title="Logout">
                         <ion-icon name="log-out-outline"></ion-icon>
                     </button>
                 </nav>
             </header>
 
-            <!-- ZH: 主要數據圖表面板區 | EN: Main Data Dashboard Area -->
-            <main class="hud-grid">
+            <!-- ZH: 分頁 1: 儀表板視圖 | EN: PAGE 1: Dashboard Content -->
+            <main id="dashboard-page" class="hud-grid page-view active">
                 
                 <!-- ZH: 頂部區塊: 額度分析環 | EN: TOP WIDGE: Token Usage Ring -->
                 <section class="widget token-widget form-box-panel">
@@ -156,7 +164,7 @@
                             <label data-i18n="label_model_name">Model Identifier</label>
                             <ion-icon name="cube-outline"></ion-icon>
                         </div>
-
+                        
                         <div class="input-select-group">
                             <p data-i18n="label_priority" style="font-size:14px; margin-bottom:5px;">Priority</p>
                             <select id="job-priority" class="select-box">
@@ -165,7 +173,7 @@
                                 <option value="2" data-i18n="priority_2">2 - HIGH</option>
                             </select>
                         </div>
-
+                        
                         <div class="row">
                             <div class="input row-input mini-input">
                                 <input type="number" id="job-epochs" min="1" max="1000" value="10">
@@ -176,7 +184,7 @@
                                 <label data-i18n="label_batch">Batch Size</label>
                             </div>
                         </div>
-
+                        
                         <button type="submit" class="ready-btn" id="submit-job-btn">
                             <span data-i18n="btn_dispatch">Dispatch Task</span>
                         </button>
@@ -200,6 +208,48 @@
                 </section>
 
             </main>
+
+            <!-- ZH: 分頁 2: AI 助手視圖 (全螢幕) | EN: PAGE 2: Assistant View (Full Screen) -->
+            <main id="assistant-page" class="assistant-container page-view">
+                <div class="chat-layout">
+                    <!-- ZH: 聊天側邊欄/工具列 | EN: Chat Sidebar/Toolbar -->
+                    <aside class="chat-sidebar form-box-panel">
+                        <h3 data-i18n="chat_config">Config</h3>
+                        <div class="input-select-group">
+                            <label data-i18n="label_ai_model">AI Model</label>
+                            <select id="chat-model-select" class="select-box">
+                                <option value="gemini-1.5-pro">Gemini 1.5 Pro</option>
+                                <option value="claude-3-5-sonnet">Claude 3.5 Sonnet</option>
+                                <option value="llama3:latest">Ollama Llama3</option>
+                            </select>
+                        </div>
+                        <button class="ready-btn mini-btn" id="clear-chat-btn">
+                            <ion-icon name="trash-outline"></ion-icon>
+                            <span data-i18n="btn_clear_chat">Clear Chat</span>
+                        </button>
+                    </aside>
+
+                    <!-- ZH: 聊天主要區域 | EN: Chat Main Area -->
+                    <div class="chat-main">
+                        <div id="chat-history" class="chat-history scrollbar-custom">
+                            <!-- ZH: 對話內容將由 JS 注入 | EN: Chat content injected by JS -->
+                            <div class="ai-bubble intro">
+                                <div class="bubble-content" data-i18n="chat_welcome">Hello! How can I help you with your AI research today?</div>
+                            </div>
+                        </div>
+                        
+                        <div class="chat-input-area">
+                            <form id="chat-form" class="chat-form">
+                                <textarea id="chat-input" data-i18n-placeholder="placeholder_chat" placeholder="Type your message here..." required></textarea>
+                                <button type="submit" id="send-chat-btn" class="send-btn">
+                                    <ion-icon name="send"></ion-icon>
+                                </button>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+            </main>
+
         </div>
     </div>
     
