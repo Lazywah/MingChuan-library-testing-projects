@@ -1,11 +1,11 @@
 // =========================
-// State & Configuration
+// ZH: 系統狀態與設定 | EN: State & Configuration
 // =========================
 const API_BASE = '/api/v1';
 let authToken = localStorage.getItem('ai_hud_token') || null;
 let pollInterval = null;
 
-// Translation Dictionary (i18n)
+// ZH: i18n 翻譯字典 | EN: i18n Translation Dictionary
 const TRANSLATIONS = {
     zh: {
         login_title: "系統登入",
@@ -77,9 +77,9 @@ let currentLang = localStorage.getItem('ai_hud_lang') || 'zh';
 let currentTheme = localStorage.getItem('ai_hud_theme') || 'dark';
 
 // DOM Elements
-const bodyEl = document.documentElement; // using root for data-theme
-const toggleLangBtn = document.getElementById('toggle-lang');
-const toggleThemeBtn = document.getElementById('toggle-theme');
+const bodyEl = document.documentElement; // ZH: 使用 root 用於 data-theme | EN: using root for data-theme
+const toggleLangBtns = document.querySelectorAll('.toggle-lang-btn');
+const toggleThemeBtns = document.querySelectorAll('.toggle-theme-btn');
 
 const loginView = document.getElementById('login-view');
 const dashView = document.getElementById('dashboard-view');
@@ -105,7 +105,7 @@ const submitJobBtn = document.getElementById('submit-job-btn');
 const eyeToggle = document.getElementById('eye-toggle');
 
 // =========================
-// Initialization
+// ZH: 初始化階段 | EN: Initialization Phase
 // =========================
 document.addEventListener('DOMContentLoaded', () => {
     applyTheme(currentTheme);
@@ -116,27 +116,33 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 // =========================
-// Theme & Language Engines
+// ZH: 主題與多語系引擎 | EN: Theme & Language Engines
 // =========================
-toggleThemeBtn.addEventListener('click', () => {
-    currentTheme = currentTheme === 'dark' ? 'light' : 'dark';
-    applyTheme(currentTheme);
+toggleThemeBtns.forEach(btn => {
+    btn.addEventListener('click', () => {
+        currentTheme = currentTheme === 'dark' ? 'light' : 'dark';
+        applyTheme(currentTheme);
+    });
 });
 
-toggleLangBtn.addEventListener('click', () => {
-    currentLang = currentLang === 'zh' ? 'en' : 'zh';
-    applyLanguage(currentLang);
-    // Refresh jobs list to update status translations if logged in
-    if(authToken && !dashView.classList.contains('hidden')) {
-        fetchJobs();
-    }
+toggleLangBtns.forEach(btn => {
+    btn.addEventListener('click', () => {
+        currentLang = currentLang === 'zh' ? 'en' : 'zh';
+        applyLanguage(currentLang);
+        // ZH: 如果已經登入，刷新任務列表以獲取最新翻譯狀態 | EN: Refresh jobs list to update status translations if logged in
+        if(authToken && !dashView.classList.contains('hidden')) {
+            fetchJobs();
+        }
+    });
 });
 
 function applyTheme(theme) {
     bodyEl.setAttribute('data-theme', theme);
     localStorage.setItem('ai_hud_theme', theme);
-    const icon = toggleThemeBtn.querySelector('ion-icon');
-    icon.setAttribute('name', theme === 'dark' ? 'moon-outline' : 'sunny-outline');
+    toggleThemeBtns.forEach(btn => {
+        const icon = btn.querySelector('ion-icon');
+        icon.setAttribute('name', theme === 'dark' ? 'moon-outline' : 'sunny-outline');
+    });
 }
 
 function applyLanguage(lang) {
@@ -155,7 +161,7 @@ function t(key) {
 }
 
 // =========================
-// Toast System
+// ZH: 彈窗提示系統 | EN: Toast Notification System
 // =========================
 function showToast(msgKey, isError = false) {
     toastMsg.textContent = t(msgKey);
@@ -171,7 +177,7 @@ function showToast(msgKey, isError = false) {
 }
 
 // =========================
-// UI Interactions
+// ZH: 介面互動事件 | EN: UI Interactions
 // =========================
 eyeToggle.addEventListener('click', () => {
     const pwInput = document.getElementById('password');
@@ -192,7 +198,7 @@ function formatDate(dateStr) {
 }
 
 // =========================
-// Authentication
+// ZH: 身份驗證 | EN: Authentication
 // =========================
 loginForm.addEventListener('submit', async (e) => {
     e.preventDefault();
@@ -253,7 +259,7 @@ function switchToDashboard() {
     setTimeout(() => {
         dashView.classList.remove('hidden');
         if(pollInterval) clearInterval(pollInterval);
-        pollInterval = setInterval(fetchJobs, 5000);
+        pollInterval = setInterval(fetchJobs, 5000); // ZH: 輪詢任務狀態 | EN: Poll job status
     }, 400);
 }
 function switchToLogin() {
@@ -264,7 +270,7 @@ function switchToLogin() {
 }
 
 // =========================
-// Dashboard Data Fetching
+// ZH: 儀表板資料獲取 | EN: Dashboard Data Fetching
 // =========================
 async function fetchDashboardData() {
     await Promise.all([
@@ -303,7 +309,7 @@ async function fetchTokenUsage() {
 }
 
 // =========================
-// Jobs Management
+// ZH: 任務管理 | EN: Jobs Management
 // =========================
 jobForm.addEventListener('submit', async (e) => {
     e.preventDefault();

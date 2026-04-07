@@ -1,5 +1,5 @@
 :root {
-    /* DEFAULT DARK MODE & CHESS-STYLE VARIABLES */
+    /* ZH: 預設暗黑模式與 Chess 風格變數 | EN: DEFAULT DARK MODE & CHESS-STYLE VARIABLES */
     --bg-universe: radial-gradient(circle at 10% 50%, rgba(68, 26, 167, 0.4), transparent 60%),
                    radial-gradient(circle at 90% 10%, rgba(62, 62, 192, 0.5), transparent 60%),
                    linear-gradient(to bottom, rgb(14, 3, 42) 0%, rgba(68, 26, 167, 0.8) 50%, #000 100%);
@@ -16,7 +16,7 @@
 }
 
 [data-theme='light'] {
-    /* LIGHT MODE VARIANTS */
+    /* ZH: 亮色模式風格變數 | EN: LIGHT MODE VARIANTS */
     --bg-universe: radial-gradient(circle at 10% 50%, rgba(135, 126, 219, 0.2), transparent 50%),
                    radial-gradient(circle at 90% 10%, rgba(100, 100, 240, 0.3), transparent 50%),
                    linear-gradient(to bottom, #f0f4f8 0%, #dbeafe 50%, #e0e7ff 100%);
@@ -51,8 +51,10 @@ body {
 
 /* 
 ======================================================
- USER CUSTOM BACKGROUND (保留供未來自訂背景圖片)
- 可以在此覆蓋 --bg-universe 變數 或是 直接寫 background-image
+ ZH: 使用者自訂背景 (保留供未來看情況放置背景圖片)
+ EN: USER CUSTOM BACKGROUND (Reserved for future custom background image placement)
+ ZH: 可以在此覆蓋 --bg-universe 變數 或是 疊加實體圖片
+ EN: You can override --bg-universe variable or overlay a physical image here
 ======================================================
 .custom-bg {
     background-image: url('image/background/11.jpg');
@@ -70,7 +72,7 @@ body {
     pointer-events: none;
 }
 
-/* Form Window (Active Popup) */
+/* ZH: 彈出的表單視窗面板 | EN: Form Window (Active Popup) */
 .form-box {
     position: relative;
     width: 360px;
@@ -83,6 +85,7 @@ body {
     transition: transform 0.6s ease, border-color 0.5s ease, background 0.6s ease;
 }
 
+/* ZH: 游標懸停時引發高光動畫 | EN: Trigger glow animation on hover */
 .form-box:hover, .form-box-panel:hover {
     border-color: var(--border-glow-color);
     animation: border-glow 1s infinite alternate;
@@ -117,7 +120,7 @@ form h1 {
     font-weight: 700;
 }
 
-/* Floating Label Inputs */
+/* ZH: 浮動標籤式輸入框 | EN: Floating Label Inputs */
 .input {
     width: 100%;
     position: relative;
@@ -148,7 +151,7 @@ form h1 {
     pointer-events: none;
 }
 
-/* When focused or filled -> label floats */
+/* ZH: 聚焦或已輸入資料時，標籤往上浮起 | EN: When focused or filled -> label floats */
 .input input:focus ~ label,
 .input input:not(:placeholder-shown) ~ label {
     transform: translateY(-25px);
@@ -190,7 +193,7 @@ form h1 {
     cursor: not-allowed;
 }
 
-/* Views Management */
+/* ZH: 視圖視窗管理 | EN: Views Management */
 .view-container {
     width: 100%;
     min-height: 100vh;
@@ -206,7 +209,7 @@ form h1 {
     display: none;
 }
 
-/* Dashboard Elements */
+/* ZH: 儀表板元素設定 | EN: Dashboard Elements Settings */
 .main-content {
     width: 100%;
     max-width: 1200px;
@@ -221,9 +224,6 @@ header {
     backdrop-filter: blur(10px);
     -webkit-backdrop-filter: blur(10px);
     border-radius: 20px;
-    /* position: fixed;
-    top: 0; left: 0; width: 100vw; 
-    z-index: 999; */
     display: flex;
     justify-content: space-between;
     align-items: center;
@@ -267,7 +267,8 @@ header nav .user-info {
     gap: 8px;
     font-size: 18px;
 }
-header nav .icon-action {
+header nav .icon-action,
+.login-actions .icon-action {
     background: transparent;
     border: none;
     color: var(--text-primary);
@@ -275,7 +276,8 @@ header nav .icon-action {
     cursor: pointer;
     transition: 0.3s;
 }
-header nav .icon-action:hover {
+header nav .icon-action:hover,
+.login-actions .icon-action:hover {
     color: var(--accent-glow);
     text-shadow: 0 0 10px var(--accent-glow);
 }
@@ -286,7 +288,7 @@ header nav .icon-action:hover {
     font-size: 12px;
 }
 
-/* Dashboard Grid Layout */
+/* ZH: 儀表板排版格線 | EN: Dashboard Grid Layout */
 .hud-grid {
     display: grid;
     grid-template-columns: 350px 1fr;
@@ -325,7 +327,7 @@ header nav .icon-action:hover {
 }
 .refresh-icon:hover { transform: rotate(180deg); color: var(--accent-glow); }
 
-/* Token Progress */
+/* ZH: Token 環狀與資料顯示 | EN: Token Progress and Data Display */
 .token-display {
     display: flex;
     align-items: center;
@@ -356,7 +358,7 @@ header nav .icon-action:hover {
 }
 .stat-row .highlight { font-weight: bold; }
 
-/* Submitting Form overrides */
+/* ZH: 遞交任務表單特殊修飾 | EN: Submitting Form overrides */
 .job-form .input { margin: 20px 0; border-bottom-width: 1px;}
 .row { display: flex; gap: 20px; }
 .mini-input { width: 50%; }
@@ -374,7 +376,7 @@ header nav .icon-action:hover {
     color: #fff;
 }
 
-/* JobList */
+/* ZH: 任務列表顯示 | EN: JobList Display */
 .job-list-container {
     max-height: 400px;
     overflow-y: auto;
@@ -423,7 +425,7 @@ header nav .icon-action:hover {
     height: 100%; background: var(--accent-glow); width: 0%; transition: 0.5s;
 }
 
-/* Toast */
+/* ZH: 提示彈窗 (Toast) | EN: Notification Toast */
 .toast {
     position: fixed;
     bottom: 40px; left: 50%; transform: translateX(-50%);

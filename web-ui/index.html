@@ -1,29 +1,43 @@
 <!DOCTYPE html>
+<!-- ZH: AI 訓練平台主前端面版 | EN: AI Training Platform Main Frontend Dashboard -->
 <html lang="zh-Hant" data-theme="dark">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>AI Training Platform</title>
-    <!-- Use Google Fonts (from website-Chess) -->
+    <!-- ZH: 引入 Google 字體 | EN: Import Google Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Playpen+Sans:wght@400;600;700&display=swap" rel="stylesheet">
     
-    <!-- Main Stylesheet -->
+    <!-- ZH: 引入主任務面板樣式 | EN: Import main stylesheet -->
     <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-    <!-- Background Area: Add your background image logic here via CSS in styles.css -->
+    <!-- ZH: 裝飾背景區域（由 CSS 控制，可自訂圖片） | EN: Decorative background area (Controlled by CSS, custom image ready) -->
     <div class="empty bg-grad custom-bg" id="main-bg"></div>
 
-    <!-- Notification Toast -->
+    <!-- ZH: 系統提示訊息 | EN: System notification toast -->
     <div id="toast" class="toast hidden">
         <span id="toast-icon"></span>
         <span id="toast-msg">Notification Message</span>
     </div>
 
-    <!-- VIEW: Login panel -->
+    <!-- ZH: 視圖: 登入面板 | EN: VIEW: Login panel -->
     <div id="login-view" class="view-container active">
+        
+        <!-- ZH: 獨立的登入操作列 | EN: Independent login action bar -->
+        <div class="login-actions" style="position: absolute; top: 20px; right: 30px; display: flex; gap: 15px; z-index: 10;">
+            <!-- ZH: 語言切換 | EN: Language Toggle -->
+            <button class="icon-action toggle-lang-btn" title="切換語言 / Toggle Language" style="font-size:30px; background:transparent; border:none; cursor:pointer; color:var(--text-primary); transition:0.3s;">
+                <ion-icon name="language-outline"></ion-icon>
+            </button>
+            <!-- ZH: 主題切換 | EN: Theme Toggle -->
+            <button class="icon-action toggle-theme-btn" title="切換主題 / Toggle Theme" style="font-size:30px; background:transparent; border:none; cursor:pointer; color:var(--text-primary); transition:0.3s;">
+                <ion-icon name="moon-outline"></ion-icon>
+            </button>
+        </div>
+
         <div class="form-box active-popup">
             <span class="close" title="Mock close button">
                 <ion-icon name="close-circle-outline"></ion-icon>
@@ -31,12 +45,14 @@
             <form id="login-form">
                 <h1 data-i18n="login_title">Login</h1>
                 
+                <!-- ZH: 帳號輸入框 | EN: Username Input -->
                 <div class="input">
                     <input type="text" id="username" required autocomplete="username" placeholder=" ">
                     <label data-i18n="label_username">Username</label>
                     <ion-icon name="person-outline"></ion-icon>
                 </div>
                 
+                <!-- ZH: 密碼輸入框 | EN: Password Input -->
                 <div class="input login-eye">
                     <input type="password" id="password" required autocomplete="current-password" placeholder=" ">
                     <label data-i18n="label_password">Password</label>
@@ -53,15 +69,14 @@
         </div>
     </div>
 
-    <!-- VIEW: Main Dashboard HUD -->
+    <!-- ZH: 視圖: HUD 儀表板主介面 | EN: VIEW: Main Dashboard HUD -->
     <div id="dashboard-view" class="view-container hidden">
         <div class="hud-container main-content">
             
-            <!-- Header section -->
+            <!-- ZH: 頂部狀態列 | EN: Header Section -->
             <header>
                 <span>
                     <div class="logo-image">
-                        <!-- Logo Placeholder -->
                         <ion-icon name="hardware-chip-outline" style="font-size: 50px; color: white; display: flex; align-items:center; justify-content:center; height: 100%;"></ion-icon>
                     </div>
                     <div class="logo">AI_TRAIN</div>
@@ -74,25 +89,25 @@
                         <span id="user-role" class="badge">ROLE</span>
                     </div>
                     
-                    <!-- Language Toggle -->
-                    <button class="icon-action" id="toggle-lang" title="切換語言 / Toggle Language">
+                    <!-- ZH: 語言切換 | EN: Language Toggle -->
+                    <button class="icon-action toggle-lang-btn" title="切換語言 / Toggle Language">
                         <ion-icon name="language-outline"></ion-icon>
                     </button>
-                    <!-- Theme Toggle -->
-                    <button class="icon-action" id="toggle-theme" title="切換主題 / Toggle Theme">
+                    <!-- ZH: 主題切換 | EN: Theme Toggle -->
+                    <button class="icon-action toggle-theme-btn" title="切換主題 / Toggle Theme">
                         <ion-icon name="moon-outline"></ion-icon>
                     </button>
-                    <!-- Logout -->
+                    <!-- ZH: 登出操作 | EN: Logout Action -->
                     <button class="icon-action" id="logout-btn" title="Logout">
                         <ion-icon name="log-out-outline"></ion-icon>
                     </button>
                 </nav>
             </header>
 
-            <!-- Main Content Area -->
+            <!-- ZH: 主要數據圖表面板區 | EN: Main Data Dashboard Area -->
             <main class="hud-grid">
                 
-                <!-- TOP WIDGET: Token Usage Overview -->
+                <!-- ZH: 頂部區塊: 額度分析環 | EN: TOP WIDGE: Token Usage Ring -->
                 <section class="widget token-widget form-box-panel">
                     <div class="widget-header">
                         <h3 data-i18n="token_overview">Token Resources</h3>
@@ -123,7 +138,7 @@
                     </div>
                 </section>
 
-                <!-- LEFT WIDGET: Submit new job -->
+                <!-- ZH: 左側面板: 發配訓練任務 | EN: LEFT PANE: Submit New Job -->
                 <section class="widget submit-widget form-box-panel">
                     <div class="widget-header">
                         <h3 data-i18n="job_compose">New Task</h3>
@@ -168,7 +183,7 @@
                     </form>
                 </section>
 
-                <!-- RIGHT WIDGET: Active & Queued Jobs -->
+                <!-- ZH: 右側面板: 活躍的任務佇列清單 | EN: RIGHT PANE: Active & Queued Jobs -->
                 <section class="widget list-widget form-box-panel">
                     <div class="widget-header split">
                         <h3 data-i18n="pipeline_active">Active Pipeline</h3>
@@ -176,7 +191,7 @@
                     </div>
                     
                     <div class="job-list-container" id="job-list-container">
-                        <!-- JS injects jobs here -->
+                        <!-- ZH: 由 JS 動態注入任務 | EN: JS injects jobs here dynamically -->
                         <div class="empty-state">
                             <ion-icon name="radio-outline"></ion-icon>
                             <p data-i18n="msg_no_signal">No Signal / Queue Empty</p>
@@ -188,7 +203,7 @@
         </div>
     </div>
     
-    <!-- Scripts -->
+    <!-- ZH: 載入圖標庫與主程式碼 | EN: Load Icon library and Main Logic -->
     <script type="module" src="https://unpkg.com/ionicons@7.1.0/dist/ionicons/ionicons.esm.js"></script>
     <script nomodule src="https://unpkg.com/ionicons@7.1.0/dist/ionicons/ionicons.js"></script>
     <script src="app.js"></script>
