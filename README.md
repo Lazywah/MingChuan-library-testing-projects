@@ -57,6 +57,7 @@ curl http://localhost:8002/health
 | [03-GPU伺服器部署指南](docs/03-GPU伺服器部署指南.md) | SSH、Mock 切換 |
 | [04-系統管理與維護](docs/04-系統管理與維護.md) | 備份、監控 |
 | [05-開發者指南](docs/05-開發者指南.md) | 模組架構、擴展方式 |
+| [06-專案架構與檔案說明](docs/06-專案架構與檔案說明.md) | 專案結構概覽與說明 |
 
 ## 🧩 模組架構 | Module Architecture
 
