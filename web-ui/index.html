@@ -91,6 +91,10 @@
                         <ion-icon name="chatbubbles-outline"></ion-icon>
                         <span data-i18n="nav_assistant">Assistant</span>
                     </button>
+                    <button class="tab-btn" id="tab-settings" data-tab="settings">
+                        <ion-icon name="settings-outline"></ion-icon>
+                        <span data-i18n="nav_settings">Settings</span>
+                    </button>
                 </div>
                 
                 <nav class="header-right">
@@ -99,16 +103,6 @@
                         <span id="user-display">USER</span>
                         <span id="user-role" class="badge">ROLE</span>
                     </div>
-                    
-                    <button class="icon-action toggle-lang-btn" title="切換語言 / Toggle Language">
-                        <ion-icon name="language-outline"></ion-icon>
-                    </button>
-                    <button class="icon-action toggle-theme-btn" title="切換主題 / Toggle Theme">
-                        <ion-icon name="moon-outline"></ion-icon>
-                    </button>
-                    <button class="icon-action" id="logout-btn" title="Logout">
-                        <ion-icon name="log-out-outline"></ion-icon>
-                    </button>
                 </nav>
             </header>
 
@@ -198,7 +192,7 @@
                         <ion-icon name="refresh-circle-outline" id="refresh-jobs-btn" class="refresh-icon" title="Refresh"></ion-icon>
                     </div>
                     
-                    <div class="job-list-container" id="job-list-container">
+                    <div class="job-list-container scrollbar-custom" id="job-list-container">
                         <!-- ZH: 由 JS 動態注入任務 | EN: JS injects jobs here dynamically -->
                         <div class="empty-state">
                             <ion-icon name="radio-outline"></ion-icon>
@@ -212,21 +206,17 @@
             <!-- ZH: 分頁 2: AI 助手視圖 (全螢幕) | EN: PAGE 2: Assistant View (Full Screen) -->
             <main id="assistant-page" class="assistant-container page-view">
                 <div class="chat-layout">
-                    <!-- ZH: 聊天側邊欄/工具列 | EN: Chat Sidebar/Toolbar -->
+                    <!-- ZH: 聊天室列表 | EN: Chatroom Sessions Sidebar -->
                     <aside class="chat-sidebar form-box-panel">
-                        <h3 data-i18n="chat_config">Config</h3>
-                        <div class="input-select-group">
-                            <label data-i18n="label_ai_model">AI Model</label>
-                            <select id="chat-model-select" class="select-box">
-                                <option value="gemini-1.5-pro">Gemini 1.5 Pro</option>
-                                <option value="claude-3-5-sonnet">Claude 3.5 Sonnet</option>
-                                <option value="llama3:latest">Ollama Llama3</option>
-                            </select>
+                        <div class="sidebar-header">
+                            <h3 data-i18n="chat_sessions">Sessions</h3>
+                            <button class="icon-action" id="new-chat-btn" title="New Chat">
+                                <ion-icon name="add-circle-outline"></ion-icon>
+                            </button>
                         </div>
-                        <button class="ready-btn mini-btn" id="clear-chat-btn">
-                            <ion-icon name="trash-outline"></ion-icon>
-                            <span data-i18n="btn_clear_chat">Clear Chat</span>
-                        </button>
+                        <div class="session-list scrollbar-custom" id="session-list">
+                            <!-- ZH: 由 JS 動態注入對話室 | EN: Session items injected by JS -->
+                        </div>
                     </aside>
 
                     <!-- ZH: 聊天主要區域 | EN: Chat Main Area -->
@@ -240,13 +230,75 @@
                         
                         <div class="chat-input-area">
                             <form id="chat-form" class="chat-form">
-                                <textarea id="chat-input" data-i18n-placeholder="placeholder_chat" placeholder="Type your message here..." required></textarea>
-                                <button type="submit" id="send-chat-btn" class="send-btn">
-                                    <ion-icon name="send"></ion-icon>
-                                </button>
+                                <div class="chat-input-row">
+                                    <textarea id="chat-input" data-i18n-placeholder="placeholder_chat" placeholder="Type your message here..." required></textarea>
+                                    <button type="submit" id="send-chat-btn" class="send-btn">
+                                        <ion-icon name="send"></ion-icon>
+                                    </button>
+                                </div>
+                                <div class="chat-controls-bar">
+                                    <div class="input-select-group mini-select">
+                                        <label data-i18n="label_ai_model">AI Model</label>
+                                        <select id="chat-model-select" class="select-box">
+                                            <option value="gemini-1.5-pro">Gemini 1.5 Pro</option>
+                                            <option value="claude-3-5-sonnet">Claude 3.5 Sonnet</option>
+                                            <option value="llama3:latest">Ollama Llama3</option>
+                                        </select>
+                                    </div>
+                                    <div class="chat-actions">
+                                        <button type="button" class="ready-btn mini-btn" id="clear-chat-btn">
+                                            <ion-icon name="trash-outline"></ion-icon>
+                                            <span data-i18n="btn_clear_chat">Clear</span>
+                                        </button>
+                                    </div>
+                                </div>
                             </form>
                         </div>
                     </div>
+                </div>
+            </main>
+
+            <!-- ZH: 分頁 3: 設定視圖 | EN: PAGE 3: Settings View -->
+            <main id="settings-page" class="settings-container page-view">
+                <div class="settings-grid">
+                    <section class="widget form-box-panel">
+                        <div class="widget-header">
+                            <h3 data-i18n="settings_appearance">Appearance</h3>
+                        </div>
+                        <div class="settings-option">
+                            <span data-i18n="label_theme">Theme Mode</span>
+                            <button class="ready-btn toggle-theme-btn" style="width:auto; min-width:120px;">
+                                <ion-icon name="moon-outline"></ion-icon>
+                                <span data-i18n="btn_toggle_theme">Toggle Theme</span>
+                            </button>
+                        </div>
+                    </section>
+
+                    <section class="widget form-box-panel">
+                        <div class="widget-header">
+                            <h3 data-i18n="settings_language">Localization</h3>
+                        </div>
+                        <div class="settings-option">
+                            <span data-i18n="label_lang">System Language</span>
+                            <button class="ready-btn toggle-lang-btn" style="width:auto; min-width:120px;">
+                                <ion-icon name="language-outline"></ion-icon>
+                                <span data-i18n="btn_toggle_lang">Switch Language</span>
+                            </button>
+                        </div>
+                    </section>
+
+                    <section class="widget form-box-panel">
+                        <div class="widget-header">
+                            <h3 data-i18n="settings_account">Account</h3>
+                        </div>
+                        <div class="settings-option">
+                            <span data-i18n="label_logout">Session Control</span>
+                            <button class="ready-btn" id="logout-btn" style="width:auto; min-width:120px; border-color:#fb7185; color:#fb7185;">
+                                <ion-icon name="log-out-outline"></ion-icon>
+                                <span data-i18n="btn_logout">Logout System</span>
+                            </button>
+                        </div>
+                    </section>
                 </div>
             </main>
 
