@@ -39,7 +39,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from .database import init_db
 from .scheduler import start_scheduler, stop_scheduler
-from .config import settings
+from .config import settings, SCHEDULER_POLICY
 from .routers import auth, jobs
 
 import logging
@@ -83,10 +83,11 @@ async def lifespan(app: FastAPI):
     # ZH: Module 8: 啟動排程器 | EN: Module 8: Start scheduler
     await start_scheduler()
 
+    sched_config = SCHEDULER_POLICY.get("scheduling", {})
     logger.info(
         f"ZH: 服務就緒 | EN: Service ready | "
-        f"GPU_MOCK={settings.GPU_MOCK_MODE} | "
-        f"MAX_JOBS={settings.MAX_CONCURRENT_JOBS}"
+        f"GPU_MOCK={SCHEDULER_POLICY.get('mock_mode', True)} | "
+        f"MAX_JOBS={sched_config.get('max_concurrent_jobs', 4)}"
     )
 
     yield  # ZH: 應用運行中 | EN: Application running
@@ -151,12 +152,13 @@ def health_check():
     ZH: 服務健康檢查
     EN: Service health check
     """
+    sched_config = SCHEDULER_POLICY.get("scheduling", {})
     return {
         "status": "healthy",
         "service": "job-scheduler",
         "version": "1.0.0",
-        "gpu_mock_mode": settings.GPU_MOCK_MODE,
-        "max_concurrent_jobs": settings.MAX_CONCURRENT_JOBS
+        "gpu_mock_mode": SCHEDULER_POLICY.get("mock_mode", True),
+        "max_concurrent_jobs": sched_config.get("max_concurrent_jobs", 4)
     }
 
 

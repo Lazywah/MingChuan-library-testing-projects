@@ -70,9 +70,9 @@ services:
     # ==============================================================================
 networks:
   ai-platform-net:
-    # ZH: 強制使用外部既有的網路，確保與核心層級相通 
-    # EN: Force external network to connect with core layer
-    external: true
+    # ZH: 與核心層級共享網路 | EN: Shared network with core layer
+    driver: bridge
+    name: ai-platform-net
 
 volumes:
   open-webui-data:
