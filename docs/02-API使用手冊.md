@@ -142,6 +142,45 @@ curl -X DELETE "http://localhost:8002/api/v1/jobs/JOB_ID" \
 
 ---
 
+## AI 助手 API | AI Assistant API (Chat)
+
+本區塊 API 提供對話式 AI 功能，支援串流輸出與歷史紀錄存儲。
+
+### POST `/api/v1/chat/completions` — 發送對話請求
+
+與底層 LLM 進行對話，支援 SSE (Server-Sent Events) 串流。
+
+```bash
+curl -X POST http://localhost:8002/api/v1/chat/completions \
+  -H "Authorization: Bearer YOUR_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model_id": "gemini-1.5-pro",
+    "messages": [
+      {"role": "user", "content": "你好，請介紹一下什麼是 GPU 叢集？"}
+    ],
+    "stream": true
+  }'
+```
+
+**參數說明**:
+- `model_id`: 模型識別碼 (如 `gemini-1.5-pro`, `llama3:latest`)。
+- `messages`: 對話歷史陣列。
+- `stream`: 是否使用串流模式。
+
+### GET `/api/v1/chat/history` — 獲取歷史紀錄
+
+取得當前使用者在系統內的對話歷史。
+
+```bash
+curl http://localhost:8002/api/v1/chat/history \
+  -H "Authorization: Bearer YOUR_TOKEN"
+```
+
+回應: `List[ChatMessage]` 格式之陣列。
+
+---
+
 ## 系統 API | System API
 
 ### GET `/health` — 健康檢查
