@@ -1,50 +1,53 @@
 <!DOCTYPE html>
-<html lang="zh-Hant">
+<html lang="zh-Hant" data-theme="dark">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AI Training Platform HUD</title>
-    <!-- Use Google Fonts -->
+    <title>AI Training Platform</title>
+    <!-- Use Google Fonts (from website-Chess) -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&family=Rajdhani:wght@400;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Playpen+Sans:wght@400;600;700&display=swap" rel="stylesheet">
+    
     <!-- Main Stylesheet -->
     <link rel="stylesheet" href="styles.css">
-    <!-- Icons -->
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 </head>
 <body>
-    <!-- Background Elements -->
-    <div class="bg-grad"></div>
-    <div class="grid-overlay"></div>
+    <!-- Background Area: Add your background image logic here via CSS in styles.css -->
+    <div class="empty bg-grad custom-bg" id="main-bg"></div>
 
     <!-- Notification Toast -->
     <div id="toast" class="toast hidden">
-        <span id="toast-icon"><i class="fas fa-info-circle"></i></span>
+        <span id="toast-icon"></span>
         <span id="toast-msg">Notification Message</span>
     </div>
 
     <!-- VIEW: Login panel -->
     <div id="login-view" class="view-container active">
-        <div class="glass-panel login-panel">
-            <div class="brand">
-                <i class="fas fa-microchip neon-icon"></i>
-                <h2>AI_CORE // <span class="highlight">AUTH</span></h2>
-                <p>Training Platform Access</p>
-            </div>
-            
+        <div class="form-box active-popup">
+            <span class="close" title="Mock close button">
+                <ion-icon name="close-circle-outline"></ion-icon>
+            </span>
             <form id="login-form">
-                <div class="input-group">
-                    <i class="fas fa-user"></i>
-                    <input type="text" id="username" placeholder="Username" required autocomplete="username">
+                <h1 data-i18n="login_title">Login</h1>
+                
+                <div class="input">
+                    <input type="text" id="username" required autocomplete="username" placeholder=" ">
+                    <label data-i18n="label_username">Username</label>
+                    <ion-icon name="person-outline"></ion-icon>
                 </div>
-                <div class="input-group">
-                    <i class="fas fa-lock"></i>
-                    <input type="password" id="password" placeholder="Password" required autocomplete="current-password">
+                
+                <div class="input login-eye">
+                    <input type="password" id="password" required autocomplete="current-password" placeholder=" ">
+                    <label data-i18n="label_password">Password</label>
+                    <span id="eye-toggle">
+                        <ion-icon name="eye-off-outline" class="eye-off"></ion-icon>
+                        <ion-icon name="eye-outline" class="eye-open"></ion-icon>
+                    </span>
                 </div>
-                <button type="submit" class="btn-neon" id="login-btn">
-                    <span>INITIALIZE_CONNECTION()</span>
-                    <i class="fas fa-chevron-right"></i>
+                
+                <button type="submit" class="ready-btn" id="login-btn">
+                    <span data-i18n="btn_login">Submit</span>
                 </button>
             </form>
         </div>
@@ -52,53 +55,68 @@
 
     <!-- VIEW: Main Dashboard HUD -->
     <div id="dashboard-view" class="view-container hidden">
-        <div class="hud-container">
+        <div class="hud-container main-content">
             
             <!-- Header section -->
-            <header class="hud-header glass-panel">
-                <div class="header-left">
-                    <i class="fas fa-network-wired neon-icon"></i>
-                    <h1>TRAIN_HUD <span class="highlight">v1.0</span></h1>
-                </div>
-                <div class="header-right">
+            <header>
+                <span>
+                    <div class="logo-image">
+                        <!-- Logo Placeholder -->
+                        <ion-icon name="hardware-chip-outline" style="font-size: 50px; color: white; display: flex; align-items:center; justify-content:center; height: 100%;"></ion-icon>
+                    </div>
+                    <div class="logo">AI_TRAIN</div>
+                </span>
+                
+                <nav>
                     <div class="user-info">
-                        <i class="fas fa-user-astronaut"></i>
-                        <span id="user-display">USER_UNKNOWN</span>
+                        <ion-icon name="person-circle-outline"></ion-icon>
+                        <span id="user-display">USER</span>
                         <span id="user-role" class="badge">ROLE</span>
                     </div>
-                    <button id="logout-btn" class="btn-ghost" title="Disconnect">
-                        <i class="fas fa-power-off"></i>
+                    
+                    <!-- Language Toggle -->
+                    <button class="icon-action" id="toggle-lang" title="切換語言 / Toggle Language">
+                        <ion-icon name="language-outline"></ion-icon>
                     </button>
-                </div>
+                    <!-- Theme Toggle -->
+                    <button class="icon-action" id="toggle-theme" title="切換主題 / Toggle Theme">
+                        <ion-icon name="moon-outline"></ion-icon>
+                    </button>
+                    <!-- Logout -->
+                    <button class="icon-action" id="logout-btn" title="Logout">
+                        <ion-icon name="log-out-outline"></ion-icon>
+                    </button>
+                </nav>
             </header>
 
             <!-- Main Content Area -->
             <main class="hud-grid">
                 
                 <!-- TOP WIDGET: Token Usage Overview -->
-                <section class="widget token-widget glass-panel">
+                <section class="widget token-widget form-box-panel">
                     <div class="widget-header">
-                        <h3><i class="fas fa-battery-three-quarters"></i> ALOCATED_RESOURCES [TOKENS]</h3>
+                        <h3 data-i18n="token_overview">Token Resources</h3>
                     </div>
                     <div class="token-display">
                         <div class="token-ring-container">
                             <svg class="progress-ring" width="120" height="120">
-                                <circle class="progress-ring__bg" stroke="rgba(255,255,255,0.1)" stroke-width="8" fill="transparent" r="52" cx="60" cy="60"/>
-                                <circle id="token-ring-fill" class="progress-ring__circle" stroke="var(--neon-blue)" stroke-width="8" fill="transparent" r="52" cx="60" cy="60"/>
+                                <circle class="progress-ring__bg" stroke="rgba(255,255,255,0.1)" stroke-width="10" fill="transparent" r="50" cx="60" cy="60"/>
+                                <circle id="token-ring-fill" class="progress-ring__circle" stroke="var(--accent-glow)" stroke-width="10" fill="transparent" r="50" cx="60" cy="60"/>
                             </svg>
                             <div class="token-percentage" id="token-percent">0%</div>
                         </div>
+                        
                         <div class="token-details">
                             <div class="stat-row">
-                                <span class="stat-label">USED:</span>
+                                <span class="stat-label" data-i18n="token_used">Used:</span>
                                 <span class="stat-value highlight" id="token-used">0</span>
                             </div>
                             <div class="stat-row">
-                                <span class="stat-label">LIMIT:</span>
+                                <span class="stat-label" data-i18n="token_limit">Limit:</span>
                                 <span class="stat-value" id="token-limit">0</span>
                             </div>
                             <div class="stat-row">
-                                <span class="stat-label">RESETS:</span>
+                                <span class="stat-label" data-i18n="token_reset">Reset Date:</span>
                                 <span class="stat-value warning" id="token-reset">--</span>
                             </div>
                         </div>
@@ -106,58 +124,62 @@
                 </section>
 
                 <!-- LEFT WIDGET: Submit new job -->
-                <section class="widget submit-widget glass-panel">
+                <section class="widget submit-widget form-box-panel">
                     <div class="widget-header">
-                        <h3><i class="fas fa-terminal"></i> COMPILE_NEW_JOB()</h3>
+                        <h3 data-i18n="job_compose">New Task</h3>
                     </div>
                     <form id="job-form" class="job-form">
-                        <div class="input-group">
-                            <label>JOB_NAME</label>
-                            <input type="text" id="job-name" required placeholder="e.g. ResNet50_Exp1">
+                        
+                        <div class="input row-input">
+                            <input type="text" id="job-name" required placeholder=" ">
+                            <label data-i18n="label_job_name">Job Name</label>
+                            <ion-icon name="document-text-outline"></ion-icon>
                         </div>
-                        <div class="row">
-                            <div class="input-group">
-                                <label>MODEL_IDENTIFIER</label>
-                                <input type="text" id="model-name" required placeholder="resnet50">
-                            </div>
-                            <div class="input-group">
-                                <label>PRIORITY</label>
-                                <select id="job-priority">
-                                    <option value="0">0 - BATCH</option>
-                                    <option value="1" selected>1 - NORMAL</option>
-                                    <option value="2">2 - HIGH</option>
-                                </select>
-                            </div>
+                        
+                        <div class="input row-input">
+                            <input type="text" id="model-name" required placeholder=" ">
+                            <label data-i18n="label_model_name">Model Identifier</label>
+                            <ion-icon name="cube-outline"></ion-icon>
                         </div>
+
+                        <div class="input-select-group">
+                            <p data-i18n="label_priority" style="font-size:14px; margin-bottom:5px;">Priority</p>
+                            <select id="job-priority" class="select-box">
+                                <option value="0" data-i18n="priority_0">0 - BATCH</option>
+                                <option value="1" data-i18n="priority_1" selected>1 - NORMAL</option>
+                                <option value="2" data-i18n="priority_2">2 - HIGH</option>
+                            </select>
+                        </div>
+
                         <div class="row">
-                            <div class="input-group">
-                                <label>EPOCHS (CONFIG)</label>
+                            <div class="input row-input mini-input">
                                 <input type="number" id="job-epochs" min="1" max="1000" value="10">
+                                <label data-i18n="label_epochs">Epochs</label>
                             </div>
-                            <div class="input-group">
-                                <label>BATCH_SIZE (CONFIG)</label>
+                            <div class="input row-input mini-input">
                                 <input type="number" id="job-batch" min="1" max="512" value="32">
+                                <label data-i18n="label_batch">Batch Size</label>
                             </div>
                         </div>
-                        <button type="submit" class="btn-neon" id="submit-job-btn">
-                            <i class="fas fa-upload"></i> DISPATCH_TASK
+
+                        <button type="submit" class="ready-btn" id="submit-job-btn">
+                            <span data-i18n="btn_dispatch">Dispatch Task</span>
                         </button>
                     </form>
                 </section>
 
                 <!-- RIGHT WIDGET: Active & Queued Jobs -->
-                <section class="widget list-widget glass-panel">
+                <section class="widget list-widget form-box-panel">
                     <div class="widget-header split">
-                        <h3><i class="fas fa-tasks"></i> ACTIVE_PIPELINE</h3>
-                        <button class="btn-icon" id="refresh-jobs-btn" title="Force Refresh">
-                            <i class="fas fa-sync-alt"></i>
-                        </button>
+                        <h3 data-i18n="pipeline_active">Active Pipeline</h3>
+                        <ion-icon name="refresh-circle-outline" id="refresh-jobs-btn" class="refresh-icon" title="Refresh"></ion-icon>
                     </div>
+                    
                     <div class="job-list-container" id="job-list-container">
                         <!-- JS injects jobs here -->
                         <div class="empty-state">
-                            <i class="fas fa-satellite-dish"></i>
-                            <p>NO SIGNAL / QUEUE EMPTY</p>
+                            <ion-icon name="radio-outline"></ion-icon>
+                            <p data-i18n="msg_no_signal">No Signal / Queue Empty</p>
                         </div>
                     </div>
                 </section>
@@ -166,7 +188,9 @@
         </div>
     </div>
     
-    <!-- Setup JS -->
+    <!-- Scripts -->
+    <script type="module" src="https://unpkg.com/ionicons@7.1.0/dist/ionicons/ionicons.esm.js"></script>
+    <script nomodule src="https://unpkg.com/ionicons@7.1.0/dist/ionicons/ionicons.js"></script>
     <script src="app.js"></script>
 </body>
 </html>
