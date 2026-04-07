@@ -277,7 +277,7 @@ loginForm.addEventListener('submit', async (e) => {
 
         const res = await fetch(`${API_BASE}/auth/login`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/x-form-urlencoded' },
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
             body: formData
         });
 
