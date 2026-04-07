@@ -44,9 +44,18 @@ curl http://localhost:8002/health
 
 | 服務 Service | URL | 說明 Description |
 |-------------|-----|-------------------|
-| Open WebUI | http://localhost:3000 | AI 聊天介面 \| Chat interface |
+| Open WebUI | http://localhost/ | AI 聊天介面 (預設入口) \| Chat interface |
+| TRAIN_HUD | http://localhost/train/ | 訓練管理面板 (方案 C) \| Training HUD |
 | Job Scheduler API | http://localhost:8002/docs | Swagger API 文件 \| API docs |
-| Nginx Gateway | http://localhost | 統一入口 \| Unified entry |
+| Nginx Gateway | http://localhost/health | 統一入口健康檢查 \| Gateway Health |
+
+## ✍️ 內容開發與撰寫位置 | Where to Write
+| 目標 Task | 檔案路徑 File Path | 說明 Note |
+|-----------|--------------------|-----------|
+| **修改 UI 視覺/語系** | `web-ui/` | 包含 html, css, js (i18n 字典) |
+| **調整 GPU/排程政策** | `job-scheduler/app/scheduler_policy.yaml` | 增減伺服器與調整併發數 |
+| **API 與後端邏輯** | `job-scheduler/app/` | FastAPI 路由與處理器 |
+| **更新說明文件** | `docs/` | 所有的 Markdown 指南 |
 
 ## 📚 文檔 | Documentation
 
