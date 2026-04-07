@@ -30,8 +30,8 @@
 cp .env.example .env
 # 然後修改 .env 中的設定值 | Then edit values in .env
 
-# 2. 啟動所有服務 | Start all services
-docker-compose up -d --build
+# 2. 啟動所有服務 (包含核心與 AI 對話模塊) | Start all services
+docker-compose -f docker-compose.yml -f docker-compose.ai-models.yml up -d --build
 
 # 3. 確認服務狀態 | Check service status
 docker-compose ps
