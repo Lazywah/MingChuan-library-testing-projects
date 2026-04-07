@@ -31,6 +31,7 @@ services:
       - "80:80"
     volumes:
       - ./infrastructure/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./web-ui:/usr/share/nginx/html/train:ro
     depends_on:
       job-scheduler:
         condition: service_healthy

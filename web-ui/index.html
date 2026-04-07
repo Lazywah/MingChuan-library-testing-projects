@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Training Platform HUD</title>
+    <!-- Use Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&family=Rajdhani:wght@400;600;700&display=swap" rel="stylesheet">
+    <!-- Main Stylesheet -->
+    <link rel="stylesheet" href="styles.css">
+    <!-- Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body>
+    <!-- Background Elements -->
+    <div class="bg-grad"></div>
+    <div class="grid-overlay"></div>
+
+    <!-- Notification Toast -->
+    <div id="toast" class="toast hidden">
+        <span id="toast-icon"><i class="fas fa-info-circle"></i></span>
+        <span id="toast-msg">Notification Message</span>
+    </div>
+
+    <!-- VIEW: Login panel -->
+    <div id="login-view" class="view-container active">
+        <div class="glass-panel login-panel">
+            <div class="brand">
+                <i class="fas fa-microchip neon-icon"></i>
+                <h2>AI_CORE // <span class="highlight">AUTH</span></h2>
+                <p>Training Platform Access</p>
+            </div>
+            
+            <form id="login-form">
+                <div class="input-group">
+                    <i class="fas fa-user"></i>
+                    <input type="text" id="username" placeholder="Username" required autocomplete="username">
+                </div>
+                <div class="input-group">
+                    <i class="fas fa-lock"></i>
+                    <input type="password" id="password" placeholder="Password" required autocomplete="current-password">
+                </div>
+                <button type="submit" class="btn-neon" id="login-btn">
+                    <span>INITIALIZE_CONNECTION()</span>
+                    <i class="fas fa-chevron-right"></i>
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <!-- VIEW: Main Dashboard HUD -->
+    <div id="dashboard-view" class="view-container hidden">
+        <div class="hud-container">
+            
+            <!-- Header section -->
+            <header class="hud-header glass-panel">
+                <div class="header-left">
+                    <i class="fas fa-network-wired neon-icon"></i>
+                    <h1>TRAIN_HUD <span class="highlight">v1.0</span></h1>
+                </div>
+                <div class="header-right">
+                    <div class="user-info">
+                        <i class="fas fa-user-astronaut"></i>
+                        <span id="user-display">USER_UNKNOWN</span>
+                        <span id="user-role" class="badge">ROLE</span>
+                    </div>
+                    <button id="logout-btn" class="btn-ghost" title="Disconnect">
+                        <i class="fas fa-power-off"></i>
+                    </button>
+                </div>
+            </header>
+
+            <!-- Main Content Area -->
+            <main class="hud-grid">
+                
+                <!-- TOP WIDGET: Token Usage Overview -->
+                <section class="widget token-widget glass-panel">
+                    <div class="widget-header">
+                        <h3><i class="fas fa-battery-three-quarters"></i> ALOCATED_RESOURCES [TOKENS]</h3>
+                    </div>
+                    <div class="token-display">
+                        <div class="token-ring-container">
+                            <svg class="progress-ring" width="120" height="120">
+                                <circle class="progress-ring__bg" stroke="rgba(255,255,255,0.1)" stroke-width="8" fill="transparent" r="52" cx="60" cy="60"/>
+                                <circle id="token-ring-fill" class="progress-ring__circle" stroke="var(--neon-blue)" stroke-width="8" fill="transparent" r="52" cx="60" cy="60"/>
+                            </svg>
+                            <div class="token-percentage" id="token-percent">0%</div>
+                        </div>
+                        <div class="token-details">
+                            <div class="stat-row">
+                                <span class="stat-label">USED:</span>
+                                <span class="stat-value highlight" id="token-used">0</span>
+                            </div>
+                            <div class="stat-row">
+                                <span class="stat-label">LIMIT:</span>
+                                <span class="stat-value" id="token-limit">0</span>
+                            </div>
+                            <div class="stat-row">
+                                <span class="stat-label">RESETS:</span>
+                                <span class="stat-value warning" id="token-reset">--</span>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- LEFT WIDGET: Submit new job -->
+                <section class="widget submit-widget glass-panel">
+                    <div class="widget-header">
+                        <h3><i class="fas fa-terminal"></i> COMPILE_NEW_JOB()</h3>
+                    </div>
+                    <form id="job-form" class="job-form">
+                        <div class="input-group">
+                            <label>JOB_NAME</label>
+                            <input type="text" id="job-name" required placeholder="e.g. ResNet50_Exp1">
+                        </div>
+                        <div class="row">
+                            <div class="input-group">
+                                <label>MODEL_IDENTIFIER</label>
+                                <input type="text" id="model-name" required placeholder="resnet50">
+                            </div>
+                            <div class="input-group">
+                                <label>PRIORITY</label>
+                                <select id="job-priority">
+                                    <option value="0">0 - BATCH</option>
+                                    <option value="1" selected>1 - NORMAL</option>
+                                    <option value="2">2 - HIGH</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="row">
+                            <div class="input-group">
+                                <label>EPOCHS (CONFIG)</label>
+                                <input type="number" id="job-epochs" min="1" max="1000" value="10">
+                            </div>
+                            <div class="input-group">
+                                <label>BATCH_SIZE (CONFIG)</label>
+                                <input type="number" id="job-batch" min="1" max="512" value="32">
+                            </div>
+                        </div>
+                        <button type="submit" class="btn-neon" id="submit-job-btn">
+                            <i class="fas fa-upload"></i> DISPATCH_TASK
+                        </button>
+                    </form>
+                </section>
+
+                <!-- RIGHT WIDGET: Active & Queued Jobs -->
+                <section class="widget list-widget glass-panel">
+                    <div class="widget-header split">
+                        <h3><i class="fas fa-tasks"></i> ACTIVE_PIPELINE</h3>
+                        <button class="btn-icon" id="refresh-jobs-btn" title="Force Refresh">
+                            <i class="fas fa-sync-alt"></i>
+                        </button>
+                    </div>
+                    <div class="job-list-container" id="job-list-container">
+                        <!-- JS injects jobs here -->
+                        <div class="empty-state">
+                            <i class="fas fa-satellite-dish"></i>
+                            <p>NO SIGNAL / QUEUE EMPTY</p>
+                        </div>
+                    </div>
+                </section>
+
+            </main>
+        </div>
+    </div>
+    
+    <!-- Setup JS -->
+    <script src="app.js"></script>
+</body>
+</html>
