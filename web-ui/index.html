@@ -210,12 +210,13 @@
                     <aside class="chat-sidebar form-box-panel">
                         <div class="sidebar-header">
                             <h3 data-i18n="chat_sessions">Sessions</h3>
-                            <button class="icon-action" id="new-chat-btn" title="New Chat">
-                                <ion-icon name="add-circle-outline"></ion-icon>
-                            </button>
                         </div>
                         <div class="session-list scrollbar-custom" id="session-list">
                             <!-- ZH: 由 JS 動態注入對話室 | EN: Session items injected by JS -->
+                            <button class="session-item new-chat-btn" id="new-chat-btn">
+                                <ion-icon name="add-circle-outline"></ion-icon>
+                                <span data-i18n="btn_new_chat">開始新對話</span>
+                            </button>
                         </div>
                     </aside>
 
@@ -232,8 +233,8 @@
                             <form id="chat-form" class="chat-form">
                                 <div class="chat-input-row">
                                     <textarea id="chat-input" data-i18n-placeholder="placeholder_chat" placeholder="Type your message here..." required></textarea>
-                                    <button type="submit" id="send-chat-btn" class="send-btn">
-                                        <ion-icon name="send"></ion-icon>
+                                    <button type="submit" id="send-chat-btn" class="send-btn" aria-label="Send message">
+                                        <ion-icon name="send-outline"></ion-icon>
                                     </button>
                                 </div>
                                 <div class="chat-controls-bar">
@@ -245,13 +246,7 @@
                                             <option value="llama3:latest">Ollama Llama3</option>
                                         </select>
                                     </div>
-                                    <div class="chat-actions">
-                                        <button type="button" class="ready-btn mini-btn" id="clear-chat-btn">
-                                            <ion-icon name="trash-outline"></ion-icon>
-                                            <span data-i18n="btn_clear_chat">Clear</span>
-                                        </button>
-                                    </div>
-                                </div>
+                                                                    </div>
                             </form>
                         </div>
                     </div>

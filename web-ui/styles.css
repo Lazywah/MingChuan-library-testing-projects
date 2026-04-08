@@ -160,8 +160,17 @@ form h1 {
 }
 
 .input ion-icon {
-    font-size: 22px;
+    font-size: 20px;
     color: var(--text-primary);
+    background: transparent;
+    padding: 2px;
+    border-radius: 4px;
+    transition: all 0.3s ease;
+}
+
+.input ion-icon:hover {
+    color: var(--accent-glow);
+    transform: scale(1.1);
 }
 
 .login-eye span {
@@ -235,10 +244,28 @@ header {
     height: 80px;
 }
 
-.header-left, .header-center, .header-right {
+.header-left, .header-center, .header-left {
     display: flex;
     align-items: center;
     gap: 10px;
+}
+
+.header-left .logo-image ion-icon {
+    color: var(--text-primary);
+    transition: color 0.3s ease;
+}
+
+[data-theme='light'] .header-left .logo-image ion-icon {
+    color: #4f46e5;
+}
+
+/* Ensure logo icon respects theme changes */
+.header-left .logo-image ion-icon {
+    color: var(--text-primary) !important;
+}
+
+[data-theme='light'] .header-left .logo-image ion-icon {
+    color: #4f46e5 !important;
 }
 
 .header-center {
@@ -250,16 +277,105 @@ header {
 }
 
 .header-right .icon-action {
-    font-size: 24px;
+    font-size: 22px;
     color: var(--text-primary);
     opacity: 0.8;
     transition: 0.3s;
+    background: transparent;
+    border: none;
+    padding: 4px;
+    border-radius: 6px;
 }
 
 .header-right .icon-action:hover {
     opacity: 1;
     transform: scale(1.1);
     color: var(--accent-glow);
+    background: rgba(255, 255, 255, 0.1);
+}
+
+/* Global icon improvements */
+ion-icon {
+    background: transparent !important;
+    border: none !important;
+    outline: none !important;
+}
+
+
+/* Action icons in buttons */
+.ready-btn ion-icon,
+.mini-btn ion-icon {
+    font-size: 16px;
+    margin-right: 4px;
+}
+
+/* Session action icons */
+.session-actions ion-icon {
+    font-size: 14px;
+    color: var(--text-muted);
+    cursor: pointer;
+    transition: color 0.2s ease;
+    padding: 2px;
+    border-radius: 4px;
+    background: transparent;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 20px;
+    transform: none !important;
+    flex-shrink: 0;
+}
+
+.session-actions ion-icon:hover,
+.session-actions ion-icon:focus {
+    color: var(--accent-glow);
+    transform: none !important;
+    background: rgba(255, 255, 255, 0.1);
+}
+
+/* New chat button icon */
+#new-chat-btn ion-icon {
+    font-size: 14px;
+    color: var(--text-primary);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 14px;
+    height: 14px;
+    flex-shrink: 0;
+}
+
+/* Tab button icons - improved sizing */
+.tab-btn ion-icon {
+    font-size: 22px;
+    transition: all 0.3s ease;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+}
+
+.tab-btn:hover ion-icon {
+    transform: scale(1.1);
+}
+
+
+/* Refresh icon */
+.refresh-icon {
+    font-size: 24px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    background: transparent;
+    padding: 4px;
+    border-radius: 50%;
+}
+
+.refresh-icon:hover { 
+    transform: rotate(180deg); 
+    color: var(--accent-glow);
+    background: rgba(255, 255, 255, 0.1);
 }
 
 /* ZH: Tab 按鈕樣式 | EN: Tab Button Styles */
@@ -358,26 +474,74 @@ header {
 }
 
 .session-item {
-    padding: 12px 15px;
+    padding: 10px 12px;
     border-radius: 12px;
     border: 1px solid transparent;
     cursor: pointer;
     display: flex;
     justify-content: space-between;
     align-items: center;
-    transition: 0.3s;
+    transition: background 0.3s ease, border-color 0.3s ease;
     background: rgba(255, 255, 255, 0.05);
+    min-height: 44px;
+    max-height: 44px;
+    height: 44px;
+    box-sizing: border-box;
 }
 
 .session-item:hover {
     background: rgba(255, 255, 255, 0.1);
-    border-color: var(--accent-glow);
+    transform: none;
+    min-height: 44px;
+    max-height: 44px;
+    height: 44px;
 }
 
 .session-item.active {
     background: rgba(255, 255, 255, 0.15);
     border-color: var(--accent-glow);
-    box-shadow: 0 0 10px rgba(255, 255, 255, 0.1);
+}
+
+.session-item.new-chat-btn {
+    background: rgba(79, 70, 229, 0.1);
+    border: 1px solid rgba(79, 70, 229, 0.3);
+    gap: 8px;
+    min-height: 44px;
+    max-height: 44px;
+    height: 44px;
+    padding: 8px 12px;
+}
+
+.session-item.new-chat-btn:hover {
+    background: rgba(79, 70, 229, 0.2);
+    border-color: var(--accent-glow);
+    transform: none;
+    min-height: 44px;
+    max-height: 44px;
+    height: 44px;
+}
+
+.session-item.new-chat-btn:focus {
+    transform: none;
+    box-shadow: none;
+    min-height: 44px;
+    max-height: 44px;
+    height: 44px;
+    outline: none;
+}
+
+.session-item.new-chat-btn ion-icon {
+    font-size: 14px;
+    color: var(--accent-glow);
+    width: 14px;
+    height: 14px;
+    flex-shrink: 0;
+}
+
+.session-item.new-chat-btn span {
+    font-weight: 500;
+    color: var(--text-primary);
+    font-size: 13px;
 }
 
 .session-name {
@@ -418,10 +582,54 @@ header {
     gap: 20px;
 }
 
+/* Chat bubble positioning */
+.user-bubble {
+    display: flex;
+    justify-content: flex-end;
+    margin-left: 20%;
+}
+
+.ai-bubble {
+    display: flex;
+    justify-content: flex-start;
+    margin-right: 20%;
+}
+
+.bubble-content {
+    max-width: 100%;
+    padding: 12px 16px;
+    border-radius: 16px;
+    font-size: 14px;
+    line-height: 1.4;
+    word-wrap: break-word;
+}
+
+.user-bubble .bubble-content {
+    background: rgba(99, 102, 241, 0.2);
+    border: 1px solid var(--border-color);
+    color: var(--text-primary);
+}
+
+.ai-bubble .bubble-content {
+    background: rgba(255, 255, 255, 0.1);
+    border: 1px solid var(--accent-glow);
+    color: var(--text-primary);
+}
+
+[data-theme='light'] .user-bubble .bubble-content {
+    background: rgba(99, 102, 241, 0.1);
+    border-color: #6366f1;
+}
+
+[data-theme='light'] .ai-bubble .bubble-content {
+    background: rgba(79, 70, 229, 0.05);
+    border-color: #4f46e5;
+}
+
 /* ZH: 輸入區域 | EN: Input Area */
 .chat-input-area {
     padding: 20px 30px;
-    background: rgba(0,0,0,0.2);
+    background: transparent;
     border-top: 1px solid rgba(255, 255, 255, 0.05);
 }
 
@@ -440,18 +648,76 @@ header {
     align-items: flex-end;
 }
 
+.send-btn {
+    background: var(--accent-glow);
+    border: none;
+    border-radius: 12px;
+    width: 40px;
+    height: 40px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    flex-shrink: 0;
+    overflow: visible;
+}
+
+.send-btn:hover {
+    transform: scale(1.05);
+    background: #fff;
+}
+
+.send-btn ion-icon {
+    font-size: 20px;
+    color: #ffffff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    visibility: visible;
+    opacity: 1;
+    width: 20px;
+    height: 20px;
+}
+
+.send-btn:hover ion-icon {
+    color: var(--accent-glow);
+}
+
 .chat-form textarea {
     flex: 1;
     background: rgba(255, 255, 255, 0.05);
     border: 1px solid var(--border-color);
     border-radius: 16px;
     color: var(--text-primary);
-    padding: 15px 20px;
+    padding: 10px 20px;
     resize: none;
-    height: 60px;
+    min-height: 40px;
+    max-height: 84px; /* 3 lines at ~28px per line */
+    height: 40px;
     font-size: 16px;
     outline: none;
-    transition: all 0.3s ease;
+    transition: border-color 0.3s ease, box-shadow 0.3s ease;
+    line-height: 1.4;
+    overflow-y: auto;
+    box-sizing: border-box;
+}
+
+.chat-form textarea::-webkit-scrollbar {
+    width: 6px;
+}
+
+.chat-form textarea::-webkit-scrollbar-thumb {
+    background-color: rgba(255, 255, 255, 0.2);
+    border-radius: 3px;
+}
+
+.chat-form textarea::-webkit-scrollbar-thumb:hover {
+    background-color: rgba(255, 255, 255, 0.4);
+}
+
+.chat-form textarea:not(:hover)::-webkit-scrollbar-thumb {
+    background-color: transparent;
 }
 
 .chat-controls-bar {
@@ -473,10 +739,21 @@ header {
 }
 
 .mini-select select {
-    width: 180px;
-    height: 32px;
-    padding: 0 10px;
+    width: 220px;
+    height: 36px;
+    padding: 0 12px;
     font-size: 13px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.mini-select select option {
+    padding: 10px;
+    white-space: normal;
+    overflow: visible;
+    text-overflow: unset;
+    max-width: none;
 }
 
 .chat-actions .mini-btn {
@@ -509,6 +786,96 @@ header {
 @media (max-width: 900px) {
     .chat-layout { grid-template-columns: 1fr; }
     .chat-sidebar { display: none; }
+}
+
+@media (max-width: 1200px) {
+    .hud-grid {
+        grid-template-columns: 1fr;
+        gap: 20px;
+    }
+    
+    .token-widget {
+        grid-column: 1;
+    }
+}
+
+@media (max-width: 800px) {
+    .main-content {
+        padding: 15px 20px 30px 20px;
+    }
+    
+    header {
+        flex-direction: column;
+        height: auto;
+        padding: 15px;
+        gap: 15px;
+    }
+    
+    .header-center {
+        flex-wrap: wrap;
+        justify-content: center;
+    }
+    
+    .tab-btn {
+        font-size: 14px;
+        padding: 6px 12px;
+    }
+    
+    .chat-layout {
+        grid-template-columns: 1fr;
+    }
+    
+    .chat-sidebar {
+        display: none;
+    }
+}
+
+@media (max-width: 600px) {
+    .form-box {
+        width: 90%;
+        padding: 30px 20px;
+    }
+    
+    .main-content {
+        padding: 10px 15px 20px 15px;
+    }
+    
+    header {
+        padding: 10px;
+    }
+    
+    .header-left .logo {
+        font-size: 18px;
+    }
+    
+    .tab-btn {
+        font-size: 12px;
+        padding: 4px 8px;
+        gap: 4px;
+    }
+    
+    .tab-btn ion-icon {
+        font-size: 16px;
+    }
+    
+    .chat-input-row {
+        flex-direction: column;
+        gap: 10px;
+    }
+    
+    .chat-controls-bar {
+        flex-direction: column;
+        gap: 10px;
+        align-items: stretch;
+    }
+    
+    .mini-select {
+        justify-content: space-between;
+    }
+    
+    .settings-grid {
+        grid-template-columns: 1fr;
+    }
 }
 
 .badge {
@@ -603,7 +970,12 @@ header {
 }
 .input-select-group select option {
     background: var(--bg-panel);
-    color: #fff;
+    color: var(--text-primary);
+}
+
+[data-theme='light'] .input-select-group select option {
+    background: #ffffff;
+    color: #1e1b4b;
 }
 
 /* ZH: 任務列表顯示 | EN: JobList Display */
@@ -629,21 +1001,47 @@ header {
 }
 .job-card:hover {
     background: rgba(255, 255, 255, 0.2);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.3);
 }
 .job-head {
     display: flex;
     justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 8px;
+}
+.job-info {
+    flex: 1;
+}
+.job-title {
     font-weight: bold;
-    font-size: 18px;
+    font-size: 16px;
+    display: block;
+    margin-bottom: 4px;
 }
 .job-id {
-    font-size: 12px; opacity: 0.7; margin: 5px 0;
+    font-size: 11px; 
+    opacity: 0.7; 
+    color: var(--text-muted);
 }
 .job-meta {
-    display: flex; gap: 15px; font-size: 14px;
+    display: flex; 
+    gap: 15px; 
+    font-size: 12px;
+    margin-bottom: 10px;
+    opacity: 0.8;
+}
+.job-model, .job-priority {
+    background: rgba(255, 255, 255, 0.05);
+    padding: 2px 6px;
+    border-radius: 4px;
 }
 .job-status {
-    padding: 3px 8px; border-radius: 10px; font-size: 12px;
+    padding: 4px 8px; 
+    border-radius: 8px; 
+    font-size: 11px;
+    font-weight: 600;
+    white-space: nowrap;
 }
 
 .job-progress-bar {

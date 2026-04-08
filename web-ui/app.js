@@ -7,7 +7,7 @@ let pollInterval = null;
 
 // ZH: 多對話管理狀態 | EN: Multi-session State Management
 let sessions = JSON.parse(localStorage.getItem('ai_hud_sessions')) || [
-    { id: 'default', name: 'New Chat', messages: [] }
+    { id: 'default', name: TRANSLATIONS[currentLang]['chat_sessions'], messages: [] }
 ];
 let activeSessionId = localStorage.getItem('ai_hud_active_session') || 'default';
 
@@ -45,6 +45,7 @@ const TRANSLATIONS = {
         chat_welcome: "哈囉！我是 AI 助手，今天有什麼我可以幫您的嗎？",
         btn_clear_chat: "清除內容",
         placeholder_chat: "輸入訊息...",
+        btn_new_chat: "開始新對話",
         // 設定
         settings_appearance: "外觀視覺",
         label_theme: "佈景主題",
@@ -99,6 +100,7 @@ const TRANSLATIONS = {
         chat_welcome: "Hello! I am your AI assistant. How can I help you today?",
         btn_clear_chat: "Clear",
         placeholder_chat: "Type a message...",
+        btn_new_chat: "Start New Conversation",
         // Settings
         settings_appearance: "Appearance",
         label_theme: "Theme Mode",
@@ -149,7 +151,6 @@ const chatHistoryEl = document.getElementById('chat-history');
 const chatForm = document.getElementById('chat-form');
 const chatInput = document.getElementById('chat-input');
 const chatModelSelect = document.getElementById('chat-model-select');
-const clearChatBtn = document.getElementById('clear-chat-btn');
 
 // Dashboard Nodes
 const tokenPercent = document.getElementById('token-percent');
@@ -237,7 +238,17 @@ function switchTab(tabId) {
 // =========================
 function renderSessions() {
     if(!sessionListEl) return;
+    
+    // Clear all session items except the new chat button
+    const newChatBtn = sessionListEl.querySelector('.new-chat-btn');
     sessionListEl.innerHTML = '';
+    
+    // Add the new chat button at the top
+    if(newChatBtn) {
+        sessionListEl.appendChild(newChatBtn);
+    }
+    
+    // Render all sessions
     sessions.forEach(session => {
         const item = document.createElement('div');
         item.className = `session-item ${session.id === activeSessionId ? 'active' : ''}`;
@@ -246,8 +257,8 @@ function renderSessions() {
         item.innerHTML = `
             <span class="session-name" id="name-${session.id}">${session.name}</span>
             <div class="session-actions">
-                <ion-icon name="create-outline" title="Rename" class="action-rename"></ion-icon>
-                <ion-icon name="trash-outline" title="Delete" class="action-delete"></ion-icon>
+                <ion-icon name="create-outline" class="action-rename" title="Rename"></ion-icon>
+                <ion-icon name="trash-outline" class="action-delete" title="Delete"></ion-icon>
             </div>
         `;
         sessionListEl.appendChild(item);
@@ -283,14 +294,19 @@ function renameSession(e, id) {
 
 function deleteSession(e, id) {
     e.stopPropagation();
-    if(sessions.length <= 1) {
-        alert('Cannot delete the last session.');
-        return;
-    }
     if(!confirm('Delete this session?')) return;
     
     sessions = sessions.filter(s => s.id !== id);
-    if(activeSessionId === id) activeSessionId = sessions[0].id;
+    
+    // If no sessions left, create a new one automatically
+    if(sessions.length === 0) {
+        const newId = 'sess_' + Date.now();
+        sessions.unshift({ id: newId, name: 'New Chat', messages: [] });
+        activeSessionId = newId;
+    } else if(activeSessionId === id) {
+        activeSessionId = sessions[0].id;
+    }
+    
     saveSessions();
     renderSessions();
     renderActiveChat();
@@ -403,6 +419,8 @@ function switchToDashboard() {
     if(dashView) dashView.classList.remove('hidden');
     if(pollInterval) clearInterval(pollInterval);
     pollInterval = setInterval(fetchJobs, 5000);
+    // Add token usage refresh interval
+    setInterval(fetchTokenUsage, 10000); // Refresh token usage every 10 seconds
     switchTab('dashboard');
 }
 
@@ -428,15 +446,81 @@ async function fetchUserProfile() {
 }
 
 async function fetchTokenUsage() {
-    const res = await fetch(`${API_BASE}/auth/usage`, { headers: { 'Authorization': `Bearer ${authToken}` } });
-    if(res.ok) {
-        const data = await res.json();
-        const percentage = (data.usage_percentage * 100).toFixed(1);
-        if(tokenPercent) tokenPercent.textContent = `${percentage}%`;
-        if(tokenUsed) tokenUsed.textContent = data.tokens_used.toLocaleString();
-        if(tokenLimit) tokenLimit.textContent = data.tokens_limit.toLocaleString();
-        if(tokenReset) tokenReset.textContent = formatDate(data.reset_date);
-        if(tokenRingFill) tokenRingFill.style.strokeDashoffset = 314 - (314 * data.usage_percentage);
+    try {
+        const res = await fetch(`${API_BASE}/auth/usage`, { headers: { 'Authorization': `Bearer ${authToken}` } });
+        if(res.ok) {
+            const data = await res.json();
+            console.log('Token usage data:', data);
+            updateTokenDisplay(data);
+        } else {
+            console.error('Token usage API error:', res.status);
+            // Use cached/local token tracking as fallback
+            updateTokenDisplayFromLocal();
+        }
+    } catch(e) {
+        console.error('Error fetching token usage:', e);
+        updateTokenDisplayFromLocal();
+    }
+}
+
+function updateTokenDisplay(data) {
+    // Handle both percentage formats (0.1 or 10%)
+    const usagePercentage = data.usage_percentage;
+    const percentage = usagePercentage > 1 ? usagePercentage : (usagePercentage * 100).toFixed(1);
+    
+    if(tokenPercent) tokenPercent.textContent = `${percentage}%`;
+    if(tokenUsed) tokenUsed.textContent = (data.tokens_used || 0).toLocaleString();
+    if(tokenLimit) tokenLimit.textContent = (data.tokens_limit || 0).toLocaleString();
+    if(tokenReset) tokenReset.textContent = formatDate(data.reset_date);
+    
+    // Update progress ring - handle both percentage formats
+    const normalizedPercentage = usagePercentage > 1 ? usagePercentage / 100 : usagePercentage;
+    if(tokenRingFill) tokenRingFill.style.strokeDashoffset = 314 - (314 * normalizedPercentage);
+    
+    // Store in localStorage for offline tracking
+    localStorage.setItem('token_usage_data', JSON.stringify(data));
+    
+    console.log('Token display updated:', {
+        percentage,
+        tokens_used: data.tokens_used,
+        tokens_limit: data.tokens_limit,
+        reset_date: data.reset_date,
+        normalizedPercentage
+    });
+}
+
+function updateTokenDisplayFromLocal() {
+    const localData = localStorage.getItem('token_usage_data');
+    if(localData) {
+        try {
+            const data = JSON.parse(localData);
+            updateTokenDisplay(data);
+        } catch(e) {
+            console.error('Error parsing local token data:', e);
+            // Set default values
+            if(tokenPercent) tokenPercent.textContent = '0%';
+            if(tokenUsed) tokenUsed.textContent = '0';
+            if(tokenLimit) tokenLimit.textContent = '10000';
+            if(tokenReset) tokenReset.textContent = '--';
+            if(tokenRingFill) tokenRingFill.style.strokeDashoffset = 314;
+        }
+    }
+}
+
+function trackTokenUsage(messageTokens, isUser = true) {
+    // Simple token estimation (rough approximation: 1 token ≈ 4 characters for English, 2-3 for Chinese)
+    const estimatedTokens = Math.ceil(messageTokens.length / 3);
+    
+    const localData = localStorage.getItem('token_usage_data');
+    if(localData) {
+        try {
+            const data = JSON.parse(localData);
+            data.tokens_used = (data.tokens_used || 0) + estimatedTokens;
+            data.usage_percentage = Math.min(data.tokens_used / data.tokens_limit, 1);
+            updateTokenDisplay(data);
+        } catch(e) {
+            console.error('Error updating local token tracking:', e);
+        }
     }
 }
 
@@ -448,32 +532,95 @@ function formatDate(dateStr) {
 
 async function fetchJobs() {
     try {
-        const res = await fetch(`${API_BASE}/jobs`, { headers: { 'Authorization': `Bearer ${authToken}` } });
-        if(res.ok) {
-            const data = await res.json();
-            renderJobs(data.items || []);
+        console.log('Fetching jobs from API...');
+        const res = await fetch(`${API_BASE}/jobs`, { 
+            headers: { 'Authorization': `Bearer ${authToken}` } 
+        });
+        
+        if(!res.ok) {
+            console.error('Jobs API response not OK:', res.status, res.statusText);
+            renderJobs([]);
+            return;
         }
-    } catch(e) {}
+        
+        const data = await res.json();
+        console.log('Jobs data received:', data);
+        const jobs = data.items || data || [];
+        console.log('Jobs to render:', jobs);
+        renderJobs(jobs);
+    } catch(e) {
+        console.error('Error fetching jobs:', e);
+        renderJobs([]);
+    }
 }
 
 function renderJobs(jobs) {
     if(!jobListContainer) return;
-    jobListContainer.innerHTML = jobs.length ? '' : `
-        <div class="empty-state">
-            <ion-icon name="radio-outline"></ion-icon>
-            <p data-i18n="msg_no_signal">No Signal</p>
-        </div>
-    `;
-    jobs.forEach(job => {
+    
+    console.log('Rendering jobs:', jobs);
+    
+    if(!jobs || jobs.length === 0) {
+        jobListContainer.innerHTML = `
+            <div class="empty-state">
+                <ion-icon name="radio-outline"></ion-icon>
+                <p data-i18n="msg_no_signal">No Signal / Queue Empty</p>
+            </div>
+        `;
+        return;
+    }
+    
+    jobListContainer.innerHTML = '';
+    jobs.forEach((job, index) => {
         const card = document.createElement('div');
         card.className = 'job-card';
+        
+        // Handle different job data structures
+        const jobName = job.job_name || job.name || `Job ${index + 1}`;
+        const jobStatus = job.status || 'unknown';
+        const jobProgress = job.progress || job.progress_percentage || 0;
+        const jobId = job.id || job.job_id || `job_${index}`;
+        const modelName = job.model_name || job.model || 'Unknown Model';
+        
+        // Status color mapping
+        let statusColor = 'var(--accent-glow)';
+        let statusBg = 'transparent';
+        
+        switch(jobStatus.toLowerCase()) {
+            case 'running':
+                statusColor = '#10b981';
+                statusBg = 'rgba(16, 185, 129, 0.1)';
+                break;
+            case 'completed':
+                statusColor = '#3b82f6';
+                statusBg = 'rgba(59, 130, 246, 0.1)';
+                break;
+            case 'failed':
+                statusColor = '#ef4444';
+                statusBg = 'rgba(239, 68, 68, 0.1)';
+                break;
+            case 'queued':
+            case 'pending':
+                statusColor = '#f59e0b';
+                statusBg = 'rgba(245, 158, 11, 0.1)';
+                break;
+        }
+        
         card.innerHTML = `
             <div class="job-head">
-                <span class="job-title">${job.job_name}</span>
-                <span class="job-status" style="border:1px solid var(--accent-glow); color:var(--accent-glow);">${job.status.toUpperCase()}</span>
+                <div class="job-info">
+                    <span class="job-title">${jobName}</span>
+                    <span class="job-id">ID: ${jobId}</span>
+                </div>
+                <span class="job-status" style="background: ${statusBg}; border:1px solid ${statusColor}; color:${statusColor};">
+                    ${t(`status_${jobStatus.toLowerCase()}`) || jobStatus.toUpperCase()}
+                </span>
+            </div>
+            <div class="job-meta">
+                <span class="job-model">${modelName}</span>
+                <span class="job-priority">Priority: ${job.priority || 1}</span>
             </div>
             <div class="job-progress-bar">
-                <div class="job-progress-fill" style="width: ${job.progress || 0}%"></div>
+                <div class="job-progress-fill" style="width: ${jobProgress}%"></div>
             </div>
         `;
         jobListContainer.appendChild(card);
@@ -527,6 +674,9 @@ if(chatForm) {
         currentSession.messages.push(userMsg);
         renderBubble(userMsg);
         saveSessions();
+        
+        // Track token usage for user message
+        trackTokenUsage(prompt, true);
 
         // Create empty AI bubble
         const aiBubble = createBubble('assistant', '');
@@ -578,6 +728,9 @@ if(chatForm) {
             
             currentSession.messages.push({ role: 'assistant', content: aiFullText });
             saveSessions();
+            
+            // Track token usage for AI response
+            trackTokenUsage(aiFullText, false);
         } catch (err) {
             contentEl.textContent = "Error occurred during AI generation.";
         }
@@ -598,21 +751,44 @@ function createBubble(role, content) {
     return div;
 }
 
-if(clearChatBtn) {
-    clearChatBtn.addEventListener('click', () => {
-        if(!confirm('Clear this session?')) return;
-        const session = sessions.find(s => s.id === activeSessionId);
-        if(session) {
-            session.messages = [];
-            saveSessions();
-            renderActiveChat();
-        }
-    });
-}
 
 if(chatInput) {
-    chatInput.addEventListener('input', () => {
-        chatInput.style.height = '60px';
-        chatInput.style.height = (chatInput.scrollHeight) + 'px';
+    const resetInputHeight = () => {
+        // Store current scroll position
+        const scrollTop = chatInput.scrollTop;
+        
+        // Reset height to auto to get proper scrollHeight
+        chatInput.style.height = 'auto';
+        
+        // Get computed styles to account for padding
+        const computedStyle = window.getComputedStyle(chatInput);
+        const paddingTop = parseInt(computedStyle.paddingTop, 10);
+        const paddingBottom = parseInt(computedStyle.paddingBottom, 10);
+        const totalPadding = paddingTop + paddingBottom;
+        
+        // Calculate new height: scrollHeight already includes padding, 
+        // so we subtract padding to get content height, then add back min padding
+        const contentHeight = chatInput.scrollHeight - totalPadding;
+        const newHeight = Math.max(40 - totalPadding, Math.min(contentHeight, 84 - totalPadding));
+        chatInput.style.height = newHeight + 'px';
+        
+        // Restore scroll position if needed
+        if (scrollTop > 0) {
+            chatInput.scrollTop = scrollTop;
+        }
+    };
+    
+    chatInput.addEventListener('input', resetInputHeight);
+    
+    // Handle paste events with delay
+    chatInput.addEventListener('paste', () => {
+        setTimeout(resetInputHeight, 10);
     });
+    
+    // Handle focus/blur to ensure proper height
+    chatInput.addEventListener('focus', resetInputHeight);
+    chatInput.addEventListener('blur', resetInputHeight);
+    
+    // Initialize height on load
+    resetInputHeight();
 }
