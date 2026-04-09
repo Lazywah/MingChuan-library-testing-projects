@@ -718,6 +718,15 @@ if(chatForm) {
                         if(dataStr === '[DONE]') continue;
                         try {
                             const json = JSON.parse(dataStr);
+                            
+                            // 判斷是否為伺服器錯誤訊息 (例如 Token 用盡)
+                            if (json.error) {
+                                aiFullText = `[系統拒絕]: ${json.error === 'Token quota exceeded' ? '您的 Token 額度已用盡，請聯繫管理員擴充額度。' : json.error}`;
+                                contentEl.innerHTML = `<span style="color: #ff4d4f; font-weight: bold;">${aiFullText}</span>`;
+                                chatHistoryEl.scrollTop = chatHistoryEl.scrollHeight;
+                                break;
+                            }
+                            
                             const content = json.choices[0].delta.content || '';
                             aiFullText += content;
                             contentEl.textContent = aiFullText;
