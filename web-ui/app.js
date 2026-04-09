@@ -66,7 +66,31 @@ const TRANSLATIONS = {
         status_queued: "排隊中",
         status_running: "運算中",
         status_completed: "已完成",
-        status_failed: "失敗"
+        status_failed: "失敗",
+        // AI Hub
+        hub_title_models: "AI 模型",
+        hub_desc_models: "文字、圖片辨識、搜尋、歸納、解任務！",
+        hub_card_chat: "文字聊天",
+        hub_card_search: "上網搜尋",
+        hub_card_vision: "圖片辨識",
+        hub_title_writing: "文書寫作",
+        hub_desc_writing: "文字作業、歸納、會議紀錄整理、語音轉換！",
+        hub_card_editor: "AI小編",
+        hub_card_pdf: "PDF合約",
+        hub_card_ppt: "文書簡報",
+        hub_title_media: "影音創作",
+        hub_desc_media: "生成圖片、生成影片、生成歌曲！",
+        hub_card_image: "生成圖片",
+        hub_card_video: "生成影片",
+        hub_card_music: "生成歌曲",
+        hub_title_life: "生活/翻譯",
+        hub_desc_life: "多語翻譯、衛教知識、專屬知識庫！",
+        hub_card_translate: "多語翻譯",
+        hub_card_health: "衛生教育",
+        hub_card_kb: "知識庫",
+        hub_coming_soon_title: "🚧 此功能即將推出 🚧",
+        hub_coming_soon_desc: "我們正在努力開發此模組，敬請期待未來更新！",
+        btn_back_hub: "返回大廳"
     },
     en: {
         login_title: "System Login",
@@ -121,7 +145,31 @@ const TRANSLATIONS = {
         status_queued: "QUEUED",
         status_running: "RUNNING",
         status_completed: "COMPLETED",
-        status_failed: "FAILED"
+        status_failed: "FAILED",
+        // AI Hub
+        hub_title_models: "AI Models",
+        hub_desc_models: "Text, vision, search, and tasks!",
+        hub_card_chat: "Text Chat",
+        hub_card_search: "Web Search",
+        hub_card_vision: "Vision",
+        hub_title_writing: "Writing",
+        hub_desc_writing: "Essays, summaries, notes, and speech-to-text!",
+        hub_card_editor: "AI Editor",
+        hub_card_pdf: "PDF Contract",
+        hub_card_ppt: "Presentation",
+        hub_title_media: "Multimedia",
+        hub_desc_media: "Generate images, videos, and music!",
+        hub_card_image: "Image Gen",
+        hub_card_video: "Video Gen",
+        hub_card_music: "Music Gen",
+        hub_title_life: "Life / Translate",
+        hub_desc_life: "Translation, health, and knowledge base!",
+        hub_card_translate: "Translation",
+        hub_card_health: "Health Edu",
+        hub_card_kb: "Knowledge Base",
+        hub_coming_soon_title: "🚧 Coming Soon 🚧",
+        hub_coming_soon_desc: "We are currently developing this module, stay tuned!",
+        btn_back_hub: "Back to Hub"
     }
 };
 
@@ -388,6 +436,10 @@ function applyLanguage(lang) {
     document.querySelectorAll('[data-i18n-placeholder]').forEach(el => {
         const key = el.getAttribute('data-i18n-placeholder');
         if(dict[key]) el.placeholder = dict[key];
+    });
+    document.querySelectorAll('[data-i18n-aria]').forEach(el => {
+        const key = el.getAttribute('data-i18n-aria');
+        if(dict[key]) el.setAttribute('aria-label', dict[key]);
     });
 }
 
