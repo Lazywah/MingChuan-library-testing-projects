@@ -208,10 +208,135 @@
 
             <!-- ZH: 分頁 2: AI 助手視圖 (全螢幕) | EN: PAGE 2: Assistant View (Full Screen) -->
             <main id="assistant-page" class="assistant-container page-view">
-                <div class="chat-layout">
+                <!-- ZH: 新增 AI 大廳 面板 (預設顯示) | EN: AI Hub Panel -->
+                <div id="ai-hub-container" class="ai-hub-container active">
+                    <div class="hub-grid">
+                        <div class="hub-section">
+                            <div class="hub-section-header">
+                                <h3><ion-icon name="chatbubbles-outline"></ion-icon> AI 模型</h3>
+                                <p>文字、圖片辨識、搜尋、歸納、解任務！</p>
+                            </div>
+                            <div class="hub-cards">
+                                <div class="hub-sub-card" data-target="chat-layout">
+                                    <div class="card-bg" style="background: linear-gradient(135deg, #6366f1, #8b5cf6);">
+                                        <ion-icon name="chatbox-ellipses"></ion-icon>
+                                    </div>
+                                    <span class="card-title">文字聊天</span>
+                                </div>
+                                <div class="hub-sub-card" data-target="coming-soon-layout">
+                                    <div class="card-bg" style="background: linear-gradient(135deg, #0ea5e9, #2563eb);">
+                                        <ion-icon name="search-outline"></ion-icon>
+                                    </div>
+                                    <span class="card-title">上網搜尋</span>
+                                </div>
+                                <div class="hub-sub-card" data-target="coming-soon-layout">
+                                    <div class="card-bg" style="background: linear-gradient(135deg, #10b981, #059669);">
+                                        <ion-icon name="scan-outline"></ion-icon>
+                                    </div>
+                                    <span class="card-title">圖片辨識</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="hub-section">
+                            <div class="hub-section-header">
+                                <h3><ion-icon name="document-text-outline"></ion-icon> 文書寫作</h3>
+                                <p>文字作業、歸納、會議紀錄整理、語音轉換！</p>
+                            </div>
+                            <div class="hub-cards">
+                                <div class="hub-sub-card" data-target="coming-soon-layout">
+                                    <div class="card-bg" style="background: linear-gradient(135deg, #ec4899, #d946ef);">
+                                        <ion-icon name="create-outline"></ion-icon>
+                                    </div>
+                                    <span class="card-title">AI小編</span>
+                                </div>
+                                <div class="hub-sub-card" data-target="coming-soon-layout">
+                                    <div class="card-bg" style="background: linear-gradient(135deg, #f59e0b, #ea580c);">
+                                        <ion-icon name="document-attach-outline"></ion-icon>
+                                    </div>
+                                    <span class="card-title">PDF合約</span>
+                                </div>
+                                <div class="hub-sub-card" data-target="coming-soon-layout">
+                                    <div class="card-bg" style="background: linear-gradient(135deg, #ef4444, #b91c1c);">
+                                        <ion-icon name="easel-outline"></ion-icon>
+                                    </div>
+                                    <span class="card-title">文書簡報</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="hub-section">
+                            <div class="hub-section-header">
+                                <h3><ion-icon name="color-wand-outline"></ion-icon> 影音創作</h3>
+                                <p>生成圖片、生成影片、生成歌曲！</p>
+                            </div>
+                            <div class="hub-cards">
+                                <div class="hub-sub-card" data-target="coming-soon-layout">
+                                    <div class="card-bg" style="background: linear-gradient(135deg, #8b5cf6, #d946ef);">
+                                        <ion-icon name="image-outline"></ion-icon>
+                                    </div>
+                                    <span class="card-title">生成圖片</span>
+                                </div>
+                                <div class="hub-sub-card" data-target="coming-soon-layout">
+                                    <div class="card-bg" style="background: linear-gradient(135deg, #f43f5e, #e11d48);">
+                                        <ion-icon name="videocam-outline"></ion-icon>
+                                    </div>
+                                    <span class="card-title">生成影片</span>
+                                </div>
+                                <div class="hub-sub-card" data-target="coming-soon-layout">
+                                    <div class="card-bg" style="background: linear-gradient(135deg, #14b8a6, #0f766e);">
+                                        <ion-icon name="musical-notes-outline"></ion-icon>
+                                    </div>
+                                    <span class="card-title">生成歌曲</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="hub-section">
+                            <div class="hub-section-header">
+                                <h3><ion-icon name="language-outline"></ion-icon> 生活/翻譯</h3>
+                                <p>多語翻譯、衛教知識、專屬知識庫！</p>
+                            </div>
+                            <div class="hub-cards">
+                                <div class="hub-sub-card" data-target="coming-soon-layout">
+                                    <div class="card-bg" style="background: linear-gradient(135deg, #3b82f6, #4f46e5);">
+                                        <ion-icon name="earth-outline"></ion-icon>
+                                    </div>
+                                    <span class="card-title">多語翻譯</span>
+                                </div>
+                                <div class="hub-sub-card" data-target="coming-soon-layout">
+                                    <div class="card-bg" style="background: linear-gradient(135deg, #10b981, #3b82f6);">
+                                        <ion-icon name="medkit-outline"></ion-icon>
+                                    </div>
+                                    <span class="card-title">衛生教育</span>
+                                </div>
+                                <div class="hub-sub-card" data-target="coming-soon-layout">
+                                    <div class="card-bg" style="background: linear-gradient(135deg, #64748b, #475569);">
+                                        <ion-icon name="library-outline"></ion-icon>
+                                    </div>
+                                    <span class="card-title">知識庫</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ZH: 待開發功能佔位版面 (預設隱藏) | EN: Coming Soon Placeholder -->
+                <div id="coming-soon-layout" class="coming-soon-layout hidden">
+                    <div class="coming-soon-content form-box-panel">
+                        <ion-icon name="construct-outline"></ion-icon>
+                        <h2>🚧 此功能即將推出 🚧</h2>
+                        <p>我們正在努力開發此模組，敬請期待未來更新！</p>
+                        <button class="back-to-hub-btn ready-btn" aria-label="返回大廳"><ion-icon name="arrow-back-outline"></ion-icon> 返回大廳</button>
+                    </div>
+                </div>
+
+                <!-- ZH: 聊天主要視圖 (預設變為隱藏) | EN: Chat Layout -->
+                <div id="chat-layout" class="chat-layout hidden">
                     <!-- ZH: 聊天室列表 | EN: Chatroom Sessions Sidebar -->
                     <aside class="chat-sidebar form-box-panel">
-                        <div class="sidebar-header">
+                        <div class="sidebar-header" style="justify-content: flex-start; gap: 10px;">
+                            <button class="icon-btn back-to-hub-btn" aria-label="返回大廳" style="background: transparent; border: none; color: var(--text-primary); cursor: pointer; font-size: 20px;"><ion-icon name="arrow-back-outline"></ion-icon></button>
                             <h3 data-i18n="chat_sessions">Sessions</h3>
                         </div>
                         <div class="session-list scrollbar-custom" id="session-list">

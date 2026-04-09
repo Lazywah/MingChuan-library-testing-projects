@@ -152,6 +152,45 @@ const chatForm = document.getElementById('chat-form');
 const chatInput = document.getElementById('chat-input');
 const chatModelSelect = document.getElementById('chat-model-select');
 
+// AI Hub Nodes
+const aiHubContainer = document.getElementById('ai-hub-container');
+const chatLayout = document.getElementById('chat-layout');
+const comingSoonLayout = document.getElementById('coming-soon-layout');
+const hubSubCards = document.querySelectorAll('.hub-sub-card');
+const backToHubBtns = document.querySelectorAll('.back-to-hub-btn');
+
+// Hub navigation helpers
+function showHubView(targetId) {
+    aiHubContainer.classList.remove('active');
+    chatLayout.classList.add('hidden');
+    comingSoonLayout.classList.remove('active');
+    if (targetId === 'chat-layout') {
+        chatLayout.classList.remove('hidden');
+    } else if (targetId === 'coming-soon-layout') {
+        comingSoonLayout.classList.add('active');
+    }
+}
+function showHub() {
+    aiHubContainer.classList.add('active');
+    chatLayout.classList.add('hidden');
+    comingSoonLayout.classList.remove('active');
+}
+
+// Bind hub card clicks
+hubSubCards.forEach(card => {
+    card.addEventListener('click', () => showHubView(card.getAttribute('data-target')));
+});
+
+// Bind back-to-hub buttons
+backToHubBtns.forEach(btn => btn.addEventListener('click', () => showHub()));
+
+// When switching away from AI tab, reset to hub
+document.querySelectorAll('.tab-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+        if (btn.getAttribute('data-tab') !== 'assistant-page') showHub();
+    });
+});
+
 // Dashboard Nodes
 const tokenPercent = document.getElementById('token-percent');
 const tokenRingFill = document.getElementById('token-ring-fill');
@@ -742,7 +781,9 @@ if(chatForm) {
             // Track token usage for AI response
             trackTokenUsage(aiFullText, false);
         } catch (err) {
-            contentEl.textContent = "Error occurred during AI generation.";
+            // 保留已生成的文字，在末端追加紅色警告提示
+            const errorHint = `<br><br><span style="color: #ff4d4f; font-size: 13px; font-weight: bold;">[系統提示]: 連線意外中斷或發生錯誤 (${err.message})</span>`;
+            contentEl.innerHTML = (aiFullText ? aiFullText : contentEl.textContent) + errorHint;
         }
     });
 }
