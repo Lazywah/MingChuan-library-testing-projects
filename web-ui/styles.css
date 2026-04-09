@@ -1,15 +1,15 @@
 :root {
     /* ZH: 預設暗黑模式與 Chess 風格變數 | EN: DEFAULT DARK MODE & CHESS-STYLE VARIABLES */
     --bg-universe: radial-gradient(circle at 10% 50%, rgba(68, 26, 167, 0.4), transparent 60%),
-                   radial-gradient(circle at 90% 10%, rgba(62, 62, 192, 0.5), transparent 60%),
-                   linear-gradient(to bottom, rgb(14, 3, 42) 0%, rgba(68, 26, 167, 0.8) 50%, #000 100%);
-    
+        radial-gradient(circle at 90% 10%, rgba(62, 62, 192, 0.5), transparent 60%),
+        linear-gradient(to bottom, rgb(14, 3, 42) 0%, rgba(68, 26, 167, 0.8) 50%, #000 100%);
+
     --bg-panel: rgba(0, 0, 0, 0.4);
     --bg-input: transparent;
     --border-color: #c8c8c8;
     --border-glow-color: rgba(255, 255, 255, 0.8);
     --accent-glow: #ffffff;
-    
+
     --text-primary: #ffffff;
     --text-muted: #d1d5db;
     --font-main: 'Playpen Sans', cursive;
@@ -18,14 +18,14 @@
 [data-theme='light'] {
     /* ZH: 亮色模式風格變數 | EN: LIGHT MODE VARIANTS */
     --bg-universe: radial-gradient(circle at 10% 50%, rgba(135, 126, 219, 0.2), transparent 50%),
-                   radial-gradient(circle at 90% 10%, rgba(100, 100, 240, 0.3), transparent 50%),
-                   linear-gradient(to bottom, #f0f4f8 0%, #dbeafe 50%, #e0e7ff 100%);
-    
+        radial-gradient(circle at 90% 10%, rgba(100, 100, 240, 0.3), transparent 50%),
+        linear-gradient(to bottom, #f0f4f8 0%, #dbeafe 50%, #e0e7ff 100%);
+
     --bg-panel: rgba(255, 255, 255, 0.6);
     --border-color: #6366f1;
     --border-glow-color: rgba(99, 102, 241, 0.6);
     --accent-glow: #4f46e5;
-    
+
     --text-primary: #1e1b4b;
     --text-muted: #4338ca;
 }
@@ -67,7 +67,10 @@ body {
 */
 .empty {
     position: fixed;
-    top: 0; left: 0; right: 0; bottom: 0;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
     z-index: -1;
     pointer-events: none;
 }
@@ -86,14 +89,20 @@ body {
 }
 
 /* ZH: 游標懸停時引發高光動畫 | EN: Trigger glow animation on hover */
-.form-box:hover, .form-box-panel:hover {
+.form-box:hover,
+.form-box-panel:hover {
     border-color: var(--border-glow-color);
     animation: border-glow 1s infinite alternate;
 }
 
 @keyframes border-glow {
-    from { box-shadow: 0 0 10px rgba(255, 255, 255, 0.2); }
-    to { box-shadow: 0 0 20px var(--border-glow-color); }
+    from {
+        box-shadow: 0 0 10px rgba(255, 255, 255, 0.2);
+    }
+
+    to {
+        box-shadow: 0 0 20px var(--border-glow-color);
+    }
 }
 
 .form-box .close {
@@ -105,6 +114,7 @@ body {
     cursor: pointer;
     transition: 0.3s;
 }
+
 .form-box .close:hover {
     color: var(--accent-glow);
 }
@@ -114,6 +124,7 @@ form {
     flex-direction: column;
     align-items: center;
 }
+
 form h1 {
     font-size: 28px;
     margin-bottom: 20px;
@@ -152,8 +163,8 @@ form h1 {
 }
 
 /* ZH: 聚焦或已輸入資料時，標籤往上浮起 | EN: When focused or filled -> label floats */
-.input input:focus ~ label,
-.input input:not(:placeholder-shown) ~ label {
+.input input:focus~label,
+.input input:not(:placeholder-shown)~label {
     transform: translateY(-25px);
     font-size: 14px;
     color: var(--accent-glow);
@@ -176,9 +187,18 @@ form h1 {
 .login-eye span {
     cursor: pointer;
 }
-.login-eye .eye-open { display: none; }
-.login-eye.open .eye-off { display: none; }
-.login-eye.open .eye-open { display: inline-block; }
+
+.login-eye .eye-open {
+    display: none;
+}
+
+.login-eye.open .eye-off {
+    display: none;
+}
+
+.login-eye.open .eye-open {
+    display: inline-block;
+}
 
 .ready-btn {
     width: 100%;
@@ -193,10 +213,12 @@ form h1 {
     cursor: pointer;
     transition: all 0.5s ease;
 }
+
 .ready-btn:hover {
     background-color: var(--text-primary);
     color: var(--bg-panel);
 }
+
 .ready-btn:disabled {
     opacity: 0.5;
     cursor: not-allowed;
@@ -212,6 +234,7 @@ form h1 {
     opacity: 1;
     transition: opacity 0.5s;
 }
+
 .view-container.hidden {
     opacity: 0;
     pointer-events: none;
@@ -240,11 +263,13 @@ header {
     padding: 0 30px;
     margin-bottom: 25px;
     border: 1px solid var(--border-color);
-    box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
     height: 80px;
 }
 
-.header-left, .header-center, .header-left {
+.header-left,
+.header-center,
+.header-left {
     display: flex;
     align-items: center;
     gap: 10px;
@@ -372,8 +397,8 @@ ion-icon {
     border-radius: 50%;
 }
 
-.refresh-icon:hover { 
-    transform: rotate(180deg); 
+.refresh-icon:hover {
+    transform: rotate(180deg);
     color: var(--accent-glow);
     background: rgba(255, 255, 255, 0.1);
 }
@@ -430,13 +455,21 @@ ion-icon {
     padding-right: 10px;
 }
 
-#assistant-page.active, #settings-page.active {
+#assistant-page.active,
+#settings-page.active {
     display: block !important;
 }
 
 @keyframes fadeIn {
-    from { opacity: 0; transform: translateY(10px); }
-    to { opacity: 1; transform: translateY(0); }
+    from {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
 }
 
 /* ZH: AI 助手專用版面 (全螢幕) | EN: Assistant Page Layout (Full Screen) */
@@ -570,7 +603,7 @@ ion-icon {
     border-radius: 20px;
     background: var(--bg-panel);
     overflow: hidden;
-    box-shadow: 0 10px 40px rgba(0,0,0,0.4);
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.4);
 }
 
 .chat-history {
@@ -671,6 +704,11 @@ ion-icon {
 .send-btn .material-icons {
     font-size: 20px;
     color: #ffffff;
+    /* 機頭朝右上 (Points to top-right) */
+    transform: rotate(-45deg);
+    /* 調整旋轉後的中心點偏移 (Adjust center after rotation if needed, usually slightly off) */
+    margin-left: 4px;
+    margin-bottom: 2px;
 }
 
 .send-btn:hover .material-icons {
@@ -680,7 +718,9 @@ ion-icon {
 /* 淺色模式 */
 [data-theme='light'] .send-btn {
     border-color: var(--accent-glow);
+    /* 紫色邊框 */
     background: var(--accent-glow);
+    /* 紫色背景 */
 }
 
 [data-theme='light'] .send-btn:hover {
@@ -689,6 +729,7 @@ ion-icon {
 
 [data-theme='light'] .send-btn .material-icons {
     color: #ffffff;
+    /* 白色圖示 */
 }
 
 [data-theme='light'] .send-btn:hover .material-icons {
@@ -704,8 +745,10 @@ ion-icon {
     padding: 10px 20px;
     resize: none;
     height: 42.4px;
-    min-height: 42.4px; /* 單行高度 22.4px + padding 20px */
-    max-height: 87.2px; /* 三行高度 67.2px + padding 20px */
+    min-height: 42.4px;
+    /* 單行高度 22.4px + padding 20px */
+    max-height: 87.2px;
+    /* 三行高度 67.2px + padding 20px */
     font-size: 16px;
     outline: none;
     transition: border-color 0.3s ease, box-shadow 0.3s ease;
@@ -786,17 +829,24 @@ ion-icon {
 .scrollbar-custom::-webkit-scrollbar {
     width: 6px;
 }
+
 .scrollbar-custom::-webkit-scrollbar-track {
     background: transparent;
 }
+
 .scrollbar-custom::-webkit-scrollbar-thumb {
     background: rgba(255, 255, 255, 0.2);
     border-radius: 3px;
 }
 
 @media (max-width: 900px) {
-    .chat-layout { grid-template-columns: 1fr; }
-    .chat-sidebar { display: none; }
+    .chat-layout {
+        grid-template-columns: 1fr;
+    }
+
+    .chat-sidebar {
+        display: none;
+    }
 }
 
 @media (max-width: 1200px) {
@@ -804,7 +854,7 @@ ion-icon {
         grid-template-columns: 1fr;
         gap: 20px;
     }
-    
+
     .token-widget {
         grid-column: 1;
     }
@@ -814,28 +864,28 @@ ion-icon {
     .main-content {
         padding: 15px 20px 30px 20px;
     }
-    
+
     header {
         flex-direction: column;
         height: auto;
         padding: 15px;
         gap: 15px;
     }
-    
+
     .header-center {
         flex-wrap: wrap;
         justify-content: center;
     }
-    
+
     .tab-btn {
         font-size: 14px;
         padding: 6px 12px;
     }
-    
+
     .chat-layout {
         grid-template-columns: 1fr;
     }
-    
+
     .chat-sidebar {
         display: none;
     }
@@ -846,44 +896,44 @@ ion-icon {
         width: 90%;
         padding: 30px 20px;
     }
-    
+
     .main-content {
         padding: 10px 15px 20px 15px;
     }
-    
+
     header {
         padding: 10px;
     }
-    
+
     .header-left .logo {
         font-size: 18px;
     }
-    
+
     .tab-btn {
         font-size: 12px;
         padding: 4px 8px;
         gap: 4px;
     }
-    
+
     .tab-btn ion-icon {
         font-size: 16px;
     }
-    
+
     .chat-input-row {
         flex-direction: column;
         gap: 10px;
     }
-    
+
     .chat-controls-bar {
         flex-direction: column;
         gap: 10px;
         align-items: stretch;
     }
-    
+
     .mini-select {
         justify-content: space-between;
     }
-    
+
     .settings-grid {
         grid-template-columns: 1fr;
     }
@@ -923,17 +973,23 @@ ion-icon {
     margin-bottom: 20px;
     padding-bottom: 10px;
 }
+
 .widget-header.split {
     display: flex;
     justify-content: space-between;
     align-items: center;
 }
+
 .refresh-icon {
     font-size: 28px;
     cursor: pointer;
     transition: 0.3s;
 }
-.refresh-icon:hover { transform: rotate(180deg); color: var(--accent-glow); }
+
+.refresh-icon:hover {
+    transform: rotate(180deg);
+    color: var(--accent-glow);
+}
 
 /* ZH: Token 環狀與資料顯示 | EN: Token Progress and Data Display */
 .token-display {
@@ -941,10 +997,13 @@ ion-icon {
     align-items: center;
     gap: 50px;
 }
+
 .token-ring-container {
     position: relative;
-    width: 120px; height: 120px;
+    width: 120px;
+    height: 120px;
 }
+
 .progress-ring__circle {
     stroke-dasharray: 314;
     stroke-dashoffset: 314;
@@ -952,24 +1011,40 @@ ion-icon {
     transform: rotate(-90deg);
     transform-origin: 50% 50%;
 }
+
 .token-percentage {
     position: absolute;
-    top: 50%; left: 50%;
+    top: 50%;
+    left: 50%;
     transform: translate(-50%, -50%);
     font-size: 22px;
     font-weight: bold;
     color: var(--accent-glow);
 }
+
 .stat-row {
     font-size: 18px;
     margin-bottom: 8px;
 }
-.stat-row .highlight { font-weight: bold; }
+
+.stat-row .highlight {
+    font-weight: bold;
+}
 
 /* ZH: 遞交任務表單特殊修飾 | EN: Submitting Form overrides */
-.job-form .input { margin: 20px 0; border-bottom-width: 1px;}
-.row { display: flex; gap: 20px; }
-.mini-input { width: 50%; }
+.job-form .input {
+    margin: 20px 0;
+    border-bottom-width: 1px;
+}
+
+.row {
+    display: flex;
+    gap: 20px;
+}
+
+.mini-input {
+    width: 50%;
+}
 
 .input-select-group select {
     width: 100%;
@@ -979,6 +1054,7 @@ ion-icon {
     padding: 8px;
     border-radius: 8px;
 }
+
 .input-select-group select option {
     background: var(--bg-panel);
     color: var(--text-primary);
@@ -998,9 +1074,19 @@ ion-icon {
     gap: 15px;
     padding-right: 10px;
 }
-.job-list-container::-webkit-scrollbar { width: 8px; }
-.job-list-container::-webkit-scrollbar-track { background: transparent; }
-.job-list-container::-webkit-scrollbar-thumb { background: var(--border-color); border-radius: 4px; }
+
+.job-list-container::-webkit-scrollbar {
+    width: 8px;
+}
+
+.job-list-container::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.job-list-container::-webkit-scrollbar-thumb {
+    background: var(--border-color);
+    border-radius: 4px;
+}
 
 .job-card {
     border: 1px solid var(--border-color);
@@ -1010,46 +1096,55 @@ ion-icon {
     position: relative;
     transition: 0.3s;
 }
+
 .job-card:hover {
     background: rgba(255, 255, 255, 0.2);
     transform: translateY(-2px);
-    box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
 }
+
 .job-head {
     display: flex;
     justify-content: space-between;
     align-items: flex-start;
     margin-bottom: 8px;
 }
+
 .job-info {
     flex: 1;
 }
+
 .job-title {
     font-weight: bold;
     font-size: 16px;
     display: block;
     margin-bottom: 4px;
 }
+
 .job-id {
-    font-size: 11px; 
-    opacity: 0.7; 
+    font-size: 11px;
+    opacity: 0.7;
     color: var(--text-muted);
 }
+
 .job-meta {
-    display: flex; 
-    gap: 15px; 
+    display: flex;
+    gap: 15px;
     font-size: 12px;
     margin-bottom: 10px;
     opacity: 0.8;
 }
-.job-model, .job-priority {
+
+.job-model,
+.job-priority {
     background: rgba(255, 255, 255, 0.05);
     padding: 2px 6px;
     border-radius: 4px;
 }
+
 .job-status {
-    padding: 4px 8px; 
-    border-radius: 8px; 
+    padding: 4px 8px;
+    border-radius: 8px;
     font-size: 11px;
     font-weight: 600;
     white-space: nowrap;
@@ -1057,41 +1152,55 @@ ion-icon {
 
 .job-progress-bar {
     height: 6px;
-    background: rgba(255,255,255,0.2);
-    border-radius: 3px; margin-top: 10px; overflow: hidden;
+    background: rgba(255, 255, 255, 0.2);
+    border-radius: 3px;
+    margin-top: 10px;
+    overflow: hidden;
 }
+
 .job-progress-fill {
-    height: 100%; background: var(--accent-glow); width: 0%; transition: 0.5s;
+    height: 100%;
+    background: var(--accent-glow);
+    width: 0%;
+    transition: 0.5s;
 }
 
 /* ZH: 提示彈窗 (Toast) | EN: Notification Toast */
 .toast {
     position: fixed;
-    bottom: 40px; left: 50%; transform: translateX(-50%);
+    bottom: 40px;
+    left: 50%;
+    transform: translateX(-50%);
     background: var(--bg-panel);
     border: 2px solid var(--border-color);
     padding: 15px 30px;
     border-radius: 30px;
     backdrop-filter: blur(10px);
     font-size: 18px;
-    display: flex; align-items: center; gap: 10px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
     z-index: 1000;
     transition: 0.4s;
-    box-shadow: 0 0 20px rgba(0,0,0,0.5);
+    box-shadow: 0 0 20px rgba(0, 0, 0, 0.5);
 }
+
 .toast.hidden {
-    opacity: 0; transform: translate(-50%, 50px);
+    opacity: 0;
+    transform: translate(-50%, 50px);
 }
 
 /* ZH: 設定分頁樣式 | EN: Settings Page Styles */
 .settings-container {
     height: 100%;
 }
+
 .settings-grid {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
     gap: 30px;
 }
+
 .settings-option {
     display: flex;
     justify-content: space-between;
@@ -1100,6 +1209,11 @@ ion-icon {
 }
 
 @media (max-width: 800px) {
-    .hud-grid { grid-template-columns: 1fr; }
-    .settings-grid { grid-template-columns: 1fr; }
+    .hud-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .settings-grid {
+        grid-template-columns: 1fr;
+    }
 }
