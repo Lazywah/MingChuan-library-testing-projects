@@ -649,8 +649,8 @@ ion-icon {
 }
 
 .send-btn {
-    background: var(--accent-glow);
-    border: none;
+    background: transparent;
+    border: 2px solid #ffffff;
     border-radius: 12px;
     width: 40px;
     height: 40px;
@@ -665,23 +665,34 @@ ion-icon {
 
 .send-btn:hover {
     transform: scale(1.05);
-    background: #fff;
+    background: rgba(255, 255, 255, 0.1);
 }
 
-.send-btn ion-icon {
+.send-btn .material-icons {
     font-size: 20px;
     color: #ffffff;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    visibility: visible;
-    opacity: 1;
-    width: 20px;
-    height: 20px;
 }
 
-.send-btn:hover ion-icon {
-    color: var(--accent-glow);
+.send-btn:hover .material-icons {
+    color: #ffffff;
+}
+
+/* 淺色模式 */
+[data-theme='light'] .send-btn {
+    border-color: var(--accent-glow);
+    background: var(--accent-glow);
+}
+
+[data-theme='light'] .send-btn:hover {
+    background: rgba(79, 70, 229, 0.8);
+}
+
+[data-theme='light'] .send-btn .material-icons {
+    color: #ffffff;
+}
+
+[data-theme='light'] .send-btn:hover .material-icons {
+    color: #ffffff;
 }
 
 .chat-form textarea {
@@ -692,9 +703,9 @@ ion-icon {
     color: var(--text-primary);
     padding: 10px 20px;
     resize: none;
-    min-height: 40px;
-    max-height: 84px; /* 3 lines at ~28px per line */
-    height: 40px;
+    height: 42.4px;
+    min-height: 42.4px; /* 單行高度 22.4px + padding 20px */
+    max-height: 87.2px; /* 三行高度 67.2px + padding 20px */
     font-size: 16px;
     outline: none;
     transition: border-color 0.3s ease, box-shadow 0.3s ease;

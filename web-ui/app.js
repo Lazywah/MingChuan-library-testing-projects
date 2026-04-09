@@ -665,7 +665,8 @@ if(chatForm) {
         if(!prompt) return;
 
         chatInput.value = '';
-        chatInput.style.height = '60px';
+        // 重置为单行高度（42.4px = 22.4px + 20px padding）
+        chatInput.style.height = '42.4px';
 
         const currentSession = sessions.find(s => s.id === activeSessionId) || sessions[0];
         
@@ -753,42 +754,49 @@ function createBubble(role, content) {
 
 
 if(chatInput) {
-    const resetInputHeight = () => {
-        // Store current scroll position
-        const scrollTop = chatInput.scrollTop;
-        
-        // Reset height to auto to get proper scrollHeight
+    // 精确行高 = font-size 16px * line-height 1.4 = 22.4px
+    const LINE_HEIGHT = 22.4;
+    const PADDING = 20; // 10px top + 10px bottom
+    
+    // 基础高度（单行 + padding）
+    const MIN_HEIGHT = LINE_HEIGHT + PADDING; // 42.4px
+    // 最大高度（三行 + padding）
+    const MAX_HEIGHT = (LINE_HEIGHT * 3) + PADDING; // 87.2px
+    
+    const adjustHeight = () => {
+        // 先重置为auto以获取准确的scrollHeight
         chatInput.style.height = 'auto';
         
-        // Get computed styles to account for padding
-        const computedStyle = window.getComputedStyle(chatInput);
-        const paddingTop = parseInt(computedStyle.paddingTop, 10);
-        const paddingBottom = parseInt(computedStyle.paddingBottom, 10);
-        const totalPadding = paddingTop + paddingBottom;
+        // 获取包含padding的scrollHeight
+        const scrollHeight = chatInput.scrollHeight;
         
-        // Calculate new height: scrollHeight already includes padding, 
-        // so we subtract padding to get content height, then add back min padding
-        const contentHeight = chatInput.scrollHeight - totalPadding;
-        const newHeight = Math.max(40 - totalPadding, Math.min(contentHeight, 84 - totalPadding));
-        chatInput.style.height = newHeight + 'px';
+        // 计算行数（基于纯内容高度）
+        const contentHeight = scrollHeight - PADDING;
+        let lines = Math.round(contentHeight / LINE_HEIGHT);
+        if (lines < 1) lines = 1;
+        if (lines > 3) lines = 3;
         
-        // Restore scroll position if needed
-        if (scrollTop > 0) {
-            chatInput.scrollTop = scrollTop;
-        }
+        // 根据行数计算高度
+        const newHeight = (lines * LINE_HEIGHT) + PADDING;
+        
+        // 应用高度（在最小和最大之间）
+        chatInput.style.height = Math.max(MIN_HEIGHT, Math.min(newHeight, MAX_HEIGHT)) + 'px';
     };
     
-    chatInput.addEventListener('input', resetInputHeight);
+    // 输入时实时调整高度
+    chatInput.addEventListener('input', adjustHeight);
     
-    // Handle paste events with delay
+    // 键盘事件也触发调整（处理删除、回车等）
+    chatInput.addEventListener('keyup', adjustHeight);
+    
+    // 粘贴事件延迟处理
     chatInput.addEventListener('paste', () => {
-        setTimeout(resetInputHeight, 10);
+        setTimeout(adjustHeight, 10);
     });
     
-    // Handle focus/blur to ensure proper height
-    chatInput.addEventListener('focus', resetInputHeight);
-    chatInput.addEventListener('blur', resetInputHeight);
+    // 窗口大小变化时重新计算
+    window.addEventListener('resize', adjustHeight);
     
-    // Initialize height on load
-    resetInputHeight();
+    // 初始化高度
+    adjustHeight();
 }
