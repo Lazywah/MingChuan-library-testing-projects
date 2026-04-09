@@ -764,8 +764,8 @@ if(chatInput) {
     const MAX_HEIGHT = (LINE_HEIGHT * 3) + PADDING; // 87.2px
     
     const adjustHeight = () => {
-        // 先重置为auto以获取准确的scrollHeight
-        chatInput.style.height = 'auto';
+        // 先重置為 1px 以獲取準確純文字所需之 scrollHeight (避免 auto 預設造成兩行)
+        chatInput.style.height = '1px';
         
         // 获取包含padding的scrollHeight
         const scrollHeight = chatInput.scrollHeight;

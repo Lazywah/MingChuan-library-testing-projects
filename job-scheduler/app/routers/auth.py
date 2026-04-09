@@ -142,7 +142,7 @@ def get_token_usage(
         "user_id": usage.user_id,
         "tokens_used": usage.tokens_used,
         "tokens_limit": usage.tokens_limit,
-        "usage_percentage": (usage.tokens_used / usage.tokens_limit * 100) if usage.tokens_limit > 0 else 0,
+        "usage_percentage": (usage.tokens_used / usage.tokens_limit) if usage.tokens_limit > 0 else 0,
         "reset_date": usage.reset_date
     }
 
