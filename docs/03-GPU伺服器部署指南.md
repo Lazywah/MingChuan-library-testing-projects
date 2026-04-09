@@ -84,4 +84,17 @@ ls -la ~/.ssh/gpu_key  # 應為 600
 ```bash
 # 在 GPU 伺服器上執行
 nvidia-smi --query-gpu=index,utilization.gpu --format=csv
+
+---
+
+## 大規模叢集擴展 | Large-Scale Scaling (HPC)
+
+當節點數量超過 5 台或需要更精細的資源配份時，建議從 SSH 模式切換為 **HPC 調度架構**：
+
+1. **Slurm 調度器**：透過 `job-scheduler/app/gpu_client.py` 中的 `SlurmGPUClient` 介面進行對接，實現多節點任務衝突管理。
+2. **NVIDIA DCGM 監控**：部署 DCGM Exporter 以獲取 GPU 健康與功率數據，支援大規模機房的異常攔截。
+
+> [!NOTE]
+> 關於上述進階組件的詳細規格與使用方法，請參考：
+> [07-工具組件統整.md](file:///c:/Users/User/Desktop/school/大學/圖書館-AI基地/CodeSpace/docs/07-工具組件統整.md)
 ```

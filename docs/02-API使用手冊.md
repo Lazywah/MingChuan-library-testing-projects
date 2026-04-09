@@ -167,6 +167,14 @@ curl -X POST http://localhost:8002/api/v1/chat/completions \
 - `model_id`: 模型識別碼 (如 `gemini-1.5-pro`, `llama3:latest`)。
 - `messages`: 對話歷史陣列。
 - `stream`: 是否使用串流模式。
+- `user_id`: (由後端從 Token 解析) 自動帶入。
+
+**SSE 異常處理 | Error Handling**:
+當發生配額超限 (Quota Exceeded) 或系統錯誤時，SSE 串流可能會發送一個包含 `error` 欄位的 JSON 區塊而非 `choices`：
+```json
+data: {"error": "Token quota exceeded", "details": "Your monthly quota is depleted."}
+```
+前端必須攔截此 JSON 並正確顯示錯誤提示，而非將其作為模型文字輸出。 
 
 ### GET `/api/v1/chat/history` — 獲取歷史紀錄
 
