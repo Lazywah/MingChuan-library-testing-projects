@@ -42,73 +42,58 @@ async def chat_completions(
     db: Session = Depends(get_db)
 ):
     """
-    ZH: AI 聊天及串流代理端點
-    EN: AI Chat and Streaming Proxy Endpoint
+    ZH: AI 聊天及串流代理端點 (方案 B：模擬回音模式)
+    EN: AI Chat and Streaming Proxy Endpoint (Option B: Mock Echo Mode)
     """
     
-    # ZH: 準備轉發給下層服務的資料 | EN: Prepare data for downstream service
-    # ZH: 注意：此處我們可以根據 model_id 調整 Portkey 的 Headers (例如切換 Provider)
-    # EN: Note: We can adjust Portkey headers based on model_id here
-    headers = {
-        "x-portkey-provider": "openai", # ZH: 預設使用 OpenAI 格式代理 | EN: Default OpenAI format
-        "Content-Type": "application/json"
-    }
-    
-    # ZH: 實例映射 (簡化版) | EN: Simplified mapping
-    payload = {
-        "model": request.model_id,
-        "messages": [{"role": m.role, "content": m.content} for m in request.messages],
-        "stream": request.stream
-    }
+    # ZH: 檢查 Token 額度 | EN: Check token quota upfront
+    usage = crud.get_token_usage(db, current_user.id)
+    if usage and usage.tokens_used >= usage.tokens_limit:
+        async def quota_exceeded():
+            yield f"data: {json.dumps({'error': 'Token quota exceeded'}, ensure_ascii=False)}\n\n"
+        return StreamingResponse(quota_exceeded(), media_type="text/event-stream")
 
     async def stream_generator():
+        import asyncio
         combined_response = []
+        last_message = request.messages[-1].content if request.messages else "沒有訊息"
+        
+        # ZH: 方案 B：模擬回音模式 | EN: Option B: Mock Echo Mode
+        mock_response_text = f"這是模擬 AI 的回應 (Echo Mode)。您剛才說了：\n「{last_message}」\n\n(系統提示：由於目前為 MVP 開發階段，此為模擬訊息。串流對話功能與 Token 實際扣減皆已運作。)"
+        
         try:
-            async with httpx.AsyncClient(timeout=60.0) as client:
-                async with client.stream("POST", PORTKEY_URL, json=payload, headers=headers) as response:
-                    if response.status_code != 200:
-                        error_detail = await response.aread()
-                        logger.error(f"LLM Provider error: {error_detail}")
-                        yield f"data: {json.dumps({'error': 'Upstream Error'})}\n\n"
-                        return
+            # ZH: 模擬串流延遲 | EN: Simulate streaming delay
+            chunk_size = 3
+            for i in range(0, len(mock_response_text), chunk_size):
+                chunk = mock_response_text[i:i+chunk_size]
+                combined_response.append(chunk)
+                data = {"choices": [{"delta": {"content": chunk}}]}
+                yield f"data: {json.dumps(data, ensure_ascii=False)}\n\n"
+                await asyncio.sleep(0.05)
+                
+            yield "data: [DONE]\n\n"
 
-                    async for line in response.aiter_lines():
-                        if not line:
-                            continue
-                        
-                        # ZH: 轉發串流內容 | EN: Forward stream content
-                        yield f"{line}\n\n"
-                        
-                        # ZH: 解析內容以供稍後存入資料庫 | EN: Parse content for DB storage
-                        if line.startswith("data: "):
-                            content = line[6:].strip()
-                            if content == "[DONE]":
-                                break
-                            try:
-                                data = json.loads(content)
-                                delta = data['choices'][0]['delta'].get('content', '')
-                                combined_response.append(delta)
-                            except:
-                                pass
-
-            # ZH: 結束後異步存儲紀錄 | EN: Async save history after finishing
-            # ZH: 注意：生產環境建議建立真正的 session_id 追蹤
+            # ZH: 結束後存儲紀錄與扣減 Token | EN: Save history and deduct token
             full_text = "".join(combined_response)
             if full_text:
-                # 儲存使用者問題 (最後一筆)
                 crud.create_chat_history(db, models.ChatHistory(
-                    user_id=current_user.id,
-                    session_id="default",
-                    role="user",
-                    content=request.messages[-1].content
+                    user_id=current_user.id, session_id="default", role="user", content=last_message
                 ))
-                # 儲存 AI 回覆
                 crud.create_chat_history(db, models.ChatHistory(
-                    user_id=current_user.id,
-                    session_id="default",
-                    role="assistant",
-                    content=full_text
+                    user_id=current_user.id, session_id="default", role="assistant", content=full_text
                 ))
+                
+                # 計算 Token: 粗估中英文字數 / 3
+                prompt_text = "".join([m.content for m in request.messages])
+                estimated_tokens = (len(prompt_text) // 3) + (len(full_text) // 3)
+                if estimated_tokens < 1: estimated_tokens = 1
+                
+                # 扣除額度
+                try:
+                    crud.increment_token_usage(db, current_user.id, estimated_tokens)
+                except HTTPException:
+                    pass # 超額時會丟出 429，由於在 generator 中，我們就捕捉忽略
+                    
                 db.commit()
 
         except Exception as e:
