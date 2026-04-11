@@ -5,10 +5,8 @@ const API_BASE = '/api/v1';
 let authToken = localStorage.getItem('ai_hud_token') || null;
 let pollInterval = null;
 
-// ZH: 多對話管理狀態 | EN: Multi-session State Management
-let sessions = JSON.parse(localStorage.getItem('ai_hud_sessions')) || [
-    { id: 'default', name: TRANSLATIONS[currentLang]['chat_sessions'], messages: [] }
-];
+// ZH: 多對話管理狀態 (於 TRANSLATIONS 宣告後再初始化) | EN: Multi-session state (initialized after TRANSLATIONS)
+let sessions = null; // ZH: 將於 TRANSLATIONS 宣告後初始化 | EN: Initialized after TRANSLATIONS
 let activeSessionId = localStorage.getItem('ai_hud_active_session') || 'default';
 
 // ZH: i18n 翻譯字典 | EN: i18n Translation Dictionary
@@ -46,6 +44,7 @@ const TRANSLATIONS = {
         btn_clear_chat: "清除內容",
         placeholder_chat: "輸入訊息...",
         btn_new_chat: "開始新對話",
+        new_session_name: "新對話",
         // 設定
         settings_appearance: "外觀視覺",
         label_theme: "佈景主題",
@@ -125,6 +124,7 @@ const TRANSLATIONS = {
         btn_clear_chat: "Clear",
         placeholder_chat: "Type a message...",
         btn_new_chat: "Start New Conversation",
+        new_session_name: "New Chat",
         // Settings
         settings_appearance: "Appearance",
         label_theme: "Theme Mode",
@@ -175,6 +175,12 @@ const TRANSLATIONS = {
 
 let currentLang = localStorage.getItem('ai_hud_lang') || 'zh';
 let currentTheme = localStorage.getItem('ai_hud_theme') || 'dark';
+
+// ZH: 在 TRANSLATIONS 宣告後才初始化 sessions，避免 ReferenceError
+// EN: Initialize sessions AFTER TRANSLATIONS to avoid ReferenceError
+sessions = JSON.parse(localStorage.getItem('ai_hud_sessions')) || [
+    { id: 'default', name: TRANSLATIONS[currentLang].chat_sessions || 'New Chat', messages: [] }
+];
 
 // DOM Elements
 const bodyEl = document.documentElement;
@@ -232,10 +238,10 @@ hubSubCards.forEach(card => {
 // Bind back-to-hub buttons
 backToHubBtns.forEach(btn => btn.addEventListener('click', () => showHub()));
 
-// When switching away from AI tab, reset to hub
+// ZH: 切換離開 AI 助手分頁時，重設回大廳 | EN: Reset to hub when leaving assistant tab
 document.querySelectorAll('.tab-btn').forEach(btn => {
     btn.addEventListener('click', () => {
-        if (btn.getAttribute('data-tab') !== 'assistant-page') showHub();
+        if (btn.getAttribute('data-tab') !== 'assistant') showHub();
     });
 });
 
@@ -364,7 +370,9 @@ function selectSession(id) {
 
 function createNewSession() {
     const id = 'sess_' + Date.now();
-    sessions.unshift({ id, name: 'New Research', messages: [] });
+    // ZH: 使用 i18n 取名，避免硬寫英文 | EN: Use i18n for name to avoid hardcoded English
+    const defaultName = TRANSLATIONS[currentLang].new_session_name || 'New Research';
+    sessions.unshift({ id, name: defaultName, messages: [] });
     saveSessions();
     selectSession(id);
 }
