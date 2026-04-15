@@ -34,6 +34,15 @@ except Exception as e:
     SCHEDULER_POLICY = {"scheduling": {}, "mock_mode": True, "nodes": []}
     print(f"[Warning] Failed to load scheduler_policy.yaml: {e}")
 
+# 讀取 SSO 政策
+SSO_POLICY_PATH = os.path.join(os.path.dirname(__file__), "sso_policy.yaml")
+try:
+    with open(SSO_POLICY_PATH, "r", encoding="utf-8") as f:
+        SSO_POLICY = yaml.safe_load(f)
+except Exception as e:
+    SSO_POLICY = {"mock_mode": True, "mock": {"users": []}, "cas": {}}
+    print(f"[Warning] Failed to load sso_policy.yaml: {e}")
+
 class Settings(BaseSettings):
     """
     ZH: 應用程式基礎設定類別 (僅保留與密碼、路徑相關)

@@ -1,0 +1,16 @@
+mock_mode: true
+
+mock:
+  users:
+    - student_id: "T1090001"
+      name: "林小明"
+      email: "T1090001@school.edu.tw"
+      role: "student"
+    - student_id: "T1090002"
+      name: "陳靜水"
+      email: "T1090002@school.edu.tw"
+      role: "student"
+
+cas:
+  server_url: "https://cas.school.edu.tw/cas"
+  service_url: "http://localhost:8000/api/v1/sso/callback"

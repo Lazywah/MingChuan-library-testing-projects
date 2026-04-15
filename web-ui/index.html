@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <!-- ZH: AI 訓練平台主前端面版 | EN: AI Training Platform Main Frontend Dashboard -->
 <html lang="zh-Hant" data-theme="dark">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -9,13 +10,14 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Playpen+Sans:wght@400;600;700&display=swap" rel="stylesheet">
-    
+
     <!-- ZH: 引入主任務面板樣式 | EN: Import main stylesheet -->
     <link rel="stylesheet" href="styles.css">
-    
+
     <!-- ZH: 引入 Google Material Icons | EN: Import Google Material Icons -->
     <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
 </head>
+
 <body>
     <!-- ZH: 裝飾背景區域（由 CSS 控制，可自訂圖片） | EN: Decorative background area (Controlled by CSS, custom image ready) -->
     <div class="empty bg-grad custom-bg" id="main-bg"></div>
@@ -28,33 +30,36 @@
 
     <!-- ZH: 視圖: 登入面板 | EN: VIEW: Login panel -->
     <div id="login-view" class="view-container active">
-        
+
         <!-- ZH: 獨立的登入操作列 | EN: Independent login action bar -->
-        <div class="login-actions" style="position: absolute; top: 20px; right: 30px; display: flex; gap: 15px; z-index: 10;">
+        <div class="login-actions"
+            style="position: absolute; top: 20px; right: 30px; display: flex; gap: 15px; z-index: 10;">
             <!-- ZH: 語言切換 | EN: Language Toggle -->
-            <button class="icon-action toggle-lang-btn" title="切換語言 / Toggle Language" style="font-size:30px; background:transparent; border:none; cursor:pointer; color:var(--text-primary); transition:0.3s;">
+            <button class="icon-action toggle-lang-btn" title="切換語言 / Toggle Language"
+                style="font-size:30px; background:transparent; border:none; cursor:pointer; color:var(--text-primary); transition:0.3s;">
                 <ion-icon name="language-outline"></ion-icon>
             </button>
             <!-- ZH: 主題切換 | EN: Theme Toggle -->
-            <button class="icon-action toggle-theme-btn" title="切換主題 / Toggle Theme" style="font-size:30px; background:transparent; border:none; cursor:pointer; color:var(--text-primary); transition:0.3s;">
+            <button class="icon-action toggle-theme-btn" title="切換主題 / Toggle Theme"
+                style="font-size:30px; background:transparent; border:none; cursor:pointer; color:var(--text-primary); transition:0.3s;">
                 <ion-icon name="moon-outline"></ion-icon>
             </button>
         </div>
 
-        <div class="form-box active-popup">
+        <div class="form-box active-popup" id="login-form-box">
             <span class="close" title="Mock close button">
                 <ion-icon name="close-circle-outline"></ion-icon>
             </span>
             <form id="login-form">
                 <h1 data-i18n="login_title">Login</h1>
-                
+
                 <!-- ZH: 帳號輸入框 | EN: Username Input -->
                 <div class="input">
                     <input type="text" id="username" required autocomplete="username" placeholder=" ">
                     <label data-i18n="label_username">Username</label>
                     <ion-icon name="person-outline"></ion-icon>
                 </div>
-                
+
                 <!-- ZH: 密碼輸入框 | EN: Password Input -->
                 <div class="input login-eye">
                     <input type="password" id="password" required autocomplete="current-password" placeholder=" ">
@@ -64,7 +69,7 @@
                         <ion-icon name="eye-outline" class="eye-open"></ion-icon>
                     </span>
                 </div>
-                
+
                 <button type="submit" class="ready-btn" id="login-btn">
                     <span data-i18n="btn_login">Submit</span>
                 </button>
@@ -75,7 +80,7 @@
     <!-- ZH: 視圖: HUD 介面主容器 | EN: VIEW: MAIN HUD Container -->
     <div id="dashboard-view" class="view-container hidden">
         <div class="hud-container main-content">
-            
+
             <header>
                 <span class="header-left">
                     <div class="logo-image">
@@ -99,7 +104,7 @@
                         <span data-i18n="nav_settings">Settings</span>
                     </button>
                 </div>
-                
+
                 <nav class="header-right">
                     <div class="user-info">
                         <ion-icon name="person-circle-outline"></ion-icon>
@@ -111,7 +116,7 @@
 
             <!-- ZH: 分頁 1: 儀表板視圖 | EN: PAGE 1: Dashboard Content -->
             <main id="dashboard-page" class="hud-grid page-view active">
-                
+
                 <!-- ZH: 頂部區塊: 額度分析環 | EN: TOP WIDGE: Token Usage Ring -->
                 <section class="widget token-widget form-box-panel">
                     <div class="widget-header">
@@ -120,12 +125,14 @@
                     <div class="token-display">
                         <div class="token-ring-container">
                             <svg class="progress-ring" width="120" height="120">
-                                <circle class="progress-ring__bg" stroke="rgba(255,255,255,0.1)" stroke-width="10" fill="transparent" r="50" cx="60" cy="60"/>
-                                <circle id="token-ring-fill" class="progress-ring__circle" stroke="var(--accent-glow)" stroke-width="10" fill="transparent" r="50" cx="60" cy="60"/>
+                                <circle class="progress-ring__bg" stroke="rgba(255,255,255,0.1)" stroke-width="10"
+                                    fill="transparent" r="50" cx="60" cy="60" />
+                                <circle id="token-ring-fill" class="progress-ring__circle" stroke="var(--accent-glow)"
+                                    stroke-width="10" fill="transparent" r="50" cx="60" cy="60" />
                             </svg>
                             <div class="token-percentage" id="token-percent">0%</div>
                         </div>
-                        
+
                         <div class="token-details">
                             <div class="stat-row">
                                 <span class="stat-label" data-i18n="token_used">Used:</span>
@@ -149,19 +156,19 @@
                         <h3 data-i18n="job_compose">New Task</h3>
                     </div>
                     <form id="job-form" class="job-form">
-                        
+
                         <div class="input row-input">
                             <input type="text" id="job-name" required placeholder=" ">
                             <label data-i18n="label_job_name">Job Name</label>
                             <ion-icon name="document-text-outline"></ion-icon>
                         </div>
-                        
+
                         <div class="input row-input">
                             <input type="text" id="model-name" required placeholder=" ">
                             <label data-i18n="label_model_name">Model Identifier</label>
                             <ion-icon name="cube-outline"></ion-icon>
                         </div>
-                        
+
                         <div class="input-select-group">
                             <p data-i18n="label_priority" style="font-size:14px; margin-bottom:5px;">Priority</p>
                             <select id="job-priority" class="select-box">
@@ -170,7 +177,7 @@
                                 <option value="2" data-i18n="priority_2">2 - HIGH</option>
                             </select>
                         </div>
-                        
+
                         <div class="row">
                             <div class="input row-input mini-input">
                                 <input type="number" id="job-epochs" min="1" max="1000" value="10">
@@ -181,7 +188,7 @@
                                 <label data-i18n="label_batch">Batch Size</label>
                             </div>
                         </div>
-                        
+
                         <button type="submit" class="ready-btn" id="submit-job-btn">
                             <span data-i18n="btn_dispatch">Dispatch Task</span>
                         </button>
@@ -192,9 +199,10 @@
                 <section class="widget list-widget form-box-panel">
                     <div class="widget-header split">
                         <h3 data-i18n="pipeline_active">Active Pipeline</h3>
-                        <ion-icon name="refresh-circle-outline" id="refresh-jobs-btn" class="refresh-icon" title="Refresh"></ion-icon>
+                        <ion-icon name="refresh-circle-outline" id="refresh-jobs-btn" class="refresh-icon"
+                            title="Refresh"></ion-icon>
                     </div>
-                    
+
                     <div class="job-list-container scrollbar-custom" id="job-list-container">
                         <!-- ZH: 由 JS 動態注入任務 | EN: JS injects jobs here dynamically -->
                         <div class="empty-state">
@@ -213,7 +221,8 @@
                     <div class="hub-grid">
                         <div class="hub-section">
                             <div class="hub-section-header">
-                                <h3><ion-icon name="chatbubbles-outline"></ion-icon> <span data-i18n="hub_title_models">AI 模型</span></h3>
+                                <h3><ion-icon name="chatbubbles-outline"></ion-icon> <span
+                                        data-i18n="hub_title_models">AI 模型</span></h3>
                                 <p data-i18n="hub_desc_models">文字、圖片辨識、搜尋、歸納、解任務！</p>
                             </div>
                             <div class="hub-cards">
@@ -240,7 +249,8 @@
 
                         <div class="hub-section">
                             <div class="hub-section-header">
-                                <h3><ion-icon name="document-text-outline"></ion-icon> <span data-i18n="hub_title_writing">文書寫作</span></h3>
+                                <h3><ion-icon name="document-text-outline"></ion-icon> <span
+                                        data-i18n="hub_title_writing">文書寫作</span></h3>
                                 <p data-i18n="hub_desc_writing">文字作業、歸納、會議紀錄整理、語音轉換！</p>
                             </div>
                             <div class="hub-cards">
@@ -267,7 +277,8 @@
 
                         <div class="hub-section">
                             <div class="hub-section-header">
-                                <h3><ion-icon name="color-wand-outline"></ion-icon> <span data-i18n="hub_title_media">影音創作</span></h3>
+                                <h3><ion-icon name="color-wand-outline"></ion-icon> <span
+                                        data-i18n="hub_title_media">影音創作</span></h3>
                                 <p data-i18n="hub_desc_media">生成圖片、生成影片、生成歌曲！</p>
                             </div>
                             <div class="hub-cards">
@@ -294,7 +305,8 @@
 
                         <div class="hub-section">
                             <div class="hub-section-header">
-                                <h3><ion-icon name="language-outline"></ion-icon> <span data-i18n="hub_title_life">生活/翻譯</span></h3>
+                                <h3><ion-icon name="language-outline"></ion-icon> <span
+                                        data-i18n="hub_title_life">生活/翻譯</span></h3>
                                 <p data-i18n="hub_desc_life">多語翻譯、衛教知識、專屬知識庫！</p>
                             </div>
                             <div class="hub-cards">
@@ -327,7 +339,9 @@
                         <ion-icon name="construct-outline"></ion-icon>
                         <h2 data-i18n="hub_coming_soon_title">🚧 此功能即將推出 🚧</h2>
                         <p data-i18n="hub_coming_soon_desc">我們正在努力開發此模組，敬請期待未來更新！</p>
-                        <button class="back-to-hub-btn ready-btn" data-i18n-aria="btn_back_hub" aria-label="返回大廳"><ion-icon name="arrow-back-outline"></ion-icon> <span data-i18n="btn_back_hub">返回大廳</span></button>
+                        <button class="back-to-hub-btn ready-btn" data-i18n-aria="btn_back_hub"
+                            aria-label="返回大廳"><ion-icon name="arrow-back-outline"></ion-icon> <span
+                                data-i18n="btn_back_hub">返回大廳</span></button>
                     </div>
                 </div>
 
@@ -336,7 +350,9 @@
                     <!-- ZH: 聊天室列表 | EN: Chatroom Sessions Sidebar -->
                     <aside class="chat-sidebar form-box-panel">
                         <div class="sidebar-header" style="justify-content: flex-start; gap: 10px;">
-                            <button class="icon-btn back-to-hub-btn" data-i18n-aria="btn_back_hub" aria-label="返回大廳" style="background: transparent; border: none; color: var(--text-primary); cursor: pointer; font-size: 20px;"><ion-icon name="arrow-back-outline"></ion-icon></button>
+                            <button class="icon-btn back-to-hub-btn" data-i18n-aria="btn_back_hub" aria-label="返回大廳"
+                                style="background: transparent; border: none; color: var(--text-primary); cursor: pointer; font-size: 20px;"><ion-icon
+                                    name="arrow-back-outline"></ion-icon></button>
                             <h3 data-i18n="chat_sessions">Sessions</h3>
                         </div>
                         <div class="session-list scrollbar-custom" id="session-list">
@@ -353,14 +369,16 @@
                         <div id="chat-history" class="chat-history scrollbar-custom">
                             <!-- ZH: 對話內容將由 JS 注入 | EN: Chat content injected by JS -->
                             <div class="ai-bubble intro">
-                                <div class="bubble-content" data-i18n="chat_welcome">Hello! How can I help you with your AI research today?</div>
+                                <div class="bubble-content" data-i18n="chat_welcome">Hello! How can I help you with your
+                                    AI research today?</div>
                             </div>
                         </div>
-                        
+
                         <div class="chat-input-area">
                             <form id="chat-form" class="chat-form">
                                 <div class="chat-input-row">
-                                    <textarea id="chat-input" data-i18n-placeholder="placeholder_chat" placeholder="Type your message here..." required></textarea>
+                                    <textarea id="chat-input" data-i18n-placeholder="placeholder_chat"
+                                        placeholder="Type your message here..." required></textarea>
                                     <button type="submit" id="send-chat-btn" class="send-btn" aria-label="Send message">
                                         <span class="material-icons">send</span>
                                     </button>
@@ -374,7 +392,7 @@
                                             <option value="llama3:latest">Ollama Llama3</option>
                                         </select>
                                     </div>
-                                                                    </div>
+                                </div>
                             </form>
                         </div>
                     </div>
@@ -416,7 +434,8 @@
                         </div>
                         <div class="settings-option">
                             <span data-i18n="label_logout">Session Control</span>
-                            <button class="ready-btn" id="logout-btn" style="width:auto; min-width:120px; border-color:#fb7185; color:#fb7185;">
+                            <button class="ready-btn" id="logout-btn"
+                                style="width:auto; min-width:120px; border-color:#fb7185; color:#fb7185;">
                                 <ion-icon name="log-out-outline"></ion-icon>
                                 <span data-i18n="btn_logout">Logout System</span>
                             </button>
@@ -427,10 +446,11 @@
 
         </div>
     </div>
-    
+
     <!-- ZH: 載入圖標庫與主程式碼 | EN: Load Icon library and Main Logic -->
     <script type="module" src="https://unpkg.com/ionicons@7.1.0/dist/ionicons/ionicons.esm.js"></script>
     <script nomodule src="https://unpkg.com/ionicons@7.1.0/dist/ionicons/ionicons.js"></script>
     <script src="app.js"></script>
 </body>
+
 </html>

@@ -266,7 +266,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (authToken) {
         checkAuth();
     }
-    
+
     // ZH: 設定頁面事件綁定 | EN: Settings Page Event Binding
     document.querySelectorAll('.toggle-theme-btn').forEach(btn => {
         btn.addEventListener('click', () => {
@@ -279,7 +279,7 @@ document.addEventListener('DOMContentLoaded', () => {
         btn.addEventListener('click', () => {
             currentLang = currentLang === 'zh' ? 'en' : 'zh';
             applyLanguage(currentLang);
-            if(authToken && !dashView.classList.contains('hidden')) {
+            if (authToken && !dashView.classList.contains('hidden')) {
                 fetchJobs();
             }
         });
@@ -289,15 +289,15 @@ document.addEventListener('DOMContentLoaded', () => {
         btn.addEventListener('click', () => {
             authToken = null;
             localStorage.removeItem('ai_hud_token');
-            if(pollInterval) clearInterval(pollInterval);
+            if (pollInterval) clearInterval(pollInterval);
             switchToLogin();
         });
     });
 
     newChatBtn.addEventListener('click', createNewSession);
-    
-    if(jobForm) jobForm.addEventListener('submit', handleJobSubmit);
-    if(refreshJobsBtn) refreshJobsBtn.addEventListener('click', fetchJobs);
+
+    if (jobForm) jobForm.addEventListener('submit', handleJobSubmit);
+    if (refreshJobsBtn) refreshJobsBtn.addEventListener('click', fetchJobs);
 });
 
 // =========================
@@ -312,16 +312,16 @@ tabBtns.forEach(btn => {
 
 function switchTab(tabId) {
     tabBtns.forEach(b => {
-        if(b.getAttribute('data-tab') === tabId) b.classList.add('active');
+        if (b.getAttribute('data-tab') === tabId) b.classList.add('active');
         else b.classList.remove('active');
     });
 
     pageViews.forEach(p => {
-        if(p.id === `${tabId}-page`) p.classList.add('active');
+        if (p.id === `${tabId}-page`) p.classList.add('active');
         else p.classList.remove('active');
     });
 
-    if(tabId === 'assistant') {
+    if (tabId === 'assistant') {
         renderActiveChat();
     }
 }
@@ -330,23 +330,23 @@ function switchTab(tabId) {
 // ZH: 聊天室會話管理 | EN: Chat Session Management
 // =========================
 function renderSessions() {
-    if(!sessionListEl) return;
-    
+    if (!sessionListEl) return;
+
     // Clear all session items except the new chat button
     const newChatBtn = sessionListEl.querySelector('.new-chat-btn');
     sessionListEl.innerHTML = '';
-    
+
     // Add the new chat button at the top
-    if(newChatBtn) {
+    if (newChatBtn) {
         sessionListEl.appendChild(newChatBtn);
     }
-    
+
     // Render all sessions
     sessions.forEach(session => {
         const item = document.createElement('div');
         item.className = `session-item ${session.id === activeSessionId ? 'active' : ''}`;
         item.onclick = () => selectSession(session.id);
-        
+
         item.innerHTML = `
             <span class="session-name" id="name-${session.id}">${session.name}</span>
             <div class="session-actions">
@@ -355,7 +355,7 @@ function renderSessions() {
             </div>
         `;
         sessionListEl.appendChild(item);
-        
+
         item.querySelector('.action-rename').onclick = (e) => renameSession(e, session.id);
         item.querySelector('.action-delete').onclick = (e) => deleteSession(e, session.id);
     });
@@ -380,7 +380,7 @@ function createNewSession() {
 function renameSession(e, id) {
     e.stopPropagation();
     const newName = prompt('Enter new name:', sessions.find(s => s.id === id).name);
-    if(newName) {
+    if (newName) {
         sessions.find(s => s.id === id).name = newName;
         saveSessions();
         renderSessions();
@@ -389,30 +389,34 @@ function renameSession(e, id) {
 
 function deleteSession(e, id) {
     e.stopPropagation();
-    if(!confirm('Delete this session?')) return;
-    
+    if (!confirm('Delete this session?')) return;
+
     sessions = sessions.filter(s => s.id !== id);
-    
+
     // If no sessions left, create a new one automatically
-    if(sessions.length === 0) {
+    if (sessions.length === 0) {
         const newId = 'sess_' + Date.now();
         sessions.unshift({ id: newId, name: 'New Chat', messages: [] });
         activeSessionId = newId;
-    } else if(activeSessionId === id) {
+    } else if (activeSessionId === id) {
         activeSessionId = sessions[0].id;
     }
-    
+
     saveSessions();
     renderSessions();
     renderActiveChat();
 }
 
 function saveSessions() {
-    localStorage.setItem('ai_hud_sessions', JSON.stringify(sessions));
+    if (window.currentUsername) {
+        localStorage.setItem(`ai_hud_sessions_${window.currentUsername}`, JSON.stringify(sessions));
+    } else {
+        localStorage.setItem('ai_hud_sessions', JSON.stringify(sessions));
+    }
 }
 
 function renderActiveChat() {
-    if(!chatHistoryEl) return;
+    if (!chatHistoryEl) return;
     const active = sessions.find(s => s.id === activeSessionId) || sessions[0];
     chatHistoryEl.innerHTML = `
         <div class="ai-bubble intro">
@@ -439,15 +443,15 @@ function applyLanguage(lang) {
     const dict = TRANSLATIONS[lang];
     document.querySelectorAll('[data-i18n]').forEach(el => {
         const key = el.getAttribute('data-i18n');
-        if(dict[key]) el.textContent = dict[key];
+        if (dict[key]) el.textContent = dict[key];
     });
     document.querySelectorAll('[data-i18n-placeholder]').forEach(el => {
         const key = el.getAttribute('data-i18n-placeholder');
-        if(dict[key]) el.placeholder = dict[key];
+        if (dict[key]) el.placeholder = dict[key];
     });
     document.querySelectorAll('[data-i18n-aria]').forEach(el => {
         const key = el.getAttribute('data-i18n-aria');
-        if(dict[key]) el.setAttribute('aria-label', dict[key]);
+        if (dict[key]) el.setAttribute('aria-label', dict[key]);
     });
 }
 
@@ -456,7 +460,7 @@ function t(key) {
 }
 
 function showToast(msgKey, isError = false) {
-    if(!toastMsg) return;
+    if (!toastMsg) return;
     toastMsg.textContent = t(msgKey);
     toastIcon.innerHTML = isError ? '<ion-icon name="warning-outline" style="color:#fb7185"></ion-icon>' : '<ion-icon name="checkmark-circle-outline" style="color:var(--accent-glow)"></ion-icon>';
     toastEl.style.borderColor = isError ? '#fb7185' : 'var(--border-color)';
@@ -467,7 +471,7 @@ function showToast(msgKey, isError = false) {
 // =========================
 // ZH: 身份驗證 | EN: Authentication
 // =========================
-if(loginForm) {
+if (loginForm) {
     loginForm.addEventListener('submit', async (e) => {
         e.preventDefault();
         const userValue = document.getElementById('username').value;
@@ -514,9 +518,9 @@ async function checkAuth() {
 }
 
 function switchToDashboard() {
-    if(loginView) loginView.classList.add('hidden');
-    if(dashView) dashView.classList.remove('hidden');
-    if(pollInterval) clearInterval(pollInterval);
+    if (loginView) loginView.classList.add('hidden');
+    if (dashView) dashView.classList.remove('hidden');
+    if (pollInterval) clearInterval(pollInterval);
     pollInterval = setInterval(fetchJobs, 5000);
     // Add token usage refresh interval
     setInterval(fetchTokenUsage, 10000); // Refresh token usage every 10 seconds
@@ -524,8 +528,8 @@ function switchToDashboard() {
 }
 
 function switchToLogin() {
-    if(dashView) dashView.classList.add('hidden');
-    if(loginView) loginView.classList.remove('hidden');
+    if (dashView) dashView.classList.add('hidden');
+    if (loginView) loginView.classList.remove('hidden');
 }
 
 // =========================
@@ -537,17 +541,33 @@ async function fetchDashboardData() {
 
 async function fetchUserProfile() {
     const res = await fetch(`${API_BASE}/auth/me`, { headers: { 'Authorization': `Bearer ${authToken}` } });
-    if(res.ok) {
+    if (res.ok) {
         const data = await res.json();
-        if(userDisplay) userDisplay.textContent = data.username;
-        if(userRole) userRole.textContent = data.role.toUpperCase();
+        if (userDisplay) userDisplay.textContent = data.username;
+        if (userRole) userRole.textContent = data.role.toUpperCase();
+        
+        // ZH: 依照帳號掛載其專屬的聊天歷史紀錄 | EN: Load specific chat sessions per user
+        window.currentUsername = data.username;
+        const userSessionsKey = `ai_hud_sessions_${data.username}`;
+        let userSessions = JSON.parse(localStorage.getItem(userSessionsKey));
+        
+        if (!userSessions || userSessions.length === 0) {
+            userSessions = [{ id: 'sess_' + Date.now(), name: TRANSLATIONS[currentLang].chat_sessions || 'New Chat', messages: [] }];
+            localStorage.setItem(userSessionsKey, JSON.stringify(userSessions));
+        }
+        
+        sessions = userSessions;
+        activeSessionId = sessions[0].id;
+        
+        renderSessions();
+        renderActiveChat();
     }
 }
 
 async function fetchTokenUsage() {
     try {
         const res = await fetch(`${API_BASE}/auth/usage`, { headers: { 'Authorization': `Bearer ${authToken}` } });
-        if(res.ok) {
+        if (res.ok) {
             const data = await res.json();
             console.log('Token usage data:', data);
             updateTokenDisplay(data);
@@ -556,7 +576,7 @@ async function fetchTokenUsage() {
             // Use cached/local token tracking as fallback
             updateTokenDisplayFromLocal();
         }
-    } catch(e) {
+    } catch (e) {
         console.error('Error fetching token usage:', e);
         updateTokenDisplayFromLocal();
     }
@@ -566,19 +586,19 @@ function updateTokenDisplay(data) {
     // Handle both percentage formats (0.1 or 10%)
     const usagePercentage = data.usage_percentage;
     const percentage = usagePercentage > 1 ? usagePercentage : (usagePercentage * 100).toFixed(1);
-    
-    if(tokenPercent) tokenPercent.textContent = `${percentage}%`;
-    if(tokenUsed) tokenUsed.textContent = (data.tokens_used || 0).toLocaleString();
-    if(tokenLimit) tokenLimit.textContent = (data.tokens_limit || 0).toLocaleString();
-    if(tokenReset) tokenReset.textContent = formatDate(data.reset_date);
-    
+
+    if (tokenPercent) tokenPercent.textContent = `${percentage}%`;
+    if (tokenUsed) tokenUsed.textContent = (data.tokens_used || 0).toLocaleString();
+    if (tokenLimit) tokenLimit.textContent = (data.tokens_limit || 0).toLocaleString();
+    if (tokenReset) tokenReset.textContent = formatDate(data.reset_date);
+
     // Update progress ring - handle both percentage formats
     const normalizedPercentage = usagePercentage > 1 ? usagePercentage / 100 : usagePercentage;
-    if(tokenRingFill) tokenRingFill.style.strokeDashoffset = 314 - (314 * normalizedPercentage);
-    
+    if (tokenRingFill) tokenRingFill.style.strokeDashoffset = 314 - (314 * normalizedPercentage);
+
     // Store in localStorage for offline tracking
     localStorage.setItem('token_usage_data', JSON.stringify(data));
-    
+
     console.log('Token display updated:', {
         percentage,
         tokens_used: data.tokens_used,
@@ -590,18 +610,18 @@ function updateTokenDisplay(data) {
 
 function updateTokenDisplayFromLocal() {
     const localData = localStorage.getItem('token_usage_data');
-    if(localData) {
+    if (localData) {
         try {
             const data = JSON.parse(localData);
             updateTokenDisplay(data);
-        } catch(e) {
+        } catch (e) {
             console.error('Error parsing local token data:', e);
             // Set default values
-            if(tokenPercent) tokenPercent.textContent = '0%';
-            if(tokenUsed) tokenUsed.textContent = '0';
-            if(tokenLimit) tokenLimit.textContent = '10000';
-            if(tokenReset) tokenReset.textContent = '--';
-            if(tokenRingFill) tokenRingFill.style.strokeDashoffset = 314;
+            if (tokenPercent) tokenPercent.textContent = '0%';
+            if (tokenUsed) tokenUsed.textContent = '0';
+            if (tokenLimit) tokenLimit.textContent = '10000';
+            if (tokenReset) tokenReset.textContent = '--';
+            if (tokenRingFill) tokenRingFill.style.strokeDashoffset = 314;
         }
     }
 }
@@ -609,15 +629,15 @@ function updateTokenDisplayFromLocal() {
 function trackTokenUsage(messageTokens, isUser = true) {
     // Simple token estimation (rough approximation: 1 token ≈ 4 characters for English, 2-3 for Chinese)
     const estimatedTokens = Math.ceil(messageTokens.length / 3);
-    
+
     const localData = localStorage.getItem('token_usage_data');
-    if(localData) {
+    if (localData) {
         try {
             const data = JSON.parse(localData);
             data.tokens_used = (data.tokens_used || 0) + estimatedTokens;
             data.usage_percentage = Math.min(data.tokens_used / data.tokens_limit, 1);
             updateTokenDisplay(data);
-        } catch(e) {
+        } catch (e) {
             console.error('Error updating local token tracking:', e);
         }
     }
@@ -626,39 +646,39 @@ function trackTokenUsage(messageTokens, isUser = true) {
 function formatDate(dateStr) {
     if (!dateStr) return '--';
     const d = new Date(dateStr);
-    return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
 async function fetchJobs() {
     try {
         console.log('Fetching jobs from API...');
-        const res = await fetch(`${API_BASE}/jobs`, { 
-            headers: { 'Authorization': `Bearer ${authToken}` } 
+        const res = await fetch(`${API_BASE}/jobs`, {
+            headers: { 'Authorization': `Bearer ${authToken}` }
         });
-        
-        if(!res.ok) {
+
+        if (!res.ok) {
             console.error('Jobs API response not OK:', res.status, res.statusText);
             renderJobs([]);
             return;
         }
-        
+
         const data = await res.json();
         console.log('Jobs data received:', data);
         const jobs = data.items || data || [];
         console.log('Jobs to render:', jobs);
         renderJobs(jobs);
-    } catch(e) {
+    } catch (e) {
         console.error('Error fetching jobs:', e);
         renderJobs([]);
     }
 }
 
 function renderJobs(jobs) {
-    if(!jobListContainer) return;
-    
+    if (!jobListContainer) return;
+
     console.log('Rendering jobs:', jobs);
-    
-    if(!jobs || jobs.length === 0) {
+
+    if (!jobs || jobs.length === 0) {
         jobListContainer.innerHTML = `
             <div class="empty-state">
                 <ion-icon name="radio-outline"></ion-icon>
@@ -667,24 +687,24 @@ function renderJobs(jobs) {
         `;
         return;
     }
-    
+
     jobListContainer.innerHTML = '';
     jobs.forEach((job, index) => {
         const card = document.createElement('div');
         card.className = 'job-card';
-        
+
         // Handle different job data structures
         const jobName = job.job_name || job.name || `Job ${index + 1}`;
         const jobStatus = job.status || 'unknown';
         const jobProgress = job.progress || job.progress_percentage || 0;
         const jobId = job.id || job.job_id || `job_${index}`;
         const modelName = job.model_name || job.model || 'Unknown Model';
-        
+
         // Status color mapping
         let statusColor = 'var(--accent-glow)';
         let statusBg = 'transparent';
-        
-        switch(jobStatus.toLowerCase()) {
+
+        switch (jobStatus.toLowerCase()) {
             case 'running':
                 statusColor = '#10b981';
                 statusBg = 'rgba(16, 185, 129, 0.1)';
@@ -703,7 +723,7 @@ function renderJobs(jobs) {
                 statusBg = 'rgba(245, 158, 11, 0.1)';
                 break;
         }
-        
+
         card.innerHTML = `
             <div class="job-head">
                 <div class="job-info">
@@ -745,7 +765,7 @@ async function handleJobSubmit(e) {
             headers: { 'Authorization': `Bearer ${authToken}`, 'Content-Type': 'application/json' },
             body: JSON.stringify(jobData)
         });
-        if(!res.ok) throw new Error('fail');
+        if (!res.ok) throw new Error('fail');
         showToast('toast_job_ok');
         jobForm.reset();
         fetchJobs();
@@ -757,24 +777,24 @@ async function handleJobSubmit(e) {
 // =========================
 // ZH: AI 助手串流邏輯 | EN: AI Assistant Streaming
 // =========================
-if(chatForm) {
+if (chatForm) {
     chatForm.addEventListener('submit', async (e) => {
         e.preventDefault();
         const prompt = chatInput.value.trim();
-        if(!prompt) return;
+        if (!prompt) return;
 
         chatInput.value = '';
         // 重置为单行高度（42.4px = 22.4px + 20px padding）
         chatInput.style.height = '42.4px';
 
         const currentSession = sessions.find(s => s.id === activeSessionId) || sessions[0];
-        
+
         // User message
         const userMsg = { role: 'user', content: prompt };
         currentSession.messages.push(userMsg);
         renderBubble(userMsg);
         saveSessions();
-        
+
         // Track token usage for user message
         trackTokenUsage(prompt, true);
 
@@ -787,37 +807,37 @@ if(chatForm) {
         try {
             const response = await fetch(`${API_BASE}/chat/completions`, {
                 method: 'POST',
-                headers: { 
+                headers: {
                     'Authorization': `Bearer ${authToken}`,
-                    'Content-Type': 'application/json' 
+                    'Content-Type': 'application/json'
                 },
-                body: JSON.stringify({ 
-                    model_id: chatModelSelect.value, 
-                    messages: currentSession.messages, 
-                    stream: true 
+                body: JSON.stringify({
+                    model_id: chatModelSelect.value,
+                    messages: currentSession.messages,
+                    stream: true
                 })
             });
-            
-            if(!response.ok) throw new Error('Stream Error');
+
+            if (!response.ok) throw new Error('Stream Error');
 
             const reader = response.body.getReader();
             const decoder = new TextDecoder();
             let aiFullText = '';
 
-            while(true) {
+            while (true) {
                 const { value, done } = await reader.read();
-                if(done) break;
+                if (done) break;
 
                 const chunk = decoder.decode(value);
                 const lines = chunk.split('\n');
-                
-                for(const line of lines) {
-                    if(line.startsWith('data: ')) {
+
+                for (const line of lines) {
+                    if (line.startsWith('data: ')) {
                         const dataStr = line.replace('data: ', '').trim();
-                        if(dataStr === '[DONE]') continue;
+                        if (dataStr === '[DONE]') continue;
                         try {
                             const json = JSON.parse(dataStr);
-                            
+
                             // 判斷是否為伺服器錯誤訊息 (例如 Token 用盡)
                             if (json.error) {
                                 aiFullText = `[系統拒絕]: ${json.error === 'Token quota exceeded' ? '您的 Token 額度已用盡，請聯繫管理員擴充額度。' : json.error}`;
@@ -825,19 +845,19 @@ if(chatForm) {
                                 chatHistoryEl.scrollTop = chatHistoryEl.scrollHeight;
                                 break;
                             }
-                            
+
                             const content = json.choices[0].delta.content || '';
                             aiFullText += content;
                             contentEl.textContent = aiFullText;
                             chatHistoryEl.scrollTop = chatHistoryEl.scrollHeight;
-                        } catch(e) {}
+                        } catch (e) { }
                     }
                 }
             }
-            
+
             currentSession.messages.push({ role: 'assistant', content: aiFullText });
             saveSessions();
-            
+
             // Track token usage for AI response
             trackTokenUsage(aiFullText, false);
         } catch (err) {
@@ -849,7 +869,7 @@ if(chatForm) {
 }
 
 function renderBubble(msg) {
-    if(!chatHistoryEl) return;
+    if (!chatHistoryEl) return;
     const div = createBubble(msg.role, msg.content);
     chatHistoryEl.appendChild(div);
     chatHistoryEl.scrollTop = chatHistoryEl.scrollHeight;
@@ -863,50 +883,50 @@ function createBubble(role, content) {
 }
 
 
-if(chatInput) {
+if (chatInput) {
     // 精确行高 = font-size 16px * line-height 1.4 = 22.4px
     const LINE_HEIGHT = 22.4;
     const PADDING = 20; // 10px top + 10px bottom
-    
+
     // 基础高度（单行 + padding）
     const MIN_HEIGHT = LINE_HEIGHT + PADDING; // 42.4px
     // 最大高度（三行 + padding）
     const MAX_HEIGHT = (LINE_HEIGHT * 3) + PADDING; // 87.2px
-    
+
     const adjustHeight = () => {
         // 先重置為 1px 以獲取準確純文字所需之 scrollHeight (避免 auto 預設造成兩行)
         chatInput.style.height = '1px';
-        
+
         // 获取包含padding的scrollHeight
         const scrollHeight = chatInput.scrollHeight;
-        
+
         // 计算行数（基于纯内容高度）
         const contentHeight = scrollHeight - PADDING;
         let lines = Math.round(contentHeight / LINE_HEIGHT);
         if (lines < 1) lines = 1;
         if (lines > 3) lines = 3;
-        
+
         // 根据行数计算高度
         const newHeight = (lines * LINE_HEIGHT) + PADDING;
-        
+
         // 应用高度（在最小和最大之间）
         chatInput.style.height = Math.max(MIN_HEIGHT, Math.min(newHeight, MAX_HEIGHT)) + 'px';
     };
-    
+
     // 输入时实时调整高度
     chatInput.addEventListener('input', adjustHeight);
-    
+
     // 键盘事件也触发调整（处理删除、回车等）
     chatInput.addEventListener('keyup', adjustHeight);
-    
+
     // 粘贴事件延迟处理
     chatInput.addEventListener('paste', () => {
         setTimeout(adjustHeight, 10);
     });
-    
+
     // 窗口大小变化时重新计算
     window.addEventListener('resize', adjustHeight);
-    
+
     // 初始化高度
     adjustHeight();
 }

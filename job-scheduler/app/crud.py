@@ -104,6 +104,34 @@ def create_user(db: Session, user: schemas.UserCreate) -> models.User:
 
     return db_user
 
+def create_sso_user(db: Session, username: str, email: str, role: str = "student") -> models.User:
+    """SSO 登入時自動建立帳號 (無需讓使用者輸入密碼，系統給予隨機 hash 密碼)"""
+    import secrets
+    random_password = secrets.token_urlsafe(16)
+    hashed_password = get_password_hash(random_password)
+    
+    db_user = models.User(
+        username=username,
+        email=email,
+        hashed_password=hashed_password,
+        role=role
+    )
+    db.add(db_user)
+    db.commit()
+    db.refresh(db_user)
+
+    # 自動建立 Token 用量記錄
+    next_month_reset = _calculate_next_reset_date()
+    db_usage = models.TokenUsage(
+        user_id=db_user.id,
+        tokens_used=0,
+        tokens_limit=settings.DEFAULT_MONTHLY_TOKEN_LIMIT,
+        reset_date=next_month_reset
+    )
+    db.add(db_usage)
+    db.commit()
+
+    return db_user
 
 # ==============================================================================
 # ZH: Token 用量 CRUD | EN: Token Usage CRUD

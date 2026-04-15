@@ -85,6 +85,25 @@ def run_tests():
     username = reg_data["username"]
 
     # ==================================================================
+    # Step 1.5: 模擬校園 SSO 登入驗證
+    # ==================================================================
+    print("\n📋 Step 1.5: 模擬校園 SSO 登入驗證 | Mock SSO Login Test")
+    sso_res = requests.get(f"{BASE_URL}/api/v1/sso/callback?ticket=S110001", allow_redirects=False)
+    test_step("SSO 回呼成功發出重導 (HTTP 302)", "SSO Callback Redirects", sso_res.status_code in (302, 303, 307))
+    sso_token = ""
+    if sso_res.status_code in (302, 303, 307):
+        redirect_url = sso_res.headers.get("Location", "")
+        if "sso_token=" in redirect_url:
+            sso_token = redirect_url.split("sso_token=")[-1]
+    
+    test_step("成功從 URL 提取 SSO Token", "Extract SSO Token from URL", len(sso_token) > 0)
+    
+    if sso_token:
+        sso_headers = {"Authorization": f"Bearer {sso_token}"}
+        me_res = requests.get(f"{AUTH_API}/me", headers=sso_headers)
+        test_step("使用 SSO Token 查詢使用者資訊", "Query user with SSO Token", me_res.status_code == 200)
+
+    # ==================================================================
     # ZH: 2. 使用者登入 | EN: 2. User Login
     # ==================================================================
     print("\n📋 Step 2: 使用者登入 | User Login")

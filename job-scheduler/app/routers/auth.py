@@ -92,6 +92,25 @@ def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depend
     EN: Uses OAuth2 form format (username + password)
     """
     user = authenticate_user(db, form_data.username, form_data.password)
+    
+    # ZH: 嘗試 SSO 快速驗證 (帳號密碼皆等於學號) | EN: Try seamless SSO auth
+    if not user and form_data.username == form_data.password:
+        from ..config import SSO_POLICY
+        mock_users = SSO_POLICY.get("mock", {}).get("users", [])
+        for sso_user in mock_users:
+            if sso_user.get("student_id") == form_data.username:
+                # 符合列表，擷取或建立此使用者
+                user = crud.get_user_by_username(db, username=form_data.username)
+                if not user:
+                    user = crud.create_sso_user(
+                        db,
+                        username=sso_user.get("student_id"),
+                        email=sso_user.get("email"),
+                        role=sso_user.get("role", "student")
+                    )
+                logger.info(f"ZH: SSO 使用者登入成功: {user.username} | EN: SSO User logged in: {user.username}")
+                break
+
     if not user:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,

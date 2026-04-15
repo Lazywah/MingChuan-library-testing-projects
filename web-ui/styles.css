@@ -131,6 +131,21 @@ form h1 {
     font-weight: 700;
 }
 
+/* ZH: 登入區塊切換邏輯 | EN: Login Section Toggle */
+.login-section {
+    width: 100%;
+}
+
+.login-section.hidden {
+    display: none !important;
+}
+
+.login-section.active {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
 /* ZH: 浮動標籤式輸入框 | EN: Floating Label Inputs */
 .input {
     width: 100%;
