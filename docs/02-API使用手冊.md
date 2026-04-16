@@ -52,6 +52,18 @@ curl http://localhost:8002/api/v1/auth/me \
   -H "Authorization: Bearer YOUR_TOKEN"
 ```
 
+### PUT `/api/v1/auth/me` — 變更個人資料
+
+```bash
+curl -X PUT http://localhost:8002/api/v1/auth/me \
+  -H "Authorization: Bearer YOUR_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "email": "new.email@example.com",
+    "password": "newpassword123"
+  }'
+```
+
 ### GET `/api/v1/auth/usage` — 查詢 Token 用量
 
 ```bash

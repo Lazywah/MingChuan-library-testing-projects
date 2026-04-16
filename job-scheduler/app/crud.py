@@ -104,6 +104,16 @@ def create_user(db: Session, user: schemas.UserCreate) -> models.User:
 
     return db_user
 
+def update_user(db: Session, db_user: models.User, update_data: schemas.UserUpdate) -> models.User:
+    """ZH: 更新使用者資料 (如果不為空) | EN: Update user data if not None"""
+    if update_data.email is not None:
+        db_user.email = update_data.email
+    if update_data.password is not None and update_data.password.strip():
+        db_user.hashed_password = get_password_hash(update_data.password)
+    db.commit()
+    db.refresh(db_user)
+    return db_user
+
 def create_sso_user(db: Session, username: str, email: str, role: str = "student") -> models.User:
     """SSO 登入時自動建立帳號 (無需讓使用者輸入密碼，系統給予隨機 hash 密碼)"""
     import secrets

@@ -149,7 +149,22 @@ def read_users_me(current_user: models.User = Depends(get_current_user)):
     """
     return current_user
 
-
+# ==============================================================================
+# ZH: PUT /me - 更新當前使用者資訊
+# EN: PUT /me - Update current user info
+# ==============================================================================
+@router.put("/me", response_model=schemas.UserResponse)
+def update_users_me(
+    update_data: schemas.UserUpdate,
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    ZH: 更新已登入使用者的個人資訊 (修改信箱、密碼)
+    EN: Update logged-in user's profile info (email, password)
+    """
+    updated_user = crud.update_user(db, current_user, update_data)
+    return updated_user
 # ==============================================================================
 # ZH: GET /usage - 查詢 Token 用量
 # EN: GET /usage - Query token usage

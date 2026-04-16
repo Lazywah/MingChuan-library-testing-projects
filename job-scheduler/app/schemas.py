@@ -40,6 +40,12 @@ class UserCreate(BaseModel):
     role: Optional[str] = "student"                  # ZH: 角色 (預設 student) | EN: Role (default: student)
 
 
+class UserUpdate(BaseModel):
+    """ZH: 使用者更新個人資料請求 | EN: User profile update request"""
+    email: Optional[EmailStr] = None
+    password: Optional[str] = None
+
+
 class UserResponse(BaseModel):
     """ZH: 使用者資訊回應 (不含密碼) | EN: User info response (no password)"""
     id: str

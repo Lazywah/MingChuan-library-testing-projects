@@ -309,6 +309,7 @@ const jobForm = document.getElementById('job-form');
 const jobListHigh = document.getElementById('job-list-high');
 const jobListMidLow = document.getElementById('job-list-midlow');
 const submitJobBtn = document.getElementById('submit-job-btn');
+const profileUpdateForm = document.getElementById('profile-update-form');
 
 // =========================
 // ZH: 初始化階段 | EN: Initialization Phase
@@ -351,6 +352,7 @@ document.addEventListener('DOMContentLoaded', () => {
     newChatBtn.addEventListener('click', createNewSession);
 
     if (jobForm) jobForm.addEventListener('submit', handleJobSubmit);
+    if (profileUpdateForm) profileUpdateForm.addEventListener('submit', handleProfileUpdate);
     document.querySelectorAll('.refresh-jobs-btn').forEach(btn => {
         btn.addEventListener('click', fetchJobs);
     });
@@ -740,7 +742,6 @@ async function fetchJobs() {
         renderJobs([]);
     }
 }
-
 function renderJobs(jobs) {
     const emptyHTML = `<div class="empty-state"><ion-icon name="radio-outline"></ion-icon><p data-i18n="msg_no_signal">${t('msg_no_signal')}</p></div>`;
 
@@ -821,6 +822,43 @@ async function handleJobSubmit(e) {
         fetchJobs();
     } catch {
         showToast('toast_job_fail', true);
+    }
+}
+
+async function handleProfileUpdate(e) {
+    e.preventDefault();
+    const emailVal = document.getElementById('profile-email').value.trim();
+    const passVal = document.getElementById('profile-password').value.trim();
+    const submitBtn = e.target.querySelector('button[type="submit"]');
+
+    const updateData = {};
+    if (emailVal) updateData.email = emailVal;
+    if (passVal) updateData.password = passVal;
+
+    if (Object.keys(updateData).length === 0) {
+        // Nothing to update
+        showToast('toast_auth_fail', true);
+        return;
+    }
+
+    submitBtn.disabled = true;
+    try {
+        const res = await fetch(`${API_BASE}/auth/me`, {
+            method: 'PUT',
+            headers: { 
+                'Authorization': `Bearer ${authToken}`,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(updateData)
+        });
+        if (!res.ok) throw new Error('Update failed');
+        showToast('toast_auth_ok');
+        document.getElementById('profile-password').value = '';
+    } catch (err) {
+        console.error(err);
+        showToast('toast_auth_fail', true);
+    } finally {
+        submitBtn.disabled = false;
     }
 }
 
