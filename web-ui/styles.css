@@ -860,14 +860,6 @@ ion-icon {
 }
 
 @media (max-width: 1200px) {
-    .hud-grid {
-        grid-template-columns: 1fr;
-        gap: 20px;
-    }
-
-    .token-widget {
-        grid-column: 1;
-    }
 }
 
 @media (max-width: 800px) {
@@ -956,13 +948,7 @@ ion-icon {
     font-size: 12px;
 }
 
-/* ZH: 儀表板排版格線 | EN: Dashboard Grid Layout */
-.hud-grid {
-    display: grid;
-    grid-template-columns: 350px 1fr;
-    grid-template-rows: auto 1fr;
-    gap: 30px;
-}
+
 
 .form-box-panel {
     border: 2px solid var(--border-color);
@@ -974,9 +960,7 @@ ion-icon {
     transition: all 0.4s;
 }
 
-.token-widget {
-    grid-column: 1 / -1;
-}
+
 
 .widget-header {
     border-bottom: 2px solid var(--text-primary);
@@ -1219,9 +1203,7 @@ ion-icon {
 }
 
 @media (max-width: 800px) {
-    .hud-grid {
-        grid-template-columns: 1fr;
-    }
+
 
     .settings-grid {
         grid-template-columns: 1fr;
