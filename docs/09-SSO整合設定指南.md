@@ -39,14 +39,21 @@ cas:
 # 開發模擬環境配置
 mock:
   users:
-    - student_id: "S110001"
-      name: "測試學生"
-      email: "s110001@school.edu.tw"
+    - student_id: "T1090001"
+      password: "T1090001"
+      name: "林小明"
+      email: "T1090001@school.edu.tw"
       role: "student"
-    - student_id: "T001"
-      name: "測試教師"
-      email: "t001@school.edu.tw"
-      role: "teacher"
+    - student_id: "admin"
+      password: "admin"
+      name: "系統管理員"
+      email: "admin@school.edu.tw"
+      role: "admin"
+
+### 🔒 雙重驗證機制 (Dual-Auth)
+本系統實作了**混合式驗證**：
+1. **SSO 驗證**：若使用者透過 SSO 登錄，系統會先對比 `sso_policy.yaml` 中的名單。
+2. **資料庫驗證**：使用者亦可於之後在「系統設定」中修改個人密碼，新密碼會寫入資料庫。登入時，後端會同時驗證資料庫 hash 與 SSO 預設密碼，確保使用者不會因忘記新密碼而無法進入系統。
 ```
 
 ### 上線須知
