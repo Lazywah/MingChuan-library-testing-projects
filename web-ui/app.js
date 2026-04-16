@@ -308,7 +308,6 @@ const tokenReset = document.getElementById('token-reset');
 const jobForm = document.getElementById('job-form');
 const jobListHigh = document.getElementById('job-list-high');
 const jobListMidLow = document.getElementById('job-list-midlow');
-const refreshJobsBtn = document.getElementById('refresh-jobs-btn');
 const submitJobBtn = document.getElementById('submit-job-btn');
 
 // =========================
@@ -352,7 +351,9 @@ document.addEventListener('DOMContentLoaded', () => {
     newChatBtn.addEventListener('click', createNewSession);
 
     if (jobForm) jobForm.addEventListener('submit', handleJobSubmit);
-    if (refreshJobsBtn) refreshJobsBtn.addEventListener('click', fetchJobs);
+    document.querySelectorAll('.refresh-jobs-btn').forEach(btn => {
+        btn.addEventListener('click', fetchJobs);
+    });
 });
 
 // =========================
