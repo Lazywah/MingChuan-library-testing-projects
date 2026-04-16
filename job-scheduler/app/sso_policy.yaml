@@ -3,13 +3,20 @@ mock_mode: true
 mock:
   users:
     - student_id: "T1090001"
+      password: "T1090001"
       name: "林小明"
       email: "T1090001@school.edu.tw"
       role: "student"
     - student_id: "T1090002"
+      password: "T1090002"
       name: "陳靜水"
       email: "T1090002@school.edu.tw"
       role: "student"
+    - student_id: "admin"
+      password: "admin"
+      name: "系統管理員"
+      email: "admin@school.edu.tw"
+      role: "admin"
 
 cas:
   server_url: "https://cas.school.edu.tw/cas"
