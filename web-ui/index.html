@@ -92,8 +92,8 @@
                 <!-- ZH: 分頁切換導覽 | EN: Tab Navigation -->
                 <div class="header-center">
                     <button class="tab-btn active" id="tab-dash" data-tab="dashboard">
-                        <ion-icon name="apps-outline"></ion-icon>
-                        <span data-i18n="nav_dashboard">Dashboard</span>
+                        <ion-icon name="server-outline"></ion-icon>
+                        <span data-i18n="nav_compute">Compute Tasks</span>
                     </button>
                     <button class="tab-btn" id="tab-chat" data-tab="assistant">
                         <ion-icon name="chatbubbles-outline"></ion-icon>
@@ -102,6 +102,11 @@
                     <button class="tab-btn" id="tab-settings" data-tab="settings">
                         <ion-icon name="settings-outline"></ion-icon>
                         <span data-i18n="nav_settings">Settings</span>
+                    </button>
+                    <!-- ZH: 管理員專屬分頁 (預設隱藏) | EN: Admin tab (hidden by default) -->
+                    <button class="tab-btn" id="tab-admin" data-tab="admin" style="display:none;">
+                        <ion-icon name="shield-checkmark-outline"></ion-icon>
+                        <span data-i18n="nav_admin">Admin</span>
                     </button>
                 </div>
 
@@ -114,103 +119,75 @@
                 </nav>
             </header>
 
-            <!-- ZH: 分頁 1: 儀表板視圖 | EN: PAGE 1: Dashboard Content -->
-            <main id="dashboard-page" class="hud-grid page-view active">
+            <!-- ZH: 分頁 1: 運算任務視圖 | EN: PAGE 1: Compute Tasks -->
+            <main id="dashboard-page" class="page-view active">
 
-                <!-- ZH: 頂部區塊: 額度分析環 | EN: TOP WIDGE: Token Usage Ring -->
-                <section class="widget token-widget form-box-panel">
-                    <div class="widget-header">
-                        <h3 data-i18n="token_overview">Token Resources</h3>
-                    </div>
-                    <div class="token-display">
-                        <div class="token-ring-container">
-                            <svg class="progress-ring" width="120" height="120">
-                                <circle class="progress-ring__bg" stroke="rgba(255,255,255,0.1)" stroke-width="10"
-                                    fill="transparent" r="50" cx="60" cy="60" />
-                                <circle id="token-ring-fill" class="progress-ring__circle" stroke="var(--accent-glow)"
-                                    stroke-width="10" fill="transparent" r="50" cx="60" cy="60" />
-                            </svg>
-                            <div class="token-percentage" id="token-percent">0%</div>
-                        </div>
-
-                        <div class="token-details">
-                            <div class="stat-row">
-                                <span class="stat-label" data-i18n="token_used">Used:</span>
-                                <span class="stat-value highlight" id="token-used">0</span>
-                            </div>
-                            <div class="stat-row">
-                                <span class="stat-label" data-i18n="token_limit">Limit:</span>
-                                <span class="stat-value" id="token-limit">0</span>
-                            </div>
-                            <div class="stat-row">
-                                <span class="stat-label" data-i18n="token_reset">Reset Date:</span>
-                                <span class="stat-value warning" id="token-reset">--</span>
-                            </div>
-                        </div>
-                    </div>
-                </section>
-
-                <!-- ZH: 左側面板: 發配訓練任務 | EN: LEFT PANE: Submit New Job -->
-                <section class="widget submit-widget form-box-panel">
+                <!-- ZH: 頂部: 新增任務表單 | EN: TOP: Submit New Job -->
+                <section class="widget submit-widget form-box-panel" style="margin-bottom: 25px;">
                     <div class="widget-header">
                         <h3 data-i18n="job_compose">New Task</h3>
                     </div>
-                    <form id="job-form" class="job-form">
-
-                        <div class="input row-input">
+                    <form id="job-form" class="job-form" style="flex-direction:row; flex-wrap:wrap; gap:15px; align-items:flex-end;">
+                        <div class="input row-input" style="flex:1; min-width:180px; margin:0;">
                             <input type="text" id="job-name" required placeholder=" ">
                             <label data-i18n="label_job_name">Job Name</label>
                             <ion-icon name="document-text-outline"></ion-icon>
                         </div>
-
-                        <div class="input row-input">
+                        <div class="input row-input" style="flex:1; min-width:180px; margin:0;">
                             <input type="text" id="model-name" required placeholder=" ">
                             <label data-i18n="label_model_name">Model Identifier</label>
                             <ion-icon name="cube-outline"></ion-icon>
                         </div>
-
-                        <div class="input-select-group">
-                            <p data-i18n="label_priority" style="font-size:14px; margin-bottom:5px;">Priority</p>
+                        <div class="input-select-group" style="flex:0 0 160px;">
                             <select id="job-priority" class="select-box">
                                 <option value="0" data-i18n="priority_0">0 - BATCH</option>
                                 <option value="1" data-i18n="priority_1" selected>1 - NORMAL</option>
                                 <option value="2" data-i18n="priority_2">2 - HIGH</option>
                             </select>
                         </div>
-
-                        <div class="row">
-                            <div class="input row-input mini-input">
-                                <input type="number" id="job-epochs" min="1" max="1000" value="10">
-                                <label data-i18n="label_epochs">Epochs</label>
-                            </div>
-                            <div class="input row-input mini-input">
-                                <input type="number" id="job-batch" min="1" max="512" value="32">
-                                <label data-i18n="label_batch">Batch Size</label>
-                            </div>
+                        <div class="input row-input" style="flex:0 0 80px; margin:0;">
+                            <input type="number" id="job-epochs" min="1" max="1000" value="10">
+                            <label data-i18n="label_epochs">Epochs</label>
                         </div>
-
-                        <button type="submit" class="ready-btn" id="submit-job-btn">
+                        <div class="input row-input" style="flex:0 0 80px; margin:0;">
+                            <input type="number" id="job-batch" min="1" max="512" value="32">
+                            <label data-i18n="label_batch">Batch Size</label>
+                        </div>
+                        <button type="submit" class="ready-btn" id="submit-job-btn" style="flex:0 0 auto; width:auto; min-width:140px; margin:0;">
                             <span data-i18n="btn_dispatch">Dispatch Task</span>
                         </button>
                     </form>
                 </section>
 
-                <!-- ZH: 右側面板: 活躍的任務佇列清單 | EN: RIGHT PANE: Active & Queued Jobs -->
-                <section class="widget list-widget form-box-panel">
-                    <div class="widget-header split">
-                        <h3 data-i18n="pipeline_active">Active Pipeline</h3>
-                        <ion-icon name="refresh-circle-outline" id="refresh-jobs-btn" class="refresh-icon"
-                            title="Refresh"></ion-icon>
-                    </div>
-
-                    <div class="job-list-container scrollbar-custom" id="job-list-container">
-                        <!-- ZH: 由 JS 動態注入任務 | EN: JS injects jobs here dynamically -->
-                        <div class="empty-state">
-                            <ion-icon name="radio-outline"></ion-icon>
-                            <p data-i18n="msg_no_signal">No Signal / Queue Empty</p>
+                <!-- ZH: 左右分欄: 高算力 / 中低算力 | EN: Side-by-side: High / Mid-Low Compute -->
+                <div class="compute-split-row">
+                    <!-- ZH: 左側: 高算力任務 (Priority >= 2) | EN: Left: High Compute (Priority >= 2) -->
+                    <section class="widget form-box-panel compute-panel">
+                        <div class="widget-header split">
+                            <h3><ion-icon name="flash-outline" style="color:#f59e0b; margin-right:6px;"></ion-icon> <span data-i18n="compute_high">High Compute</span></h3>
+                            <ion-icon name="refresh-circle-outline" id="refresh-jobs-btn" class="refresh-icon" title="Refresh"></ion-icon>
                         </div>
-                    </div>
-                </section>
+                        <div class="job-list-container scrollbar-custom" id="job-list-high">
+                            <div class="empty-state">
+                                <ion-icon name="radio-outline"></ion-icon>
+                                <p data-i18n="msg_no_signal">No Signal / Queue Empty</p>
+                            </div>
+                        </div>
+                    </section>
+
+                    <!-- ZH: 右側: 中低算力任務 (Priority 0, 1) | EN: Right: Mid/Low Compute (Priority 0, 1) -->
+                    <section class="widget form-box-panel compute-panel">
+                        <div class="widget-header split">
+                            <h3><ion-icon name="speedometer-outline" style="color:#3b82f6; margin-right:6px;"></ion-icon> <span data-i18n="compute_mid_low">Mid / Low Compute</span></h3>
+                        </div>
+                        <div class="job-list-container scrollbar-custom" id="job-list-midlow">
+                            <div class="empty-state">
+                                <ion-icon name="radio-outline"></ion-icon>
+                                <p data-i18n="msg_no_signal">No Signal / Queue Empty</p>
+                            </div>
+                        </div>
+                    </section>
+                </div>
 
             </main>
 
@@ -402,48 +379,150 @@
             <!-- ZH: 分頁 3: 設定視圖 | EN: PAGE 3: Settings View -->
             <main id="settings-page" class="settings-container page-view">
                 <div class="settings-grid">
+
+                    <!-- ZH: Token 資源概況 (從儀表板移來) | EN: Token Resources (moved from dashboard) -->
                     <section class="widget form-box-panel">
                         <div class="widget-header">
-                            <h3 data-i18n="settings_appearance">Appearance</h3>
+                            <h3 data-i18n="token_overview">Token Resources</h3>
                         </div>
+                        <div class="token-display">
+                            <div class="token-ring-container">
+                                <svg class="progress-ring" width="120" height="120">
+                                    <circle class="progress-ring__bg" stroke="rgba(255,255,255,0.1)" stroke-width="10" fill="transparent" r="50" cx="60" cy="60" />
+                                    <circle id="token-ring-fill" class="progress-ring__circle" stroke="var(--accent-glow)" stroke-width="10" fill="transparent" r="50" cx="60" cy="60" />
+                                </svg>
+                                <div class="token-percentage" id="token-percent">0%</div>
+                            </div>
+                            <div class="token-details">
+                                <div class="stat-row"><span class="stat-label" data-i18n="token_used">Used:</span> <span class="stat-value highlight" id="token-used">0</span></div>
+                                <div class="stat-row"><span class="stat-label" data-i18n="token_limit">Limit:</span> <span class="stat-value" id="token-limit">0</span></div>
+                                <div class="stat-row"><span class="stat-label" data-i18n="token_reset">Reset Date:</span> <span class="stat-value warning" id="token-reset">--</span></div>
+                            </div>
+                        </div>
+                    </section>
+
+                    <section class="widget form-box-panel">
+                        <div class="widget-header"><h3 data-i18n="settings_appearance">Appearance</h3></div>
                         <div class="settings-option">
                             <span data-i18n="label_theme">Theme Mode</span>
-                            <button class="ready-btn toggle-theme-btn" style="width:auto; min-width:120px;">
-                                <ion-icon name="moon-outline"></ion-icon>
-                                <span data-i18n="btn_toggle_theme">Toggle Theme</span>
-                            </button>
+                            <button class="ready-btn toggle-theme-btn" style="width:auto; min-width:120px;"><ion-icon name="moon-outline"></ion-icon> <span data-i18n="btn_toggle_theme">Toggle Theme</span></button>
                         </div>
                     </section>
 
                     <section class="widget form-box-panel">
-                        <div class="widget-header">
-                            <h3 data-i18n="settings_language">Localization</h3>
-                        </div>
+                        <div class="widget-header"><h3 data-i18n="settings_language">Localization</h3></div>
                         <div class="settings-option">
                             <span data-i18n="label_lang">System Language</span>
-                            <button class="ready-btn toggle-lang-btn" style="width:auto; min-width:120px;">
-                                <ion-icon name="language-outline"></ion-icon>
-                                <span data-i18n="btn_toggle_lang">Switch Language</span>
-                            </button>
+                            <button class="ready-btn toggle-lang-btn" style="width:auto; min-width:120px;"><ion-icon name="language-outline"></ion-icon> <span data-i18n="btn_toggle_lang">Switch Language</span></button>
+                        </div>
+                    </section>
+
+                    <!-- ZH: 教學導覽 | EN: Tutorial Guide -->
+                    <section class="widget form-box-panel">
+                        <div class="widget-header"><h3 data-i18n="settings_tutorial">Tutorial Guide</h3></div>
+                        <div class="settings-option">
+                            <span data-i18n="label_reopen_tutorial">Onboarding Guide</span>
+                            <button class="ready-btn" id="reopen-tutorial-btn" style="width:auto; min-width:120px;"><ion-icon name="book-outline"></ion-icon> <span data-i18n="btn_reopen_tutorial">Show Tutorial</span></button>
                         </div>
                     </section>
 
                     <section class="widget form-box-panel">
-                        <div class="widget-header">
-                            <h3 data-i18n="settings_account">Account</h3>
-                        </div>
+                        <div class="widget-header"><h3 data-i18n="settings_account">Account</h3></div>
                         <div class="settings-option">
                             <span data-i18n="label_logout">Session Control</span>
-                            <button class="ready-btn" id="logout-btn"
-                                style="width:auto; min-width:120px; border-color:#fb7185; color:#fb7185;">
-                                <ion-icon name="log-out-outline"></ion-icon>
-                                <span data-i18n="btn_logout">Logout System</span>
-                            </button>
+                            <button class="ready-btn" id="logout-btn" style="width:auto; min-width:120px; border-color:#fb7185; color:#fb7185;"><ion-icon name="log-out-outline"></ion-icon> <span data-i18n="btn_logout">Logout System</span></button>
                         </div>
                     </section>
                 </div>
             </main>
 
+            <!-- ZH: 分頁 4: 管理員視圖 | EN: PAGE 4: Admin View -->
+            <main id="admin-page" class="page-view">
+                <div class="admin-grid">
+                    <!-- ZH: 使用者管理表格 | EN: User Management Table -->
+                    <section class="widget form-box-panel" style="grid-column: 1 / -1;">
+                        <div class="widget-header split">
+                            <h3><ion-icon name="people-outline" style="margin-right:6px;"></ion-icon> <span data-i18n="admin_users">User Management</span></h3>
+                            <ion-icon name="refresh-circle-outline" id="refresh-admin-btn" class="refresh-icon" title="Refresh"></ion-icon>
+                        </div>
+                        <div class="admin-table-wrap scrollbar-custom">
+                            <table class="admin-table" id="admin-users-table">
+                                <thead>
+                                    <tr>
+                                        <th data-i18n="admin_col_user">Username</th>
+                                        <th data-i18n="admin_col_email">Email</th>
+                                        <th data-i18n="admin_col_role">Role</th>
+                                        <th data-i18n="admin_col_status">Status</th>
+                                        <th data-i18n="admin_col_ip">Last IP</th>
+                                        <th data-i18n="admin_col_login_time">Last Login</th>
+                                        <th data-i18n="admin_col_tokens">Tokens</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="admin-users-body"><!-- JS --></tbody>
+                            </table>
+                        </div>
+                    </section>
+
+                    <!-- ZH: 模型管理 | EN: Model Management -->
+                    <section class="widget form-box-panel">
+                        <div class="widget-header"><h3><ion-icon name="cube-outline" style="margin-right:6px;"></ion-icon> <span data-i18n="admin_models">Models</span></h3></div>
+                        <div class="admin-table-wrap scrollbar-custom">
+                            <table class="admin-table" id="admin-models-table">
+                                <thead><tr><th>Name</th><th>Framework</th><th>Public</th></tr></thead>
+                                <tbody id="admin-models-body"><!-- JS --></tbody>
+                            </table>
+                        </div>
+                    </section>
+
+                    <!-- ZH: 全域排程管理 | EN: Global Job Queue -->
+                    <section class="widget form-box-panel">
+                        <div class="widget-header"><h3><ion-icon name="list-outline" style="margin-right:6px;"></ion-icon> <span data-i18n="admin_jobs">All Jobs</span></h3></div>
+                        <div class="admin-table-wrap scrollbar-custom">
+                            <table class="admin-table" id="admin-jobs-table">
+                                <thead><tr><th>Job</th><th>User</th><th>Status</th><th>Priority</th></tr></thead>
+                                <tbody id="admin-jobs-body"><!-- JS --></tbody>
+                            </table>
+                        </div>
+                    </section>
+                </div>
+            </main>
+
+        </div>
+    </div>
+
+    <!-- ZH: 教學導覽浮動面板 | EN: Onboarding Tutorial Modal -->
+    <div id="tutorial-modal" class="tutorial-modal hidden">
+        <div class="tutorial-backdrop"></div>
+        <div class="tutorial-content form-box-panel">
+            <button class="tutorial-close" id="tutorial-close-btn"><ion-icon name="close-outline"></ion-icon></button>
+            <h2><ion-icon name="school-outline" style="margin-right:8px;"></ion-icon> <span data-i18n="tutorial_title">Welcome to AI Base!</span></h2>
+            <div class="tutorial-body">
+                <div class="tutorial-step">
+                    <ion-icon name="server-outline" style="font-size:28px; color:#f59e0b;"></ion-icon>
+                    <div>
+                        <h4 data-i18n="tutorial_step1_title">Compute Tasks</h4>
+                        <p data-i18n="tutorial_step1_desc">Submit high or mid/low compute tasks and monitor your job queue in real time.</p>
+                    </div>
+                </div>
+                <div class="tutorial-step">
+                    <ion-icon name="chatbubbles-outline" style="font-size:28px; color:#6366f1;"></ion-icon>
+                    <div>
+                        <h4 data-i18n="tutorial_step2_title">AI Assistant</h4>
+                        <p data-i18n="tutorial_step2_desc">Access various AI models for text chat, image recognition, web search and more.</p>
+                    </div>
+                </div>
+                <div class="tutorial-step">
+                    <ion-icon name="settings-outline" style="font-size:28px; color:#10b981;"></ion-icon>
+                    <div>
+                        <h4 data-i18n="tutorial_step3_title">Settings</h4>
+                        <p data-i18n="tutorial_step3_desc">Check your token quota, switch themes & language, and manage your account.</p>
+                    </div>
+                </div>
+            </div>
+            <label class="tutorial-dismiss">
+                <input type="checkbox" id="tutorial-dismiss-check"> <span data-i18n="tutorial_dismiss">Don't show again</span>
+            </label>
+            <button class="ready-btn" id="tutorial-ok-btn" style="margin-top:10px;"><span data-i18n="tutorial_ok">Got it!</span></button>
         </div>
     </div>
 

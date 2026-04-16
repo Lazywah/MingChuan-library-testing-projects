@@ -23,9 +23,10 @@ EN: Modular design:
 ==============================================================================
 """
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Request
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
+from datetime import datetime
 
 from .. import crud, schemas, models
 from ..auth import authenticate_user, create_access_token, get_current_user
@@ -83,7 +84,7 @@ def register(user: schemas.UserCreate, db: Session = Depends(get_db)):
 # EN: Flow: Receive credentials → verify → issue JWT token
 # ==============================================================================
 @router.post("/login", response_model=schemas.Token)
-def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
+def login(request: Request, form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
     """
     ZH: 使用者登入，回傳 JWT access token
     EN: User login, returns JWT access token
@@ -117,6 +118,15 @@ def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depend
             detail="ZH: 帳號或密碼錯誤 | EN: Incorrect username or password",
             headers={"WWW-Authenticate": "Bearer"},
         )
+
+    # ZH: 記錄上線狀態 | EN: Record online status
+    try:
+        user.last_login_time = datetime.utcnow()
+        user.last_login_ip = request.client.host if request.client else "Unknown"
+        user.online_status = 1
+        db.commit()
+    except Exception as e:
+        logger.error(f"Failed to update login status: {e}")
 
     access_token = create_access_token(
         data={"sub": user.username, "role": user.role}

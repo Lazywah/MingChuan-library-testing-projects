@@ -63,6 +63,9 @@ class User(Base):
     hashed_password = Column(String, nullable=False)                          # ZH: 雜湊密碼 | EN: Hashed password
     role = Column(String, nullable=False, default="student")                  # ZH: 角色 | EN: Role
     is_active = Column(Integer, default=1)                                    # ZH: 啟用狀態 | EN: Active status
+    last_login_time = Column(DateTime, nullable=True)                         # ZH: 最後登入時間 | EN: Last login time
+    last_login_ip = Column(String, nullable=True)                             # ZH: 最後登入IP | EN: Last login IP
+    online_status = Column(Integer, default=0)                                # ZH: 在線狀態 (0:離線, 1:線上) | EN: Online status
     created_at = Column(DateTime, default=datetime.utcnow)                    # ZH: 建立時間 | EN: Created at
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)  # ZH: 更新時間 | EN: Updated at
 

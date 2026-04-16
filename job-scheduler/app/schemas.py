@@ -47,6 +47,9 @@ class UserResponse(BaseModel):
     email: str
     role: str
     is_active: int
+    online_status: Optional[int] = 0
+    last_login_ip: Optional[str] = None
+    last_login_time: Optional[datetime] = None
     created_at: datetime
 
     class Config:

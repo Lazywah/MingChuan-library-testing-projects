@@ -199,6 +199,35 @@ curl http://localhost:8002/health
 
 ---
 
+## 管理員 API | Admin API
+
+> ⚠️ 以下端點僅限 `role: admin` 的使用者存取，否則回傳 403。
+
+### GET `/api/v1/admin/users` — 取得全部使用者
+
+```bash
+curl http://localhost:8002/api/v1/admin/users \
+  -H "Authorization: Bearer ADMIN_TOKEN"
+```
+
+回應 (200): 包含 `username`, `email`, `role`, `online_status`, `last_login_ip`, `last_login_time`, `tokens_used`, `tokens_limit` 等欄位的陣列。
+
+### GET `/api/v1/admin/jobs` — 取得全部任務
+
+```bash
+curl http://localhost:8002/api/v1/admin/jobs \
+  -H "Authorization: Bearer ADMIN_TOKEN"
+```
+
+### GET `/api/v1/admin/models` — 取得全部模型
+
+```bash
+curl http://localhost:8002/api/v1/admin/models \
+  -H "Authorization: Bearer ADMIN_TOKEN"
+```
+
+---
+
 ## 錯誤碼 | Error Codes
 
 | 狀態碼 | 說明 |

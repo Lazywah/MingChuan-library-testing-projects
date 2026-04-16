@@ -127,4 +127,18 @@ def init_db():
     # ZH: 匯入 models 以註冊所有表 | EN: Import models to register all tables
     from . import models  # noqa: F401
     Base.metadata.create_all(bind=engine)
+
+    # ZH: 手動遷移 - 自動補齊新增的欄位 (供開發使用) | EN: Manual migration - auto append new columns
+    from sqlalchemy import text
+    try:
+        with engine.begin() as conn:
+            try: conn.execute(text("ALTER TABLE users ADD COLUMN last_login_time DATETIME"))
+            except Exception: pass
+            try: conn.execute(text("ALTER TABLE users ADD COLUMN last_login_ip VARCHAR"))
+            except Exception: pass
+            try: conn.execute(text("ALTER TABLE users ADD COLUMN online_status INTEGER DEFAULT 0"))
+            except Exception: pass
+    except Exception as e:
+        logger.warning(f"DB Migration checks: {e}")
+
     logger.info(f"ZH: 資料庫初始化完成 ({settings.DATABASE_PATH}) | EN: Database initialized ({settings.DATABASE_PATH})")

@@ -17,9 +17,10 @@ const TRANSLATIONS = {
         label_password: "密碼",
         btn_login: "傳送授權",
         // 導覽
-        nav_dashboard: "儀表板",
+        nav_compute: "運算任務",
         nav_assistant: "AI 助手",
         nav_settings: "系統設定",
+        nav_admin: "管理中心",
         // 儀表板
         token_overview: "代幣資源概況",
         token_used: "已使用",
@@ -35,6 +36,8 @@ const TRANSLATIONS = {
         label_epochs: "訓練迴圈數",
         label_batch: "批次大小",
         btn_dispatch: "派發任務",
+        compute_high: "高算力運算",
+        compute_mid_low: "中低算力運算",
         pipeline_active: "運行管線 / 佇列",
         msg_no_signal: "無訊號 / 佇列空閒",
         // AI 助手
@@ -89,7 +92,31 @@ const TRANSLATIONS = {
         hub_card_kb: "知識庫",
         hub_coming_soon_title: "🚧 此功能即將推出 🚧",
         hub_coming_soon_desc: "我們正在努力開發此模組，敬請期待未來更新！",
-        btn_back_hub: "返回大廳"
+        btn_back_hub: "返回大廳",
+        // 管理員
+        admin_users: "使用者管理",
+        admin_models: "模型管理",
+        admin_jobs: "全域排程",
+        admin_col_user: "帳號",
+        admin_col_email: "信箱",
+        admin_col_role: "角色",
+        admin_col_status: "狀態",
+        admin_col_ip: "最後IP",
+        admin_col_login_time: "最後登入",
+        admin_col_tokens: "Token用量",
+        // 教學
+        settings_tutorial: "教學手冊",
+        label_reopen_tutorial: "入站導覽",
+        btn_reopen_tutorial: "開啟教學",
+        tutorial_title: "歡迎來到 AI Base！",
+        tutorial_step1_title: "運算任務",
+        tutorial_step1_desc: "提交高算力或中低算力運算任務，並即時監控您的作業佇列。",
+        tutorial_step2_title: "AI 助手",
+        tutorial_step2_desc: "存取各類 AI 模型進行文字聊天、圖片辨識、搜尋等功能。",
+        tutorial_step3_title: "系統設定",
+        tutorial_step3_desc: "查看您的 Token 配額、切換主題和語言、管理帳戶。",
+        tutorial_dismiss: "不再顯示",
+        tutorial_ok: "了解！"
     },
     en: {
         login_title: "System Login",
@@ -97,9 +124,10 @@ const TRANSLATIONS = {
         label_password: "Password",
         btn_login: "Submit Auth",
         // Navigation
-        nav_dashboard: "Dashboard",
+        nav_compute: "Compute",
         nav_assistant: "Assistant",
         nav_settings: "Settings",
+        nav_admin: "Admin",
         // Dashboard
         token_overview: "Token Resources",
         token_used: "Used",
@@ -115,6 +143,8 @@ const TRANSLATIONS = {
         label_epochs: "Epochs",
         label_batch: "Batch Size",
         btn_dispatch: "Dispatch Task",
+        compute_high: "High Compute",
+        compute_mid_low: "Mid / Low Compute",
         pipeline_active: "Active Pipeline",
         msg_no_signal: "No Signal / Queue Empty",
         // Assistant
@@ -169,7 +199,31 @@ const TRANSLATIONS = {
         hub_card_kb: "Knowledge Base",
         hub_coming_soon_title: "🚧 Coming Soon 🚧",
         hub_coming_soon_desc: "We are currently developing this module, stay tuned!",
-        btn_back_hub: "Back to Hub"
+        btn_back_hub: "Back to Hub",
+        // Admin
+        admin_users: "User Management",
+        admin_models: "Models",
+        admin_jobs: "All Jobs",
+        admin_col_user: "Username",
+        admin_col_email: "Email",
+        admin_col_role: "Role",
+        admin_col_status: "Status",
+        admin_col_ip: "Last IP",
+        admin_col_login_time: "Last Login",
+        admin_col_tokens: "Tokens",
+        // Tutorial
+        settings_tutorial: "Tutorial Guide",
+        label_reopen_tutorial: "Onboarding Guide",
+        btn_reopen_tutorial: "Show Tutorial",
+        tutorial_title: "Welcome to AI Base!",
+        tutorial_step1_title: "Compute Tasks",
+        tutorial_step1_desc: "Submit high or mid/low compute tasks and monitor your job queue in real time.",
+        tutorial_step2_title: "AI Assistant",
+        tutorial_step2_desc: "Access various AI models for text chat, image recognition, web search and more.",
+        tutorial_step3_title: "Settings",
+        tutorial_step3_desc: "Check your token quota, switch themes & language, and manage your account.",
+        tutorial_dismiss: "Don't show again",
+        tutorial_ok: "Got it!"
     }
 };
 
@@ -252,7 +306,8 @@ const tokenUsed = document.getElementById('token-used');
 const tokenLimit = document.getElementById('token-limit');
 const tokenReset = document.getElementById('token-reset');
 const jobForm = document.getElementById('job-form');
-const jobListContainer = document.getElementById('job-list-container');
+const jobListHigh = document.getElementById('job-list-high');
+const jobListMidLow = document.getElementById('job-list-midlow');
 const refreshJobsBtn = document.getElementById('refresh-jobs-btn');
 const submitJobBtn = document.getElementById('submit-job-btn');
 
@@ -522,9 +577,13 @@ function switchToDashboard() {
     if (dashView) dashView.classList.remove('hidden');
     if (pollInterval) clearInterval(pollInterval);
     pollInterval = setInterval(fetchJobs, 5000);
-    // Add token usage refresh interval
-    setInterval(fetchTokenUsage, 10000); // Refresh token usage every 10 seconds
+    setInterval(fetchTokenUsage, 10000);
     switchTab('dashboard');
+
+    // ZH: 教學導覽: 首次登入時顯示 | EN: Show tutorial on first login
+    if (!localStorage.getItem('ai_hud_tutorial_dismissed')) {
+        showTutorial();
+    }
 }
 
 function switchToLogin() {
@@ -548,6 +607,7 @@ async function fetchUserProfile() {
         
         // ZH: 依照帳號掛載其專屬的聊天歷史紀錄 | EN: Load specific chat sessions per user
         window.currentUsername = data.username;
+        window.currentUserRole = data.role;
         const userSessionsKey = `ai_hud_sessions_${data.username}`;
         let userSessions = JSON.parse(localStorage.getItem(userSessionsKey));
         
@@ -561,6 +621,13 @@ async function fetchUserProfile() {
         
         renderSessions();
         renderActiveChat();
+
+        // ZH: 管理員處理 | EN: Admin role handling
+        const adminTab = document.getElementById('tab-admin');
+        if (data.role === 'admin' && adminTab) {
+            adminTab.style.display = '';
+            fetchAdminData();
+        }
     }
 }
 
@@ -674,76 +741,58 @@ async function fetchJobs() {
 }
 
 function renderJobs(jobs) {
-    if (!jobListContainer) return;
-
-    console.log('Rendering jobs:', jobs);
+    const emptyHTML = `<div class="empty-state"><ion-icon name="radio-outline"></ion-icon><p data-i18n="msg_no_signal">${t('msg_no_signal')}</p></div>`;
 
     if (!jobs || jobs.length === 0) {
-        jobListContainer.innerHTML = `
-            <div class="empty-state">
-                <ion-icon name="radio-outline"></ion-icon>
-                <p data-i18n="msg_no_signal">No Signal / Queue Empty</p>
-            </div>
-        `;
+        if (jobListHigh) jobListHigh.innerHTML = emptyHTML;
+        if (jobListMidLow) jobListMidLow.innerHTML = emptyHTML;
         return;
     }
 
-    jobListContainer.innerHTML = '';
-    jobs.forEach((job, index) => {
-        const card = document.createElement('div');
-        card.className = 'job-card';
+    const highJobs = jobs.filter(j => (j.priority || 0) >= 2);
+    const midLowJobs = jobs.filter(j => (j.priority || 0) < 2);
 
-        // Handle different job data structures
-        const jobName = job.job_name || job.name || `Job ${index + 1}`;
-        const jobStatus = job.status || 'unknown';
-        const jobProgress = job.progress || job.progress_percentage || 0;
-        const jobId = job.id || job.job_id || `job_${index}`;
-        const modelName = job.model_name || job.model || 'Unknown Model';
-
-        // Status color mapping
-        let statusColor = 'var(--accent-glow)';
-        let statusBg = 'transparent';
-
-        switch (jobStatus.toLowerCase()) {
-            case 'running':
-                statusColor = '#10b981';
-                statusBg = 'rgba(16, 185, 129, 0.1)';
-                break;
-            case 'completed':
-                statusColor = '#3b82f6';
-                statusBg = 'rgba(59, 130, 246, 0.1)';
-                break;
-            case 'failed':
-                statusColor = '#ef4444';
-                statusBg = 'rgba(239, 68, 68, 0.1)';
-                break;
-            case 'queued':
-            case 'pending':
-                statusColor = '#f59e0b';
-                statusBg = 'rgba(245, 158, 11, 0.1)';
-                break;
-        }
-
-        card.innerHTML = `
-            <div class="job-head">
-                <div class="job-info">
-                    <span class="job-title">${jobName}</span>
-                    <span class="job-id">ID: ${jobId}</span>
+    function renderToContainer(container, list) {
+        if (!container) return;
+        if (list.length === 0) { container.innerHTML = emptyHTML; return; }
+        container.innerHTML = '';
+        list.forEach((job, index) => {
+            const card = document.createElement('div');
+            card.className = 'job-card';
+            const jobName = job.job_name || job.name || `Job ${index + 1}`;
+            const jobStatus = job.status || 'unknown';
+            const jobProgress = job.progress || job.progress_percentage || 0;
+            const jobId = job.id || job.job_id || `job_${index}`;
+            const modelName = job.model_name || job.model || 'Unknown Model';
+            let statusColor = 'var(--accent-glow)', statusBg = 'transparent';
+            switch (jobStatus.toLowerCase()) {
+                case 'running': statusColor = '#10b981'; statusBg = 'rgba(16,185,129,0.1)'; break;
+                case 'completed': statusColor = '#3b82f6'; statusBg = 'rgba(59,130,246,0.1)'; break;
+                case 'failed': statusColor = '#ef4444'; statusBg = 'rgba(239,68,68,0.1)'; break;
+                case 'queued': case 'pending': statusColor = '#f59e0b'; statusBg = 'rgba(245,158,11,0.1)'; break;
+            }
+            card.innerHTML = `
+                <div class="job-head">
+                    <div class="job-info">
+                        <span class="job-title">${jobName}</span>
+                        <span class="job-id">ID: ${jobId}</span>
+                    </div>
+                    <span class="job-status" style="background:${statusBg}; border:1px solid ${statusColor}; color:${statusColor};">
+                        ${t(`status_${jobStatus.toLowerCase()}`) || jobStatus.toUpperCase()}
+                    </span>
                 </div>
-                <span class="job-status" style="background: ${statusBg}; border:1px solid ${statusColor}; color:${statusColor};">
-                    ${t(`status_${jobStatus.toLowerCase()}`) || jobStatus.toUpperCase()}
-                </span>
-            </div>
-            <div class="job-meta">
-                <span class="job-model">${modelName}</span>
-                <span class="job-priority">Priority: ${job.priority || 1}</span>
-            </div>
-            <div class="job-progress-bar">
-                <div class="job-progress-fill" style="width: ${jobProgress}%"></div>
-            </div>
-        `;
-        jobListContainer.appendChild(card);
-    });
+                <div class="job-meta">
+                    <span class="job-model">${modelName}</span>
+                    <span class="job-priority">Priority: ${job.priority || 0}</span>
+                </div>
+                <div class="job-progress-bar"><div class="job-progress-fill" style="width:${jobProgress}%"></div></div>
+            `;
+            container.appendChild(card);
+        });
+    }
+
+    renderToContainer(jobListHigh, highJobs);
+    renderToContainer(jobListMidLow, midLowJobs);
 }
 
 async function handleJobSubmit(e) {
@@ -930,3 +979,99 @@ if (chatInput) {
     // 初始化高度
     adjustHeight();
 }
+
+// =========================
+// ZH: 管理員控制台邏輯 | EN: Admin Panel Logic
+// =========================
+async function fetchAdminData() {
+    try {
+        const [usersRes, jobsRes, modelsRes] = await Promise.all([
+            fetch(`${API_BASE}/admin/users`, { headers: { 'Authorization': `Bearer ${authToken}` } }),
+            fetch(`${API_BASE}/admin/jobs`, { headers: { 'Authorization': `Bearer ${authToken}` } }),
+            fetch(`${API_BASE}/admin/models`, { headers: { 'Authorization': `Bearer ${authToken}` } })
+        ]);
+        if (usersRes.ok) renderAdminUsers(await usersRes.json());
+        if (jobsRes.ok) renderAdminJobs(await jobsRes.json());
+        if (modelsRes.ok) renderAdminModels(await modelsRes.json());
+    } catch (e) {
+        console.error('Admin fetch error:', e);
+    }
+}
+
+function renderAdminUsers(users) {
+    const tbody = document.getElementById('admin-users-body');
+    if (!tbody) return;
+    if (!users || users.length === 0) { tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;">No users</td></tr>'; return; }
+    tbody.innerHTML = users.map(u => {
+        const statusClass = u.online_status ? 'online' : 'offline';
+        const statusText = u.online_status ? 'Online' : 'Offline';
+        const loginTime = u.last_login_time ? new Date(u.last_login_time).toLocaleString() : '--';
+        return `<tr>
+            <td>${u.username}</td>
+            <td>${u.email || '--'}</td>
+            <td><span class="badge">${(u.role || 'student').toUpperCase()}</span></td>
+            <td><span class="admin-status-badge ${statusClass}"></span>${statusText}</td>
+            <td>${u.last_login_ip || '--'}</td>
+            <td>${loginTime}</td>
+            <td>${(u.tokens_used || 0).toLocaleString()} / ${(u.tokens_limit || 0).toLocaleString()}</td>
+        </tr>`;
+    }).join('');
+}
+
+function renderAdminJobs(jobs) {
+    const tbody = document.getElementById('admin-jobs-body');
+    if (!tbody) return;
+    if (!jobs || jobs.length === 0) { tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;">No jobs</td></tr>'; return; }
+    tbody.innerHTML = jobs.map(j => `<tr>
+        <td>${j.job_name || '--'}</td>
+        <td>${j.user_id || '--'}</td>
+        <td>${j.status || '--'}</td>
+        <td>${j.priority || 0}</td>
+    </tr>`).join('');
+}
+
+function renderAdminModels(models) {
+    const tbody = document.getElementById('admin-models-body');
+    if (!tbody) return;
+    if (!models || models.length === 0) { tbody.innerHTML = '<tr><td colspan="3" style="text-align:center;">No models</td></tr>'; return; }
+    tbody.innerHTML = models.map(m => `<tr>
+        <td>${m.name || '--'}</td>
+        <td>${m.framework || '--'}</td>
+        <td>${m.is_public ? 'Yes' : 'No'}</td>
+    </tr>`).join('');
+}
+
+// Admin refresh button
+const refreshAdminBtn = document.getElementById('refresh-admin-btn');
+if (refreshAdminBtn) refreshAdminBtn.addEventListener('click', fetchAdminData);
+
+// =========================
+// ZH: 教學導覽邏輯 | EN: Tutorial Modal Logic
+// =========================
+function showTutorial() {
+    const modal = document.getElementById('tutorial-modal');
+    if (modal) modal.classList.remove('hidden');
+}
+
+function hideTutorial() {
+    const modal = document.getElementById('tutorial-modal');
+    if (modal) modal.classList.add('hidden');
+    const check = document.getElementById('tutorial-dismiss-check');
+    if (check && check.checked) {
+        localStorage.setItem('ai_hud_tutorial_dismissed', 'true');
+    }
+}
+
+// Tutorial event bindings
+const tutorialCloseBtn = document.getElementById('tutorial-close-btn');
+const tutorialOkBtn = document.getElementById('tutorial-ok-btn');
+const reopenTutorialBtn = document.getElementById('reopen-tutorial-btn');
+
+if (tutorialCloseBtn) tutorialCloseBtn.addEventListener('click', hideTutorial);
+if (tutorialOkBtn) tutorialOkBtn.addEventListener('click', hideTutorial);
+if (reopenTutorialBtn) reopenTutorialBtn.addEventListener('click', () => {
+    localStorage.removeItem('ai_hud_tutorial_dismissed');
+    const check = document.getElementById('tutorial-dismiss-check');
+    if (check) check.checked = false;
+    showTutorial();
+});

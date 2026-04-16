@@ -464,14 +464,9 @@ ion-icon {
     animation: fadeIn 0.4s ease forwards;
 }
 
-#dashboard-page.active {
-    display: grid !important;
-    overflow-y: auto;
-    padding-right: 10px;
-}
-
 #assistant-page.active,
-#settings-page.active {
+#settings-page.active,
+#admin-page.active {
     display: block !important;
 }
 
@@ -1357,4 +1352,199 @@ ion-icon {
     display: flex;
     align-items: center;
     gap: 5px;
+}
+
+/* ==========================================================================
+   Compute Tasks - Split Row Layout (左右分欄)
+   ========================================================================== */
+#dashboard-page.active {
+    display: flex !important;
+    flex-direction: column;
+    overflow-y: auto;
+    padding-right: 10px;
+}
+
+.compute-split-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 25px;
+    flex: 1;
+    min-height: 0;
+}
+
+.compute-panel {
+    display: flex;
+    flex-direction: column;
+}
+
+.compute-panel .job-list-container {
+    flex: 1;
+    min-height: 200px;
+}
+
+@media (max-width: 900px) {
+    .compute-split-row {
+        grid-template-columns: 1fr;
+    }
+}
+
+/* ==========================================================================
+   Admin Grid & Tables
+   ========================================================================== */
+.admin-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 25px;
+}
+
+@media (max-width: 1000px) {
+    .admin-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
+.admin-table-wrap {
+    max-height: 400px;
+    overflow-y: auto;
+}
+
+.admin-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+}
+
+.admin-table th,
+.admin-table td {
+    padding: 10px 12px;
+    text-align: left;
+    border-bottom: 1px solid rgba(255,255,255,0.1);
+    white-space: nowrap;
+}
+
+.admin-table th {
+    font-weight: 600;
+    color: var(--accent-glow);
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.admin-table tbody tr:hover {
+    background: rgba(255,255,255,0.05);
+}
+
+.admin-status-badge {
+    display: inline-block;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    margin-right: 6px;
+}
+
+.admin-status-badge.online { background: #10b981; box-shadow: 0 0 6px #10b981; }
+.admin-status-badge.offline { background: #6b7280; }
+
+/* ==========================================================================
+   Tutorial Modal (教學導覽彈窗)
+   ========================================================================== */
+.tutorial-modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 9999;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    animation: fadeIn 0.3s ease;
+}
+
+.tutorial-modal.hidden {
+    display: none !important;
+}
+
+.tutorial-backdrop {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0,0,0,0.6);
+    backdrop-filter: blur(6px);
+}
+
+.tutorial-content {
+    position: relative;
+    max-width: 520px;
+    width: 90%;
+    z-index: 1;
+    animation: fadeIn 0.4s ease;
+}
+
+.tutorial-content h2 {
+    display: flex;
+    align-items: center;
+    font-size: 22px;
+    margin-bottom: 20px;
+}
+
+.tutorial-close {
+    position: absolute;
+    top: 15px;
+    right: 15px;
+    background: transparent;
+    border: none;
+    font-size: 24px;
+    color: var(--text-primary);
+    cursor: pointer;
+    transition: 0.3s;
+}
+
+.tutorial-close:hover {
+    color: #fb7185;
+    transform: scale(1.2);
+}
+
+.tutorial-body {
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+    margin-bottom: 20px;
+}
+
+.tutorial-step {
+    display: flex;
+    gap: 14px;
+    align-items: flex-start;
+    padding: 12px;
+    border-radius: 12px;
+    background: rgba(255,255,255,0.05);
+    border: 1px solid rgba(255,255,255,0.08);
+}
+
+.tutorial-step h4 {
+    font-size: 15px;
+    margin-bottom: 4px;
+    font-weight: 600;
+}
+
+.tutorial-step p {
+    font-size: 13px;
+    color: var(--text-muted);
+    line-height: 1.5;
+}
+
+.tutorial-dismiss {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 14px;
+    cursor: pointer;
+    color: var(--text-muted);
+}
+
+.tutorial-dismiss input[type="checkbox"] {
+    accent-color: var(--accent-glow);
 }
