@@ -464,9 +464,13 @@ ion-icon {
     animation: fadeIn 0.4s ease forwards;
 }
 
-#assistant-page.active,
 #settings-page.active,
 #admin-page.active {
+    display: block !important;
+    overflow-y: auto;
+}
+
+#assistant-page.active {
     display: block !important;
 }
 
@@ -1187,6 +1191,8 @@ ion-icon {
 /* ZH: 設定分頁樣式 | EN: Settings Page Styles */
 .settings-container {
     height: 100%;
+    overflow-y: auto;
+    padding-right: 15px; /* Prevent scrollbar from overlapping content */
 }
 
 .settings-grid {
