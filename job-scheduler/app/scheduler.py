@@ -59,6 +59,7 @@ async def _process_single_job(job, db):
             gpu_client = get_gpu_client(
                 host=node.get("host"),
                 mock_mode=mock_mode,
+                port=node.get("port", 22),
                 username=node.get("username", "gpu_admin"),
                 key_path=node.get("ssh_key_path", "/root/.ssh/id_rsa")
             )

@@ -19,9 +19,12 @@ mock_mode: true
 
 # ZH: 資源層 GPU 運算節點池 | EN: Resource Layer GPU Compute Node Pool
 # ZH: 架構圖硬體規格：AMD EPYC Genoa + 256GB ECC + NVIDIA RTX 5090 * 2
+# ZH: 若 GPU 位於外網，請將 host 改為公網 IP/域名，並設定 port 為實際 SSH Port
+# EN: For WAN GPU servers, set host to public IP/domain and port to actual SSH port
 nodes:
   - id: "gpu-node-01"
-    host: "192.168.1.100"
+    host: "192.168.1.100"           # ZH: 內網 IP 或公網 IP/域名 | EN: LAN or WAN IP/domain
+    port: 22                         # ZH: SSH 連線埠 (外網建議改為非標準 Port) | EN: SSH port
     username: "gpu_admin"
     ssh_key_path: "/root/.ssh/id_rsa"
     hardware:
@@ -31,6 +34,7 @@ nodes:
 
   - id: "gpu-node-02"
     host: "192.168.1.101"
+    port: 22
     username: "gpu_admin"
     ssh_key_path: "/root/.ssh/id_rsa"
     hardware:
