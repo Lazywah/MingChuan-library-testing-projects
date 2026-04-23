@@ -9,8 +9,9 @@
     <!-- ZH: 引入 Google 字體 | EN: Import Google Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-    
+    <!-- <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet"> -->
+    <link href="https://fonts.googleapis.com/css2?family=Playpen+Sans:wght@400;600;700&display=swap" rel="stylesheet">
+
     <!-- Chart.js -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
@@ -125,7 +126,8 @@
                     <div class="widget-header">
                         <h3 data-i18n="job_compose">New Task</h3>
                     </div>
-                    <form id="job-form" class="job-form" style="flex-direction:row; flex-wrap:wrap; gap:15px; align-items:flex-end;">
+                    <form id="job-form" class="job-form"
+                        style="flex-direction:row; flex-wrap:wrap; gap:15px; align-items:flex-end;">
                         <div class="input row-input" style="flex:1; min-width:180px; margin:0;">
                             <input type="text" id="job-name" required placeholder=" ">
                             <label data-i18n="label_job_name">Job Name</label>
@@ -143,7 +145,8 @@
                                 <option value="2" data-i18n="priority_2">2 - HIGH</option>
                             </select>
                         </div>
-                        <div class="input row-input dataset-upload-container" style="flex:1; min-width:200px; margin:0; position:relative;">
+                        <div class="input row-input dataset-upload-container"
+                            style="flex:1; min-width:200px; margin:0; position:relative;">
                             <input type="file" id="datasetFile" accept=".zip,.csv,.jsonl" style="padding-top: 25px;">
                             <label data-i18n="label_dataset">資料集 (自動推薦)</label>
                             <ion-icon name="cloud-upload-outline"></ion-icon>
@@ -156,7 +159,8 @@
                             <input type="number" id="job-batch" min="1" max="512" value="32">
                             <label data-i18n="label_batch">Batch Size</label>
                         </div>
-                        <button type="submit" class="ready-btn" id="submit-job-btn" style="flex:0 0 auto; width:auto; min-width:140px; margin:0;">
+                        <button type="submit" class="ready-btn" id="submit-job-btn"
+                            style="flex:0 0 auto; width:auto; min-width:140px; margin:0;">
                             <span data-i18n="btn_dispatch">Dispatch Task</span>
                         </button>
                     </form>
@@ -167,8 +171,10 @@
                     <!-- ZH: 左側: 高算力任務 (Priority >= 2) | EN: Left: High Compute (Priority >= 2) -->
                     <section class="widget form-box-panel compute-panel">
                         <div class="widget-header split">
-                            <h3><ion-icon name="flash-outline" style="color:#f59e0b; margin-right:6px;"></ion-icon> <span data-i18n="compute_high">High Compute</span></h3>
-                            <ion-icon name="refresh-circle-outline" class="refresh-icon refresh-jobs-btn" title="Refresh"></ion-icon>
+                            <h3><ion-icon name="flash-outline" style="color:#f59e0b; margin-right:6px;"></ion-icon>
+                                <span data-i18n="compute_high">High Compute</span></h3>
+                            <ion-icon name="refresh-circle-outline" class="refresh-icon refresh-jobs-btn"
+                                title="Refresh"></ion-icon>
                         </div>
                         <div class="job-list-container scrollbar-custom" id="job-list-high">
                             <div class="empty-state">
@@ -181,8 +187,11 @@
                     <!-- ZH: 右側: 中低算力任務 (Priority 0, 1) | EN: Right: Mid/Low Compute (Priority 0, 1) -->
                     <section class="widget form-box-panel compute-panel">
                         <div class="widget-header split">
-                            <h3><ion-icon name="speedometer-outline" style="color:#3b82f6; margin-right:6px;"></ion-icon> <span data-i18n="compute_mid_low">Mid / Low Compute</span></h3>
-                            <ion-icon name="refresh-circle-outline" class="refresh-icon refresh-jobs-btn" title="Refresh"></ion-icon>
+                            <h3><ion-icon name="speedometer-outline"
+                                    style="color:#3b82f6; margin-right:6px;"></ion-icon> <span
+                                    data-i18n="compute_mid_low">Mid / Low Compute</span></h3>
+                            <ion-icon name="refresh-circle-outline" class="refresh-icon refresh-jobs-btn"
+                                title="Refresh"></ion-icon>
                         </div>
                         <div class="job-list-container scrollbar-custom" id="job-list-midlow">
                             <div class="empty-state">
@@ -392,29 +401,38 @@
                         <div class="token-display">
                             <div class="token-ring-container">
                                 <svg class="progress-ring" width="120" height="120">
-                                    <circle class="progress-ring__bg" stroke="rgba(255,255,255,0.1)" stroke-width="10" fill="transparent" r="50" cx="60" cy="60" />
-                                    <circle id="token-ring-fill" class="progress-ring__circle" stroke="var(--accent-glow)" stroke-width="10" fill="transparent" r="50" cx="60" cy="60" />
+                                    <circle class="progress-ring__bg" stroke="rgba(255,255,255,0.1)" stroke-width="10"
+                                        fill="transparent" r="50" cx="60" cy="60" />
+                                    <circle id="token-ring-fill" class="progress-ring__circle"
+                                        stroke="var(--accent-glow)" stroke-width="10" fill="transparent" r="50" cx="60"
+                                        cy="60" />
                                 </svg>
                                 <div class="token-percentage" id="token-percent">0%</div>
                             </div>
                             <div class="token-details">
-                                <div class="stat-row"><span class="stat-label" data-i18n="token_used">Used:</span> <span class="stat-value highlight" id="token-used">0</span></div>
-                                <div class="stat-row"><span class="stat-label" data-i18n="token_limit">Limit:</span> <span class="stat-value" id="token-limit">0</span></div>
-                                <div class="stat-row"><span class="stat-label" data-i18n="token_reset">Reset Date:</span> <span class="stat-value warning" id="token-reset">--</span></div>
+                                <div class="stat-row"><span class="stat-label" data-i18n="token_used">Used:</span> <span
+                                        class="stat-value highlight" id="token-used">0</span></div>
+                                <div class="stat-row"><span class="stat-label" data-i18n="token_limit">Limit:</span>
+                                    <span class="stat-value" id="token-limit">0</span></div>
+                                <div class="stat-row"><span class="stat-label" data-i18n="token_reset">Reset
+                                        Date:</span> <span class="stat-value warning" id="token-reset">--</span></div>
                             </div>
                         </div>
                     </section>
 
                     <!-- ZH: 個人資料變更 | EN: Profile Update -->
                     <section class="widget form-box-panel">
-                        <div class="widget-header"><h3 data-i18n="settings_profile">Profile Update</h3></div>
+                        <div class="widget-header">
+                            <h3 data-i18n="settings_profile">Profile Update</h3>
+                        </div>
                         <form id="profile-update-form" class="job-form-layout" style="margin-top: 15px;">
                             <div class="input" style="flex:1;">
                                 <input type="email" id="profile-email" placeholder=" " autocomplete="email">
                                 <label data-i18n="label_email">Email Address</label>
                             </div>
                             <div class="input" style="flex:1;">
-                                <input type="password" id="profile-password" placeholder=" " autocomplete="new-password">
+                                <input type="password" id="profile-password" placeholder=" "
+                                    autocomplete="new-password">
                                 <label data-i18n="label_new_password">New Password (Optional)</label>
                             </div>
                             <button type="submit" class="ready-btn" style="flex:0 0 auto; min-width:140px;">
@@ -424,46 +442,68 @@
                     </section>
 
                     <section class="widget form-box-panel">
-                        <div class="widget-header"><h3 data-i18n="settings_appearance">Appearance</h3></div>
+                        <div class="widget-header">
+                            <h3 data-i18n="settings_appearance">Appearance</h3>
+                        </div>
                         <div class="settings-option">
                             <span data-i18n="label_theme">Theme Mode</span>
-                            <button class="ready-btn toggle-theme-btn" style="width:auto; min-width:120px;"><ion-icon name="moon-outline"></ion-icon> <span data-i18n="btn_toggle_theme">Toggle Theme</span></button>
+                            <button class="ready-btn toggle-theme-btn" style="width:auto; min-width:120px;"><ion-icon
+                                    name="moon-outline"></ion-icon> <span data-i18n="btn_toggle_theme">Toggle
+                                    Theme</span></button>
                         </div>
                     </section>
 
                     <section class="widget form-box-panel">
-                        <div class="widget-header"><h3 data-i18n="settings_language">Localization</h3></div>
+                        <div class="widget-header">
+                            <h3 data-i18n="settings_language">Localization</h3>
+                        </div>
                         <div class="settings-option">
                             <span data-i18n="label_lang">System Language</span>
-                            <button class="ready-btn toggle-lang-btn" style="width:auto; min-width:120px;"><ion-icon name="language-outline"></ion-icon> <span data-i18n="btn_toggle_lang">Switch Language</span></button>
+                            <button class="ready-btn toggle-lang-btn" style="width:auto; min-width:120px;"><ion-icon
+                                    name="language-outline"></ion-icon> <span data-i18n="btn_toggle_lang">Switch
+                                    Language</span></button>
                         </div>
                     </section>
 
                     <!-- ZH: 教學導覽 | EN: Tutorial Guide -->
                     <section class="widget form-box-panel">
-                        <div class="widget-header"><h3 data-i18n="settings_tutorial">Tutorial Guide</h3></div>
+                        <div class="widget-header">
+                            <h3 data-i18n="settings_tutorial">Tutorial Guide</h3>
+                        </div>
                         <div class="settings-option">
                             <span data-i18n="label_reopen_tutorial">Onboarding Guide</span>
-                            <button class="ready-btn" id="reopen-tutorial-btn" style="width:auto; min-width:120px;"><ion-icon name="book-outline"></ion-icon> <span data-i18n="btn_reopen_tutorial">Show Tutorial</span></button>
+                            <button class="ready-btn" id="reopen-tutorial-btn"
+                                style="width:auto; min-width:120px;"><ion-icon name="book-outline"></ion-icon> <span
+                                    data-i18n="btn_reopen_tutorial">Show Tutorial</span></button>
                         </div>
                     </section>
 
                     <!-- ZH: 管理員專屬入口 | EN: Admin Portal Link -->
                     <section class="widget form-box-panel" id="admin-portal-section" style="display:none;">
-                        <div class="widget-header"><h3><ion-icon name="shield-checkmark-outline" style="margin-right:6px;"></ion-icon> <span data-i18n="settings_admin">Admin Portal</span></h3></div>
+                        <div class="widget-header">
+                            <h3><ion-icon name="shield-checkmark-outline" style="margin-right:6px;"></ion-icon> <span
+                                    data-i18n="settings_admin">Admin Portal</span></h3>
+                        </div>
                         <div class="settings-option">
                             <span data-i18n="label_admin_desc">Access advanced cluster management</span>
-                            <a href="admin.html" class="ready-btn" style="width:auto; min-width:120px; text-decoration:none; display:inline-flex; align-items:center; justify-content:center;">
-                                <ion-icon name="open-outline" style="margin-right:6px;"></ion-icon> <span data-i18n="btn_open_admin">Open Dashboard</span>
+                            <a href="admin.html" class="ready-btn"
+                                style="width:auto; min-width:120px; text-decoration:none; display:inline-flex; align-items:center; justify-content:center;">
+                                <ion-icon name="open-outline" style="margin-right:6px;"></ion-icon> <span
+                                    data-i18n="btn_open_admin">Open Dashboard</span>
                             </a>
                         </div>
                     </section>
 
                     <section class="widget form-box-panel">
-                        <div class="widget-header"><h3 data-i18n="settings_account">Account</h3></div>
+                        <div class="widget-header">
+                            <h3 data-i18n="settings_account">Account</h3>
+                        </div>
                         <div class="settings-option">
                             <span data-i18n="label_logout">Session Control</span>
-                            <button class="ready-btn" id="logout-btn" style="width:auto; min-width:120px; border-color:#fb7185; color:#fb7185;"><ion-icon name="log-out-outline"></ion-icon> <span data-i18n="btn_logout">Logout System</span></button>
+                            <button class="ready-btn" id="logout-btn"
+                                style="width:auto; min-width:120px; border-color:#fb7185; color:#fb7185;"><ion-icon
+                                    name="log-out-outline"></ion-icon> <span data-i18n="btn_logout">Logout
+                                    System</span></button>
                         </div>
                     </section>
                 </div>
@@ -477,55 +517,69 @@
         <div class="tutorial-backdrop"></div>
         <div class="tutorial-content form-box-panel">
             <button class="tutorial-close" id="tutorial-close-btn"><ion-icon name="close-outline"></ion-icon></button>
-            <h2><ion-icon name="school-outline" style="margin-right:8px;"></ion-icon> <span data-i18n="tutorial_title">Welcome to AI Base!</span></h2>
+            <h2><ion-icon name="school-outline" style="margin-right:8px;"></ion-icon> <span
+                    data-i18n="tutorial_title">Welcome to AI Base!</span></h2>
             <div class="tutorial-body">
                 <div class="tutorial-step">
                     <ion-icon name="server-outline" style="font-size:28px; color:#f59e0b;"></ion-icon>
                     <div>
                         <h4 data-i18n="tutorial_step1_title">Compute Tasks</h4>
-                        <p data-i18n="tutorial_step1_desc">Submit high or mid/low compute tasks and monitor your job queue in real time.</p>
+                        <p data-i18n="tutorial_step1_desc">Submit high or mid/low compute tasks and monitor your job
+                            queue in real time.</p>
                     </div>
                 </div>
                 <div class="tutorial-step">
                     <ion-icon name="chatbubbles-outline" style="font-size:28px; color:#6366f1;"></ion-icon>
                     <div>
                         <h4 data-i18n="tutorial_step2_title">AI Assistant</h4>
-                        <p data-i18n="tutorial_step2_desc">Access various AI models for text chat, image recognition, web search and more.</p>
+                        <p data-i18n="tutorial_step2_desc">Access various AI models for text chat, image recognition,
+                            web search and more.</p>
                     </div>
                 </div>
                 <div class="tutorial-step">
                     <ion-icon name="settings-outline" style="font-size:28px; color:#10b981;"></ion-icon>
                     <div>
                         <h4 data-i18n="tutorial_step3_title">Settings</h4>
-                        <p data-i18n="tutorial_step3_desc">Check your token quota, switch themes & language, and manage your account.</p>
+                        <p data-i18n="tutorial_step3_desc">Check your token quota, switch themes & language, and manage
+                            your account.</p>
                     </div>
                 </div>
             </div>
             <label class="tutorial-dismiss">
-                <input type="checkbox" id="tutorial-dismiss-check"> <span data-i18n="tutorial_dismiss">Don't show again</span>
+                <input type="checkbox" id="tutorial-dismiss-check"> <span data-i18n="tutorial_dismiss">Don't show
+                    again</span>
             </label>
-            <button class="ready-btn" id="tutorial-ok-btn" style="margin-top:10px;"><span data-i18n="tutorial_ok">Got it!</span></button>
+            <button class="ready-btn" id="tutorial-ok-btn" style="margin-top:10px;"><span data-i18n="tutorial_ok">Got
+                    it!</span></button>
         </div>
     </div>
 
     <!-- ZH: 任務詳情浮動面板 (即時日誌與指標) | EN: Job Details Modal (Real-time logs & metrics) -->
     <div id="job-details-modal" class="tutorial-modal hidden">
         <div class="tutorial-backdrop" id="job-details-backdrop"></div>
-        <div class="tutorial-content form-box-panel" style="max-width: 800px; width: 90%; max-height: 90vh; display: flex; flex-direction: column;">
-            <button class="tutorial-close" id="job-details-close-btn"><ion-icon name="close-outline"></ion-icon></button>
-            <h2 style="margin-bottom: 15px;"><ion-icon name="pulse-outline" style="margin-right:8px;"></ion-icon> <span data-i18n="job_details_title">任務詳情 (Job Details)</span> - <span id="detail-job-id" style="font-size: 0.7em; color: var(--neon-blue);"></span></h2>
-            
-            <div style="display: flex; gap: 10px; margin-bottom: 15px; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 10px;">
+        <div class="tutorial-content form-box-panel"
+            style="max-width: 800px; width: 90%; max-height: 90vh; display: flex; flex-direction: column;">
+            <button class="tutorial-close" id="job-details-close-btn"><ion-icon
+                    name="close-outline"></ion-icon></button>
+            <h2 style="margin-bottom: 15px;"><ion-icon name="pulse-outline" style="margin-right:8px;"></ion-icon> <span
+                    data-i18n="job_details_title">任務詳情 (Job Details)</span> - <span id="detail-job-id"
+                    style="font-size: 0.7em; color: var(--neon-blue);"></span></h2>
+
+            <div
+                style="display: flex; gap: 10px; margin-bottom: 15px; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 10px;">
                 <button class="tab-btn active" id="tab-btn-logs" data-i18n="tab_logs">終端日誌 (Console Logs)</button>
                 <button class="tab-btn" id="tab-btn-metrics" data-i18n="tab_metrics">收斂曲線 (Loss Curve)</button>
             </div>
 
-            <div id="job-details-body" style="flex: 1; overflow: hidden; display: flex; flex-direction: column; min-height: 300px;">
+            <div id="job-details-body"
+                style="flex: 1; overflow: hidden; display: flex; flex-direction: column; min-height: 300px;">
                 <!-- Logs View -->
                 <div id="view-logs" style="flex: 1; display: flex; flex-direction: column; height: 100%;">
-                    <pre id="job-logs-container" class="scrollbar-custom" style="flex: 1; background: #000; color: #0f0; padding: 15px; border-radius: 8px; font-family: monospace; overflow-y: auto; margin: 0; white-space: pre-wrap; font-size: 0.9em; border: 1px solid rgba(0, 255, 0, 0.2);"></pre>
+                    <pre id="job-logs-container" class="scrollbar-custom"
+                        style="flex: 1; background: #000; color: #0f0; padding: 15px; border-radius: 8px; font-family: monospace; overflow-y: auto; margin: 0; white-space: pre-wrap; font-size: 0.9em; border: 1px solid rgba(0, 255, 0, 0.2);"></pre>
                     <div style="margin-top: 10px; text-align: right;">
-                        <label style="font-size: 0.9em; cursor: pointer; color: rgba(255,255,255,0.7); display: flex; align-items: center; justify-content: flex-end; gap: 5px;">
+                        <label
+                            style="font-size: 0.9em; cursor: pointer; color: rgba(255,255,255,0.7); display: flex; align-items: center; justify-content: flex-end; gap: 5px;">
                             <input type="checkbox" id="auto-scroll-logs" checked>
                             <span data-i18n="label_auto_scroll">自動捲動 (Auto-scroll)</span>
                         </label>

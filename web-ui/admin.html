@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <!-- ZH: AI 訓練平台 - 管理員介面 | EN: AI Training Platform - Admin Interface -->
 <html lang="zh-Hant" data-theme="dark">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -16,12 +17,14 @@
             max-width: 1400px;
             margin: 0 auto;
         }
+
         .admin-nav {
             display: flex;
             justify-content: space-between;
             align-items: center;
             margin-bottom: 20px;
         }
+
         .back-link {
             color: var(--text-primary);
             text-decoration: none;
@@ -30,15 +33,18 @@
             gap: 5px;
             font-weight: 600;
         }
+
         .back-link:hover {
             color: var(--neon-blue);
         }
+
         .cluster-stats-grid {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
             gap: 15px;
             margin-top: 15px;
         }
+
         .stat-card {
             background: rgba(0, 0, 0, 0.4);
             border: 1px solid rgba(255, 255, 255, 0.1);
@@ -48,6 +54,7 @@
             flex-direction: column;
             gap: 10px;
         }
+
         .stat-card h4 {
             margin: 0;
             color: var(--neon-blue);
@@ -56,11 +63,13 @@
             align-items: center;
             justify-content: space-between;
         }
+
         .stat-row {
             display: flex;
             justify-content: space-between;
             font-size: 0.9em;
         }
+
         .progress-bar-bg {
             background: rgba(255, 255, 255, 0.1);
             height: 6px;
@@ -68,15 +77,23 @@
             overflow: hidden;
             margin-top: 5px;
         }
+
         .progress-bar-fill {
             height: 100%;
             background: var(--neon-blue);
             transition: width 0.3s ease, background-color 0.3s ease;
         }
-        .fill-danger { background: var(--neon-pink); }
-        .fill-warning { background: var(--neon-yellow); }
+
+        .fill-danger {
+            background: var(--neon-pink);
+        }
+
+        .fill-warning {
+            background: var(--neon-yellow);
+        }
     </style>
 </head>
+
 <body>
     <div class="empty bg-grad custom-bg" id="main-bg"></div>
 
@@ -87,11 +104,13 @@
 
     <div class="admin-layout">
         <div class="admin-nav">
-            <a href="index.html" class="back-link">
+            <!-- <a href="index.html" class="back-link">
                 <ion-icon name="arrow-back-outline"></ion-icon> <span data-i18n="btn_back_hub">返回大廳 (Back to Hub)</span>
-            </a>
-            <h2 style="margin: 0;"><ion-icon name="settings-outline"></ion-icon> <span data-i18n="admin_dashboard">管理員儀表板 (Admin Dashboard)</span></h2>
-            <button id="admin-logout-btn" class="ready-btn" style="width:auto; min-width:100px; border-color:#fb7185; color:#fb7185; padding: 6px 14px; font-size: 0.85em; display: inline-flex; align-items: center; gap: 6px;">
+            </a> -->
+            <h2 style="margin: 0;"><ion-icon name="settings-outline"></ion-icon> <span
+                    data-i18n="admin_dashboard">管理員儀表板 (Admin Dashboard)</span></h2>
+            <button id="admin-logout-btn" class="ready-btn"
+                style="width:auto; min-width:100px; border-color:#fb7185; color:#fb7185; padding: 6px 14px; font-size: 0.85em; display: inline-flex; align-items: center; gap: 6px;">
                 <ion-icon name="log-out-outline"></ion-icon> <span data-i18n="btn_logout">登出 (Logout)</span>
             </button>
         </div>
@@ -100,19 +119,23 @@
             <!-- ZH: 叢集資源監控 | EN: Cluster Status -->
             <section class="widget form-box-panel" style="grid-column: 1 / -1;">
                 <div class="widget-header">
-                    <h3><ion-icon name="hardware-chip-outline" style="margin-right:6px;"></ion-icon> <span data-i18n="admin_cluster_status">叢集資源即時監控 (Cluster Hardware Status)</span></h3>
+                    <h3><ion-icon name="hardware-chip-outline" style="margin-right:6px;"></ion-icon> <span
+                            data-i18n="admin_cluster_status">叢集資源即時監控 (Cluster Hardware Status)</span></h3>
                 </div>
                 <div id="cluster-stats-container" class="cluster-stats-grid">
                     <!-- Cards will be injected by JS -->
-                    <div style="padding: 20px; text-align: center; color: rgba(255,255,255,0.5);" data-i18n="msg_loading">載入中... (Loading...)</div>
+                    <div style="padding: 20px; text-align: center; color: rgba(255,255,255,0.5);"
+                        data-i18n="msg_loading">載入中... (Loading...)</div>
                 </div>
             </section>
 
             <!-- ZH: 使用者管理表格 | EN: User Management Table -->
             <section class="widget form-box-panel" style="grid-column: 1 / -1;">
                 <div class="widget-header split">
-                    <h3><ion-icon name="people-outline" style="margin-right:6px;"></ion-icon> <span data-i18n="admin_users">使用者管理 (User Management)</span></h3>
-                    <ion-icon name="refresh-circle-outline" id="refresh-admin-btn" class="refresh-icon" title="Refresh"></ion-icon>
+                    <h3><ion-icon name="people-outline" style="margin-right:6px;"></ion-icon> <span
+                            data-i18n="admin_users">使用者管理 (User Management)</span></h3>
+                    <ion-icon name="refresh-circle-outline" id="refresh-admin-btn" class="refresh-icon"
+                        title="Refresh"></ion-icon>
                 </div>
                 <div class="admin-table-wrap scrollbar-custom">
                     <table class="admin-table" id="admin-users-table">
@@ -134,10 +157,19 @@
 
             <!-- ZH: 模型管理 | EN: Model Management -->
             <section class="widget form-box-panel">
-                <div class="widget-header"><h3><ion-icon name="cube-outline" style="margin-right:6px;"></ion-icon> <span data-i18n="admin_models">模型 (Models)</span></h3></div>
+                <div class="widget-header">
+                    <h3><ion-icon name="cube-outline" style="margin-right:6px;"></ion-icon> <span
+                            data-i18n="admin_models">模型 (Models)</span></h3>
+                </div>
                 <div class="admin-table-wrap scrollbar-custom">
                     <table class="admin-table" id="admin-models-table">
-                        <thead><tr><th>Name</th><th>Framework</th><th>Public</th></tr></thead>
+                        <thead>
+                            <tr>
+                                <th>Name</th>
+                                <th>Framework</th>
+                                <th>Public</th>
+                            </tr>
+                        </thead>
                         <tbody id="admin-models-body"><!-- JS --></tbody>
                     </table>
                 </div>
@@ -145,10 +177,20 @@
 
             <!-- ZH: 全域排程管理 | EN: Global Job Queue -->
             <section class="widget form-box-panel">
-                <div class="widget-header"><h3><ion-icon name="list-outline" style="margin-right:6px;"></ion-icon> <span data-i18n="admin_jobs">全域任務 (All Jobs)</span></h3></div>
+                <div class="widget-header">
+                    <h3><ion-icon name="list-outline" style="margin-right:6px;"></ion-icon> <span
+                            data-i18n="admin_jobs">全域任務 (All Jobs)</span></h3>
+                </div>
                 <div class="admin-table-wrap scrollbar-custom">
                     <table class="admin-table" id="admin-jobs-table">
-                        <thead><tr><th>Job</th><th>User</th><th>Status</th><th>Priority</th></tr></thead>
+                        <thead>
+                            <tr>
+                                <th>Job</th>
+                                <th>User</th>
+                                <th>Status</th>
+                                <th>Priority</th>
+                            </tr>
+                        </thead>
                         <tbody id="admin-jobs-body"><!-- JS --></tbody>
                     </table>
                 </div>
@@ -162,4 +204,5 @@
     <!-- 載入 Admin 邏輯 -->
     <script src="admin.js"></script>
 </body>
+
 </html>
