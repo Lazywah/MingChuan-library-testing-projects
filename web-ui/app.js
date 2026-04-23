@@ -31,6 +31,7 @@ const TRANSLATIONS = {
         label_job_name: "任務名稱",
         label_model_name: "模型辨識碼",
         label_priority: "佇列優先級",
+        label_dataset: "資料集 (自動推薦)",
         priority_0: "0 - 批次處理",
         priority_1: "1 - 正常佇列",
         priority_2: "2 - 急件優先",
@@ -41,6 +42,11 @@ const TRANSLATIONS = {
         compute_mid_low: "中低算力運算",
         pipeline_active: "運行管線 / 佇列",
         msg_no_signal: "無訊號 / 佇列空閒",
+        btn_view_details: "查看詳情",
+        job_details_title: "任務詳情",
+        tab_logs: "終端日誌 (Console Logs)",
+        tab_metrics: "收斂曲線 (Loss Curve)",
+        label_auto_scroll: "自動捲動 (Auto-scroll)",
         // AI 助手
         chat_sessions: "對話紀錄",
         label_ai_model: "選擇 AI 模型",
@@ -138,6 +144,7 @@ const TRANSLATIONS = {
         label_job_name: "Job Name",
         label_model_name: "Model Identifier",
         label_priority: "Queue Priority",
+        label_dataset: "Dataset (Auto Config)",
         priority_0: "0 - BATCH",
         priority_1: "1 - NORMAL",
         priority_2: "2 - HIGH",
@@ -148,6 +155,11 @@ const TRANSLATIONS = {
         compute_mid_low: "Mid / Low Compute",
         pipeline_active: "Active Pipeline",
         msg_no_signal: "No Signal / Queue Empty",
+        btn_view_details: "View Details",
+        job_details_title: "Job Details",
+        tab_logs: "Console Logs",
+        tab_metrics: "Loss Curve",
+        label_auto_scroll: "Auto-scroll",
         // Assistant
         chat_sessions: "Sessions",
         label_ai_model: "AI Model",
@@ -790,9 +802,13 @@ function renderJobs(jobs) {
                     <span class="job-priority">Priority: ${job.priority || 0}</span>
                 </div>
                 <div class="job-progress-bar"><div class="job-progress-fill" style="width:${jobProgress}%"></div></div>
+                <div style="margin-top: 10px; text-align: right;">
+                    <button class="ready-btn" style="padding: 4px 10px; font-size: 0.8em; min-width: auto; width: auto;" onclick="openJobDetails('${jobId}')" data-i18n="btn_view_details">查看詳情</button>
+                </div>
             `;
             container.appendChild(card);
         });
+        applyTranslations(); // Translate the newly added buttons
     }
 
     renderToContainer(jobListHigh, highJobs);
@@ -1093,12 +1109,164 @@ function hideTutorial() {
 const tutorialCloseBtn = document.getElementById('tutorial-close-btn');
 const tutorialOkBtn = document.getElementById('tutorial-ok-btn');
 const reopenTutorialBtn = document.getElementById('reopen-tutorial-btn');
-
 if (tutorialCloseBtn) tutorialCloseBtn.addEventListener('click', hideTutorial);
 if (tutorialOkBtn) tutorialOkBtn.addEventListener('click', hideTutorial);
-if (reopenTutorialBtn) reopenTutorialBtn.addEventListener('click', () => {
-    localStorage.removeItem('ai_hud_tutorial_dismissed');
-    const check = document.getElementById('tutorial-dismiss-check');
-    if (check) check.checked = false;
-    showTutorial();
-});
+if (reopenTutorialBtn) reopenTutorialBtn.addEventListener('click', showTutorial);
+
+// =========================
+// ZH: 任務詳情邏輯 | EN: Job Details Modal & SSE Logic
+// =========================
+const jobDetailsModal = document.getElementById('job-details-modal');
+const jobDetailsCloseBtn = document.getElementById('job-details-close-btn');
+const jobDetailsBackdrop = document.getElementById('job-details-backdrop');
+const detailJobId = document.getElementById('detail-job-id');
+const jobLogsContainer = document.getElementById('job-logs-container');
+const autoScrollCheckbox = document.getElementById('auto-scroll-logs');
+
+const tabBtnLogs = document.getElementById('tab-btn-logs');
+const tabBtnMetrics = document.getElementById('tab-btn-metrics');
+const viewLogs = document.getElementById('view-logs');
+const viewMetrics = document.getElementById('view-metrics');
+
+let currentEventSource = null;
+let lossChart = null;
+
+if (jobDetailsCloseBtn) {
+    jobDetailsCloseBtn.addEventListener('click', closeJobDetails);
+    jobDetailsBackdrop.addEventListener('click', closeJobDetails);
+}
+
+if (tabBtnLogs && tabBtnMetrics) {
+    tabBtnLogs.addEventListener('click', () => {
+        tabBtnLogs.classList.add('active');
+        tabBtnMetrics.classList.remove('active');
+        viewLogs.classList.remove('hidden');
+        viewMetrics.classList.add('hidden');
+    });
+    tabBtnMetrics.addEventListener('click', () => {
+        tabBtnMetrics.classList.add('active');
+        tabBtnLogs.classList.remove('active');
+        viewMetrics.classList.remove('hidden');
+        viewLogs.classList.add('hidden');
+        if (lossChart) lossChart.update(); // Fix canvas render issues
+    });
+}
+
+function initChart() {
+    const ctx = document.getElementById('lossChart');
+    if (!ctx) return;
+    if (lossChart) lossChart.destroy();
+    
+    lossChart = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: [],
+            datasets: [{
+                label: 'Training Loss',
+                data: [],
+                borderColor: '#10b981',
+                backgroundColor: 'rgba(16, 185, 129, 0.1)',
+                borderWidth: 2,
+                pointBackgroundColor: '#10b981',
+                fill: true,
+                tension: 0.3
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            color: '#fff',
+            scales: {
+                x: {
+                    title: { display: true, text: 'Epoch', color: 'rgba(255,255,255,0.7)' },
+                    grid: { color: 'rgba(255,255,255,0.1)' },
+                    ticks: { color: 'rgba(255,255,255,0.7)' }
+                },
+                y: {
+                    title: { display: true, text: 'Loss', color: 'rgba(255,255,255,0.7)' },
+                    grid: { color: 'rgba(255,255,255,0.1)' },
+                    ticks: { color: 'rgba(255,255,255,0.7)' }
+                }
+            },
+            plugins: {
+                legend: { labels: { color: '#fff' } }
+            }
+        }
+    });
+}
+
+function closeJobDetails() {
+    if (jobDetailsModal) jobDetailsModal.classList.add('hidden');
+    if (currentEventSource) {
+        currentEventSource.close();
+        currentEventSource = null;
+    }
+}
+
+window.openJobDetails = function(jobId) {
+    if (!jobDetailsModal) return;
+    detailJobId.textContent = jobId;
+    jobLogsContainer.textContent = '';
+    initChart();
+    
+    // Switch to Logs tab by default
+    if (tabBtnLogs) tabBtnLogs.click();
+    
+    jobDetailsModal.classList.remove('hidden');
+
+    if (currentEventSource) {
+        currentEventSource.close();
+    }
+
+    // Connect to SSE
+    currentEventSource = new EventSource(`${API_BASE}/jobs/${jobId}/stream`);
+    
+    currentEventSource.onmessage = function(event) {
+        try {
+            const data = JSON.parse(event.data);
+            
+            // Append Logs
+            if (data.logs !== undefined) { // Initial load
+                jobLogsContainer.textContent = data.logs;
+            } else if (data.new_logs) { // Updates
+                jobLogsContainer.textContent += data.new_logs;
+            }
+            
+            // Auto Scroll
+            if (autoScrollCheckbox && autoScrollCheckbox.checked) {
+                jobLogsContainer.scrollTop = jobLogsContainer.scrollHeight;
+            }
+
+            // Append Metrics
+            let metricsToAdd = [];
+            if (data.metrics) metricsToAdd = data.metrics; // Initial load
+            if (data.new_metrics) metricsToAdd = data.new_metrics; // Updates
+            
+            if (metricsToAdd.length > 0 && lossChart) {
+                metricsToAdd.forEach(m => {
+                    lossChart.data.labels.push(m.epoch);
+                    lossChart.data.datasets[0].data.push(m.loss);
+                });
+                lossChart.update();
+            }
+
+            // Check if finished
+            if (['completed', 'failed', 'cancelled'].includes(data.status)) {
+                currentEventSource.close();
+                jobLogsContainer.textContent += `\n[System] Job finished with status: ${data.status}\n`;
+                if (autoScrollCheckbox && autoScrollCheckbox.checked) {
+                    jobLogsContainer.scrollTop = jobLogsContainer.scrollHeight;
+                }
+            }
+            
+        } catch(e) {
+            console.error("Error parsing SSE data", e);
+        }
+    };
+    
+    currentEventSource.onerror = function(err) {
+        console.error("EventSource failed:", err);
+        currentEventSource.close();
+        jobLogsContainer.textContent += `\n[System] Disconnected from log stream.\n`;
+    };
+};

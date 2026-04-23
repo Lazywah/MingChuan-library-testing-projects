@@ -326,14 +326,42 @@ def update_job_status(
     return job
 
 
-def update_job_progress(db: Session, job_id: str, progress: float, logs: Optional[str] = None):
+def update_job_progress(db: Session, job_id: str, progress: float) -> Optional[models.TrainingJob]:
     """ZH: 更新任務進度 | EN: Update job progress"""
     job = get_job(db, job_id)
     if job:
         job.progress = progress
-        if logs:
-            job.logs = logs
         db.commit()
+        db.refresh(job)
+    return job
+
+
+def append_job_log(db: Session, job_id: str, new_log: str) -> Optional[models.TrainingJob]:
+    """ZH: 附加日誌 | EN: Append execution log"""
+    job = get_job(db, job_id)
+    if job:
+        current_logs = job.logs or ""
+        job.logs = current_logs + new_log + "\n"
+        db.commit()
+        db.refresh(job)
+    return job
+
+
+def append_job_metric(db: Session, job_id: str, metric: dict) -> Optional[models.TrainingJob]:
+    """ZH: 附加指標資料 (存為 JSON array) | EN: Append metric data (stored as JSON array)"""
+    job = get_job(db, job_id)
+    if job:
+        current_metrics = []
+        if job.metrics:
+            try:
+                current_metrics = json.loads(job.metrics)
+            except:
+                pass
+        current_metrics.append(metric)
+        job.metrics = json.dumps(current_metrics)
+        db.commit()
+        db.refresh(job)
+    return job
 
 
 def cancel_job(db: Session, job_id: str) -> Optional[models.TrainingJob]:

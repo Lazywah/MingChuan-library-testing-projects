@@ -88,27 +88,27 @@
     <div class="admin-layout">
         <div class="admin-nav">
             <a href="index.html" class="back-link">
-                <ion-icon name="arrow-back-outline"></ion-icon> 返回大廳 (Back to Hub)
+                <ion-icon name="arrow-back-outline"></ion-icon> <span data-i18n="btn_back_hub">返回大廳 (Back to Hub)</span>
             </a>
-            <h2 style="margin: 0;"><ion-icon name="settings-outline"></ion-icon> 管理員儀表板 (Admin Dashboard)</h2>
+            <h2 style="margin: 0;"><ion-icon name="settings-outline"></ion-icon> <span data-i18n="admin_dashboard">管理員儀表板 (Admin Dashboard)</span></h2>
         </div>
 
         <div class="admin-grid">
             <!-- ZH: 叢集資源監控 | EN: Cluster Status -->
             <section class="widget form-box-panel" style="grid-column: 1 / -1;">
                 <div class="widget-header">
-                    <h3><ion-icon name="hardware-chip-outline" style="margin-right:6px;"></ion-icon> 叢集資源即時監控 (Cluster Hardware Status)</h3>
+                    <h3><ion-icon name="hardware-chip-outline" style="margin-right:6px;"></ion-icon> <span data-i18n="admin_cluster_status">叢集資源即時監控 (Cluster Hardware Status)</span></h3>
                 </div>
                 <div id="cluster-stats-container" class="cluster-stats-grid">
                     <!-- Cards will be injected by JS -->
-                    <div style="padding: 20px; text-align: center; color: rgba(255,255,255,0.5);">載入中... (Loading...)</div>
+                    <div style="padding: 20px; text-align: center; color: rgba(255,255,255,0.5);" data-i18n="msg_loading">載入中... (Loading...)</div>
                 </div>
             </section>
 
             <!-- ZH: 使用者管理表格 | EN: User Management Table -->
             <section class="widget form-box-panel" style="grid-column: 1 / -1;">
                 <div class="widget-header split">
-                    <h3><ion-icon name="people-outline" style="margin-right:6px;"></ion-icon> 使用者管理 (User Management)</h3>
+                    <h3><ion-icon name="people-outline" style="margin-right:6px;"></ion-icon> <span data-i18n="admin_users">使用者管理 (User Management)</span></h3>
                     <ion-icon name="refresh-circle-outline" id="refresh-admin-btn" class="refresh-icon" title="Refresh"></ion-icon>
                 </div>
                 <div class="admin-table-wrap scrollbar-custom">
@@ -131,7 +131,7 @@
 
             <!-- ZH: 模型管理 | EN: Model Management -->
             <section class="widget form-box-panel">
-                <div class="widget-header"><h3><ion-icon name="cube-outline" style="margin-right:6px;"></ion-icon> 模型 (Models)</h3></div>
+                <div class="widget-header"><h3><ion-icon name="cube-outline" style="margin-right:6px;"></ion-icon> <span data-i18n="admin_models">模型 (Models)</span></h3></div>
                 <div class="admin-table-wrap scrollbar-custom">
                     <table class="admin-table" id="admin-models-table">
                         <thead><tr><th>Name</th><th>Framework</th><th>Public</th></tr></thead>
@@ -142,7 +142,7 @@
 
             <!-- ZH: 全域排程管理 | EN: Global Job Queue -->
             <section class="widget form-box-panel">
-                <div class="widget-header"><h3><ion-icon name="list-outline" style="margin-right:6px;"></ion-icon> 全域任務 (All Jobs)</h3></div>
+                <div class="widget-header"><h3><ion-icon name="list-outline" style="margin-right:6px;"></ion-icon> <span data-i18n="admin_jobs">全域任務 (All Jobs)</span></h3></div>
                 <div class="admin-table-wrap scrollbar-custom">
                     <table class="admin-table" id="admin-jobs-table">
                         <thead><tr><th>Job</th><th>User</th><th>Status</th><th>Priority</th></tr></thead>

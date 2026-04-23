@@ -131,8 +131,16 @@ async def _process_single_job(job, db):
 
         # ZH: Step 4: 監控進度直到完成 | EN: Step 4: Monitor progress until done
         while True:
-            progress = await gpu_client.check_job_progress()
+            progress_data = await gpu_client.check_job_progress()
+            progress = progress_data.get("progress", 0.0)
+            log_line = progress_data.get("log", "")
+            metric = progress_data.get("metric", {})
+
             crud.update_job_progress(db, job.id, progress=progress)
+            if log_line:
+                crud.append_job_log(db, job.id, log_line)
+            if metric:
+                crud.append_job_metric(db, job.id, metric)
 
             if progress >= 100.0:
                 break

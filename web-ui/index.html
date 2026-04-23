@@ -9,7 +9,10 @@
     <!-- ZH: 引入 Google 字體 | EN: Import Google Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Playpen+Sans:wght@400;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
     <!-- ZH: 引入主任務面板樣式 | EN: Import main stylesheet -->
     <link rel="stylesheet" href="styles.css">
@@ -142,7 +145,7 @@
                         </div>
                         <div class="input row-input dataset-upload-container" style="flex:1; min-width:200px; margin:0; position:relative;">
                             <input type="file" id="datasetFile" accept=".zip,.csv,.jsonl" style="padding-top: 25px;">
-                            <label data-i18n="label_dataset">Dataset (Auto config)</label>
+                            <label data-i18n="label_dataset">資料集 (自動推薦)</label>
                             <ion-icon name="cloud-upload-outline"></ion-icon>
                         </div>
                         <div class="input row-input" style="flex:0 0 80px; margin:0;">
@@ -502,6 +505,38 @@
                 <input type="checkbox" id="tutorial-dismiss-check"> <span data-i18n="tutorial_dismiss">Don't show again</span>
             </label>
             <button class="ready-btn" id="tutorial-ok-btn" style="margin-top:10px;"><span data-i18n="tutorial_ok">Got it!</span></button>
+        </div>
+    </div>
+
+    <!-- ZH: 任務詳情浮動面板 (即時日誌與指標) | EN: Job Details Modal (Real-time logs & metrics) -->
+    <div id="job-details-modal" class="tutorial-modal hidden">
+        <div class="tutorial-backdrop" id="job-details-backdrop"></div>
+        <div class="tutorial-content form-box-panel" style="max-width: 800px; width: 90%; max-height: 90vh; display: flex; flex-direction: column;">
+            <button class="tutorial-close" id="job-details-close-btn"><ion-icon name="close-outline"></ion-icon></button>
+            <h2 style="margin-bottom: 15px;"><ion-icon name="pulse-outline" style="margin-right:8px;"></ion-icon> <span data-i18n="job_details_title">任務詳情 (Job Details)</span> - <span id="detail-job-id" style="font-size: 0.7em; color: var(--neon-blue);"></span></h2>
+            
+            <div style="display: flex; gap: 10px; margin-bottom: 15px; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 10px;">
+                <button class="tab-btn active" id="tab-btn-logs" data-i18n="tab_logs">終端日誌 (Console Logs)</button>
+                <button class="tab-btn" id="tab-btn-metrics" data-i18n="tab_metrics">收斂曲線 (Loss Curve)</button>
+            </div>
+
+            <div id="job-details-body" style="flex: 1; overflow: hidden; display: flex; flex-direction: column; min-height: 300px;">
+                <!-- Logs View -->
+                <div id="view-logs" style="flex: 1; display: flex; flex-direction: column; height: 100%;">
+                    <pre id="job-logs-container" class="scrollbar-custom" style="flex: 1; background: #000; color: #0f0; padding: 15px; border-radius: 8px; font-family: monospace; overflow-y: auto; margin: 0; white-space: pre-wrap; font-size: 0.9em; border: 1px solid rgba(0, 255, 0, 0.2);"></pre>
+                    <div style="margin-top: 10px; text-align: right;">
+                        <label style="font-size: 0.9em; cursor: pointer; color: rgba(255,255,255,0.7); display: flex; align-items: center; justify-content: flex-end; gap: 5px;">
+                            <input type="checkbox" id="auto-scroll-logs" checked>
+                            <span data-i18n="label_auto_scroll">自動捲動 (Auto-scroll)</span>
+                        </label>
+                    </div>
+                </div>
+
+                <!-- Metrics View -->
+                <div id="view-metrics" class="hidden" style="flex: 1; height: 100%; position: relative;">
+                    <canvas id="lossChart"></canvas>
+                </div>
+            </div>
         </div>
     </div>
 

@@ -6,6 +6,41 @@ if (!authToken) {
     window.location.href = 'index.html';
 }
 
+const TRANSLATIONS = {
+    zh: {
+        btn_back_hub: "返回大廳 (Back to Hub)",
+        admin_dashboard: "管理員儀表板",
+        admin_cluster_status: "叢集資源即時監控",
+        admin_users: "使用者管理",
+        admin_models: "模型",
+        admin_jobs: "全域任務",
+        msg_loading: "載入中...",
+        toast_refresh: "已重新整理管理員資料"
+    },
+    en: {
+        btn_back_hub: "Back to Hub",
+        admin_dashboard: "Admin Dashboard",
+        admin_cluster_status: "Cluster Hardware Status",
+        admin_users: "User Management",
+        admin_models: "Models",
+        admin_jobs: "All Jobs",
+        msg_loading: "Loading...",
+        toast_refresh: "Refreshed Admin Data"
+    }
+};
+
+let currentLang = localStorage.getItem('ai_hud_lang') || 'zh';
+
+function applyTranslations() {
+    const els = document.querySelectorAll('[data-i18n]');
+    els.forEach(el => {
+        const key = el.getAttribute('data-i18n');
+        if (TRANSLATIONS[currentLang] && TRANSLATIONS[currentLang][key]) {
+            el.textContent = TRANSLATIONS[currentLang][key];
+        }
+    });
+}
+
 // Ensure the user is admin
 async function verifyAdmin() {
     try {
@@ -185,9 +220,9 @@ function renderAdminModels(models) {
 document.addEventListener('DOMContentLoaded', async () => {
     await verifyAdmin();
     
-    // Initial fetch
     fetchClusterStats();
     fetchAdminData();
+    applyTranslations();
 
     // Setup Refresh Button
     const refreshBtn = document.getElementById('refresh-admin-btn');

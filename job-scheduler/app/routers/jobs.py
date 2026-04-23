@@ -25,8 +25,10 @@ EN: Modular design:
 """
 
 from fastapi import APIRouter, Depends, HTTPException, status, Query
+from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 from typing import Optional
+import asyncio
 
 from .. import crud, schemas, models
 from ..auth import get_current_user
@@ -240,3 +242,75 @@ def cancel_job(
     )
 
     return {"job_id": cancelled_job.id, "status": cancelled_job.status}
+
+
+# ==============================================================================
+# ZH: GET /{job_id}/stream - 串流任務日誌與指標 (SSE)
+# EN: GET /{job_id}/stream - Stream job logs and metrics via Server-Sent Events
+# ==============================================================================
+@router.get("/{job_id}/stream")
+async def stream_job_logs(
+    job_id: str,
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    ZH: 串流任務日誌與指標 (SSE)
+    EN: Stream job logs and metrics via Server-Sent Events
+    """
+    job = crud.get_job(db, job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+        
+    if current_user.role == "student" and job.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Permission denied")
+
+    async def event_generator():
+        # First yield the full history
+        history_data = {
+            "status": job.status,
+            "progress": job.progress,
+            "logs": job.logs or "",
+            "metrics": json.loads(job.metrics) if job.metrics else []
+        }
+        yield f"data: {json.dumps(history_data)}\n\n"
+        
+        # Then poll for updates
+        last_log_len = len(job.logs) if job.logs else 0
+        last_metrics_len = len(history_data["metrics"])
+        
+        while True:
+            # Re-fetch from DB
+            db.refresh(job)
+            
+            new_logs = ""
+            if job.logs and len(job.logs) > last_log_len:
+                new_logs = job.logs[last_log_len:]
+                last_log_len = len(job.logs)
+                
+            current_metrics = []
+            if job.metrics:
+                try:
+                    all_metrics = json.loads(job.metrics)
+                    if len(all_metrics) > last_metrics_len:
+                        current_metrics = all_metrics[last_metrics_len:]
+                        last_metrics_len = len(all_metrics)
+                except:
+                    pass
+
+            # Only yield if there's an update or job finished
+            if new_logs or current_metrics or job.status in ("completed", "failed", "cancelled"):
+                update_data = {
+                    "status": job.status,
+                    "progress": job.progress,
+                    "new_logs": new_logs,
+                    "new_metrics": current_metrics
+                }
+                yield f"data: {json.dumps(update_data)}\n\n"
+                
+            if job.status in ("completed", "failed", "cancelled"):
+                break
+                
+            await asyncio.sleep(1)
+
+    return StreamingResponse(event_generator(), media_type="text/event-stream")

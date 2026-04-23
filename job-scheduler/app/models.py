@@ -116,6 +116,7 @@ class TrainingJob(Base):
     # ZH: 進度追蹤 | EN: Progress tracking
     progress = Column(Float, default=0.0)                                     # ZH: 完成百分比 | EN: Completion %
     logs = Column(Text)                                                       # ZH: 執行日誌 | EN: Execution logs
+    metrics = Column(Text)                                                    # ZH: 訓練指標 JSON | EN: Training metrics JSON
     error_message = Column(Text)                                              # ZH: 錯誤訊息 | EN: Error message
 
     # ZH: 輸出結果 | EN: Output result

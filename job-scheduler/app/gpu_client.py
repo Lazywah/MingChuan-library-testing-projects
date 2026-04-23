@@ -29,7 +29,7 @@ EN: Modular design (building-block style):
 """
 
 from abc import ABC, abstractmethod
-from typing import List, Dict, Optional
+from typing import Any, List, Dict, Optional
 import asyncio
 import random
 import logging
@@ -73,8 +73,8 @@ class BaseGPUClient(ABC):
         pass
 
     @abstractmethod
-    async def check_job_progress(self) -> float:
-        """ZH: 檢查任務進度 (0-100) | EN: Check job progress (0-100)"""
+    async def check_job_progress(self) -> Dict[str, Any]:
+        """ZH: 檢查任務進度與日誌 | EN: Check job progress and logs (returns dict)"""
         pass
 
     @abstractmethod
@@ -146,14 +146,28 @@ class MockGPUClient(BaseGPUClient):
             "output_path": f"/mock/outputs/{int(time.time())}/model_final.pt"
         }
 
-    async def check_job_progress(self) -> float:
+    async def check_job_progress(self) -> Dict[str, Any]:
         """
-        ZH: 每次呼叫遞增 20% 進度 (模擬 3 秒一個步驟)
-        EN: Increment 20% per call (simulates 3s per step)
+        ZH: 每次呼叫遞增 20% 進度 (模擬 3 秒一個步驟) 並產生日誌與 loss 指標
+        EN: Increment 20% per call and generate logs and loss metric
         """
         await asyncio.sleep(3)  # ZH: 模擬訓練延遲 | EN: Simulate training delay
         self._progress = min(100.0, self._progress + 20.0)
-        return self._progress
+        
+        current_epoch = int((self._progress / 100) * 10)
+        simulated_loss = max(0.1, 2.5 - (self._progress / 100) * 2.3 + (random.random() * 0.2))
+        
+        log_line = f"Epoch {current_epoch}/10 - loss: {simulated_loss:.4f} - val_loss: {(simulated_loss + 0.1):.4f}"
+        metric = {
+            "epoch": current_epoch,
+            "loss": simulated_loss
+        }
+
+        return {
+            "progress": self._progress,
+            "log": log_line,
+            "metric": metric
+        }
 
     def disconnect(self):
         self.connected = False
@@ -267,10 +281,15 @@ class SSHGPUClient(BaseGPUClient):
             "output_path": f"/workspace/outputs/model_latest.pt"
         }
 
-    async def check_job_progress(self) -> float:
+    async def check_job_progress(self) -> Dict[str, Any]:
         if not self.connected or not self._ssh_client:
-            return self._progress
+            return {
+                "progress": self._progress,
+                "log": "Not connected",
+                "metric": {}
+            }
 
+        last_line = ""
         # ZH: 解析訓練日誌中的進度 | EN: Parse progress from training log
         try:
             cmd = "tail -1 /tmp/training.log"
@@ -285,7 +304,11 @@ class SSHGPUClient(BaseGPUClient):
         except Exception as e:
             logger.warning(f"ZH: [SSH] 進度查詢失敗: {e} | EN: [SSH] Progress check failed: {e}")
 
-        return self._progress
+        return {
+            "progress": self._progress,
+            "log": last_line,
+            "metric": {"epoch": int(self._progress/10), "loss": max(0.1, 2.0 - self._progress/100)}
+        }
 
     def disconnect(self):
         if self._ssh_client:
