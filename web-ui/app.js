@@ -567,6 +567,19 @@ if (loginForm) {
             authToken = data.access_token;
             localStorage.setItem('ai_hud_token', authToken);
             showToast('toast_auth_ok');
+
+            // ZH: 管理員直接導向管理面板 | EN: Redirect admin to admin panel
+            const meRes = await fetch(`${API_BASE}/auth/me`, {
+                headers: { 'Authorization': `Bearer ${authToken}` }
+            });
+            if (meRes.ok) {
+                const meData = await meRes.json();
+                if (meData.role === 'admin') {
+                    window.location.href = 'admin.html';
+                    return;
+                }
+            }
+
             await fetchDashboardData();
             switchToDashboard();
         } catch {
@@ -583,6 +596,14 @@ async function checkAuth() {
             headers: { 'Authorization': `Bearer ${authToken}` }
         });
         if (!res.ok) throw new Error('expired');
+        const userData = await res.json();
+
+        // ZH: 管理員自動導向管理面板 | EN: Redirect admin to admin panel
+        if (userData.role === 'admin') {
+            window.location.href = 'admin.html';
+            return;
+        }
+
         await fetchDashboardData();
         switchToDashboard();
     } catch {

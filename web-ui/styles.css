@@ -12,7 +12,7 @@
 
     --text-primary: #ffffff;
     --text-muted: #d1d5db;
-    --font-main: 'Playpen Sans', cursive;
+    --font-main: 'Times New Roman', '標楷體', 'DFKai-SB', serif;
 }
 
 [data-theme='light'] {
