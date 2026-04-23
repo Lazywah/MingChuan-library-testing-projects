@@ -75,7 +75,12 @@
 *   **初次部署**：
     ```bash
     # 1. 複製環境設定
+    # [Linux / macOS / Git Bash]
     cp .env.example .env
+    # [Windows CMD]
+    # copy .env.example .env
+    # [Windows PowerShell]
+    # Copy-Item .env.example .env
     
     # 2. 啟動所有服務 (Nginx, API, WebUI 等)
     docker-compose -f docker-compose.yml -f docker-compose.ai-models.yml up -d --build
