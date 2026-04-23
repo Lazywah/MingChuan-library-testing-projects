@@ -15,7 +15,8 @@ const TRANSLATIONS = {
         admin_models: "模型",
         admin_jobs: "全域任務",
         msg_loading: "載入中...",
-        toast_refresh: "已重新整理管理員資料"
+        toast_refresh: "已重新整理管理員資料",
+        btn_logout: "登出"
     },
     en: {
         btn_back_hub: "Back to Hub",
@@ -25,7 +26,8 @@ const TRANSLATIONS = {
         admin_models: "Models",
         admin_jobs: "All Jobs",
         msg_loading: "Loading...",
-        toast_refresh: "Refreshed Admin Data"
+        toast_refresh: "Refreshed Admin Data",
+        btn_logout: "Logout"
     }
 };
 
@@ -230,7 +232,16 @@ document.addEventListener('DOMContentLoaded', async () => {
         refreshBtn.addEventListener('click', () => {
             fetchClusterStats();
             fetchAdminData();
-            showToast("Refreshed Admin Data");
+            showToast(TRANSLATIONS[currentLang].toast_refresh);
+        });
+    }
+
+    // Setup Logout Button
+    const logoutBtn = document.getElementById('admin-logout-btn');
+    if (logoutBtn) {
+        logoutBtn.addEventListener('click', () => {
+            localStorage.removeItem('ai_hud_token');
+            window.location.href = 'index.html';
         });
     }
 
