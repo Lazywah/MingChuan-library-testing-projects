@@ -64,6 +64,91 @@ docker-compose restart job-scheduler
 
 ---
 
+## 🔧 GPU 伺服器必裝工具 | Required Tools on GPU Server
+
+> [!IMPORTANT]
+> 以下所有工具都必須安裝在**每一台 GPU 伺服器**上，服務層工作站不需要安裝這些。
+
+### 必備項目 (Required)
+
+| 工具 | 用途 | 安裝指令 |
+|------|------|----------|
+| **NVIDIA Driver** | GPU 硬體驅動，`nvidia-smi` 為系統偵測 GPU 的核心指令 | `sudo apt install -y nvidia-driver-550` |
+| **CUDA Toolkit** | GPU 加速運算框架，PyTorch/TensorFlow 的底層依賴 | `sudo apt install -y nvidia-cuda-toolkit` |
+| **Python 3.10+** | 訓練腳本執行環境 | `sudo apt install -y python3 python3-pip python3-venv` |
+| **OpenSSH Server** | 系統透過 SSH 遠端派發與執行訓練任務 | `sudo apt install -y openssh-server` |
+
+### 深度學習框架 (擇一安裝)
+
+| 框架 | 適用場景 | 安裝指令 |
+|------|----------|----------|
+| **PyTorch** | 學術研究、NLP、影像辨識（推薦） | `pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu124` |
+| **TensorFlow** | 生產部署、Keras 生態系 | `pip install tensorflow[and-cuda]` |
+
+### 選配項目 (Optional)
+
+| 工具 | 用途 | 安裝指令 |
+|------|------|----------|
+| **cuDNN** | CNN 加速庫（部分模型需要） | 從 NVIDIA 官網下載 `.deb` 安裝 |
+| **NCCL** | 多 GPU 間的通訊加速 (如 DataParallel) | `sudo apt install -y libnccl2 libnccl-dev` |
+| **NFS Client** | 掛載服務層的集中式儲存空間 | `sudo apt install -y nfs-common` |
+| **tmux / screen** | 背景保持 SSH 工作階段 | `sudo apt install -y tmux` |
+| **htop / nvtop** | CPU/GPU 即時監控工具 | `sudo apt install -y htop nvtop` |
+
+### 一鍵安裝腳本參考
+
+```bash
+#!/bin/bash
+# ====== GPU 伺服器初始化腳本 ======
+# 在新的 GPU 機器上以 root 或 sudo 執行
+
+# 1. 系統更新
+sudo apt update && sudo apt upgrade -y
+
+# 2. NVIDIA 驅動 + CUDA
+sudo apt install -y nvidia-driver-550 nvidia-cuda-toolkit
+
+# 3. Python 環境
+sudo apt install -y python3 python3-pip python3-venv
+
+# 4. SSH 服務
+sudo apt install -y openssh-server
+sudo systemctl enable sshd
+
+# 5. 深度學習框架 (以 PyTorch 為例)
+pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu124
+
+# 6. 選配工具
+sudo apt install -y nfs-common tmux htop nvtop
+
+# 7. 驗證安裝
+nvidia-smi
+python3 -c "import torch; print(f'CUDA: {torch.cuda.is_available()}, Devices: {torch.cuda.device_count()}')"
+```
+
+### 驗證檢查清單
+
+安裝完成後，請逐項確認以下指令均能正常回應：
+
+```bash
+# ✅ 驅動正常 → 應顯示 GPU 型號與記憶體
+nvidia-smi
+
+# ✅ CUDA 可用 → 應顯示 CUDA 版本
+nvcc --version
+
+# ✅ Python 正常 → 應顯示 Python 3.10+
+python3 --version
+
+# ✅ PyTorch 能偵測到 GPU → 應顯示 True 與 GPU 數量
+python3 -c "import torch; print(torch.cuda.is_available(), torch.cuda.device_count())"
+
+# ✅ SSH 服務運行中 → 應顯示 active (running)
+sudo systemctl status sshd
+```
+
+---
+
 ## 🌍 外網 GPU 部署 | WAN GPU Deployment
 
 若 GPU 伺服器位於外部網路（雲端主機、校外機房、VPN），核心機制相同（SSH 連線），但需要額外注意安全性。
@@ -144,6 +229,67 @@ sudo systemctl enable fail2ban
 └── logs/        ← 訓練日誌
 ```
 
+---
+
+## ✅ 配置完成後功能總覽 | Features After Configuration
+
+### Mock 模式 vs 真實模式功能對照
+
+| 功能 | Mock 模式 (開發) | 真實模式 (正式) |
+|------|:-:|:-:|
+| **使用者登入 / 註冊 / SSO** | ✅ | ✅ |
+| **AI 助手對話 (串流)** | ✅ (模擬回音) | ✅ (接 Portkey/Ollama) |
+| **Token 配額追蹤與扣減** | ✅ | ✅ |
+| **任務提交與排隊** | ✅ | ✅ |
+| **GPU 自動分配** | ✅ (模擬 2 張 GPU) | ✅ (查詢真實 nvidia-smi) |
+| **訓練腳本遠端執行** | ✅ (模擬 15 秒完成) | ✅ (SSH 派發 `nohup python`) |
+| **訓練進度即時追蹤** | ✅ (每 3 秒 +20%) | ✅ (解析 training.log 中的 %) |
+| **模型產出路徑回傳** | ✅ (假路徑) | ✅ (真實 /workspace/outputs/) |
+| **管理員全域監控** | ✅ | ✅ |
+| **多節點負載分散** | ❌ (單一模擬節點) | ✅ (依 YAML 逐節點輪詢) |
+| **GPU 健康狀態偵測** | ❌ | ✅ (nvidia-smi 利用率 < 10%) |
+
+### 配置完成後解鎖的核心能力
+
+完成 GPU 伺服器配置後，您的平台將具備以下**實際運算能力**：
+
+#### 1. 🖥️ 訓練任務全自動派發
+使用者在前端「運算任務」頁面提交任務後，系統會：
+- 自動偵測哪台 GPU 伺服器有空閒資源
+- 透過 SSH 遠端啟動 Python 訓練腳本
+- 即時解析訓練日誌中的進度百分比並回傳前端
+- 任務完成後自動標記為 `completed` 並記錄模型產出路徑
+
+#### 2. 📊 多節點資源管理
+- 排程器每 10 秒輪詢所有節點的 GPU 使用率
+- 利用率 < 10% 的 GPU 自動納入可用池
+- 支援最多 4 個任務同時運行（可在 `scheduler_policy.yaml` 調整）
+- 任務依優先級排序，高優先級任務優先獲得 GPU
+
+#### 3. 🤖 AI 助手 (需額外配置 Portkey/Ollama)
+AI 助手功能**不依賴 GPU 伺服器**，而是透過 Portkey 網關連接外部 LLM API：
+- 文字聊天、圖片辨識、知識搜尋等功能
+- 若需本地模型推論，需額外部署 Ollama 服務
+
+> [!NOTE]
+> **AI 助手** 與 **GPU 訓練** 是兩個獨立模組。GPU 伺服器負責「訓練」，Portkey/Ollama 負責「對話」，兩者互不影響。
+
+#### 4. 🔄 任務生命週期管理
+
+```text
+使用者提交任務
+      ↓
+  [pending] → 排程器偵測到空閒 GPU
+      ↓
+  [queued]  → 等待 GPU 分配中
+      ↓
+  [running] → SSH 遠端執行訓練中 (前端顯示進度條)
+      ↓
+  [completed] / [failed] → 結果回傳
+```
+
+---
+
 ## 疑難排解 | Troubleshooting
 
 ### SSH 連線失敗
@@ -164,6 +310,17 @@ ls -la ~/.ssh/gpu_key  # 應為 600
 ```bash
 # 在 GPU 伺服器上執行
 nvidia-smi --query-gpu=index,utilization.gpu --format=csv
+```
+
+### PyTorch 偵測不到 GPU
+
+```bash
+# 確認 CUDA 版本與 PyTorch 版本匹配
+python3 -c "import torch; print(torch.version.cuda)"
+nvidia-smi  # 對比 CUDA Version 欄位
+
+# 若版本不符，重新安裝對應版本的 PyTorch
+pip install torch --index-url https://download.pytorch.org/whl/cu124
 ```
 
 ---
