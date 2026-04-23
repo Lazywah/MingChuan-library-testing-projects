@@ -68,7 +68,7 @@ class BaseGPUClient(ABC):
         pass
 
     @abstractmethod
-    async def execute_training(self, script_path: str, config: dict) -> Dict:
+    async def execute_training(self, script_path: str, config: dict, dataset_path: Optional[str] = None) -> Dict:
         """ZH: 執行訓練腳本 | EN: Execute training script"""
         pass
 
@@ -124,12 +124,12 @@ class MockGPUClient(BaseGPUClient):
             return [0]  # ZH: 10% 機率只有 1 張 | EN: 10% chance only 1
         return [0, 1]
 
-    async def execute_training(self, script_path: str, config: dict) -> Dict:
+    async def execute_training(self, script_path: str, config: dict, dataset_path: Optional[str] = None) -> Dict:
         if not self.connected:
             raise ConnectionError("ZH: 尚未連線 | EN: Not connected")
 
-        logger.info(f"ZH: [Mock] 開始模擬訓練 script={script_path} | "
-                    f"EN: [Mock] Starting mock training script={script_path}")
+        logger.info(f"ZH: [Mock] 開始模擬訓練 script={script_path}, dataset={dataset_path} | "
+                    f"EN: [Mock] Starting mock training script={script_path}, dataset={dataset_path}")
 
         # ZH: 模擬訓練過程 (10% 機率失敗) | EN: Simulate training (10% failure chance)
         if random.random() < 0.1:
@@ -227,12 +227,14 @@ class SSHGPUClient(BaseGPUClient):
                     f"EN: [SSH] {self.host} available GPUs: {available}")
         return available
 
-    async def execute_training(self, script_path: str, config: dict) -> Dict:
+    async def execute_training(self, script_path: str, config: dict, dataset_path: Optional[str] = None) -> Dict:
         if not self.connected or not self._ssh_client:
             raise ConnectionError("ZH: SSH 尚未連線 | EN: SSH not connected")
 
         # ZH: 組建遠端訓練指令 | EN: Build remote training command
         config_str = " ".join([f"--{k}={v}" for k, v in config.items()]) if config else ""
+        if dataset_path:
+            config_str += f" --dataset_path={dataset_path}"
         cmd = f"nohup python {script_path} {config_str} > /tmp/training.log 2>&1 &"
 
         logger.info(f"ZH: [SSH] 執行訓練指令: {cmd} | EN: [SSH] Executing training: {cmd}")

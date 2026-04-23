@@ -83,6 +83,10 @@ async def lifespan(app: FastAPI):
     # ZH: Module 8: 啟動排程器 | EN: Module 8: Start scheduler
     await start_scheduler()
 
+    # 確保資料集上傳目錄存在
+    import os
+    os.makedirs("/data/datasets", exist_ok=True)
+
     sched_config = SCHEDULER_POLICY.get("scheduling", {})
     logger.info(
         f"ZH: 服務就緒 | EN: Service ready | "
@@ -141,9 +145,10 @@ app.include_router(auth.router, prefix="/api/v1/auth")
 app.include_router(jobs.router, prefix="/api/v1/jobs")
 
 # ZH: 新增聊天助理與管理員路由 | EN: Chat assistant and admin routes
-from .routers import chat, admin
+from .routers import chat, admin, datasets
 app.include_router(chat.router, prefix="/api/v1/chat")
 app.include_router(admin.router, prefix="/api/v1/admin")
+app.include_router(datasets.router, prefix="/api/v1/datasets")
 
 
 # ==============================================================================

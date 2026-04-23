@@ -3,6 +3,7 @@
 // =========================
 const API_BASE = '/api/v1';
 let authToken = localStorage.getItem('ai_hud_token') || null;
+let uploadedDatasetPath = null;
 let pollInterval = null;
 
 // ZH: 多對話管理狀態 (於 TRANSLATIONS 宣告後再初始化) | EN: Multi-session state (initialized after TRANSLATIONS)
@@ -353,6 +354,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
     if (jobForm) jobForm.addEventListener('submit', handleJobSubmit);
     if (profileUpdateForm) profileUpdateForm.addEventListener('submit', handleProfileUpdate);
+    const datasetInput = document.getElementById('datasetFile');
+    if (datasetInput) datasetInput.addEventListener('change', handleDatasetUpload);
     document.querySelectorAll('.refresh-jobs-btn').forEach(btn => {
         btn.addEventListener('click', fetchJobs);
     });
@@ -804,6 +807,7 @@ async function handleJobSubmit(e) {
         model_name: document.getElementById('model-name').value,
         gpu_required: 1,
         priority: parseInt(document.getElementById('job-priority').value),
+        dataset_path: uploadedDatasetPath,
         config: {
             epochs: parseInt(document.getElementById('job-epochs').value),
             batch_size: parseInt(document.getElementById('job-batch').value)
@@ -819,9 +823,59 @@ async function handleJobSubmit(e) {
         if (!res.ok) throw new Error('fail');
         showToast('toast_job_ok');
         jobForm.reset();
+        uploadedDatasetPath = null;
         fetchJobs();
     } catch {
         showToast('toast_job_fail', true);
+    }
+}
+
+async function handleDatasetUpload(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    const formData = new FormData();
+    formData.append('file', file);
+
+    const btn = document.getElementById('submit-job-btn');
+    const originalText = btn.innerHTML;
+    btn.innerHTML = `<span class="spinner" style="margin-right:5px"></span><span>Uploading...</span>`;
+    btn.disabled = true;
+
+    try {
+        const res = await fetch(`${API_BASE}/datasets/upload`, {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${authToken}` },
+            body: formData
+        });
+        if (!res.ok) throw new Error('Upload failed');
+        
+        const data = await res.json();
+        uploadedDatasetPath = data.dataset_path;
+        
+        if (data.suggested_config) {
+            if (data.suggested_config.epochs) {
+                document.getElementById('job-epochs').value = data.suggested_config.epochs;
+            }
+            if (data.suggested_config.batch_size) {
+                document.getElementById('job-batch').value = data.suggested_config.batch_size;
+            }
+            // highlight the fields to show they were auto-filled
+            document.getElementById('job-epochs').style.borderColor = 'var(--neon-green)';
+            document.getElementById('job-batch').style.borderColor = 'var(--neon-green)';
+            setTimeout(() => {
+                document.getElementById('job-epochs').style.borderColor = '';
+                document.getElementById('job-batch').style.borderColor = '';
+            }, 2000);
+        }
+        showToast('File uploaded & parameters suggested');
+    } catch (err) {
+        console.error(err);
+        showToast('Upload failed', true);
+        e.target.value = '';
+    } finally {
+        btn.innerHTML = originalText;
+        btn.disabled = false;
     }
 }
 

@@ -145,6 +145,11 @@
                                 <option value="2" data-i18n="priority_2">2 - HIGH</option>
                             </select>
                         </div>
+                        <div class="input row-input dataset-upload-container" style="flex:1; min-width:200px; margin:0; position:relative;">
+                            <input type="file" id="datasetFile" accept=".zip,.csv,.jsonl" style="padding-top: 25px;">
+                            <label data-i18n="label_dataset">Dataset (Auto config)</label>
+                            <ion-icon name="cloud-upload-outline"></ion-icon>
+                        </div>
                         <div class="input row-input" style="flex:0 0 80px; margin:0;">
                             <input type="number" id="job-epochs" min="1" max="1000" value="10">
                             <label data-i18n="label_epochs">Epochs</label>

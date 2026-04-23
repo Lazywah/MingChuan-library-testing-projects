@@ -97,7 +97,7 @@ async def _process_single_job(job, db):
         config = json.loads(job.config) if job.config else {}
         script = job.script_path or "/workspace/train.py"
 
-        result = await gpu_client.execute_training(script, config)
+        result = await gpu_client.execute_training(script, config, dataset_path=job.dataset_path)
         output_path = result.get("output_path", "")
 
         # ZH: Step 4: 監控進度直到完成 | EN: Step 4: Monitor progress until done
