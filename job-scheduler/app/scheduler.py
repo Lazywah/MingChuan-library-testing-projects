@@ -38,6 +38,35 @@ logger = logging.getLogger(__name__)
 # ==============================================================================
 _scheduler_task: Optional[asyncio.Task] = None
 _scheduler_running: bool = False
+GLOBAL_CLUSTER_STATS = []
+
+
+async def _update_cluster_stats():
+    """
+    ZH: 非同步向所有 GPU 節點要狀態並存入全域變數
+    EN: Fetch status asynchronously from all GPU nodes and store in global var
+    """
+    global GLOBAL_CLUSTER_STATS
+    nodes = SCHEDULER_POLICY.get("nodes", [])
+    mock_mode = SCHEDULER_POLICY.get("mock_mode", True)
+    
+    new_stats = []
+    for node in nodes:
+        node_ip = node.get("ip", "localhost")
+        try:
+            client = get_gpu_client(host=node_ip, mock_mode=mock_mode)
+            if await client.connect():
+                stats = await client.get_cluster_stats()
+                # Attach node info
+                for s in stats:
+                    s["node_id"] = node.get("id", "Unknown-Node")
+                    s["node_ip"] = node_ip
+                new_stats.extend(stats)
+            client.disconnect()
+        except Exception as e:
+            logger.warning(f"ZH: 更新節點 {node_ip} 狀態失敗: {e} | EN: Failed to update node {node_ip} status: {e}")
+            
+    GLOBAL_CLUSTER_STATS = new_stats
 
 
 async def _process_single_job(job, db):
@@ -139,6 +168,9 @@ async def _scheduler_loop():
 
     while _scheduler_running:
         try:
+            # ZH: 更新叢集硬體狀態快取 | EN: Update cluster hardware stats cache
+            await _update_cluster_stats()
+            
             db = SessionLocal()
             try:
                 # ZH: 查詢正在執行的任務數 | EN: Get running job count

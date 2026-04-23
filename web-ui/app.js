@@ -629,10 +629,9 @@ async function fetchUserProfile() {
         renderActiveChat();
 
         // ZH: 管理員處理 | EN: Admin role handling
-        const adminTab = document.getElementById('tab-admin');
-        if (data.role === 'admin' && adminTab) {
-            adminTab.style.display = '';
-            fetchAdminData();
+        const adminPortalSec = document.getElementById('admin-portal-section');
+        if (data.role === 'admin' && adminPortalSec) {
+            adminPortalSec.style.display = 'block';
         }
     }
 }
@@ -1072,71 +1071,6 @@ if (chatInput) {
     // 初始化高度
     adjustHeight();
 }
-
-// =========================
-// ZH: 管理員控制台邏輯 | EN: Admin Panel Logic
-// =========================
-async function fetchAdminData() {
-    try {
-        const [usersRes, jobsRes, modelsRes] = await Promise.all([
-            fetch(`${API_BASE}/admin/users`, { headers: { 'Authorization': `Bearer ${authToken}` } }),
-            fetch(`${API_BASE}/admin/jobs`, { headers: { 'Authorization': `Bearer ${authToken}` } }),
-            fetch(`${API_BASE}/admin/models`, { headers: { 'Authorization': `Bearer ${authToken}` } })
-        ]);
-        if (usersRes.ok) renderAdminUsers(await usersRes.json());
-        if (jobsRes.ok) renderAdminJobs(await jobsRes.json());
-        if (modelsRes.ok) renderAdminModels(await modelsRes.json());
-    } catch (e) {
-        console.error('Admin fetch error:', e);
-    }
-}
-
-function renderAdminUsers(users) {
-    const tbody = document.getElementById('admin-users-body');
-    if (!tbody) return;
-    if (!users || users.length === 0) { tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;">No users</td></tr>'; return; }
-    tbody.innerHTML = users.map(u => {
-        const statusClass = u.online_status ? 'online' : 'offline';
-        const statusText = u.online_status ? 'Online' : 'Offline';
-        const loginTime = u.last_login_time ? new Date(u.last_login_time).toLocaleString() : '--';
-        return `<tr>
-            <td>${u.username}</td>
-            <td>${u.email || '--'}</td>
-            <td><span class="badge">${(u.role || 'student').toUpperCase()}</span></td>
-            <td><span class="admin-status-badge ${statusClass}"></span>${statusText}</td>
-            <td>${u.last_login_ip || '--'}</td>
-            <td>${loginTime}</td>
-            <td>${(u.tokens_used || 0).toLocaleString()} / ${(u.tokens_limit || 0).toLocaleString()}</td>
-        </tr>`;
-    }).join('');
-}
-
-function renderAdminJobs(jobs) {
-    const tbody = document.getElementById('admin-jobs-body');
-    if (!tbody) return;
-    if (!jobs || jobs.length === 0) { tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;">No jobs</td></tr>'; return; }
-    tbody.innerHTML = jobs.map(j => `<tr>
-        <td>${j.job_name || '--'}</td>
-        <td>${j.user_id || '--'}</td>
-        <td>${j.status || '--'}</td>
-        <td>${j.priority || 0}</td>
-    </tr>`).join('');
-}
-
-function renderAdminModels(models) {
-    const tbody = document.getElementById('admin-models-body');
-    if (!tbody) return;
-    if (!models || models.length === 0) { tbody.innerHTML = '<tr><td colspan="3" style="text-align:center;">No models</td></tr>'; return; }
-    tbody.innerHTML = models.map(m => `<tr>
-        <td>${m.name || '--'}</td>
-        <td>${m.framework || '--'}</td>
-        <td>${m.is_public ? 'Yes' : 'No'}</td>
-    </tr>`).join('');
-}
-
-// Admin refresh button
-const refreshAdminBtn = document.getElementById('refresh-admin-btn');
-if (refreshAdminBtn) refreshAdminBtn.addEventListener('click', fetchAdminData);
 
 // =========================
 // ZH: 教學導覽邏輯 | EN: Tutorial Modal Logic

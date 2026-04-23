@@ -6,6 +6,7 @@ import logging
 from .. import models, schemas, crud
 from ..auth import get_current_user
 from ..database import get_db
+from ..scheduler import GLOBAL_CLUSTER_STATS
 
 logger = logging.getLogger(__name__)
 
@@ -59,3 +60,11 @@ def get_all_models(
     verify_admin(current_user)
     mdls = db.query(models.Model).order_by(models.Model.created_at.desc()).all()
     return mdls
+
+@router.get("/cluster/stats")
+def get_cluster_stats(
+    current_user: models.User = Depends(get_current_user)
+) -> Any:
+    verify_admin(current_user)
+    # ZH: 直接回傳記憶體快取 | EN: Return memory cache directly
+    return GLOBAL_CLUSTER_STATS

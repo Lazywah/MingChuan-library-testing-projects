@@ -82,6 +82,11 @@ class BaseGPUClient(ABC):
         """ZH: 斷開連線 | EN: Disconnect"""
         pass
 
+    @abstractmethod
+    async def get_cluster_stats(self) -> List[Dict]:
+        """ZH: 獲取叢集詳細狀態 | EN: Get detailed cluster status"""
+        pass
+
 
 # ==============================================================================
 # ZH: Mock GPU 客戶端 - 模擬 GPU 操作 (開發/測試用)
@@ -154,6 +159,22 @@ class MockGPUClient(BaseGPUClient):
         self.connected = False
         logger.info(f"ZH: [Mock] 已斷開與 {self.host} 的模擬連線 | "
                     f"EN: [Mock] Disconnected from {self.host}")
+
+    async def get_cluster_stats(self) -> List[Dict]:
+        """ZH: 產生變動的模擬硬體數據 | EN: Generate fluctuating mock hardware stats"""
+        import random
+        # 模擬 2 張 GPU
+        stats = []
+        for i in range(2):
+            stats.append({
+                "gpu_id": i,
+                "name": f"Mock-RTX-4090-{i}",
+                "temperature": random.randint(35, 85),
+                "utilization": random.randint(0, 100),
+                "memory_used": random.randint(1000, 24000),
+                "memory_total": 24576
+            })
+        return stats
 
 
 # ==============================================================================
@@ -273,6 +294,38 @@ class SSHGPUClient(BaseGPUClient):
         self.connected = False
         logger.info(f"ZH: [SSH] 已斷開與 {self.host} 的連線 | "
                     f"EN: [SSH] Disconnected from {self.host}")
+
+    async def get_cluster_stats(self) -> List[Dict]:
+        if not self.connected or not self._ssh_client:
+            return []
+        
+        # ZH: 查詢 GPU 詳細數據 | EN: Query detailed GPU stats
+        cmd = "nvidia-smi --query-gpu=index,name,temperature.gpu,utilization.gpu,memory.used,memory.total --format=csv,noheader,nounits"
+        try:
+            stdin, stdout, stderr = self._ssh_client.exec_command(cmd)
+            output = stdout.read().decode().strip()
+            error = stderr.read().decode().strip()
+            
+            if error:
+                logger.warning(f"ZH: [SSH] nvidia-smi stats 錯誤: {error} | EN: [SSH] nvidia-smi stats error: {error}")
+                return []
+                
+            stats = []
+            for line in output.split("\n"):
+                parts = [p.strip() for p in line.split(",")]
+                if len(parts) >= 6:
+                    stats.append({
+                        "gpu_id": int(parts[0]),
+                        "name": parts[1],
+                        "temperature": int(parts[2]) if parts[2].isdigit() else 0,
+                        "utilization": int(parts[3]) if parts[3].isdigit() else 0,
+                        "memory_used": int(parts[4]) if parts[4].isdigit() else 0,
+                        "memory_total": int(parts[5]) if parts[5].isdigit() else 0
+                    })
+            return stats
+        except Exception as e:
+            logger.warning(f"ZH: [SSH] 獲取硬體數據失敗: {e} | EN: [SSH] Failed to get hardware stats: {e}")
+            return []
 
 
 # ==============================================================================

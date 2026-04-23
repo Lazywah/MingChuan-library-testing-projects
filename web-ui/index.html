@@ -103,11 +103,6 @@
                         <ion-icon name="settings-outline"></ion-icon>
                         <span data-i18n="nav_settings">Settings</span>
                     </button>
-                    <!-- ZH: 管理員專屬分頁 (預設隱藏) | EN: Admin tab (hidden by default) -->
-                    <button class="tab-btn" id="tab-admin" data-tab="admin" style="display:none;">
-                        <ion-icon name="shield-checkmark-outline"></ion-icon>
-                        <span data-i18n="nav_admin">Admin</span>
-                    </button>
                 </div>
 
                 <nav class="header-right">
@@ -450,62 +445,22 @@
                         </div>
                     </section>
 
+                    <!-- ZH: 管理員專屬入口 | EN: Admin Portal Link -->
+                    <section class="widget form-box-panel" id="admin-portal-section" style="display:none;">
+                        <div class="widget-header"><h3><ion-icon name="shield-checkmark-outline" style="margin-right:6px;"></ion-icon> <span data-i18n="settings_admin">Admin Portal</span></h3></div>
+                        <div class="settings-option">
+                            <span data-i18n="label_admin_desc">Access advanced cluster management</span>
+                            <a href="admin.html" class="ready-btn" style="width:auto; min-width:120px; text-decoration:none; display:inline-flex; align-items:center; justify-content:center;">
+                                <ion-icon name="open-outline" style="margin-right:6px;"></ion-icon> <span data-i18n="btn_open_admin">Open Dashboard</span>
+                            </a>
+                        </div>
+                    </section>
+
                     <section class="widget form-box-panel">
                         <div class="widget-header"><h3 data-i18n="settings_account">Account</h3></div>
                         <div class="settings-option">
                             <span data-i18n="label_logout">Session Control</span>
                             <button class="ready-btn" id="logout-btn" style="width:auto; min-width:120px; border-color:#fb7185; color:#fb7185;"><ion-icon name="log-out-outline"></ion-icon> <span data-i18n="btn_logout">Logout System</span></button>
-                        </div>
-                    </section>
-                </div>
-            </main>
-
-            <!-- ZH: 分頁 4: 管理員視圖 | EN: PAGE 4: Admin View -->
-            <main id="admin-page" class="page-view">
-                <div class="admin-grid">
-                    <!-- ZH: 使用者管理表格 | EN: User Management Table -->
-                    <section class="widget form-box-panel" style="grid-column: 1 / -1;">
-                        <div class="widget-header split">
-                            <h3><ion-icon name="people-outline" style="margin-right:6px;"></ion-icon> <span data-i18n="admin_users">User Management</span></h3>
-                            <ion-icon name="refresh-circle-outline" id="refresh-admin-btn" class="refresh-icon" title="Refresh"></ion-icon>
-                        </div>
-                        <div class="admin-table-wrap scrollbar-custom">
-                            <table class="admin-table" id="admin-users-table">
-                                <thead>
-                                    <tr>
-                                        <th data-i18n="admin_col_user">Username</th>
-                                        <th data-i18n="admin_col_email">Email</th>
-                                        <th data-i18n="admin_col_role">Role</th>
-                                        <th data-i18n="admin_col_status">Status</th>
-                                        <th data-i18n="admin_col_ip">Last IP</th>
-                                        <th data-i18n="admin_col_login_time">Last Login</th>
-                                        <th data-i18n="admin_col_tokens">Tokens</th>
-                                    </tr>
-                                </thead>
-                                <tbody id="admin-users-body"><!-- JS --></tbody>
-                            </table>
-                        </div>
-                    </section>
-
-                    <!-- ZH: 模型管理 | EN: Model Management -->
-                    <section class="widget form-box-panel">
-                        <div class="widget-header"><h3><ion-icon name="cube-outline" style="margin-right:6px;"></ion-icon> <span data-i18n="admin_models">Models</span></h3></div>
-                        <div class="admin-table-wrap scrollbar-custom">
-                            <table class="admin-table" id="admin-models-table">
-                                <thead><tr><th>Name</th><th>Framework</th><th>Public</th></tr></thead>
-                                <tbody id="admin-models-body"><!-- JS --></tbody>
-                            </table>
-                        </div>
-                    </section>
-
-                    <!-- ZH: 全域排程管理 | EN: Global Job Queue -->
-                    <section class="widget form-box-panel">
-                        <div class="widget-header"><h3><ion-icon name="list-outline" style="margin-right:6px;"></ion-icon> <span data-i18n="admin_jobs">All Jobs</span></h3></div>
-                        <div class="admin-table-wrap scrollbar-custom">
-                            <table class="admin-table" id="admin-jobs-table">
-                                <thead><tr><th>Job</th><th>User</th><th>Status</th><th>Priority</th></tr></thead>
-                                <tbody id="admin-jobs-body"><!-- JS --></tbody>
-                            </table>
                         </div>
                     </section>
                 </div>

@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<!-- ZH: AI 訓練平台 - 管理員介面 | EN: AI Training Platform - Admin Interface -->
+<html lang="zh-Hant" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Training Platform - Admin</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Playpen+Sans:wght@400;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="styles.css">
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+    <style>
+        .admin-layout {
+            padding: 20px;
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+        .admin-nav {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+        .back-link {
+            color: var(--text-primary);
+            text-decoration: none;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            font-weight: 600;
+        }
+        .back-link:hover {
+            color: var(--neon-blue);
+        }
+        .cluster-stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 15px;
+            margin-top: 15px;
+        }
+        .stat-card {
+            background: rgba(0, 0, 0, 0.4);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 12px;
+            padding: 15px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        .stat-card h4 {
+            margin: 0;
+            color: var(--neon-blue);
+            font-size: 1.1em;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        .stat-row {
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.9em;
+        }
+        .progress-bar-bg {
+            background: rgba(255, 255, 255, 0.1);
+            height: 6px;
+            border-radius: 3px;
+            overflow: hidden;
+            margin-top: 5px;
+        }
+        .progress-bar-fill {
+            height: 100%;
+            background: var(--neon-blue);
+            transition: width 0.3s ease, background-color 0.3s ease;
+        }
+        .fill-danger { background: var(--neon-pink); }
+        .fill-warning { background: var(--neon-yellow); }
+    </style>
+</head>
+<body>
+    <div class="empty bg-grad custom-bg" id="main-bg"></div>
+
+    <div id="toast" class="toast hidden">
+        <span id="toast-icon"></span>
+        <span id="toast-msg">Notification Message</span>
+    </div>
+
+    <div class="admin-layout">
+        <div class="admin-nav">
+            <a href="index.html" class="back-link">
+                <ion-icon name="arrow-back-outline"></ion-icon> 返回大廳 (Back to Hub)
+            </a>
+            <h2 style="margin: 0;"><ion-icon name="settings-outline"></ion-icon> 管理員儀表板 (Admin Dashboard)</h2>
+        </div>
+
+        <div class="admin-grid">
+            <!-- ZH: 叢集資源監控 | EN: Cluster Status -->
+            <section class="widget form-box-panel" style="grid-column: 1 / -1;">
+                <div class="widget-header">
+                    <h3><ion-icon name="hardware-chip-outline" style="margin-right:6px;"></ion-icon> 叢集資源即時監控 (Cluster Hardware Status)</h3>
+                </div>
+                <div id="cluster-stats-container" class="cluster-stats-grid">
+                    <!-- Cards will be injected by JS -->
+                    <div style="padding: 20px; text-align: center; color: rgba(255,255,255,0.5);">載入中... (Loading...)</div>
+                </div>
+            </section>
+
+            <!-- ZH: 使用者管理表格 | EN: User Management Table -->
+            <section class="widget form-box-panel" style="grid-column: 1 / -1;">
+                <div class="widget-header split">
+                    <h3><ion-icon name="people-outline" style="margin-right:6px;"></ion-icon> 使用者管理 (User Management)</h3>
+                    <ion-icon name="refresh-circle-outline" id="refresh-admin-btn" class="refresh-icon" title="Refresh"></ion-icon>
+                </div>
+                <div class="admin-table-wrap scrollbar-custom">
+                    <table class="admin-table" id="admin-users-table">
+                        <thead>
+                            <tr>
+                                <th>Username</th>
+                                <th>Email</th>
+                                <th>Role</th>
+                                <th>Status</th>
+                                <th>Last IP</th>
+                                <th>Last Login</th>
+                                <th>Tokens</th>
+                            </tr>
+                        </thead>
+                        <tbody id="admin-users-body"><!-- JS --></tbody>
+                    </table>
+                </div>
+            </section>
+
+            <!-- ZH: 模型管理 | EN: Model Management -->
+            <section class="widget form-box-panel">
+                <div class="widget-header"><h3><ion-icon name="cube-outline" style="margin-right:6px;"></ion-icon> 模型 (Models)</h3></div>
+                <div class="admin-table-wrap scrollbar-custom">
+                    <table class="admin-table" id="admin-models-table">
+                        <thead><tr><th>Name</th><th>Framework</th><th>Public</th></tr></thead>
+                        <tbody id="admin-models-body"><!-- JS --></tbody>
+                    </table>
+                </div>
+            </section>
+
+            <!-- ZH: 全域排程管理 | EN: Global Job Queue -->
+            <section class="widget form-box-panel">
+                <div class="widget-header"><h3><ion-icon name="list-outline" style="margin-right:6px;"></ion-icon> 全域任務 (All Jobs)</h3></div>
+                <div class="admin-table-wrap scrollbar-custom">
+                    <table class="admin-table" id="admin-jobs-table">
+                        <thead><tr><th>Job</th><th>User</th><th>Status</th><th>Priority</th></tr></thead>
+                        <tbody id="admin-jobs-body"><!-- JS --></tbody>
+                    </table>
+                </div>
+            </section>
+        </div>
+    </div>
+
+    <!-- 載入 Ionicons -->
+    <script type="module" src="https://unpkg.com/ionicons@7.1.0/dist/ionicons/ionicons.esm.js"></script>
+    <script nomodule src="https://unpkg.com/ionicons@7.1.0/dist/ionicons/ionicons.js"></script>
+    <!-- 載入 Admin 邏輯 -->
+    <script src="admin.js"></script>
+</body>
+</html>
