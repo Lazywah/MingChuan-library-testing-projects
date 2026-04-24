@@ -38,7 +38,7 @@
 ### 1. 💻 工作站 (Local Workstation)
 開發者本機或管理員操作端，主要用於代碼開發、測試與遠端部署。
 - `docs/`：專案文件與開發指南。
-- `scripts/`：部署腳本（如 `deploy.sh`）。
+- `scripts/`：部署腳本（如 `deploy.ps1`）。
 - `tests/`：自動化測試與 E2E 測試腳本。
 - `.env.example` / `README.md` / `.gitignore`：開發環境說明與配置範本。
 
@@ -68,25 +68,20 @@
     3. 複製 `.env.example` 為 `.env` 並填寫本機開發參數。
 *   **往後部署 / 日常維護**：
     *   **工具**：VS Code, Git, `pytest` (執行 `tests/`)。
-    *   **步驟**：開發新功能後，提交版本控制，或透過 `scripts/deploy.sh` 等工具將更新推送到服務層。
+    *   **步驟**：開發新功能後，提交版本控制，或透過 `scripts\deploy.ps1` 等工具將更新推送到服務層。
 
 ### ☁️ 服務層 (Service Layer)
 *   **前置條件**：Docker 24.x+, Docker Compose 2.x+
 *   **初次部署**：
-    ```bash
+    ```powershell
     # 1. 複製環境設定
-    # [Linux / macOS / Git Bash]
-    cp .env.example .env
-    # [Windows CMD]
-    # copy .env.example .env
-    # [Windows PowerShell]
-    # Copy-Item .env.example .env
+    Copy-Item .env.example .env
     
     # 2. 啟動所有服務 (Nginx, API, WebUI 等)
-    docker-compose -f docker-compose.yml -f docker-compose.ai-models.yml up -d --build
+    docker compose -f docker-compose.yml -f docker-compose.ai-models.yml up -d --build
     
     # 3. 確認服務狀態
-    docker-compose ps
+    docker compose ps
     ```
     **存取服務 URL**：
     - **TRAIN_HUD (主入口)**：`http://localhost/train/`
@@ -142,9 +137,9 @@
 
 ## 🧪 測試 | Testing
 
-```bash
-pip install -r tests/requirements.txt
-python tests/end_to_end_test.py
+```powershell
+pip install -r tests\requirements.txt
+python tests\end_to_end_test.py
 ```
 
 ## 📄 License

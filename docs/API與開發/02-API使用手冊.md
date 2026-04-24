@@ -3,6 +3,9 @@
 > **Base URL**: `http://localhost:8002`  
 > **Swagger UI**: `http://localhost:8002/docs`
 
+> [!NOTE]
+> **Windows 用戶注意**：若您在 PowerShell 中執行以下範例，請將 `curl` 替換為 `curl.exe`，以避免與內建的 `Invoke-WebRequest` 衝突。
+
 ## 認證 API | Authentication API
 
 ### POST `/api/v1/auth/register` — 使用者註冊
