@@ -35,15 +35,15 @@
 
 整個專案依照部署位置分為三個主要層級：
 
-### 1. 💻 工作站 (Local Workstation)
-開發者本機或管理員操作端，主要用於代碼開發、測試與遠端部署。
+### 1. 💻 工作站 (Workstation)
+開發者本機或管理員操作端，主要用於代碼開發、測試與遠端部署。終端使用者則僅透過此層級的瀏覽器存取系統。
 - `docs/`：專案文件與開發指南。
 - `scripts/`：部署腳本（如 `deploy.ps1`）。
 - `tests/`：自動化測試與 E2E 測試腳本。
 - `.env.example` / `README.md` / `.gitignore`：開發環境說明與配置範本。
 
 ### 2. ☁️ 服務層 (Service Layer)
-核心伺服器，負責 API 路由、排程管理、資料持久化與前端靜態資源託管。
+核心伺服器 (Windows 11)，負責 API 路由、排程管理、資料持久化與前端靜態資源託管。
 - `docker-compose.yml` / `docker-compose.ai-models.yml`：微服務編排檔。
 - `infrastructure/`：基礎設施配置（Nginx、SQL Schema）。
 - `job-scheduler/`：FastAPI 後端核心服務（認證、排程、CRUD）。
@@ -52,16 +52,16 @@
 - `data/`：(運行時產生) SQLite 資料庫與持久化資料。
 - `.env`：正式環境變數。
 
-### 3. 🚀 高階 GPU (High-End GPU Layer)
-負責實際執行 AI 模型訓練與高耗能運算的資源節點。
+### 3. 🚀 GPU高階伺服器 (GPU High-End Server)
+負責實際執行 AI 模型訓練與高耗能運算的資源節點 (Windows 11/Ubuntu)。
 - `gpu-setup/`：GPU 伺服器初始化與 SSH 安全強化腳本。
-- (訓練腳本通常由服務層透過 SSH 指令派發或共享目錄至此層運行)
+- (訓練腳本由服務層透過 SSH 指令派發或遠端運行)
 
 ---
 
 ## 🛠️ 各層級部署步驟與工具
 
-### 💻 工作站 (Local Workstation)
+### 💻 工作站 (Workstation)
 *   **初次部署**：
     1. 安裝 Git, Python 3, Docker (若需本機測試)。
     2. 執行 `git clone` 取得專案代碼。
@@ -92,12 +92,12 @@
     *   **工具**：Docker, `docker-compose`, `git pull`。
     *   **步驟**：取得最新代碼後，執行 `docker-compose up -d --build` 重建並重啟更新的容器。若僅更新前端 `web-ui`，通常無需重啟容器，Nginx 會直接讀取新檔案。
 
-### 🚀 高階 GPU (High-End GPU Layer)
+### 🚀 GPU高階伺服器 (GPU High-End Server)
 *   **初次部署**：
-    1. 準備一台安裝好 Ubuntu 的實體 GPU 伺服器。
-    2. 將 `gpu-setup/` 工具包傳送至伺服器。
-    3. 執行 `sudo bash setup.sh` 一鍵安裝 NVIDIA 驅動、CUDA、Python 與 OpenSSH。
-    4. (若位於外網) 執行 `sudo bash ssh-hardening.sh` 強化連線安全。
+    1. 準備一台安裝好 Windows 11 的實體 GPU 伺服器。
+    2. 將 `gpu-setup/` 工具包傳送至該伺服器。
+    3. 以系統管理員身分開啟 PowerShell，執行 `.\setup.ps1` 一鍵安裝 CUDA、Python 與 OpenSSH。
+    4. (若位於外網) 執行 `.\ssh-hardening.ps1` 強化連線安全與防火牆設定。
     5. 將 GPU 節點的 IP 與金鑰登記至服務層的 `scheduler_policy.yaml`。
 *   **往後部署 / 擴展**：
     *   **工具**：SSH, `gpu-setup` 腳本, `nvidia-smi`。
