@@ -5,7 +5,8 @@
 # ==============================================================================
 
 param (
-    [int]$SshPort = 2222
+    [int]$SshPort = 2222,
+    [string]$ServiceLayerIP = ""
 )
 
 $ErrorActionPreference = "Stop"
@@ -67,12 +68,26 @@ $ruleName = "OpenSSH Server (sshd) - Port $SshPort"
 $existingRule = Get-NetFirewallRule -DisplayName $ruleName -ErrorAction SilentlyContinue
 
 if ($existingRule) {
-    Set-NetFirewallRule -DisplayName $ruleName -LocalPort $SshPort -Action Allow
-} else {
-    New-NetFirewallRule -DisplayName $ruleName -Direction Inbound -LocalPort $SshPort -Protocol TCP -Action Allow | Out-Null
+    Remove-NetFirewallRule -DisplayName $ruleName -ErrorAction SilentlyContinue
 }
 
-Write-Host "[✓] 防火牆已更新 (允許 Inbound TCP $SshPort)" -ForegroundColor Green
+if ([string]::IsNullOrWhiteSpace($ServiceLayerIP)) {
+    Write-Host "⚠️ 未指定 ServiceLayerIP！防火牆將對所有 IP 開放 (極度不建議)。" -ForegroundColor Yellow
+    New-NetFirewallRule -DisplayName $ruleName -Direction Inbound -LocalPort $SshPort -Protocol TCP -Action Allow | Out-Null
+    Write-Host "[✓] 防火牆已更新 (允許 Inbound TCP $SshPort，來源: ANY)" -ForegroundColor Green
+} else {
+    New-NetFirewallRule -DisplayName $ruleName -Direction Inbound -LocalPort $SshPort -Protocol TCP -RemoteAddress $ServiceLayerIP -Action Allow | Out-Null
+    Write-Host "[✓] 防火牆已更新 (允許 Inbound TCP $SshPort，來源限定: $ServiceLayerIP)" -ForegroundColor Green
+}
+
+# 確保 OpenSSH 預設 Shell 為 PowerShell (供 Service Layer 派發指令相容性)
+Write-Host "正在設定 OpenSSH 預設 Shell 為 PowerShell..."
+$RegPath = "HKLM:\SOFTWARE\OpenSSH"
+if (-not (Test-Path $RegPath)) {
+    New-Item -Path $RegPath -Force | Out-Null
+}
+New-ItemProperty -Path $RegPath -Name "DefaultShell" -Value "C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe" -PropertyType String -Force | Out-Null
+Write-Host "[✓] 已將 OpenSSH 預設 Shell 設為 PowerShell" -ForegroundColor Green
 
 Write-Host "======================================"
 Write-Host "  ✅ SSH 安全強化完成！"

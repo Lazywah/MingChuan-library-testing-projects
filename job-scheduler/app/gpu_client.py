@@ -266,13 +266,29 @@ class SSHGPUClient(BaseGPUClient):
         if not self.connected or not self._ssh_client:
             raise ConnectionError("ZH: SSH 尚未連線 | EN: SSH not connected")
 
-        # ZH: 組建遠端訓練指令 | EN: Build remote training command
-        config_str = " ".join([f"--{k}={v}" for k, v in config.items()]) if config else ""
+        # ZH: 嚴格過濾與組建遠端訓練指令 (防禦 Command Injection)
+        # EN: Strictly filter and build remote training command (Prevent Command Injection)
+        import re
+        config_str = ""
+        if config:
+            safe_config = []
+            for k, v in config.items():
+                safe_k = re.sub(r'[^a-zA-Z0-9_\-]', '', str(k))
+                safe_v = re.sub(r'[^a-zA-Z0-9_\-\.\/\\]', '', str(v))
+                if safe_k:
+                    safe_config.append(f"--{safe_k}={safe_v}")
+            config_str = " ".join(safe_config)
+            
         if dataset_path:
+            # 依賴 schemas.py 中的 regex 確保 dataset_path 安全
             config_str += f" --dataset_path={dataset_path}"
-        cmd = f"nohup python {script_path} {config_str} > /tmp/training.log 2>&1 &"
+            
+        # ZH: 使用 PowerShell Start-Process 替代 Linux nohup，在背景執行且不開啟新視窗
+        # EN: Use PowerShell Start-Process instead of Linux nohup for background execution
+        ps_args = f"{script_path} {config_str}".strip()
+        cmd = f'Start-Process -NoNewWindow -FilePath "python" -ArgumentList "{ps_args}" -RedirectStandardOutput "$env:TEMP\\training.log" -RedirectStandardError "$env:TEMP\\training.err"'
 
-        logger.info(f"ZH: [SSH] 執行訓練指令: {cmd} | EN: [SSH] Executing training: {cmd}")
+        logger.info(f"ZH: [SSH] 執行訓練指令 (PowerShell): {cmd} | EN: [SSH] Executing training (PowerShell): {cmd}")
         stdin, stdout, stderr = self._ssh_client.exec_command(cmd)
 
         self._progress = 0.0
@@ -290,9 +306,9 @@ class SSHGPUClient(BaseGPUClient):
             }
 
         last_line = ""
-        # ZH: 解析訓練日誌中的進度 | EN: Parse progress from training log
+        # ZH: 使用 PowerShell 解析訓練日誌中的進度 | EN: Parse progress from training log using PowerShell
         try:
-            cmd = "tail -1 /tmp/training.log"
+            cmd = 'Get-Content -Tail 1 "$env:TEMP\\training.log" -ErrorAction SilentlyContinue'
             stdin, stdout, stderr = self._ssh_client.exec_command(cmd)
             last_line = stdout.read().decode().strip()
             # ZH: 嘗試從日誌解析進度百分比 | EN: Try to parse progress percentage

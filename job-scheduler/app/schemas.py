@@ -23,7 +23,7 @@ EN: Modular design:
 ==============================================================================
 """
 
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, Field
 from datetime import datetime
 from typing import Optional, Dict, Any, List
 
@@ -105,8 +105,19 @@ class JobCreate(BaseModel):
     model_name: str                                  # ZH: 模型名稱 | EN: Model to train
     gpu_required: Optional[int] = 1                  # ZH: 需要的 GPU 數 (1 或 2) | EN: GPUs needed
     config: Optional[Dict[str, Any]] = None          # ZH: 訓練配置 | EN: Training config
-    script_path: Optional[str] = None                # ZH: 訓練腳本路徑 | EN: Training script path
-    dataset_path: Optional[str] = None               # ZH: 資料集路徑 | EN: Dataset path
+    
+    # ZH: 嚴格校驗路徑參數，防禦 Command Injection | EN: Strict path validation to prevent ACE
+    script_path: Optional[str] = Field(
+        default=None, 
+        pattern=r"^[a-zA-Z0-9_\-\.\/\\]+$",
+        description="Only alphanumeric, dash, underscore, dot and slashes allowed"
+    )
+    dataset_path: Optional[str] = Field(
+        default=None, 
+        pattern=r"^[a-zA-Z0-9_\-\.\/\\]+$",
+        description="Only alphanumeric, dash, underscore, dot and slashes allowed"
+    )
+    
     priority: Optional[int] = 0                      # ZH: 優先級 (越大越優先) | EN: Priority
 
 
