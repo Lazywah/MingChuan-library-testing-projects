@@ -37,10 +37,11 @@ python -c "import torch; print(torch.cuda.is_available())"
 
 ## 🔒 外網部署額外步驟
 
-若 GPU 伺服器需暴露於外網，請額外執行安全強化（需系統管理員身分）：
+若 GPU 伺服器需暴露於外網或需要鎖定連線來源，請額外執行安全強化（需系統管理員身分）：
 
 ```powershell
-.\ssh-hardening.ps1
+# 請將 192.168.1.50 替換為您服務層 (Ubuntu) 的真實 IP
+.\ssh-hardening.ps1 -SshPort 2222 -ServiceLayerIP "192.168.1.50"
 ```
 
 > 詳細說明請參考：`docs/資源層-GPU部署/03-GPU伺服器部署指南.md`

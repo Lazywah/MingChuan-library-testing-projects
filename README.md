@@ -97,7 +97,7 @@
     1. 準備一台安裝好 Windows 11 的實體 GPU 伺服器。
     2. 將 `gpu-setup/` 工具包傳送至該伺服器。
     3. 以系統管理員身分開啟 PowerShell，執行 `.\setup.ps1` 一鍵安裝 CUDA、Python 與 OpenSSH。
-    4. (若位於外網) 執行 `.\ssh-hardening.ps1` 強化連線安全與防火牆設定。
+    4. (若位於外網) 執行 `.\ssh-hardening.ps1 -ServiceLayerIP "服務層IP"` 強化連線安全與防火牆白名單鎖定。
     5. 將 GPU 節點的 IP 與金鑰登記至服務層的 `scheduler_policy.yaml`。
 *   **往後部署 / 擴展**：
     *   **工具**：SSH, `gpu-setup` 腳本, `nvidia-smi`。

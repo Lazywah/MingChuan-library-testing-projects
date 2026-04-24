@@ -159,23 +159,21 @@ nodes:
 > [!CAUTION]
 > GPU 若暴露於外網，**以下措施為必要項目**，否則有被入侵的風險。
 
-在 GPU 伺服器端執行 `gpu-setup\ssh-hardening.ps1` 腳本，或手動編輯 `C:\ProgramData\ssh\sshd_config`：
+在 GPU 伺服器端執行 `gpu-setup\ssh-hardening.ps1` 腳本，並**強制指定服務層的 IP**：
 
-```text
-Port 2222                          # 改為非標準 Port，避免掃描攻擊
-PermitRootLogin no                 # 禁止 root/Administrator 直接登入
-PasswordAuthentication no          # 只允許金鑰認證，禁用密碼
-```
-
-並於 PowerShell 重啟服務：
 ```powershell
-Restart-Service sshd
+# 請將 192.168.1.50 替換為您服務層 (Ubuntu) 的真實 IP
+.\ssh-hardening.ps1 -SshPort 2222 -ServiceLayerIP "192.168.1.50"
 ```
 
-防火牆白名單 (僅允許服務層 IP 連入)：
-```powershell
-New-NetFirewallRule -DisplayName "OpenSSH Server (2222)" -Direction Inbound -LocalPort 2222 -Protocol TCP -Action Allow
-```
+腳本會自動幫您完成以下配置：
+1. 將 SSH Port 改為非標準 Port (避免掃描攻擊)
+2. 禁用密碼登入，僅允許金鑰認證
+3. 關閉 Administrator 的直接 SSH 登入權限
+4. 設定 Windows 防火牆規則，**僅允許服務層的 IP 連入 Port 2222**
+5. 將 OpenSSH 的預設終端機改為 `powershell.exe` (提供服務層相容性)
+
+並自動於 PowerShell 重啟 SSH 服務。
 
 ---
 
