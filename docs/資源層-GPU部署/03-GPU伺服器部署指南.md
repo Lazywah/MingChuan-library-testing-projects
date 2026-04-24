@@ -28,16 +28,18 @@ nvidia-smi  # 確認驅動安裝成功
 ```
 
 2. **建立 SSH 金鑰對**
-```powershell
-# 在服務層工作站上執行:
-ssh-keygen -t rsa -b 4096 -f "$env:USERPROFILE\.ssh\gpu_key" -N '""'
-# Windows 原生沒有 ssh-copy-id，需手動將 gpu_key.pub 內容加入到 GPU 伺服器的 authorized_keys
+```bash
+# 在服務層 (Ubuntu) 上執行:
+ssh-keygen -t rsa -b 4096 -f ~/.ssh/gpu_key -N ""
+# 由於 GPU 伺服器是 Windows 11，您需要手動將 ~/.ssh/gpu_key.pub 內容
+# 複製到 GPU 伺服器的 C:\Users\gpu_admin\.ssh\authorized_keys 中。
 ```
 
 3. **測試 SSH 連線**
-```powershell
-ssh -i "$env:USERPROFILE\.ssh\gpu_key" gpu_admin@192.168.1.100 nvidia-smi
-ssh -i "$env:USERPROFILE\.ssh\gpu_key" gpu_admin@192.168.1.101 nvidia-smi
+```bash
+# 在服務層 (Ubuntu) 上測試連線到 Windows GPU 伺服器:
+ssh -i ~/.ssh/gpu_key gpu_admin@192.168.1.100 nvidia-smi
+ssh -i ~/.ssh/gpu_key gpu_admin@192.168.1.101 nvidia-smi
 ```
 
 4. **修改 `scheduler_policy.yaml` 中的節點設定**
