@@ -22,9 +22,15 @@ scp -r gpu-setup\ gpu_admin@192.168.1.100:C:\Users\gpu_admin\Desktop\
 
 ```powershell
 # 在 GPU 伺服器上以系統管理員身分開啟 PowerShell 並執行
+
+# ⚠️ 若首次執行 .ps1 被擋，請先解除執行限制：
+Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
+
 cd C:\Users\gpu_admin\Desktop\gpu-setup
 .\setup.ps1
 ```
+
+> ⚠️ **RTX 5090 使用者注意**：腳本已針對 Blackwell 架構調整，將自動安裝 CUDA 12.8+ 與 PyTorch `cu128` 版本。若 `winget` 中無合適的 CUDA 版本，腳本會引導您從 NVIDIA 官網手動下載。
 
 ### 3. 重啟並驗證
 

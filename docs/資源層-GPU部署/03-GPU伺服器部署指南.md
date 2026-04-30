@@ -73,16 +73,22 @@ docker compose restart job-scheduler
 
 | 工具 | 用途 | 安裝方式 |
 |------|------|----------|
-| **NVIDIA Driver** | GPU 硬體驅動，`nvidia-smi` 為系統偵測 GPU 的核心指令 | 手動下載安裝程式 |
-| **CUDA Toolkit** | GPU 加速運算框架，PyTorch/TensorFlow 的底層依賴 | `winget install Nvidia.CUDA` |
+| **NVIDIA Driver** (≥570) | GPU 硬體驅動，`nvidia-smi` 為系統偵測 GPU 的核心指令 | [NVIDIA 官網](https://www.nvidia.com/Download/index.aspx)手動下載 |
+| **CUDA Toolkit** (≥12.8) | GPU 加速運算框架，PyTorch/TensorFlow 的底層依賴 | [NVIDIA CUDA](https://developer.nvidia.com/cuda-downloads) 或 `winget install Nvidia.CUDA` |
 | **Python 3.11+** | 訓練腳本執行環境 | `winget install Python.Python.3.11` |
 | **OpenSSH Server** | 系統透過 SSH 遠端派發與執行訓練任務 | `Add-WindowsCapability -Online -Name OpenSSH.Server~~~~0.0.1.0` |
+
+> [!WARNING]
+> **RTX 5090 (Blackwell 架構) 使用者注意**：
+> - CUDA Toolkit 版本必須 **≥12.8**，舊版 (如 12.4) 不包含 `sm_120` kernel，無法辨識 RTX 5090。
+> - 若 `winget` 中只有舊版 CUDA，請從 [NVIDIA 官網](https://developer.nvidia.com/cuda-downloads) 手動下載 12.8+。
+> - 安裝 CUDA 後若 `nvcc` 仍無法執行，請確認 `C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.8\bin` 已加入系統 PATH。
 
 ### 深度學習框架 (擇一安裝)
 
 | 框架 | 適用場景 | 安裝指令 |
 |------|----------|----------|
-| **PyTorch** | 學術研究、NLP、影像辨識（推薦） | `pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu124` |
+| **PyTorch** | 學術研究、NLP、影像辨識（推薦） | `pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu128` |
 | **TensorFlow** | 生產部署、Keras 生態系 | `pip install tensorflow[and-cuda]` |
 
 ### 選配項目 (Optional)
@@ -263,6 +269,13 @@ ssh gpu_admin@192.168.1.100 echo "OK"
 ssh -p 2222 gpu_admin@140.123.45.67 echo "OK"
 ```
 
+> [!IMPORTANT]
+> **金鑰登入失敗常見原因**：若 GPU 伺服器的帳號屬於 `Administrators` 群組（例如預設的 Administrator 或被加入管理員群組的 gpu_admin），Windows OpenSSH **不會讀取** `C:\Users\<帳號>\.ssh\authorized_keys`，而是要求金鑰放在：
+> ```
+> C:\ProgramData\ssh\administrators_authorized_keys
+> ```
+> 且該檔案的 ACL 權限必須僅限 `SYSTEM` 和 `Administrators` 存取。`setup.ps1` 已包含自動處理此問題的邏輯。
+
 ### GPU 查詢失敗
 
 ```powershell
@@ -277,8 +290,8 @@ nvidia-smi --query-gpu=index,utilization.gpu --format=csv
 python -c "import torch; print(torch.version.cuda)"
 nvidia-smi  # 對比 CUDA Version 欄位
 
-# 若版本不符，重新安裝對應版本的 PyTorch
-pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu124
+# 若版本不符，重新安裝對應版本的 PyTorch (RTX 50 系列需要 cu128)
+pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu128
 ```
 
 ---
