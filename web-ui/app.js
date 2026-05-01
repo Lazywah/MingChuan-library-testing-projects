@@ -371,6 +371,45 @@ document.addEventListener('DOMContentLoaded', () => {
     document.querySelectorAll('.refresh-jobs-btn').forEach(btn => {
         btn.addEventListener('click', fetchJobs);
     });
+
+    // ZH: Info Board Toggle (Side Drawer) | EN: Info Board Toggle
+    const sideDrawerToggle = document.getElementById('nav-sidebar-toggle');
+    const sideDrawer = document.getElementById('side-drawer');
+    if (sideDrawerToggle && sideDrawer) {
+        sideDrawerToggle.addEventListener('click', (e) => {
+            e.preventDefault();
+            sideDrawer.classList.toggle('closed');
+        });
+    }
+
+    // ZH: Compute Sub Tabs Toggle | EN: Compute Sub Tabs Toggle
+    document.querySelectorAll('.sub-tab-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            document.querySelectorAll('.sub-tab-btn').forEach(b => b.classList.remove('active'));
+            document.querySelectorAll('.sub-page-view').forEach(p => p.classList.remove('active'));
+            btn.classList.add('active');
+            const targetId = btn.getAttribute('data-subtab') + '-page';
+            const targetPage = document.getElementById(targetId);
+            if (targetPage) targetPage.classList.add('active');
+        });
+    });
+    
+    // Quick tutorial Nav - bind the info button to the global showTutorial()
+    const navQuickTutorial = document.getElementById('nav-quick-tutorial');
+    if (navQuickTutorial) {
+        navQuickTutorial.addEventListener('click', (e) => {
+            e.preventDefault();
+            showTutorial();
+        });
+    }
+
+    // ZH: 標頭登入按鈕 | EN: Header login button - opens login modal
+    const headerLoginBtn = document.getElementById('header-login-btn');
+    if (headerLoginBtn) {
+        headerLoginBtn.addEventListener('click', () => {
+            if (loginView) loginView.classList.remove('hidden');
+        });
+    }
 });
 
 // =========================
@@ -617,17 +656,30 @@ function switchToDashboard() {
     if (pollInterval) clearInterval(pollInterval);
     pollInterval = setInterval(fetchJobs, 5000);
     setInterval(fetchTokenUsage, 10000);
-    switchTab('dashboard');
+    switchTab('home'); // Default to home after login
+
+    // ZH: 切換標頭: 隱藏登入按鈕, 顯示使用者資訊 | EN: Toggle header: hide login btn, show user info
+    const headerLoginBtn = document.getElementById('header-login-btn');
+    const userInfoDisplay = document.getElementById('user-info-display');
+    if (headerLoginBtn) headerLoginBtn.style.display = 'none';
+    if (userInfoDisplay) userInfoDisplay.style.display = 'flex';
 
     // ZH: 教學導覽: 首次登入時顯示 | EN: Show tutorial on first login
-    if (!localStorage.getItem('ai_hud_tutorial_dismissed')) {
+    if (!isTutorialDismissed()) {
         showTutorial();
     }
 }
 
 function switchToLogin() {
-    if (dashView) dashView.classList.add('hidden');
-    if (loginView) loginView.classList.remove('hidden');
+    // ZH: 不再自動彈出登入框, 使用者可瀏覽首頁 | EN: Don't auto-show login, user can browse Home
+    if (dashView) dashView.classList.remove('hidden');
+    switchTab('home');
+
+    // ZH: 切換標頭: 顯示登入按鈕, 隱藏使用者資訊 | EN: Toggle header: show login btn, hide user info
+    const headerLoginBtn = document.getElementById('header-login-btn');
+    const userInfoDisplay = document.getElementById('user-info-display');
+    if (headerLoginBtn) headerLoginBtn.style.display = 'flex';
+    if (userInfoDisplay) userInfoDisplay.style.display = 'none';
 }
 
 // =========================
@@ -703,6 +755,12 @@ function updateTokenDisplay(data) {
 
     // Store in localStorage for offline tracking
     localStorage.setItem('token_usage_data', JSON.stringify(data));
+
+    // Update Side Drawer Token Stats
+    const drawerTokenUsed = document.getElementById('drawer-token-used');
+    const drawerTokenLimit = document.getElementById('drawer-token-limit');
+    if (drawerTokenUsed) drawerTokenUsed.textContent = (data.tokens_used || 0).toLocaleString();
+    if (drawerTokenLimit) drawerTokenLimit.textContent = (data.tokens_limit || 0).toLocaleString();
 
     console.log('Token display updated:', {
         percentage,
@@ -1112,6 +1170,8 @@ if (chatInput) {
 // =========================
 // ZH: 教學導覽邏輯 | EN: Tutorial Modal Logic
 // =========================
+const TUTORIAL_DISMISSED_KEY = 'ai_hud_tutorial_dismissed';
+
 function showTutorial() {
     const modal = document.getElementById('tutorial-modal');
     if (modal) modal.classList.remove('hidden');
@@ -1122,16 +1182,20 @@ function hideTutorial() {
     if (modal) modal.classList.add('hidden');
     const check = document.getElementById('tutorial-dismiss-check');
     if (check && check.checked) {
-        localStorage.setItem('ai_hud_tutorial_dismissed', 'true');
+        localStorage.setItem(TUTORIAL_DISMISSED_KEY, 'true');
     }
 }
 
+function isTutorialDismissed() {
+    return localStorage.getItem(TUTORIAL_DISMISSED_KEY) === 'true';
+}
+
 // Tutorial event bindings
-const tutorialCloseBtn = document.getElementById('tutorial-close-btn');
-const tutorialOkBtn = document.getElementById('tutorial-ok-btn');
+const _tutorialCloseBtn = document.getElementById('tutorial-close-btn');
+const _tutorialOkBtn = document.getElementById('tutorial-ok-btn');
 const reopenTutorialBtn = document.getElementById('reopen-tutorial-btn');
-if (tutorialCloseBtn) tutorialCloseBtn.addEventListener('click', hideTutorial);
-if (tutorialOkBtn) tutorialOkBtn.addEventListener('click', hideTutorial);
+if (_tutorialCloseBtn) _tutorialCloseBtn.addEventListener('click', hideTutorial);
+if (_tutorialOkBtn) _tutorialOkBtn.addEventListener('click', hideTutorial);
 if (reopenTutorialBtn) reopenTutorialBtn.addEventListener('click', showTutorial);
 
 // =========================

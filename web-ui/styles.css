@@ -266,8 +266,8 @@ form h1 {
     padding: 20px 40px 40px 40px;
 }
 
-/* ZH: 導覽列佈局優化 | EN: Header Navigation Optimization */
-header {
+/* ZH: Moodle 風格頁首 | EN: Moodle Style Header */
+.moodle-header {
     background: var(--bg-panel);
     backdrop-filter: blur(20px);
     -webkit-backdrop-filter: blur(20px);
@@ -275,57 +275,93 @@ header {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 0 30px;
-    margin-bottom: 25px;
+    padding: 10px 40px;
+    height: 80px;
+    z-index: 10;
+    margin-bottom: 40px; /* Make distance from content */
     border: 1px solid var(--border-color);
     box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
-    height: 80px;
 }
 
-.header-left,
-.header-center,
-.header-left {
+[data-theme='light'] .moodle-header {
+    background: #ffffff;
+    color: #333333;
+}
+
+[data-theme='dark'] .moodle-header {
+    background: #1e1e1e;
+    color: #ffffff;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.moodle-header .header-left {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+}
+
+.moodle-header .logo-image ion-icon {
+    font-size: 36px;
+    color: var(--accent-glow);
+}
+
+.moodle-header .logo {
+    font-size: 24px;
+    font-weight: 700;
+}
+
+.moodle-header .header-right {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+}
+
+.header-right .icon-action {
+    font-size: 24px;
+    color: var(--text-primary);
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    transition: 0.3s;
+}
+
+.header-right .icon-action:hover {
+    color: var(--accent-glow);
+}
+
+/* Header Login Button (shown when not authenticated) */
+.header-login-btn {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 18px;
+    border-radius: 10px;
+    border: 1px solid var(--accent-glow);
+    background: transparent;
+    color: var(--accent-glow);
+    font-size: 15px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s ease;
+}
+
+.header-login-btn ion-icon {
+    font-size: 18px;
+}
+
+.header-login-btn:hover {
+    background: var(--accent-glow);
+    color: #000;
+    transform: scale(1.05);
+}
+
+.moodle-header .user-info {
     display: flex;
     align-items: center;
     gap: 10px;
 }
 
-.header-left .logo-image ion-icon {
-    color: var(--text-primary);
-    transition: color 0.3s ease;
-}
-
-[data-theme='light'] .header-left .logo-image ion-icon {
-    color: #4f46e5;
-}
-
-/* Ensure logo icon respects theme changes */
-.header-left .logo-image ion-icon {
-    color: var(--text-primary) !important;
-}
-
-[data-theme='light'] .header-left .logo-image ion-icon {
-    color: #4f46e5 !important;
-}
-
-.header-center {
-    gap: 20px;
-}
-
-.header-right {
-    gap: 20px;
-}
-
-.header-right .icon-action {
-    font-size: 22px;
-    color: var(--text-primary);
-    opacity: 0.8;
-    transition: 0.3s;
-    background: transparent;
-    border: none;
-    padding: 4px;
-    border-radius: 6px;
-}
+/* Removed .nav-sidebar styles as it is merged into .side-drawer */
 
 .header-right .icon-action:hover {
     opacity: 1;
@@ -418,36 +454,7 @@ ion-icon {
     background: rgba(255, 255, 255, 0.1);
 }
 
-/* ZH: Tab 按鈕樣式 | EN: Tab Button Styles */
-.tab-btn {
-    background: transparent;
-    border: 1px solid transparent;
-    color: var(--text-primary);
-    padding: 8px 15px;
-    border-radius: 12px;
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    font-size: 16px;
-    transition: 0.3s;
-}
-
-.tab-btn ion-icon {
-    font-size: 20px;
-}
-
-.tab-btn:hover {
-    background: rgba(255, 255, 255, 0.1);
-    color: var(--accent-glow);
-}
-
-.tab-btn.active {
-    border-color: var(--accent-glow);
-    background: rgba(255, 255, 255, 0.15);
-    color: var(--accent-glow);
-    box-shadow: 0 0 10px var(--accent-glow);
-}
+/* Removed old tab-btn styles as they are merged into side-drawer */
 
 /* ZH: 分頁切換控制 | EN: Page View Control */
 .page-view {
@@ -1447,6 +1454,7 @@ ion-icon {
     justify-content: center;
     align-items: center;
     animation: fadeIn 0.3s ease;
+    pointer-events: auto; /* Block clicks behind it */
 }
 
 .tutorial-modal.hidden {
@@ -1459,8 +1467,41 @@ ion-icon {
     left: 0;
     right: 0;
     bottom: 0;
-    background: rgba(0,0,0,0.6);
-    backdrop-filter: blur(6px);
+    background: rgba(0, 0, 0, 0.4);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    pointer-events: auto; /* Block clicks */
+}
+
+/* Glass Modal for Login */
+.glass-modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 9999;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    animation: fadeIn 0.3s ease;
+    pointer-events: auto;
+}
+
+.glass-modal.hidden {
+    display: none !important;
+}
+
+.glass-backdrop {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.4);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    pointer-events: auto;
 }
 
 .tutorial-content {
@@ -1469,6 +1510,9 @@ ion-icon {
     width: 90%;
     z-index: 1;
     animation: fadeIn 0.4s ease;
+    pointer-events: auto; /* Make the actual floating page clickable */
+    box-shadow: 0 20px 40px rgba(0,0,0,0.5); /* Emphasize floating effect */
+    border: 1px solid var(--accent-glow);
 }
 
 .tutorial-content h2 {
@@ -1535,4 +1579,345 @@ ion-icon {
 
 .tutorial-dismiss input[type="checkbox"] {
     accent-color: var(--accent-glow);
+}
+
+/* =========================================
+   ZH: 介面重構追加樣式 (Moodle UI Refactor)
+   EN: Refactored UI Additional Styles
+   ========================================= */
+
+/* Side Drawer */
+.side-drawer {
+    position: fixed;
+    top: 0;
+    right: 0;
+    width: 350px;
+    height: 100vh;
+    background: var(--bg-panel);
+    backdrop-filter: blur(20px);
+    border-left: 1px solid var(--border-color);
+    z-index: 1000;
+    transition: transform 0.4s ease;
+    display: flex;
+    flex-direction: column;
+    box-shadow: -5px 0 20px rgba(0,0,0,0.5);
+}
+
+.side-drawer.closed {
+    transform: translateX(350px);
+}
+
+/* Sidebar Pull Tab */
+.side-drawer .sidebar-pull-tab {
+    position: absolute;
+    left: -36px;
+    top: 50vh;
+    transform: translateY(-50%);
+    width: 36px;
+    height: 80px;
+    background: var(--bg-panel);
+    border: 1px solid var(--border-color);
+    border-right: none;
+    border-radius: 10px 0 0 10px;
+    color: var(--text-primary);
+    font-size: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    box-shadow: -4px 0 6px rgba(0,0,0,0.3);
+    transition: background 0.3s, color 0.3s;
+}
+
+.side-drawer .sidebar-pull-tab:hover {
+    background: rgba(255,255,255,0.1);
+    color: var(--accent-glow);
+}
+
+.side-drawer:not(.closed) .sidebar-pull-tab ion-icon {
+    transform: rotate(180deg);
+}
+
+/* Sidebar Menu */
+.side-drawer .sidebar-menu {
+    border-bottom: 1px dashed rgba(255,255,255,0.2);
+    margin-bottom: 20px;
+    padding-bottom: 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+}
+
+.side-drawer .tab-btn {
+    background: transparent;
+    border: none;
+    color: var(--text-muted);
+    padding: 12px 15px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    font-size: 16px;
+    transition: 0.3s;
+    border-left: 4px solid transparent;
+    width: 100%;
+}
+
+.side-drawer .tab-btn ion-icon { 
+    font-size: 22px; 
+}
+
+.side-drawer .tab-btn:hover { 
+    background: rgba(255,255,255,0.05); 
+    color: var(--text-primary); 
+}
+
+.side-drawer .tab-btn.active { 
+    border-left-color: var(--accent-glow); 
+    background: rgba(255,255,255,0.08); 
+    color: var(--text-primary); 
+}
+
+.drawer-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 20px;
+    border-bottom: 1px solid rgba(255,255,255,0.1);
+}
+
+.drawer-header h3 {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 18px;
+}
+
+.drawer-content {
+    flex: 1;
+    padding: 20px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 25px;
+}
+
+/* Drawer Footer - pinned at bottom */
+.drawer-footer {
+    padding: 12px 20px;
+    border-top: 1px solid rgba(255,255,255,0.1);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+.drawer-info-btn {
+    width: 38px;
+    height: 38px;
+    border-radius: 50%;
+    border: 1px solid var(--border-color);
+    background: transparent;
+    color: var(--text-muted);
+    font-size: 22px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.3s ease;
+}
+
+.drawer-info-btn:hover {
+    color: var(--accent-glow);
+    border-color: var(--accent-glow);
+    background: rgba(255,255,255,0.05);
+    transform: scale(1.1);
+}
+
+.drawer-widget h4 {
+    margin-bottom: 10px;
+    padding-bottom: 5px;
+    border-bottom: 1px solid var(--accent-glow);
+    font-size: 16px;
+    color: var(--accent-glow);
+}
+
+.drawer-token-stats .stat {
+    margin: 5px 0;
+    display: flex;
+    justify-content: space-between;
+}
+
+.feature-list {
+    list-style: none;
+    padding: 0;
+}
+
+.feature-list li {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin: 8px 0;
+}
+
+.announcement-item {
+    background: rgba(255,255,255,0.05);
+    padding: 10px;
+    border-radius: 8px;
+    border-left: 4px solid #f59e0b;
+}
+
+.announcement-item .date {
+    font-size: 12px;
+    color: var(--text-muted);
+    display: block;
+    margin-bottom: 5px;
+}
+
+/* Compute Sub Tabs */
+.compute-sub-tabs {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 20px;
+    border-bottom: 2px solid rgba(255,255,255,0.1);
+    padding-bottom: 10px;
+}
+
+.sub-tab-btn {
+    background: transparent;
+    border: none;
+    color: var(--text-muted);
+    font-size: 16px;
+    padding: 10px 20px;
+    cursor: pointer;
+    border-radius: 8px 8px 0 0;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    transition: all 0.3s;
+}
+
+.sub-tab-btn.active {
+    color: var(--text-primary);
+    background: rgba(255,255,255,0.1);
+    border-bottom: 3px solid var(--accent-glow);
+}
+
+.sub-page-view {
+    display: none;
+}
+.sub-page-view.active {
+    display: block;
+    animation: fadeIn 0.3s ease;
+}
+
+/* Bottom Quick Links Grid */
+.bottom-quick-links {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+    gap: 20px;
+    margin-top: 40px;
+    padding-top: 20px;
+    border-top: 1px dashed rgba(255,255,255,0.2);
+}
+
+.quick-link-card {
+    background: rgba(255,255,255,0.03);
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 12px;
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    transition: transform 0.3s, border-color 0.3s;
+}
+
+.quick-link-card:hover {
+    transform: translateY(-5px);
+    border-color: var(--accent-glow);
+    background: rgba(255,255,255,0.08);
+}
+
+.quick-link-card .ql-icon {
+    font-size: 32px;
+    color: var(--accent-glow);
+    margin-bottom: 10px;
+}
+
+.quick-link-card h4 {
+    margin-bottom: 8px;
+    font-size: 18px;
+}
+
+.quick-link-card p {
+    color: var(--text-muted);
+    font-size: 14px;
+    margin-bottom: 15px;
+    flex: 1;
+}
+
+/* Home Page Styles */
+.home-grid {
+    display: grid;
+    grid-template-columns: 2fr 1fr;
+    gap: 25px;
+    width: 100%;
+}
+
+@media (max-width: 900px) {
+    .home-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
+.home-main-col, .home-side-col {
+    display: flex;
+    flex-direction: column;
+    gap: 25px;
+}
+
+.announcement-list {
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+    margin-top: 15px;
+}
+
+.announcement-item {
+    background: rgba(255,255,255,0.05);
+    padding: 15px;
+    border-radius: 12px;
+    border-left: 4px solid var(--accent-glow);
+    transition: transform 0.3s, background 0.3s;
+}
+
+.announcement-item:hover {
+    background: rgba(255,255,255,0.08);
+    transform: translateX(5px);
+}
+
+.announcement-item .date {
+    font-size: 13px;
+    color: var(--text-muted);
+    display: block;
+    margin-bottom: 8px;
+    font-weight: 600;
+}
+
+.announcement-item p {
+    font-size: 15px;
+    color: var(--text-primary);
+    line-height: 1.5;
+}
+
+.bottom-quick-links.vertical-layout {
+    display: flex;
+    flex-direction: column;
+    margin-top: 0;
+    padding-top: 0;
+    border-top: none;
+    gap: 15px;
+}
+
+.bottom-quick-links.vertical-layout .quick-link-card {
+    padding: 15px;
 }

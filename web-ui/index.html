@@ -33,8 +33,8 @@
     </div>
 
     <!-- ZH: 視圖: 登入面板 | EN: VIEW: Login panel -->
-    <div id="login-view" class="view-container active">
-
+    <div id="login-view" class="glass-modal hidden">
+        <div class="glass-backdrop"></div>
         <!-- ZH: 獨立的登入操作列 | EN: Independent login action bar -->
         <div class="login-actions"
             style="position: absolute; top: 20px; right: 30px; display: flex; gap: 15px; z-index: 10;">
@@ -81,45 +81,149 @@
         </div>
     </div>
 
+    <!-- ZH: Moodle 風格側邊抽屜 | EN: Moodle Side Drawer -->
+    <div id="side-drawer" class="side-drawer closed">
+        <button id="nav-sidebar-toggle" class="sidebar-pull-tab">
+            <ion-icon name="chevron-back-outline"></ion-icon>
+        </button>
+        <div class="drawer-header">
+            <h3><ion-icon name="apps-outline"></ion-icon> <span data-i18n="drawer_title">Info Board</span></h3>
+        </div>
+        <div class="drawer-content scrollbar-custom">
+            
+            <!-- Navigation Menu -->
+            <div class="sidebar-menu">
+                <button class="tab-btn active" id="tab-home" data-tab="home">
+                    <ion-icon name="home-outline"></ion-icon>
+                    <span data-i18n="nav_home">Home</span>
+                </button>
+                <button class="tab-btn" id="tab-dash" data-tab="dashboard">
+                    <ion-icon name="server-outline"></ion-icon>
+                    <span data-i18n="nav_compute">Compute Tasks</span>
+                </button>
+                <button class="tab-btn" id="tab-chat" data-tab="assistant">
+                    <ion-icon name="chatbubbles-outline"></ion-icon>
+                    <span data-i18n="nav_assistant">Assistant</span>
+                </button>
+                <button class="tab-btn" id="tab-settings" data-tab="settings">
+                    <ion-icon name="settings-outline"></ion-icon>
+                    <span data-i18n="nav_settings">Settings</span>
+                </button>
+                
+                <!-- New Links -->
+                <button class="tab-btn" id="nav-doc-lib"><ion-icon name="library-outline"></ion-icon> <span data-i18n="nav_docs">Document Library</span></button>
+            </div>
+
+            <!-- Token Usage Summary -->
+            <div class="drawer-widget">
+                <h4 data-i18n="drawer_token">Token Usage</h4>
+                <div class="drawer-token-stats">
+                    <div class="stat"><span data-i18n="token_used">Used</span>: <b id="drawer-token-used">0</b></div>
+                    <div class="stat"><span data-i18n="token_limit">Limit</span>: <b id="drawer-token-limit">0</b></div>
+                </div>
+            </div>
+            <!-- Available Features -->
+            <div class="drawer-widget">
+                <h4 data-i18n="drawer_features">Available Features</h4>
+                <ul class="feature-list">
+                    <li><ion-icon name="checkmark-circle-outline" style="color:var(--accent-glow)"></ion-icon> <span data-i18n="feat_1">High Compute GPU</span></li>
+                    <li><ion-icon name="checkmark-circle-outline" style="color:var(--accent-glow)"></ion-icon> <span data-i18n="feat_2">AI Text Assistant</span></li>
+                    <li><ion-icon name="close-circle-outline" style="color:#fb7185"></ion-icon> <span data-i18n="feat_3">Image Gen (Soon)</span></li>
+                </ul>
+            </div>
+        </div>
+        <!-- ZH: 底部資訊按鈕 | EN: Bottom info button -->
+        <div class="drawer-footer">
+            <button class="drawer-info-btn" id="nav-quick-tutorial" title="Quick Tutorial">
+                <ion-icon name="information-circle-outline"></ion-icon>
+            </button>
+        </div>
+    </div>
+    
     <!-- ZH: 視圖: HUD 介面主容器 | EN: VIEW: MAIN HUD Container -->
-    <div id="dashboard-view" class="view-container hidden">
+    <div id="dashboard-view" class="view-container">
         <div class="hud-container main-content">
 
-            <header>
+            <!-- Moodle-style Top Header -->
+            <div class="moodle-header">
                 <span class="header-left">
                     <div class="logo-image">
-                        <ion-icon name="hardware-chip-outline" style="font-size: 40px; color: white;"></ion-icon>
+                        <ion-icon name="hardware-chip-outline"></ion-icon>
                     </div>
-                    <div class="logo">AI_BASE</div>
+                    <div class="logo">MCU AI_BASE</div>
                 </span>
-
-                <!-- ZH: 分頁切換導覽 | EN: Tab Navigation -->
-                <div class="header-center">
-                    <button class="tab-btn active" id="tab-dash" data-tab="dashboard">
-                        <ion-icon name="server-outline"></ion-icon>
-                        <span data-i18n="nav_compute">Compute Tasks</span>
-                    </button>
-                    <button class="tab-btn" id="tab-chat" data-tab="assistant">
-                        <ion-icon name="chatbubbles-outline"></ion-icon>
-                        <span data-i18n="nav_assistant">Assistant</span>
-                    </button>
-                    <button class="tab-btn" id="tab-settings" data-tab="settings">
-                        <ion-icon name="settings-outline"></ion-icon>
-                        <span data-i18n="nav_settings">Settings</span>
-                    </button>
-                </div>
-
                 <nav class="header-right">
-                    <div class="user-info">
+                    <!-- ZH: 未登入時顯示登入按鈕 | EN: Show login button when not authenticated -->
+                    <button class="header-login-btn" id="header-login-btn">
+                        <ion-icon name="log-in-outline"></ion-icon>
+                        <span data-i18n="btn_login">Login</span>
+                    </button>
+                    <!-- ZH: 登入後顯示使用者資訊 | EN: Show user info after login -->
+                    <div class="user-info" id="user-info-display" style="display:none;">
                         <ion-icon name="person-circle-outline"></ion-icon>
                         <span id="user-display">USER</span>
                         <span id="user-role" class="badge">ROLE</span>
                     </div>
                 </nav>
-            </header>
+            </div>
+
+            <!-- ZH: 分頁 0: 首頁 | EN: PAGE 0: Home -->
+            <main id="home-page" class="page-view active">
+                <div class="home-grid">
+                    <div class="home-main-col">
+                        <section class="widget form-box-panel">
+                            <div class="widget-header">
+                                <h3><ion-icon name="megaphone-outline"></ion-icon> <span data-i18n="drawer_announcements">Announcements & Updates</span></h3>
+                            </div>
+                            <div class="announcement-list">
+                                <div class="announcement-item">
+                                    <span class="date">2026-05-01</span>
+                                    <p data-i18n="anno_1">系統升級至 Blackwell 架構完成。</p>
+                                </div>
+                                <div class="announcement-item">
+                                    <span class="date">2026-04-20</span>
+                                    <p>全新 UI 介面上線，提供更佳的操作體驗。</p>
+                                </div>
+                                <div class="announcement-item">
+                                    <span class="date">2026-04-01</span>
+                                    <p>AI 訓練大廳測試開放，歡迎多加利用。</p>
+                                </div>
+                            </div>
+                        </section>
+                    </div>
+                    
+                    <div class="home-side-col">
+                        <section class="widget form-box-panel">
+                            <div class="widget-header">
+                                <h3><ion-icon name="link-outline"></ion-icon> Quick Links</h3>
+                            </div>
+                            <div class="bottom-quick-links vertical-layout">
+                                <div class="quick-link-card">
+                                    <ion-icon name="logo-python" class="ql-icon"></ion-icon>
+                                    <h4 data-i18n="ql_jupyter_title">JupyterLab</h4>
+                                    <p data-i18n="ql_jupyter_desc">進入進階開發環境</p>
+                                    <button class="ready-btn mini-btn">Go <ion-icon name="arrow-forward-outline"></ion-icon></button>
+                                </div>
+                                <div class="quick-link-card">
+                                    <ion-icon name="globe-outline" class="ql-icon"></ion-icon>
+                                    <h4 data-i18n="ql_school_title">學校首頁</h4>
+                                    <p data-i18n="ql_school_desc">前往 MCU 官方網站</p>
+                                    <button class="ready-btn mini-btn" onclick="window.open('https://www.mcu.edu.tw/', '_blank')">Go <ion-icon name="arrow-forward-outline"></ion-icon></button>
+                                </div>
+                                <div class="quick-link-card">
+                                    <ion-icon name="help-buoy-outline" class="ql-icon"></ion-icon>
+                                    <h4 data-i18n="ql_support_title">問題回報</h4>
+                                    <p data-i18n="ql_support_desc">回報系統問題與建議</p>
+                                    <button class="ready-btn mini-btn">Go <ion-icon name="arrow-forward-outline"></ion-icon></button>
+                                </div>
+                            </div>
+                        </section>
+                    </div>
+                </div>
+            </main>
 
             <!-- ZH: 分頁 1: 運算任務視圖 | EN: PAGE 1: Compute Tasks -->
-            <main id="dashboard-page" class="page-view active">
+            <main id="dashboard-page" class="page-view">
 
                 <!-- ZH: 頂部: 新增任務表單 | EN: TOP: Submit New Job -->
                 <section class="widget submit-widget form-box-panel" style="margin-bottom: 25px;">
@@ -166,13 +270,21 @@
                     </form>
                 </section>
 
-                <!-- ZH: 左右分欄: 高算力 / 中低算力 | EN: Side-by-side: High / Mid-Low Compute -->
-                <div class="compute-split-row">
+                <!-- ZH: 運算任務分頁 (高算力 / 中低算力) | EN: Compute Task Sub-tabs -->
+                <div class="compute-sub-tabs">
+                    <button class="sub-tab-btn active" id="sub-tab-high" data-subtab="compute-high">
+                        <ion-icon name="flash-outline" style="color:#f59e0b;"></ion-icon> <span data-i18n="compute_high">High Compute</span>
+                    </button>
+                    <button class="sub-tab-btn" id="sub-tab-midlow" data-subtab="compute-midlow">
+                        <ion-icon name="speedometer-outline" style="color:#3b82f6;"></ion-icon> <span data-i18n="compute_mid_low">Mid / Low Compute</span>
+                    </button>
+                </div>
+                
+                <div class="compute-tab-content">
                     <!-- ZH: 左側: 高算力任務 (Priority >= 2) | EN: Left: High Compute (Priority >= 2) -->
-                    <section class="widget form-box-panel compute-panel">
+                    <section class="widget form-box-panel compute-panel sub-page-view active" id="compute-high-page">
                         <div class="widget-header split">
-                            <h3><ion-icon name="flash-outline" style="color:#f59e0b; margin-right:6px;"></ion-icon>
-                                <span data-i18n="compute_high">High Compute</span></h3>
+                            <h3><span data-i18n="compute_high_desc">High Compute Queue (GPU Processing)</span></h3>
                             <ion-icon name="refresh-circle-outline" class="refresh-icon refresh-jobs-btn"
                                 title="Refresh"></ion-icon>
                         </div>
@@ -185,11 +297,9 @@
                     </section>
 
                     <!-- ZH: 右側: 中低算力任務 (Priority 0, 1) | EN: Right: Mid/Low Compute (Priority 0, 1) -->
-                    <section class="widget form-box-panel compute-panel">
+                    <section class="widget form-box-panel compute-panel sub-page-view" id="compute-midlow-page">
                         <div class="widget-header split">
-                            <h3><ion-icon name="speedometer-outline"
-                                    style="color:#3b82f6; margin-right:6px;"></ion-icon> <span
-                                    data-i18n="compute_mid_low">Mid / Low Compute</span></h3>
+                            <h3><span data-i18n="compute_midlow_desc">Mid/Low Compute Queue (Service Layer Processing)</span></h3>
                             <ion-icon name="refresh-circle-outline" class="refresh-icon refresh-jobs-btn"
                                 title="Refresh"></ion-icon>
                         </div>
@@ -201,7 +311,7 @@
                         </div>
                     </section>
                 </div>
-
+                
             </main>
 
             <!-- ZH: 分頁 2: AI 助手視圖 (全螢幕) | EN: PAGE 2: Assistant View (Full Screen) -->
