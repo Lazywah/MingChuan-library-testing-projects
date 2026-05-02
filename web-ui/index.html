@@ -175,11 +175,43 @@
                         <ion-icon name="log-in-outline"></ion-icon>
                         <span data-i18n="btn_login">Login</span>
                     </button>
-                    <!-- ZH: 登入後顯示使用者資訊 | EN: Show user info after login -->
-                    <div class="user-info" id="user-info-display" style="display:none;">
-                        <ion-icon name="person-circle-outline"></ion-icon>
-                        <span id="user-display">USER</span>
-                        <span id="user-role" class="badge">ROLE</span>
+                    <!-- ZH: 登入後顯示使用者資訊 + 下拉選單 | EN: Show user info + dropdown after login -->
+                    <div class="user-dropdown-wrapper" id="user-info-display" style="display:none; position: relative;">
+                        <button class="user-dropdown-toggle" id="user-dropdown-toggle" style="display: flex; align-items: center; gap: 8px; background: transparent; border: none; cursor: pointer; color: var(--text-color); font-family: inherit; font-size: 14px; padding: 6px 12px; border-radius: 8px; transition: background 0.2s;">
+                            <ion-icon name="person-circle-outline" style="font-size: 22px;"></ion-icon>
+                            <span id="user-display">USER</span>
+                            <span id="user-role" class="badge">ROLE</span>
+                            <ion-icon name="chevron-down-outline" style="font-size: 14px; opacity: 0.6;"></ion-icon>
+                        </button>
+                        <div class="user-dropdown-menu" id="user-dropdown-menu" style="display: none; position: absolute; top: calc(100% + 8px); right: 0; min-width: 320px; background: var(--glass-bg, rgba(20,20,35,0.95)); backdrop-filter: blur(20px); border: 1px solid rgba(255,255,255,0.1); border-radius: 12px; box-shadow: 0 12px 40px rgba(0,0,0,0.4); z-index: 9999; overflow: hidden;">
+                            <!-- Profile Update -->
+                            <div style="padding: 18px 20px; border-bottom: 1px solid rgba(255,255,255,0.08);">
+                                <h4 style="margin: 0 0 12px 0; font-size: 13px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 1px;" data-i18n="settings_profile">Profile Update</h4>
+                                <form id="profile-update-form" style="display: flex; flex-direction: column; gap: 10px;">
+                                    <div style="position: relative;">
+                                        <input type="email" id="profile-email" placeholder=" " autocomplete="email" style="width: 100%; padding: 10px 10px 10px 35px; border: none; border-bottom: 1px solid rgba(255,255,255,0.2); border-radius: 0; background: transparent; color: var(--text-color); box-sizing: border-box; font-family: inherit; font-size: 13px; outline: none;">
+                                        <ion-icon name="mail-outline" style="position: absolute; left: 10px; top: 50%; transform: translateY(-50%); color: var(--text-muted); font-size: 15px;"></ion-icon>
+                                        <label style="position: absolute; right: 10px; top: 50%; transform: translateY(-50%); font-size: 11px; color: var(--text-muted); pointer-events: none;" data-i18n="label_email">Email</label>
+                                    </div>
+                                    <div style="position: relative;">
+                                        <input type="password" id="profile-password" placeholder=" " autocomplete="new-password" style="width: 100%; padding: 10px 10px 10px 35px; border: none; border-bottom: 1px solid rgba(255,255,255,0.2); border-radius: 0; background: transparent; color: var(--text-color); box-sizing: border-box; font-family: inherit; font-size: 13px; outline: none;">
+                                        <ion-icon name="lock-closed-outline" style="position: absolute; left: 10px; top: 50%; transform: translateY(-50%); color: var(--text-muted); font-size: 15px;"></ion-icon>
+                                        <label style="position: absolute; right: 10px; top: 50%; transform: translateY(-50%); font-size: 11px; color: var(--text-muted); pointer-events: none;" data-i18n="label_new_password">New Password</label>
+                                    </div>
+                                    <button type="submit" class="ready-btn" style="margin-top: 4px; width: 100%; font-size: 13px; padding: 8px 0;">
+                                        <ion-icon name="save-outline" style="margin-right: 4px; vertical-align: middle;"></ion-icon>
+                                        <span data-i18n="btn_update_profile">Update</span>
+                                    </button>
+                                </form>
+                            </div>
+                            <!-- Logout -->
+                            <div style="padding: 10px 20px;">
+                                <button class="ready-btn" id="logout-btn" style="width: 100%; border-color: #fb7185; color: #fb7185; font-size: 13px; padding: 8px 0;" onmouseover="this.style.background='rgba(251,113,133,0.1)'" onmouseout="this.style.background='transparent'">
+                                    <ion-icon name="log-out-outline" style="margin-right: 4px; vertical-align: middle;"></ion-icon>
+                                    <span data-i18n="btn_logout">Logout</span>
+                                </button>
+                            </div>
+                        </div>
                     </div>
                 </nav>
             </div>
@@ -729,27 +761,6 @@
                         </div>
                     </section>
 
-                    <!-- ZH: 個人資料變更 | EN: Profile Update -->
-                    <section class="widget form-box-panel">
-                        <div class="widget-header">
-                            <h3 data-i18n="settings_profile">Profile Update</h3>
-                        </div>
-                        <form id="profile-update-form" class="job-form-layout" style="margin-top: 15px;">
-                            <div class="input" style="flex:1;">
-                                <input type="email" id="profile-email" placeholder=" " autocomplete="email">
-                                <label data-i18n="label_email">Email Address</label>
-                            </div>
-                            <div class="input" style="flex:1;">
-                                <input type="password" id="profile-password" placeholder=" "
-                                    autocomplete="new-password">
-                                <label data-i18n="label_new_password">New Password (Optional)</label>
-                            </div>
-                            <button type="submit" class="ready-btn" style="flex:0 0 auto; min-width:140px;">
-                                <span data-i18n="btn_update_profile">Update Data</span>
-                            </button>
-                        </form>
-                    </section>
-
                     <section class="widget form-box-panel">
                         <div class="widget-header">
                             <h3 data-i18n="settings_appearance">Appearance</h3>
@@ -800,19 +811,6 @@
                                 <ion-icon name="open-outline" style="margin-right:6px;"></ion-icon> <span
                                     data-i18n="btn_open_admin">Open Dashboard</span>
                             </a>
-                        </div>
-                    </section>
-
-                    <section class="widget form-box-panel">
-                        <div class="widget-header">
-                            <h3 data-i18n="settings_account">Account</h3>
-                        </div>
-                        <div class="settings-option">
-                            <span data-i18n="label_logout">Session Control</span>
-                            <button class="ready-btn" id="logout-btn"
-                                style="width:auto; min-width:120px; border-color:#fb7185; color:#fb7185;"><ion-icon
-                                    name="log-out-outline"></ion-icon> <span data-i18n="btn_logout">Logout
-                                    System</span></button>
                         </div>
                     </section>
                 </div>

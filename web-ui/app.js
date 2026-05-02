@@ -418,9 +418,29 @@ document.addEventListener('DOMContentLoaded', () => {
             authToken = null;
             localStorage.removeItem('ai_hud_token');
             if (pollInterval) clearInterval(pollInterval);
+            // Close dropdown if open
+            const menu = document.getElementById('user-dropdown-menu');
+            if (menu) menu.style.display = 'none';
             switchToLogin();
         });
     });
+
+    // ZH: 使用者下拉選單切換 | EN: User dropdown toggle
+    const userDropdownToggle = document.getElementById('user-dropdown-toggle');
+    const userDropdownMenu = document.getElementById('user-dropdown-menu');
+    if (userDropdownToggle && userDropdownMenu) {
+        userDropdownToggle.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const isOpen = userDropdownMenu.style.display === 'block';
+            userDropdownMenu.style.display = isOpen ? 'none' : 'block';
+        });
+        // Close on outside click
+        document.addEventListener('click', (e) => {
+            if (!userDropdownToggle.contains(e.target) && !userDropdownMenu.contains(e.target)) {
+                userDropdownMenu.style.display = 'none';
+            }
+        });
+    }
 
     newChatBtn.addEventListener('click', createNewSession);
 
@@ -474,6 +494,14 @@ document.addEventListener('DOMContentLoaded', () => {
     if (headerLoginBtn) {
         headerLoginBtn.addEventListener('click', () => {
             if (loginView) loginView.classList.remove('hidden');
+        });
+    }
+
+    // ZH: 登入視窗關閉按鈕 | EN: Login modal close button
+    const loginCloseBtn = document.querySelector('#login-form-box .close');
+    if (loginCloseBtn) {
+        loginCloseBtn.addEventListener('click', () => {
+            if (loginView) loginView.classList.add('hidden');
         });
     }
 });
