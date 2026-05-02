@@ -1,0 +1,18 @@
+version: '3.8'
+
+services:
+  gpu-worker:
+    build: .
+    container_name: mcu-gpu-worker
+    restart: unless-stopped
+    environment:
+      - SERVICE_LAYER_URL=${SERVICE_LAYER_URL:-http://192.168.1.50}  # ZH: 主機 API 位址 | EN: Service layer API URL
+      - API_TOKEN=${API_TOKEN:-mcu-secret-token}                    # ZH: API 認證 Token | EN: API auth token
+      - NODE_ID=${NODE_ID:-gpu-node-01}                             # ZH: 節點名稱 | EN: Node ID
+      - POLL_INTERVAL=5                                             # ZH: 輪詢間隔 (秒) | EN: Poll interval (seconds)
+      - STORAGE_MOUNT_PATH=${STORAGE_MOUNT_PATH:-C:\storage}        # ZH: 宿主機儲存路徑 | EN: Host storage path
+    volumes:
+      # ZH: 掛載 Docker Socket 以動態啟動訓練容器 | EN: Mount Docker socket to spawn training containers
+      - /var/run/docker.sock:/var/run/docker.sock
+    # ZH: Worker Agent 本身不需要 GPU，它只是用 Docker Socket 幫忙啟動帶有 GPU 權限的子容器
+    # EN: Worker agent itself doesn't need GPU, it uses Docker socket to spawn GPU containers

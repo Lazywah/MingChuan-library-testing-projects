@@ -2,7 +2,7 @@
 
 ## 概覽 | Overview
 
-本平台的資源層包含 **2 台 GPU 伺服器**，透過 SSH 接收並執行訓練任務。
+本平台的資源層包含 **2 台 GPU 伺服器**，透過 **Worker Agent (主動輪詢)** 架構，接收並執行訓練任務。
 
 | 項目 | 規格 |
 |------|------|
@@ -12,298 +12,149 @@
 | OS | Windows 11 |
 | 網路 | 內網 (同子網) 或外網 (公網 IP / VPN) |
 
-## Mock → 真實模式切換 | Mock to Real Mode Switch
+## 架構轉變聲明：一鍵式 Worker Agent (Pull 模式)
 
-### 當前狀態：Mock 模式
-
-`.env` 中 `GPU_MOCK_MODE=true`，所有 GPU 操作由 `MockGPUClient` 模擬。
-
-### 切換步驟 (GPU 就緒後)
-
-1. **在 GPU 伺服器上安裝 NVIDIA 驅動**
-```powershell
-# 請透過 NVIDIA 官網或 GeForce Experience 下載並安裝最新驅動
-# 重新開機後，在 PowerShell 確認：
-nvidia-smi  # 確認驅動安裝成功
-```
-
-2. **建立 SSH 金鑰對**
-```bash
-# 在服務層 (Ubuntu) 上執行:
-ssh-keygen -t rsa -b 4096 -f ~/.ssh/gpu_key -N ""
-# 由於 GPU 伺服器是 Windows 11，您需要手動將 ~/.ssh/gpu_key.pub 內容
-# 複製到 GPU 伺服器的 C:\Users\gpu_admin\.ssh\authorized_keys 中。
-```
-
-3. **測試 SSH 連線**
-```bash
-# 在服務層 (Ubuntu) 上測試連線到 Windows GPU 伺服器:
-ssh -i ~/.ssh/gpu_key gpu_admin@192.168.1.100 nvidia-smi
-ssh -i ~/.ssh/gpu_key gpu_admin@192.168.1.101 nvidia-smi
-```
-
-4. **修改 `scheduler_policy.yaml` 中的節點設定**
-
-所有 GPU 節點的連線資訊統一定義在 `job-scheduler/app/scheduler_policy.yaml` 中：
-
-```yaml
-mock_mode: false    # 改為 false 以啟用真實連線
-
-nodes:
-  - id: "gpu-node-01"
-    host: "192.168.1.100"       # 內網 IP
-    port: 22                     # SSH Port
-    username: "gpu_admin"
-    ssh_key_path: "/root/.ssh/gpu_key"
-```
-
-5. **重啟服務**
-```powershell
-docker compose restart job-scheduler
-```
+> [!IMPORTANT]
+> **重要變更**：本平台的 GPU 伺服器部署已全面從「主機透過 SSH 遠端派發任務 (Push)」升級為「**Worker Agent 主動輪詢 (Pull)**」架構。
+> 未來 GPU 伺服器上**不需設定 SSH 或防火牆**，所有訓練任務均由本地端的 Worker 透過 `docker-compose up -d` 啟動後，主動連線至主機領取任務，並動態啟動隔離的 Docker 容器來執行。這確保了伺服器環境的極致乾淨與跨網域的安全性。
 
 ---
 
 ## 🔧 GPU 伺服器必裝工具 | Required Tools on GPU Server
 
 > [!IMPORTANT]
-> 以下所有工具都必須安裝在**每一台 GPU 伺服器**上，服務層工作站不需要安裝這些。
+> 由於我們採用**純 Docker 架構**，您**不需**在伺服器上安裝 Python、CUDA Toolkit 或是深度學習套件。
 
-### 必備項目 (Required)
+### 必備基礎環境 (Required)
 
 | 工具 | 用途 | 安裝方式 |
 |------|------|----------|
 | **NVIDIA Driver** (≥570) | GPU 硬體驅動，`nvidia-smi` 為系統偵測 GPU 的核心指令 | [NVIDIA 官網](https://www.nvidia.com/Download/index.aspx)手動下載 |
-| **CUDA Toolkit** (≥12.8) | GPU 加速運算框架，PyTorch/TensorFlow 的底層依賴 | [NVIDIA CUDA](https://developer.nvidia.com/cuda-downloads) 或 `winget install Nvidia.CUDA` |
-| **Python 3.11+** | 訓練腳本執行環境 | `winget install Python.Python.3.11` |
-| **OpenSSH Server** | 系統透過 SSH 遠端派發與執行訓練任務 | `Add-WindowsCapability -Online -Name OpenSSH.Server~~~~0.0.1.0` |
+| **WSL 2** | Windows Subsystem for Linux，為 Docker 提供 Linux 核心與 GPU 直通支援 | PowerShell 執行 `wsl --install` 後重啟 |
+| **Docker Desktop** | 容器化執行引擎 | [Docker 官網](https://www.docker.com/products/docker-desktop/)下載，並在設定中啟用 **Use the WSL 2 based engine** |
 
 > [!WARNING]
-> **RTX 5090 (Blackwell 架構) 使用者注意**：
-> - CUDA Toolkit 版本必須 **≥12.8**，舊版 (如 12.4) 不包含 `sm_120` kernel，無法辨識 RTX 5090。
-> - 若 `winget` 中只有舊版 CUDA，請從 [NVIDIA 官網](https://developer.nvidia.com/cuda-downloads) 手動下載 12.8+。
-> - 安裝 CUDA 後若 `nvcc` 仍無法執行，請確認 `C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.8\bin` 已加入系統 PATH。
+> **RTX 5090 (Blackwell 架構) 使用者注意事項**：
+> 雖然 Windows 宿主機不需要安裝 CUDA Toolkit，但您後續拉取 (Pull) 的 Docker 映像檔，其內部的 CUDA 版本必須 **≥12.8**（或至少 12.4 但需特別注意相容性），否則容器內的 PyTorch 將無法識別 RTX 5090。
 
-### 深度學習框架 (擇一安裝)
+---
 
-| 框架 | 適用場景 | 安裝指令 |
-|------|----------|----------|
-| **PyTorch** | 學術研究、NLP、影像辨識（推薦） | `pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu128` |
-| **TensorFlow** | 生產部署、Keras 生態系 | `pip install tensorflow[and-cuda]` |
+## 🚀 部署步驟 | Deployment Steps
 
-### 選配項目 (Optional)
+### Step 1: 複製 Worker 配置檔
+將專案中 `CodeSpace/gpu-worker` 資料夾的內容複製到您的 GPU 伺服器上。資料夾內包含：
+- `docker-compose.yml`
+- `Dockerfile`
+- `requirements.txt`
+- `worker.py`
 
-| 工具 | 用途 | 安裝指令 |
-|------|------|----------|
-| **cuDNN** | CNN 加速庫（部分模型需要） | 從 NVIDIA 官網下載安裝 |
-| **NFS/SMB Client** | 掛載服務層的集中式儲存空間 | 內建 SMB 客戶端 |
+### Step 2: 設定環境變數
+在 GPU 伺服器上，編輯 `docker-compose.yml` 內的 `environment` 區塊，確保指向正確的主機位置：
 
-### 一鍵安裝腳本參考
-
-```powershell
-# ====== GPU 伺服器初始化腳本 ======
-# 參考 \gpu-setup\setup.ps1
+```yaml
+    environment:
+      - SERVICE_LAYER_URL=http://192.168.1.50:8002  # 填入您的主機 IP 與 Port
+      - API_TOKEN=mcu-secret-token                  # 與主機相符的認證 Token
+      - NODE_ID=gpu-node-01                         # 為這台 GPU 伺服器命名
+      - STORAGE_MOUNT_PATH=C:\storage               # 資料集與腳本所在的本機掛載路徑
 ```
 
-### 驗證檢查清單
-
-安裝完成後，請逐項確認以下指令均能正常回應：
+### Step 3: 一鍵啟動 Worker
+開啟 PowerShell，切換到該資料夾並執行：
 
 ```powershell
-# ✅ 驅動正常 → 應顯示 GPU 型號與記憶體
-nvidia-smi
-
-# ✅ CUDA 可用 → 應顯示 CUDA 版本
-nvcc --version
-
-# ✅ Python 正常 → 應顯示 Python 3.11+
-python --version
-
-# ✅ PyTorch 能偵測到 GPU → 應顯示 True 與 GPU 數量
-python -c "import torch; print(torch.cuda.is_available(), torch.cuda.device_count())"
-
-# ✅ SSH 服務運行中 → 應顯示 Running
-Get-Service sshd
+docker-compose up -d --build
 ```
+
+**驗證啟動：**
+```powershell
+docker-compose logs -f
+```
+如果看到 `Polling http://192.168.1.50:8002...` 代表 Worker 已經成功啟動並開始向主機要任務了！
 
 ---
 
 ## 🌍 外網 GPU 部署 | WAN GPU Deployment
 
-若 GPU 伺服器位於外部網路（雲端主機、校外機房、VPN），核心機制相同（SSH 連線），但需要額外注意安全性。
+若 GPU 伺服器位於外部網路（雲端主機、校外機房、VPN），**您不需要做任何網路穿透或 SSH 設定**。
 
 ### 架構差異
 
 ```text
 ┌──────────────────┐        Internet          ┌──────────────────┐
-│  服務層工作站      │ ── SSH (自訂 Port) ──→  │ 遠端 GPU Server   │
+│  服務層工作站      │ ←── API 請求 (Port 80) ──│ 遠端 GPU Server   │
 │  (Docker Host)    │                          │ 公網 140.x.x.x   │
 └──────────────────┘                          └──────────────────┘
 ```
 
-### 設定方式
-
-在 `scheduler_policy.yaml` 中將 `host` 改為公網 IP 或域名，並設定非標準 `port`：
-
-```yaml
-nodes:
-  - id: "gpu-cloud-01"
-    host: "140.123.45.67"          # 公網 IP
-    port: 2222                      # 非標準 SSH Port (安全考量)
-    username: "gpu_admin"
-    ssh_key_path: "/root/.ssh/gpu_key"
-
-  - id: "gpu-cloud-02"
-    host: "gpu2.school.edu.tw"     # 也可使用域名
-    port: 2222
-    username: "gpu_admin"
-    ssh_key_path: "/root/.ssh/gpu_key"
-```
-
-### 🔒 外網安全強化 (必做)
-
-> [!CAUTION]
-> GPU 若暴露於外網，**以下措施為必要項目**，否則有被入侵的風險。
-
-在 GPU 伺服器端執行 `gpu-setup\ssh-hardening.ps1` 腳本，並**強制指定服務層的 IP**：
-
-```powershell
-# 請將 192.168.1.50 替換為您服務層 (Ubuntu) 的真實 IP
-.\ssh-hardening.ps1 -SshPort 2222 -ServiceLayerIP "192.168.1.50"
-```
-
-腳本會自動幫您完成以下配置：
-1. 將 SSH Port 改為非標準 Port (避免掃描攻擊)
-2. 禁用密碼登入，僅允許金鑰認證
-3. 關閉 Administrator 的直接 SSH 登入權限
-4. 設定 Windows 防火牆規則，**僅允許服務層的 IP 連入 Port 2222**
-5. 將 OpenSSH 的預設終端機改為 `powershell.exe` (提供服務層相容性)
-
-並自動於 PowerShell 重啟 SSH 服務。
-
----
-
-## 訓練腳本存放 | Training Script Location
-
-訓練腳本應存放在服務層的集中式儲存器中，GPU 伺服器透過 NFS/SMB 掛載存取。
-
-```text
-儲存器目錄結構:
-/storage/
-├── scripts/     ← 訓練腳本
-├── datasets/    ← 資料集
-├── outputs/     ← 訓練產出 (模型權重)
-└── logs/        ← 訓練日誌
-```
+> [!TIP]
+> 因為是 GPU 伺服器**主動往外連線**主機，所以 GPU 伺服器本身可以放在 NAT 或防火牆後方，完全不用開放任何對外 Port，這是最安全的做法！唯一要注意的是主機端的 API 必須允許 GPU 伺服器的 IP 存取。
 
 ---
 
 ## ✅ 配置完成後功能總覽 | Features After Configuration
 
-### Mock 模式 vs 真實模式功能對照
+### 核心能力
 
-| 功能 | Mock 模式 (開發) | 真實模式 (正式) |
-|------|:-:|:-:|
-| **使用者登入 / 註冊 / SSO** | ✅ | ✅ |
-| **AI 助手對話 (串流)** | ✅ (模擬回音) | ✅ (接 Portkey/Ollama) |
-| **Token 配額追蹤與扣減** | ✅ | ✅ |
-| **任務提交與排隊** | ✅ | ✅ |
-| **GPU 自動分配** | ✅ (模擬 2 張 GPU) | ✅ (查詢真實 nvidia-smi) |
-| **訓練腳本遠端執行** | ✅ (模擬 15 秒完成) | ✅ (SSH 派發 PowerShell `Start-Process`) |
-| **訓練進度即時追蹤** | ✅ (每 3 秒 +20%) | ✅ (解析 training.log 中的 %) |
-| **模型產出路徑回傳** | ✅ (假路徑) | ✅ (真實 /workspace/outputs/) |
-| **管理員全域監控** | ✅ | ✅ |
-| **多節點負載分散** | ❌ (單一模擬節點) | ✅ (依 YAML 逐節點輪詢) |
-| **GPU 健康狀態偵測** | ❌ | ✅ (nvidia-smi 利用率 < 10%) |
+完成上述配置後，您的平台將具備以下能力：
 
-### 配置完成後解鎖的核心能力
+#### 1. 🖥️ 訓練任務全自動派發 (Docker 化)
+使用者在前端提交任務後，主機會將任務放入 Queue 中。
+- Worker 定期偵測本地端 GPU 使用率 (低於 10% 視為空閒)
+- 若有空閒 GPU，Worker 領取任務，並在本地動態下達 `docker run` 指令啟動訓練容器
+- 即時解析訓練日誌中的進度百分比並回報前端
+- 任務完成後容器自動銷毀 (`--rm`)，保持環境乾淨
 
-完成 GPU 伺服器配置後，您的平台將具備以下**實際運算能力**：
-
-#### 1. 🖥️ 訓練任務全自動派發
-使用者在前端「運算任務」頁面提交任務後，系統會：
-- 自動偵測哪台 GPU 伺服器有空閒資源
-- 透過 SSH 遠端啟動 Python 訓練腳本
-- 即時解析訓練日誌中的進度百分比並回傳前端
-- 任務完成後自動標記為 `completed` 並記錄模型產出路徑
-
-#### 2. 📊 多節點資源管理
-- 排程器每 10 秒輪詢所有節點的 GPU 使用率
-- 利用率 < 10% 的 GPU 自動納入可用池
-- 支援最多 4 個任務同時運行（可在 `scheduler_policy.yaml` 調整）
-- 任務依優先級排序，高優先級任務優先獲得 GPU
-
-#### 3. 🤖 AI 助手 (需額外配置 Portkey/Ollama)
-AI 助手功能**不依賴 GPU 伺服器**，而是透過 Portkey 網關連接外部 LLM API：
-- 文字聊天、圖片辨識、知識搜尋等功能
-- 若需本地模型推論，需額外部署 Ollama 服務
-
-> [!NOTE]
-> **AI 助手** 與 **GPU 訓練** 是兩個獨立模組。GPU 伺服器負責「訓練」，Portkey/Ollama 負責「對話」，兩者互不影響。
-
-#### 4. 🔄 任務生命週期管理
+#### 2. 🔄 任務生命週期管理
 
 ```text
 使用者提交任務
       ↓
-  [pending] → 排程器偵測到空閒 GPU
+  [pending] → 加入主機資料庫的佇列
       ↓
-  [queued]  → 等待 GPU 分配中
+  [running] → Worker 領取任務並啟動 Docker 容器
       ↓
-  [running] → SSH 遠端執行訓練中 (前端顯示進度條)
-      ↓
-  [completed] / [failed] → 結果回傳
+  [completed] / [failed] → Worker 回報結果與產出路徑
 ```
 
 ---
 
 ## 疑難排解 | Troubleshooting
 
-### SSH 連線失敗
+### Worker 無法連線主機
 
 ```powershell
-# 確認 SSH 服務運行中
-ssh gpu_admin@192.168.1.100 echo "OK"
+# 檢查網路是否通暢
+curl http://192.168.1.50:8002/health
 
-# 若使用非標準 Port
-ssh -p 2222 gpu_admin@140.123.45.67 echo "OK"
+# 若無回應，請檢查主機端的防火牆是否開啟了對應的 Port (例如 8002)
 ```
-
-> [!IMPORTANT]
-> **金鑰登入失敗常見原因**：若 GPU 伺服器的帳號屬於 `Administrators` 群組（例如預設的 Administrator 或被加入管理員群組的 gpu_admin），Windows OpenSSH **不會讀取** `C:\Users\<帳號>\.ssh\authorized_keys`，而是要求金鑰放在：
-> ```
-> C:\ProgramData\ssh\administrators_authorized_keys
-> ```
-> 且該檔案的 ACL 權限必須僅限 `SYSTEM` 和 `Administrators` 存取。`setup.ps1` 已包含自動處理此問題的邏輯。
 
 ### GPU 查詢失敗
 
 ```powershell
-# 在 GPU 伺服器上執行
+# 在 GPU 伺服器上執行，確保 NVIDIA 驅動正常運作
 nvidia-smi --query-gpu=index,utilization.gpu --format=csv
 ```
 
-### PyTorch 偵測不到 GPU
+### Docker 容器無法識別 GPU (PyTorch 無法載入)
 
 ```powershell
-# 確認 CUDA 版本與 PyTorch 版本匹配
-python -c "import torch; print(torch.version.cuda)"
-nvidia-smi  # 對比 CUDA Version 欄位
+# 1. 確認 Docker Desktop 的 WSL2 整合是否有開啟。
+# 2. 確認映像檔內部的 CUDA 版本是否過舊。若為 RTX 50 系列，建議使用包含 cu128 的映像檔。
+# 測試使用官方較新版 PyTorch Image：
+docker run --rm --gpus all pytorch/pytorch:2.6.0-cuda12.4-cudnn9-runtime python -c "import torch; print(torch.cuda.is_available(), torch.cuda.device_count())"
 
-# 若版本不符，重新安裝對應版本的 PyTorch (RTX 50 系列需要 cu128)
-pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu128
+# 如果上述指令返回 True 和數量，代表透傳成功。
 ```
+
+> [!TIP]
+> **映像檔冷啟動提醒**：
+> 首次派發任務時，如果 GPU 伺服器上沒有該 Docker 映像檔，Docker 會自動進行 Pull，這可能需要幾分鐘的時間。若有特定的底層 Image (例如 `pytorch/pytorch:latest`)，可以提前手動在 GPU 伺服器上執行 `docker pull` 以加速首次啟動。
 
 ---
 
 ## 大規模叢集擴展 | Large-Scale Scaling (HPC)
 
-當節點數量超過 5 台或需要更精細的資源配份時，建議從 SSH 模式切換為 **HPC 調度架構**：
-
-1. **Slurm 調度器**：透過 `job-scheduler/app/gpu_client.py` 中的 `SlurmGPUClient` 介面進行對接，實現多節點任務衝突管理。
-2. **NVIDIA DCGM 監控**：部署 DCGM Exporter 以獲取 GPU 健康與功率數據，支援大規模機房的異常攔截。
-
-> [!NOTE]
-> 關於上述進階組件的詳細規格與使用方法，請參考：
-> [07-工具組件統整.md](file:///c:/Users/User/Desktop/school/大學/圖書館-AI基地/CodeSpace/docs/07-工具組件統整.md)
+當節點數量超過 5 台或需要更精細的資源配份時，建議從原生的 Worker 架構升級為更成熟的 **K3s/Kubernetes 叢集** 或是 **Slurm 調度器** 結合 Docker 的方案。這部分超出了本指南的範圍，但我們保留了相容的擴充彈性。
 
