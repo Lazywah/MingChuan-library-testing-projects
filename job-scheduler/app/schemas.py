@@ -47,6 +47,15 @@ class UserUpdate(BaseModel):
     tutorial_dismissed: Optional[int] = None
 
 
+class AdminUserUpdate(BaseModel):
+    """ZH: 管理員更新使用者請求 | EN: Admin user update request"""
+    email: Optional[EmailStr] = None
+    password: Optional[str] = None                   # ZH: 留空則不變更 | EN: Empty = no change
+    role: Optional[str] = None                       # ZH: student/teacher/admin
+    is_active: Optional[int] = None                  # ZH: 0=停用 1=啟用 | EN: 0=disabled 1=enabled
+    tokens_limit: Optional[int] = None               # ZH: Token 月度上限 | EN: Monthly token limit
+
+
 class UserResponse(BaseModel):
     """ZH: 使用者資訊回應 (不含密碼) | EN: User info response (no password)"""
     id: str

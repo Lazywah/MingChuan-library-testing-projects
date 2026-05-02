@@ -3,16 +3,52 @@ let authToken = localStorage.getItem('admin_hud_token');
 
 const TRANSLATIONS = {
     zh: {
-        btn_back_hub: "返回大廳 (Back to Hub)",
+        btn_back_hub: "返回大廳",
         admin_dashboard: "管理員儀表板",
         admin_cluster_status: "叢集資源即時監控",
         admin_users: "使用者管理",
-        admin_models: "模型",
+        admin_models: "模型管理",
         admin_jobs: "全域任務",
+        admin_configs: "系統設定檔",
         msg_loading: "載入中...",
         toast_refresh: "已重新整理管理員資料",
         btn_logout: "登出",
-        toast_login_failed: "登入失敗，請檢查帳號密碼或權限"
+        toast_login_failed: "登入失敗，請檢查帳號密碼或權限",
+        admin_login_title: "管理員登入",
+        admin_username: "管理員帳號",
+        admin_password: "管理員密碼",
+        btn_login: "登入",
+        select_config: "選擇設定檔",
+        btn_load_config: "載入",
+        placeholder_config_editor: "請先選擇並載入設定檔...",
+        btn_save_config: "儲存變更",
+        th_username: "帳號",
+        th_email: "信箱",
+        th_role: "權限",
+        th_status: "狀態",
+        th_last_ip: "最後登入 IP",
+        th_last_login: "最後登入",
+        th_tokens: "代幣",
+        th_name: "名稱",
+        th_framework: "框架",
+        th_public: "公開",
+        th_job: "任務",
+        th_user: "使用者",
+        th_priority: "優先級",
+        no_cluster_data: "無可用叢集資料",
+        th_actions: "操作",
+        btn_edit: "編輯",
+        edit_user_title: "編輯使用者",
+        edit_new_password: "新密碼（留空則不變更）",
+        edit_tokens_limit: "Token 月度上限",
+        edit_tokens_used: "已使用",
+        status_active: "啟用",
+        status_disabled: "停用",
+        toast_user_updated: "使用者資料已更新",
+        toast_user_update_failed: "更新失敗",
+        batch_token_label: "批量設定所有使用者 Token 上限：",
+        btn_batch_apply: "套用到所有人",
+        toast_batch_updated: "已更新 {count} 位使用者的 Token 上限"
     },
     en: {
         btn_back_hub: "Back to Hub",
@@ -21,22 +57,71 @@ const TRANSLATIONS = {
         admin_users: "User Management",
         admin_models: "Models",
         admin_jobs: "All Jobs",
+        admin_configs: "System Configs",
         msg_loading: "Loading...",
         toast_refresh: "Refreshed Admin Data",
         btn_logout: "Logout",
-        toast_login_failed: "Login failed. Check credentials or permissions."
+        toast_login_failed: "Login failed. Check credentials or permissions.",
+        admin_login_title: "Admin Login",
+        admin_username: "Administrator Username",
+        admin_password: "Administrator Password",
+        btn_login: "Login",
+        select_config: "Select config file",
+        btn_load_config: "Load",
+        placeholder_config_editor: "Select and load a config file first...",
+        btn_save_config: "Save Changes",
+        th_username: "Username",
+        th_email: "Email",
+        th_role: "Role",
+        th_status: "Status",
+        th_last_ip: "Last IP",
+        th_last_login: "Last Login",
+        th_tokens: "Tokens",
+        th_name: "Name",
+        th_framework: "Framework",
+        th_public: "Public",
+        th_job: "Job",
+        th_user: "User",
+        th_priority: "Priority",
+        no_cluster_data: "No cluster data available",
+        th_actions: "Actions",
+        btn_edit: "Edit",
+        edit_user_title: "Edit User",
+        edit_new_password: "New Password (leave blank to keep)",
+        edit_tokens_limit: "Token Monthly Limit",
+        edit_tokens_used: "Used",
+        status_active: "Active",
+        status_disabled: "Disabled",
+        toast_user_updated: "User updated successfully",
+        toast_user_update_failed: "Update failed",
+        batch_token_label: "Batch set all users' token limit:",
+        btn_batch_apply: "Apply to All",
+        toast_batch_updated: "Updated {count} users' token limit"
     }
 };
 
 let currentLang = localStorage.getItem('ai_hud_lang') || 'zh';
+let currentTheme = localStorage.getItem('ai_hud_theme') || 'dark';
 
 function applyTranslations() {
     const els = document.querySelectorAll('[data-i18n]');
     els.forEach(el => {
         const key = el.getAttribute('data-i18n');
         if (TRANSLATIONS[currentLang] && TRANSLATIONS[currentLang][key]) {
-            el.textContent = TRANSLATIONS[currentLang][key];
+            if (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA') {
+                el.placeholder = TRANSLATIONS[currentLang][key];
+            } else {
+                el.textContent = TRANSLATIONS[currentLang][key];
+            }
         }
+    });
+}
+
+function applyTheme(theme) {
+    document.documentElement.setAttribute('data-theme', theme);
+    const themeIcon = theme === 'dark' ? 'moon-outline' : 'sunny-outline';
+    document.querySelectorAll('.toggle-theme-btn ion-icon').forEach(icon => {
+        icon.setAttribute('name', themeIcon);
     });
 }
 
@@ -84,7 +169,7 @@ async function handleAdminLogin(e) {
         localStorage.setItem('admin_hud_token', authToken);
         
         document.getElementById('admin-login-modal').style.display = 'none';
-        document.getElementById('admin-main-layout').style.display = 'block';
+        document.getElementById('admin-main-layout').style.display = 'flex';
         
         initAdminDashboard();
     } catch (err) {
@@ -112,7 +197,7 @@ async function verifyAdmin() {
         
         // Token 有效，顯示主畫面
         document.getElementById('admin-login-modal').style.display = 'none';
-        document.getElementById('admin-main-layout').style.display = 'block';
+        document.getElementById('admin-main-layout').style.display = 'flex';
         initAdminDashboard();
     } catch (err) {
         console.error(err);
@@ -151,7 +236,8 @@ async function fetchClusterStats() {
 function renderClusterStats(stats) {
     const container = document.getElementById('cluster-stats-container');
     if (!stats || stats.length === 0) {
-        container.innerHTML = '<div style="padding: 20px; text-align: center; color: rgba(255,255,255,0.5);">無可用叢集資料 (No cluster data available)</div>';
+        const noDataMsg = TRANSLATIONS[currentLang]?.no_cluster_data || 'No cluster data available';
+        container.innerHTML = `<div data-i18n="no_cluster_data" style="padding: 20px; text-align: center; color: var(--text-muted);">${noDataMsg}</div>`;
         return;
     }
 
@@ -211,7 +297,10 @@ async function fetchAdminData() {
     }
 }
 
+let _adminUsersCache = [];
+
 function renderAdminUsers(users) {
+    _adminUsersCache = users;
     const tbody = document.getElementById('admin-users-body');
     if (!tbody) return;
     tbody.innerHTML = '';
@@ -236,6 +325,7 @@ function renderAdminUsers(users) {
             <td>${u.last_login_ip || 'N/A'}</td>
             <td>${loginStr}</td>
             <td>${tokensStr}</td>
+            <td><button class="ready-btn" style="width:auto; padding:4px 12px; margin:0; font-size:12px; min-width:auto;" onclick="openEditUser('${u.id}')" data-i18n="btn_edit">${TRANSLATIONS[currentLang]?.btn_edit || 'Edit'}</button></td>
         `;
         tbody.appendChild(tr);
     });
@@ -286,7 +376,7 @@ async function fetchConfigList() {
         if (res.ok) {
             const data = await res.json();
             const select = document.getElementById('config-file-select');
-            select.innerHTML = '<option value="">選擇設定檔 (Select config file)</option>';
+            select.innerHTML = `<option value="" data-i18n="select_config">${TRANSLATIONS[currentLang]?.select_config || 'Select config file'}</option>`;
             data.files.forEach(f => {
                 const opt = document.createElement('option');
                 opt.value = f;
@@ -387,6 +477,85 @@ function initAdminDashboard() {
     }
 }
 
+// -------------------------
+// User Edit Modal
+// -------------------------
+function openEditUser(userId) {
+    const userData = _adminUsersCache.find(u => u.id === userId);
+    if (!userData) return;
+    document.getElementById('edit-user-id').value = userId;
+    document.getElementById('edit-username').value = userData.username;
+    document.getElementById('edit-email').value = userData.email;
+    document.getElementById('edit-password').value = '';
+    document.getElementById('edit-role').value = userData.role;
+    document.getElementById('edit-active').value = userData.is_active;
+    document.getElementById('edit-tokens-limit').value = userData.tokens_limit || 5000000;
+    document.getElementById('edit-tokens-used-display').textContent = (userData.tokens_used || 0).toLocaleString();
+    
+    const modal = document.getElementById('user-edit-modal');
+    modal.classList.remove('hidden');
+    applyTranslations();
+}
+
+function closeEditUser() {
+    document.getElementById('user-edit-modal').classList.add('hidden');
+}
+
+async function saveEditUser(e) {
+    e.preventDefault();
+    const userId = document.getElementById('edit-user-id').value;
+    const payload = {
+        email: document.getElementById('edit-email').value || null,
+        role: document.getElementById('edit-role').value,
+        is_active: parseInt(document.getElementById('edit-active').value),
+        tokens_limit: parseInt(document.getElementById('edit-tokens-limit').value) || null
+    };
+    const pwd = document.getElementById('edit-password').value;
+    if (pwd && pwd.trim()) {
+        payload.password = pwd;
+    }
+
+    try {
+        const res = await fetch(`${API_BASE}/admin/users/${userId}`, {
+            method: 'PUT',
+            headers: {
+                'Authorization': `Bearer ${authToken}`,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(payload)
+        });
+        if (!res.ok) throw new Error('Update failed');
+        
+        showToast(TRANSLATIONS[currentLang]?.toast_user_updated || 'User updated');
+        closeEditUser();
+        fetchAdminData(); // Refresh table
+    } catch (err) {
+        console.error(err);
+        showToast(TRANSLATIONS[currentLang]?.toast_user_update_failed || 'Update failed', true);
+    }
+}
+
+async function batchUpdateTokens() {
+    const limitInput = document.getElementById('batch-token-limit');
+    const newLimit = parseInt(limitInput.value);
+    if (!newLimit || newLimit <= 0) return;
+
+    try {
+        const res = await fetch(`${API_BASE}/admin/users/batch/tokens?new_limit=${newLimit}`, {
+            method: 'PUT',
+            headers: { 'Authorization': `Bearer ${authToken}` }
+        });
+        if (!res.ok) throw new Error('Batch update failed');
+        const data = await res.json();
+        const msg = (TRANSLATIONS[currentLang]?.toast_batch_updated || 'Updated {count} users').replace('{count}', data.updated_count);
+        showToast(msg);
+        fetchAdminData();
+    } catch (err) {
+        console.error(err);
+        showToast(TRANSLATIONS[currentLang]?.toast_user_update_failed || 'Update failed', true);
+    }
+}
+
 document.addEventListener('DOMContentLoaded', () => {
     const loginForm = document.getElementById('admin-login-form');
     if (loginForm) {
@@ -409,6 +578,40 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         });
     }
+
+    // User Edit Modal Bindings
+    const editForm = document.getElementById('user-edit-form');
+    if (editForm) editForm.addEventListener('submit', saveEditUser);
+    const editCloseBtn = document.getElementById('user-edit-close-btn');
+    if (editCloseBtn) editCloseBtn.addEventListener('click', closeEditUser);
+    const editBackdrop = document.getElementById('user-edit-backdrop');
+    if (editBackdrop) editBackdrop.addEventListener('click', closeEditUser);
+
+    // Batch Token Update Binding
+    const batchBtn = document.getElementById('btn-batch-tokens');
+    if (batchBtn) batchBtn.addEventListener('click', batchUpdateTokens);
+
+    // Initialize Theme & Lang
+    applyTheme(currentTheme);
+    applyTranslations();
+
+    // Theme Toggle Binding
+    document.querySelectorAll('.toggle-theme-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            currentTheme = currentTheme === 'dark' ? 'light' : 'dark';
+            localStorage.setItem('ai_hud_theme', currentTheme);
+            applyTheme(currentTheme);
+        });
+    });
+
+    // Lang Toggle Binding
+    document.querySelectorAll('.toggle-lang-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            currentLang = currentLang === 'zh' ? 'en' : 'zh';
+            localStorage.setItem('ai_hud_lang', currentLang);
+            applyTranslations();
+        });
+    });
 
     verifyAdmin();
 });

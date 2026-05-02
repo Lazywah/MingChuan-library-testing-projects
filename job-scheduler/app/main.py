@@ -80,6 +80,22 @@ async def lifespan(app: FastAPI):
     # ZH: Module 2: 初始化資料庫 | EN: Module 2: Initialize database
     init_db()
 
+    # ZH: 啟動時同步全域 Token 額度至所有使用者 | EN: Sync global token limit to all users on startup
+    from .database import SessionLocal
+    from . import models
+    try:
+        db = SessionLocal()
+        updated = db.query(models.TokenUsage).filter(
+            models.TokenUsage.tokens_limit != settings.DEFAULT_MONTHLY_TOKEN_LIMIT
+        ).update({models.TokenUsage.tokens_limit: settings.DEFAULT_MONTHLY_TOKEN_LIMIT})
+        db.commit()
+        if updated > 0:
+            logger.info(f"ZH: 已同步 {updated} 位使用者的 Token 額度為 {settings.DEFAULT_MONTHLY_TOKEN_LIMIT} | "
+                        f"EN: Synced {updated} users' token limit to {settings.DEFAULT_MONTHLY_TOKEN_LIMIT}")
+        db.close()
+    except Exception as e:
+        logger.warning(f"ZH: Token 額度同步失敗: {e} | EN: Token limit sync failed: {e}")
+
     # ZH: Module 8: 啟動排程器 | EN: Module 8: Start scheduler
     await start_scheduler()
 
