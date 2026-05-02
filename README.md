@@ -54,8 +54,8 @@
 
 ### 3. 🚀 GPU高階伺服器 (GPU High-End Server)
 負責實際執行 AI 模型訓練與高耗能運算的資源節點 (Windows 11/Ubuntu)。
-- `gpu-setup/`：GPU 伺服器初始化與 SSH 安全強化腳本。
-- (訓練腳本由服務層透過 SSH 指令派發或遠端運行)
+- `gpu-worker/`：GPU 伺服器專用的 Worker Agent 配置檔，提供一鍵式 Docker Compose 啟動環境。
+- (訓練腳本由 GPU Worker 主動向服務層請求後於本地 Docker 容器中運行)
 
 ---
 
@@ -94,14 +94,13 @@
 
 ### 🚀 GPU高階伺服器 (GPU High-End Server)
 *   **初次部署**：
-    1. 準備一台安裝好 Windows 11 的實體 GPU 伺服器。
-    2. 將 `gpu-setup/` 工具包傳送至該伺服器。
-    3. 以系統管理員身分開啟 PowerShell，執行 `.\setup.ps1` 一鍵安裝 CUDA、Python 與 OpenSSH。
-    4. (若位於外網) 執行 `.\ssh-hardening.ps1 -ServiceLayerIP "服務層IP"` 強化連線安全與防火牆白名單鎖定。
-    5. 將 GPU 節點的 IP 與金鑰登記至服務層的 `scheduler_policy.yaml`。
+    1. 準備一台安裝好 Windows 11 的 GPU 伺服器，並安裝好 NVIDIA 驅動、WSL 2 與 Docker Desktop。
+    2. 將 `gpu-worker/` 目錄複製到該伺服器。
+    3. 設定 `docker-compose.yml` 中的環境變數（主機 API 位址與 Token）。
+    4. 執行 `docker-compose up -d` 啟動 Worker Agent 主動向主機領取任務。
 *   **往後部署 / 擴展**：
-    *   **工具**：SSH, `gpu-setup` 腳本, `nvidia-smi`。
-    *   **步驟**：若需擴充算力新增節點，對新機器重複初次部署步驟即可。GPU 層作為運算節點，本身不包含業務邏輯代碼，不需隨服務層頻繁更新。
+    *   **工具**：Docker Compose。
+    *   **步驟**：若需擴充算力新增節點，只需在新機器上複製 `gpu-worker` 資料夾並執行 `docker-compose up -d` 即可，主機端完全無需修改任何設定，即插即用。
 
 ---
 

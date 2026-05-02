@@ -39,37 +39,71 @@
 
 ---
 
-## 🚀 部署步驟 | Deployment Steps
+## 🚀 從零開始建構：完整部署步驟 | From-Zero Deployment Steps
 
-### Step 1: 複製 Worker 配置檔
-將專案中 `CodeSpace/gpu-worker` 資料夾的內容複製到您的 GPU 伺服器上。資料夾內包含：
-- `docker-compose.yml`
-- `Dockerfile`
-- `requirements.txt`
-- `worker.py`
+為了確保極致乾淨與隔離的訓練環境，請在一台**全新安裝 Windows 11** 的高階伺服器上，嚴格按照以下順序進行操作。
 
-### Step 2: 設定環境變數
-在 GPU 伺服器上，編輯 `docker-compose.yml` 內的 `environment` 區塊，確保指向正確的主機位置：
+### Step 1: 基礎作業系統與驅動 (OS & Drivers)
+1. **安裝 Windows 11**：完成系統初始設定。
+2. **安裝 NVIDIA 驅動程式**：
+   - 前往 [NVIDIA 官方驅動下載頁面](https://www.nvidia.com/Download/index.aspx)。
+   - 選擇您的 GPU 型號 (例如 RTX 5090)，下載並安裝最新的 Game Ready 或 Studio 驅動程式（建議版本 ≥570）。
+   - 安裝完成後**重新開機**。
+   - 驗證：開啟 PowerShell，輸入 `nvidia-smi`，確認能正常顯示 GPU 型號與驅動版本。
 
-```yaml
-    environment:
-      - SERVICE_LAYER_URL=http://192.168.1.50:8002  # 填入您的主機 IP 與 Port
-      - API_TOKEN=mcu-secret-token                  # 與主機相符的認證 Token
-      - NODE_ID=gpu-node-01                         # 為這台 GPU 伺服器命名
-      - STORAGE_MOUNT_PATH=C:\storage               # 資料集與腳本所在的本機掛載路徑
-```
+### Step 2: 安裝 WSL 2 (Windows Subsystem for Linux)
+Docker 依賴 WSL 2 才能在 Windows 上順暢執行 Linux 容器並直通 GPU。
+1. 以**系統管理員身分**開啟 PowerShell。
+2. 執行以下指令進行安裝：
+   ```powershell
+   wsl --install
+   ```
+3. 安裝完成後，**必須重新開機**。
+4. 重啟後，系統可能會提示建立 Ubuntu 的預設使用者帳號，請依畫面指示完成設定。
 
-### Step 3: 一鍵啟動 Worker
-開啟 PowerShell，切換到該資料夾並執行：
+### Step 3: 安裝與配置 Docker Desktop
+1. 前往 [Docker 官方網站](https://www.docker.com/products/docker-desktop/) 下載 Docker Desktop for Windows。
+2. 執行安裝程式，安裝過程中請務必**勾選「Use WSL 2 instead of Hyper-V (recommended)」**。
+3. 安裝完成後啟動 Docker Desktop，進入右上方齒輪 **Settings**：
+   - 選擇 **General**，確認有勾選 `Use the WSL 2 based engine`。
+   - 選擇 **Resources > WSL Integration**，確認 `Enable integration with my default WSL distro` 已開啟。
+   - 點擊 `Apply & restart`。
 
-```powershell
-docker-compose up -d --build
-```
+### Step 4: 複製 Worker 配置檔與設定
+1. 在 GPU 伺服器上建立一個工作目錄（例如桌面上的 `gpu-worker` 資料夾）。
+2. 將專案中的 `CodeSpace/gpu-worker` 資料夾內的所有內容複製過來，包含：
+   - `docker-compose.yml`
+   - `Dockerfile`
+   - `requirements.txt`
+   - `worker.py`
+3. 以記事本開啟 `docker-compose.yml`，修改 `environment` 區塊以符合您的環境：
+   ```yaml
+       environment:
+         - SERVICE_LAYER_URL=http://192.168.1.50:8002  # ⚠️ 務必改為您的主機 IP 與 Port
+         - API_TOKEN=mcu-secret-token                  # ⚠️ 需與主機端設定的 Token 一致
+         - NODE_ID=gpu-node-01                         # 命名這台伺服器 (例如 gpu-node-02)
+         - STORAGE_MOUNT_PATH=C:\storage               # ⚠️ 設定共享儲存磁碟機路徑
+   ```
 
-**驗證啟動：**
-```powershell
-docker-compose logs -f
-```
+### Step 5: 掛載共享儲存區 (Storage Mount)
+由於訓練腳本與資料集存放於主機端，GPU 伺服器必須能夠存取這些檔案：
+1. 請確保 `STORAGE_MOUNT_PATH` 指向的目錄（例如 `C:\storage`）已經正確掛載了主機的網路芳鄰 (SMB) 或是 NFS 目錄。
+2. 該目錄內應包含 `/scripts`, `/datasets`, 與 `/outputs` 等子資料夾。
+
+### Step 6: 一鍵啟動 Worker
+1. 開啟 PowerShell，切換到 `gpu-worker` 資料夾所在位置：
+   ```powershell
+   cd C:\Users\YourUser\Desktop\gpu-worker
+   ```
+2. 啟動 Docker 容器：
+   ```powershell
+   docker-compose up -d --build
+   ```
+3. **驗證啟動與連線**：
+   ```powershell
+   docker-compose logs -f
+   ```
+   如果日誌中顯示 `Polling http://192.168.1.50:8002...`，代表 Worker 已經成功啟動，正自動與主機端索取最新的 AI 訓練任務了！
 如果看到 `Polling http://192.168.1.50:8002...` 代表 Worker 已經成功啟動並開始向主機要任務了！
 
 ---
