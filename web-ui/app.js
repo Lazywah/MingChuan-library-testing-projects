@@ -849,11 +849,6 @@ async function fetchUserProfile() {
         renderSessions();
         renderActiveChat();
 
-        // ZH: 管理員處理 | EN: Admin role handling
-        const adminPortalSec = document.getElementById('admin-portal-section');
-        if (data.role === 'admin' && adminPortalSec) {
-            adminPortalSec.style.display = 'block';
-        }
     }
 }
 

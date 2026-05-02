@@ -16,9 +16,11 @@ services:
     container_name: ai-platform-nginx
     ports:
       - "80:80"
+      - "8888:8888"
     volumes:
       - ./infrastructure/nginx.conf:/etc/nginx/nginx.conf:ro
       - ./web-ui:/usr/share/nginx/html/train:ro
+      - ./admin-ui:/usr/share/nginx/html/admin-ui:ro
     depends_on:
       job-scheduler:
         condition: service_healthy
@@ -53,7 +55,9 @@ services:
       # job-scheduler/app/scheduler_policy.yaml (依循註2規定統一維護)
     volumes:
       - ./data:/data:rw
-      - ./job-scheduler/app:/app/app:ro
+      - ./job-scheduler/app:/app/app:rw
+      - ./.env:/app/.env:rw
+      - ./docker-compose.yml:/app/docker-compose.yml:rw
     networks:
       - ai-platform-net
     restart: unless-stopped

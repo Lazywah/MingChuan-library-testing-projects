@@ -145,11 +145,12 @@ app.include_router(auth.router, prefix="/api/v1/auth")
 app.include_router(jobs.router, prefix="/api/v1/jobs")
 
 # ZH: 新增聊天助理與管理員路由 | EN: Chat assistant and admin routes
-from .routers import chat, admin, datasets, worker
+from .routers import chat, admin, datasets, worker, system
 app.include_router(chat.router, prefix="/api/v1/chat")
 app.include_router(admin.router, prefix="/api/v1/admin")
 app.include_router(datasets.router, prefix="/api/v1/datasets")
 app.include_router(worker.router, prefix="/api/v1/worker")
+app.include_router(system.router, prefix="/api/v1")
 
 
 # ==============================================================================

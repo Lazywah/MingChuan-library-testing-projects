@@ -102,7 +102,28 @@
         <span id="toast-msg">Notification Message</span>
     </div>
 
-    <div class="admin-layout">
+    <!-- Admin Login Modal -->
+    <div id="admin-login-modal" class="modal-overlay" style="display: flex; position: fixed; inset: 0; background: rgba(0,0,0,0.8); z-index: 9999; justify-content: center; align-items: center;">
+        <div class="form-box-panel" style="width: 100%; max-width: 400px; padding: 30px;">
+            <div style="text-align: center; margin-bottom: 20px;">
+                <ion-icon name="shield-checkmark-outline" style="font-size: 48px; color: var(--neon-pink);"></ion-icon>
+                <h2 style="margin: 10px 0; color: var(--text-primary);">Admin Login</h2>
+            </div>
+            <form id="admin-login-form" style="display: flex; flex-direction: column; gap: 15px;">
+                <div class="input-wrap">
+                    <ion-icon name="person-outline"></ion-icon>
+                    <input type="text" id="admin-username" required placeholder="Administrator Username">
+                </div>
+                <div class="input-wrap">
+                    <ion-icon name="lock-closed-outline"></ion-icon>
+                    <input type="password" id="admin-password" required placeholder="Administrator Password">
+                </div>
+                <button type="submit" class="ready-btn" style="margin-top: 10px;">Login</button>
+            </form>
+        </div>
+    </div>
+
+    <div class="admin-layout" id="admin-main-layout" style="display: none;">
         <div class="admin-nav">
             <!-- <a href="index.html" class="back-link">
                 <ion-icon name="arrow-back-outline"></ion-icon> <span data-i18n="btn_back_hub">返回大廳 (Back to Hub)</span>
@@ -193,6 +214,26 @@
                         </thead>
                         <tbody id="admin-jobs-body"><!-- JS --></tbody>
                     </table>
+                </div>
+            </section>
+
+            <!-- ZH: 系統設定檔管理 | EN: System Config Management -->
+            <section class="widget form-box-panel" style="grid-column: 1 / -1;">
+                <div class="widget-header">
+                    <h3><ion-icon name="document-text-outline" style="margin-right:6px;"></ion-icon> <span
+                            data-i18n="admin_configs">系統設定檔 (System Configs)</span></h3>
+                </div>
+                <div style="padding: 15px;">
+                    <div style="display: flex; gap: 10px; margin-bottom: 15px;">
+                        <select id="config-file-select" class="custom-select" style="flex: 1; padding: 10px; background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.2); color: white; border-radius: 8px;">
+                            <option value="">選擇設定檔 (Select config file)</option>
+                        </select>
+                        <button id="btn-load-config" class="ready-btn" style="min-width: 100px;">載入 (Load)</button>
+                    </div>
+                    <textarea id="config-editor" class="scrollbar-custom" style="width: 100%; height: 400px; background: rgba(0,0,0,0.5); border: 1px solid rgba(255,255,255,0.2); color: #00ffcc; font-family: monospace; padding: 15px; border-radius: 8px; resize: vertical;" placeholder="請先選擇並載入設定檔... (Select and load a config file first...)"></textarea>
+                    <div style="display: flex; justify-content: flex-end; margin-top: 15px;">
+                        <button id="btn-save-config" class="ready-btn" style="background: var(--neon-blue); border-color: var(--neon-blue); color: black;">儲存變更 (Save Changes)</button>
+                    </div>
                 </div>
             </section>
         </div>

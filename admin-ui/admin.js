@@ -1,10 +1,5 @@
 const API_BASE = '/api/v1';
-const authToken = localStorage.getItem('ai_hud_token');
-
-// Redirect if not logged in
-if (!authToken) {
-    window.location.href = 'index.html';
-}
+let authToken = localStorage.getItem('admin_hud_token');
 
 const TRANSLATIONS = {
     zh: {
@@ -16,7 +11,8 @@ const TRANSLATIONS = {
         admin_jobs: "全域任務",
         msg_loading: "載入中...",
         toast_refresh: "已重新整理管理員資料",
-        btn_logout: "登出"
+        btn_logout: "登出",
+        toast_login_failed: "登入失敗，請檢查帳號密碼或權限"
     },
     en: {
         btn_back_hub: "Back to Hub",
@@ -27,7 +23,8 @@ const TRANSLATIONS = {
         admin_jobs: "All Jobs",
         msg_loading: "Loading...",
         toast_refresh: "Refreshed Admin Data",
-        btn_logout: "Logout"
+        btn_logout: "Logout",
+        toast_login_failed: "Login failed. Check credentials or permissions."
     }
 };
 
@@ -43,20 +40,84 @@ function applyTranslations() {
     });
 }
 
-// Ensure the user is admin
+function showToast(msg, isError = false) {
+    const toast = document.getElementById('toast');
+    const msgEl = document.getElementById('toast-msg');
+    const iconEl = document.getElementById('toast-icon');
+    msgEl.textContent = msg;
+    iconEl.innerHTML = isError ? '<ion-icon name="alert-circle-outline"></ion-icon>' : '<ion-icon name="checkmark-circle-outline"></ion-icon>';
+    toast.className = `toast ${isError ? 'error' : ''} show`;
+    setTimeout(() => { toast.classList.remove('show'); }, 3000);
+}
+
+// 獨立的 Admin Login 流程
+async function handleAdminLogin(e) {
+    e.preventDefault();
+    const username = document.getElementById('admin-username').value;
+    const password = document.getElementById('admin-password').value;
+    const formData = new URLSearchParams();
+    formData.append('username', username);
+    formData.append('password', password);
+
+    try {
+        const res = await fetch(`${API_BASE}/auth/login`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: formData
+        });
+        
+        if (!res.ok) throw new Error('Login failed');
+        
+        const data = await res.json();
+        
+        // 驗證是否為 admin
+        const meRes = await fetch(`${API_BASE}/auth/me`, {
+            headers: { 'Authorization': `Bearer ${data.access_token}` }
+        });
+        const user = await meRes.json();
+        if (user.role !== 'admin') {
+            throw new Error('Not an admin');
+        }
+
+        // 登入成功
+        authToken = data.access_token;
+        localStorage.setItem('admin_hud_token', authToken);
+        
+        document.getElementById('admin-login-modal').style.display = 'none';
+        document.getElementById('admin-main-layout').style.display = 'block';
+        
+        initAdminDashboard();
+    } catch (err) {
+        console.error(err);
+        showToast(TRANSLATIONS[currentLang].toast_login_failed, true);
+    }
+}
+
+// 啟動驗證
 async function verifyAdmin() {
+    if (!authToken) {
+        document.getElementById('admin-login-modal').style.display = 'flex';
+        return;
+    }
+
     try {
         const res = await fetch(`${API_BASE}/auth/me`, {
             headers: { 'Authorization': `Bearer ${authToken}` }
         });
-        if (!res.ok) throw new Error('Not logged in');
+        if (!res.ok) throw new Error('Token invalid');
         const user = await res.json();
         if (user.role !== 'admin') {
             throw new Error('Not an admin');
         }
+        
+        // Token 有效，顯示主畫面
+        document.getElementById('admin-login-modal').style.display = 'none';
+        document.getElementById('admin-main-layout').style.display = 'block';
+        initAdminDashboard();
     } catch (err) {
         console.error(err);
-        window.location.href = 'index.html'; // Redirect to main hub
+        localStorage.removeItem('admin_hud_token');
+        document.getElementById('admin-login-modal').style.display = 'flex';
     }
 }
 
@@ -217,19 +278,94 @@ function renderAdminModels(models) {
 }
 
 // -------------------------
+// System Config Management
+// -------------------------
+async function fetchConfigList() {
+    try {
+        const res = await fetch(`${API_BASE}/system/files`, { headers: { 'Authorization': `Bearer ${authToken}` } });
+        if (res.ok) {
+            const data = await res.json();
+            const select = document.getElementById('config-file-select');
+            select.innerHTML = '<option value="">選擇設定檔 (Select config file)</option>';
+            data.files.forEach(f => {
+                const opt = document.createElement('option');
+                opt.value = f;
+                opt.textContent = f;
+                select.appendChild(opt);
+            });
+        }
+    } catch (e) {
+        console.error("Failed to fetch config list:", e);
+    }
+}
+
+async function loadConfig() {
+    const filename = document.getElementById('config-file-select').value;
+    if (!filename) return showToast("請先選擇設定檔", true);
+    
+    try {
+        const res = await fetch(`${API_BASE}/system/files/${filename}`, { headers: { 'Authorization': `Bearer ${authToken}` } });
+        if (!res.ok) throw new Error("Load failed");
+        const data = await res.json();
+        document.getElementById('config-editor').value = data.content;
+        showToast(`已載入 ${filename}`);
+    } catch (e) {
+        showToast("載入失敗", true);
+        console.error(e);
+    }
+}
+
+async function saveConfig() {
+    const filename = document.getElementById('config-file-select').value;
+    const content = document.getElementById('config-editor').value;
+    if (!filename) return showToast("請先選擇設定檔", true);
+    
+    try {
+        const res = await fetch(`${API_BASE}/system/files/${filename}`, {
+            method: 'PUT',
+            headers: { 
+                'Authorization': `Bearer ${authToken}`,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ content })
+        });
+        if (!res.ok) throw new Error("Save failed");
+        showToast(`已儲存 ${filename}`);
+    } catch (e) {
+        showToast("儲存失敗", true);
+        console.error(e);
+    }
+}
+
+// -------------------------
 // Initialization
 // -------------------------
-document.addEventListener('DOMContentLoaded', async () => {
-    await verifyAdmin();
-    
+function initAdminDashboard() {
     fetchClusterStats();
     fetchAdminData();
+    fetchConfigList();
     applyTranslations();
 
-    // Setup Refresh Button
+    // Setup Config Buttons
+    const btnLoad = document.getElementById('btn-load-config');
+    if (btnLoad) {
+        const newBtnLoad = btnLoad.cloneNode(true);
+        btnLoad.parentNode.replaceChild(newBtnLoad, btnLoad);
+        newBtnLoad.addEventListener('click', loadConfig);
+    }
+    
+    const btnSave = document.getElementById('btn-save-config');
+    if (btnSave) {
+        const newBtnSave = btnSave.cloneNode(true);
+        btnSave.parentNode.replaceChild(newBtnSave, btnSave);
+        newBtnSave.addEventListener('click', saveConfig);
+    }
     const refreshBtn = document.getElementById('refresh-admin-btn');
     if (refreshBtn) {
-        refreshBtn.addEventListener('click', () => {
+        // 防止重複綁定
+        const newBtn = refreshBtn.cloneNode(true);
+        refreshBtn.parentNode.replaceChild(newBtn, refreshBtn);
+        newBtn.addEventListener('click', () => {
             fetchClusterStats();
             fetchAdminData();
             showToast(TRANSLATIONS[currentLang].toast_refresh);
@@ -240,11 +376,21 @@ document.addEventListener('DOMContentLoaded', async () => {
     const logoutBtn = document.getElementById('admin-logout-btn');
     if (logoutBtn) {
         logoutBtn.addEventListener('click', () => {
-            localStorage.removeItem('ai_hud_token');
-            window.location.href = 'index.html';
+            localStorage.removeItem('admin_hud_token');
+            window.location.reload();
         });
     }
 
     // Polling for cluster stats every 5 seconds
-    setInterval(fetchClusterStats, 5000);
+    if (!window.statsInterval) {
+        window.statsInterval = setInterval(fetchClusterStats, 5000);
+    }
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+    const loginForm = document.getElementById('admin-login-form');
+    if (loginForm) {
+        loginForm.addEventListener('submit', handleAdminLogin);
+    }
+    verifyAdmin();
 });

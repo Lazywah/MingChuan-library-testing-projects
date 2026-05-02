@@ -6,7 +6,6 @@ import logging
 from .. import models, schemas, crud
 from ..auth import get_current_user
 from ..database import get_db
-from ..scheduler import GLOBAL_CLUSTER_STATS
 
 logger = logging.getLogger(__name__)
 
@@ -66,5 +65,5 @@ def get_cluster_stats(
     current_user: models.User = Depends(get_current_user)
 ) -> Any:
     verify_admin(current_user)
-    # ZH: 直接回傳記憶體快取 | EN: Return memory cache directly
-    return GLOBAL_CLUSTER_STATS
+    # ZH: 目前為 Pull 模式，若無即時收集機制，可回傳空陣列 | EN: Pull mode, return empty list
+    return []
