@@ -392,5 +392,23 @@ document.addEventListener('DOMContentLoaded', () => {
     if (loginForm) {
         loginForm.addEventListener('submit', handleAdminLogin);
     }
+    const eyeToggle = document.getElementById('admin-eye-toggle');
+    if (eyeToggle) {
+        eyeToggle.addEventListener('click', () => {
+            const pwdInput = document.getElementById('admin-password');
+            const eyeOff = eyeToggle.querySelector('.eye-off');
+            const eyeOpen = eyeToggle.querySelector('.eye-open');
+            if (pwdInput.type === 'password') {
+                pwdInput.type = 'text';
+                eyeOff.style.display = 'none';
+                eyeOpen.style.display = 'inline-block';
+            } else {
+                pwdInput.type = 'password';
+                eyeOff.style.display = 'inline-block';
+                eyeOpen.style.display = 'none';
+            }
+        });
+    }
+
     verifyAdmin();
 });

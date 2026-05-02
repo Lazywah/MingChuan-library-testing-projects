@@ -114,9 +114,13 @@
                     <ion-icon name="person-outline"></ion-icon>
                     <input type="text" id="admin-username" required placeholder="Administrator Username">
                 </div>
-                <div class="input-wrap">
+                <div class="input-wrap" style="position: relative;">
                     <ion-icon name="lock-closed-outline"></ion-icon>
-                    <input type="password" id="admin-password" required placeholder="Administrator Password">
+                    <input type="password" id="admin-password" required placeholder="Administrator Password" style="padding-right: 40px;">
+                    <span id="admin-eye-toggle" style="position: absolute; right: 10px; top: 50%; transform: translateY(-50%); cursor: pointer; color: rgba(255,255,255,0.5);">
+                        <ion-icon name="eye-off-outline" class="eye-off"></ion-icon>
+                        <ion-icon name="eye-outline" class="eye-open" style="display: none;"></ion-icon>
+                    </span>
                 </div>
                 <button type="submit" class="ready-btn" style="margin-top: 10px;">Login</button>
             </form>

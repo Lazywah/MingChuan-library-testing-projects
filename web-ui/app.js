@@ -491,6 +491,25 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
+    // ZH: Password Eye Toggle | EN: Password Eye Toggle
+    const eyeToggle = document.getElementById('eye-toggle');
+    if (eyeToggle) {
+        eyeToggle.addEventListener('click', () => {
+            const pwdInput = document.getElementById('password');
+            const eyeOff = eyeToggle.querySelector('.eye-off');
+            const eyeOpen = eyeToggle.querySelector('.eye-open');
+            if (pwdInput.type === 'password') {
+                pwdInput.type = 'text';
+                eyeOff.style.display = 'none';
+                eyeOpen.style.display = 'inline-block';
+            } else {
+                pwdInput.type = 'password';
+                eyeOff.style.display = 'inline-block';
+                eyeOpen.style.display = 'none';
+            }
+        });
+    }
+
     // ZH: Compute Sub Tabs Toggle | EN: Compute Sub Tabs Toggle
     document.querySelectorAll('.sub-tab-btn').forEach(btn => {
         btn.addEventListener('click', () => {
