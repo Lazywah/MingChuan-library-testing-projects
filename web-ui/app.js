@@ -143,6 +143,8 @@ const TRANSLATIONS = {
         ql_support_desc: "回報系統問題與建議",
         compute_high_desc: "高算力佇列 (GPU 處理)",
         compute_midlow_desc: "中低算力佇列 (服務層處理)",
+        priority_high_desc: "高算力 GPU 運算",
+        priority_normal_desc: "一般算力運算",
         // 文件庫頁面
         doc_lib_title: "文件庫",
         doc_portfolio_title: "未來作品集",
@@ -284,6 +286,8 @@ const TRANSLATIONS = {
         ql_support_desc: "Report bugs & suggestions",
         compute_high_desc: "High Compute Queue (GPU Processing)",
         compute_midlow_desc: "Mid/Low Compute Queue (Service Layer)",
+        priority_high_desc: "High Priority GPU Processing",
+        priority_normal_desc: "Normal Priority Processing",
         // Document Library page
         doc_lib_title: "Document Library",
         doc_portfolio_title: "Future Portfolio",
@@ -420,10 +424,16 @@ document.addEventListener('DOMContentLoaded', () => {
 
     newChatBtn.addEventListener('click', createNewSession);
 
-    if (jobForm) jobForm.addEventListener('submit', handleJobSubmit);
+    const jobFormHigh = document.getElementById('job-form-high');
+    const jobFormMidLow = document.getElementById('job-form-midlow');
+    if (jobFormHigh) jobFormHigh.addEventListener('submit', (e) => handleJobSubmit(e, 2, 'job-form-high'));
+    if (jobFormMidLow) jobFormMidLow.addEventListener('submit', (e) => handleJobSubmit(e, 1, 'job-form-midlow'));
+
     if (profileUpdateForm) profileUpdateForm.addEventListener('submit', handleProfileUpdate);
-    const datasetInput = document.getElementById('datasetFile');
-    if (datasetInput) datasetInput.addEventListener('change', handleDatasetUpload);
+    const datasetInputHigh = document.getElementById('datasetFile-high');
+    const datasetInputMidLow = document.getElementById('datasetFile-midlow');
+    if (datasetInputHigh) datasetInputHigh.addEventListener('change', (e) => handleDatasetUpload(e, 'high'));
+    if (datasetInputMidLow) datasetInputMidLow.addEventListener('change', (e) => handleDatasetUpload(e, 'midlow'));
     document.querySelectorAll('.refresh-jobs-btn').forEach(btn => {
         btn.addEventListener('click', fetchJobs);
     });
@@ -773,6 +783,7 @@ async function fetchUserProfile() {
         // ZH: 依照帳號掛載其專屬的聊天歷史紀錄 | EN: Load specific chat sessions per user
         window.currentUsername = data.username;
         window.currentUserRole = data.role;
+        window.currentUserData = data;
         const userSessionsKey = `ai_hud_sessions_${data.username}`;
         let userSessions = JSON.parse(localStorage.getItem(userSessionsKey));
         
@@ -974,17 +985,18 @@ function renderJobs(jobs) {
     renderToContainer(jobListMidLow, midLowJobs);
 }
 
-async function handleJobSubmit(e) {
+async function handleJobSubmit(e, priority, formId) {
     e.preventDefault();
+    let suffix = formId === 'job-form-high' ? '-high' : '-midlow';
     const jobData = {
-        job_name: document.getElementById('job-name').value,
-        model_name: document.getElementById('model-name').value,
-        gpu_required: 1,
-        priority: parseInt(document.getElementById('job-priority').value),
+        job_name: document.getElementById('job-name' + suffix).value,
+        model_name: document.getElementById('model-name' + suffix).value,
+        gpu_required: priority >= 2 ? 1 : 0,
+        priority: priority,
         dataset_path: uploadedDatasetPath,
         config: {
-            epochs: parseInt(document.getElementById('job-epochs').value),
-            batch_size: parseInt(document.getElementById('job-batch').value)
+            epochs: parseInt(document.getElementById('job-epochs' + suffix).value),
+            batch_size: parseInt(document.getElementById('job-batch' + suffix).value)
         }
     };
 
@@ -996,7 +1008,9 @@ async function handleJobSubmit(e) {
         });
         if (!res.ok) throw new Error('fail');
         showToast('toast_job_ok');
-        jobForm.reset();
+        document.getElementById(formId).reset();
+        const group = document.getElementById('auto-detect-group' + suffix);
+        if (group) group.style.display = 'none';
         uploadedDatasetPath = null;
         fetchJobs();
     } catch {
@@ -1004,14 +1018,15 @@ async function handleJobSubmit(e) {
     }
 }
 
-async function handleDatasetUpload(e) {
+async function handleDatasetUpload(e, type) {
     const file = e.target.files[0];
     if (!file) return;
 
     const formData = new FormData();
     formData.append('file', file);
 
-    const btn = document.getElementById('submit-job-btn');
+    const suffix = type === 'high' ? '-high' : '-midlow';
+    const btn = document.querySelector(`#job-form-${type} button[type="submit"]`);
     const originalText = btn.innerHTML;
     btn.innerHTML = `<span class="spinner" style="margin-right:5px"></span><span>Uploading...</span>`;
     btn.disabled = true;
@@ -1027,21 +1042,33 @@ async function handleDatasetUpload(e) {
         const data = await res.json();
         uploadedDatasetPath = data.dataset_path;
         
+        // Show auto-detect group
+        const group = document.getElementById('auto-detect-group' + suffix);
+        if (group) group.style.display = 'grid';
+
         if (data.suggested_config) {
+            document.getElementById('model-name' + suffix).value = type === 'high' ? 'LLaMA-3' : 'BERT-Mini';
+
             if (data.suggested_config.epochs) {
-                document.getElementById('job-epochs').value = data.suggested_config.epochs;
+                document.getElementById('job-epochs' + suffix).value = data.suggested_config.epochs;
             }
             if (data.suggested_config.batch_size) {
-                document.getElementById('job-batch').value = data.suggested_config.batch_size;
+                document.getElementById('job-batch' + suffix).value = data.suggested_config.batch_size;
             }
             // highlight the fields to show they were auto-filled
-            document.getElementById('job-epochs').style.borderColor = 'var(--neon-green)';
-            document.getElementById('job-batch').style.borderColor = 'var(--neon-green)';
+            const modelInput = document.getElementById('model-name' + suffix);
+            const epochsInput = document.getElementById('job-epochs' + suffix);
+            const batchInput = document.getElementById('job-batch' + suffix);
+            epochsInput.style.borderColor = 'var(--neon-green)';
+            batchInput.style.borderColor = 'var(--neon-green)';
+            modelInput.style.borderColor = 'var(--neon-green)';
             setTimeout(() => {
-                document.getElementById('job-epochs').style.borderColor = '';
-                document.getElementById('job-batch').style.borderColor = '';
+                epochsInput.style.borderColor = '';
+                batchInput.style.borderColor = '';
+                modelInput.style.borderColor = '';
             }, 2000);
         }
+        
         showToast('File uploaded & parameters suggested');
     } catch (err) {
         console.error(err);
@@ -1257,16 +1284,34 @@ function showTutorial() {
     if (modal) modal.classList.remove('hidden');
 }
 
-function hideTutorial() {
+async function hideTutorial() {
     const modal = document.getElementById('tutorial-modal');
     if (modal) modal.classList.add('hidden');
     const check = document.getElementById('tutorial-dismiss-check');
     if (check && check.checked) {
         localStorage.setItem(TUTORIAL_DISMISSED_KEY, 'true');
+        if (authToken && window.currentUserData) {
+            window.currentUserData.tutorial_dismissed = 1;
+            try {
+                await fetch(`${API_BASE}/auth/me`, {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${authToken}`
+                    },
+                    body: JSON.stringify({ tutorial_dismissed: 1 })
+                });
+            } catch (e) {
+                console.error("Failed to sync tutorial state to DB", e);
+            }
+        }
     }
 }
 
 function isTutorialDismissed() {
+    if (window.currentUserData && window.currentUserData.tutorial_dismissed === 1) {
+        return true;
+    }
     return localStorage.getItem(TUTORIAL_DISMISSED_KEY) === 'true';
 }
 

@@ -90,7 +90,7 @@
             <h3><ion-icon name="apps-outline"></ion-icon> <span data-i18n="drawer_title">Info Board</span></h3>
         </div>
         <div class="drawer-content scrollbar-custom">
-            
+
             <!-- Navigation Menu -->
             <div class="sidebar-menu">
                 <button class="tab-btn active" id="tab-home" data-tab="home">
@@ -105,13 +105,14 @@
                     <ion-icon name="chatbubbles-outline"></ion-icon>
                     <span data-i18n="nav_assistant">Assistant</span>
                 </button>
+                <button class="tab-btn" id="nav-doc-lib" data-tab="docs">
+                    <ion-icon name="library-outline"></ion-icon>
+                    <span data-i18n="nav_docs">Document Library</span>
+                </button>
                 <button class="tab-btn" id="tab-settings" data-tab="settings">
                     <ion-icon name="settings-outline"></ion-icon>
                     <span data-i18n="nav_settings">Settings</span>
                 </button>
-                
-                <!-- New Links -->
-                <button class="tab-btn" id="nav-doc-lib" data-tab="docs"><ion-icon name="library-outline"></ion-icon> <span data-i18n="nav_docs">Document Library</span></button>
             </div>
 
             <!-- Token Usage Summary with Pie Chart -->
@@ -119,13 +120,19 @@
                 <h4 data-i18n="drawer_token">Token Usage</h4>
                 <div class="drawer-token-visual">
                     <svg class="token-donut" viewBox="0 0 36 36" width="80" height="80">
-                        <circle class="donut-bg" cx="18" cy="18" r="15.9" fill="none" stroke="rgba(255,255,255,0.1)" stroke-width="3"/>
-                        <circle class="donut-fill" id="drawer-token-ring" cx="18" cy="18" r="15.9" fill="none" stroke="var(--accent-glow)" stroke-width="3" stroke-dasharray="100" stroke-dashoffset="100" stroke-linecap="round" transform="rotate(-90 18 18)"/>
-                        <text x="18" y="19" text-anchor="middle" dominant-baseline="middle" class="donut-text" id="drawer-token-percent">0%</text>
+                        <circle class="donut-bg" cx="18" cy="18" r="15.9" fill="none" stroke="rgba(255,255,255,0.1)"
+                            stroke-width="3" />
+                        <circle class="donut-fill" id="drawer-token-ring" cx="18" cy="18" r="15.9" fill="none"
+                            stroke="var(--accent-glow)" stroke-width="3" stroke-dasharray="100" stroke-dashoffset="100"
+                            stroke-linecap="round" transform="rotate(-90 18 18)" />
+                        <text x="18" y="19" text-anchor="middle" dominant-baseline="middle" class="donut-text"
+                            id="drawer-token-percent">0%</text>
                     </svg>
                     <div class="drawer-token-stats">
-                        <div class="stat"><span data-i18n="token_used">Used</span>: <b id="drawer-token-used">0</b></div>
-                        <div class="stat"><span data-i18n="token_limit">Limit</span>: <b id="drawer-token-limit">0</b></div>
+                        <div class="stat"><span data-i18n="token_used">Used</span>: <b id="drawer-token-used">0</b>
+                        </div>
+                        <div class="stat"><span data-i18n="token_limit">Limit</span>: <b id="drawer-token-limit">0</b>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -133,9 +140,12 @@
             <div class="drawer-widget">
                 <h4 data-i18n="drawer_features">Available Features</h4>
                 <ul class="feature-list">
-                    <li><ion-icon name="checkmark-circle-outline" style="color:var(--accent-glow)"></ion-icon> <span data-i18n="feat_1">High Compute GPU</span></li>
-                    <li><ion-icon name="checkmark-circle-outline" style="color:var(--accent-glow)"></ion-icon> <span data-i18n="feat_2">AI Text Assistant</span></li>
-                    <li><ion-icon name="close-circle-outline" style="color:#fb7185"></ion-icon> <span data-i18n="feat_3">Image Gen (Soon)</span></li>
+                    <li><ion-icon name="checkmark-circle-outline" style="color:var(--accent-glow)"></ion-icon> <span
+                            data-i18n="feat_1">High Compute GPU</span></li>
+                    <li><ion-icon name="checkmark-circle-outline" style="color:var(--accent-glow)"></ion-icon> <span
+                            data-i18n="feat_2">AI Text Assistant</span></li>
+                    <li><ion-icon name="close-circle-outline" style="color:#fb7185"></ion-icon> <span
+                            data-i18n="feat_3">Image Gen (Soon)</span></li>
                 </ul>
             </div>
         </div>
@@ -146,7 +156,7 @@
             </button>
         </div>
     </div>
-    
+
     <!-- ZH: 視圖: HUD 介面主容器 | EN: VIEW: MAIN HUD Container -->
     <div id="dashboard-view" class="view-container">
         <div class="hud-container main-content">
@@ -177,55 +187,56 @@
             <!-- ZH: 分頁 0: 首頁 | EN: PAGE 0: Home -->
             <main id="home-page" class="page-view active">
                 <div class="home-grid">
-                    <div class="home-main-col">
-                        <section class="widget form-box-panel">
-                            <div class="widget-header">
-                                <h3><ion-icon name="megaphone-outline"></ion-icon> <span data-i18n="drawer_announcements">Announcements & Updates</span></h3>
+                    <section class="widget form-box-panel">
+                        <div class="widget-header">
+                            <h3><ion-icon name="megaphone-outline"></ion-icon> <span
+                                    data-i18n="drawer_announcements">Announcements & Updates</span></h3>
+                        </div>
+                        <div class="announcement-list">
+                            <div class="announcement-item">
+                                <span class="date">2026-05-01</span>
+                                <p data-i18n="anno_1">系統升級至 Blackwell 架構完成。</p>
                             </div>
-                            <div class="announcement-list">
-                                <div class="announcement-item">
-                                    <span class="date">2026-05-01</span>
-                                    <p data-i18n="anno_1">系統升級至 Blackwell 架構完成。</p>
-                                </div>
-                                <div class="announcement-item">
-                                    <span class="date">2026-04-20</span>
-                                    <p>全新 UI 介面上線，提供更佳的操作體驗。</p>
-                                </div>
-                                <div class="announcement-item">
-                                    <span class="date">2026-04-01</span>
-                                    <p>AI 訓練大廳測試開放，歡迎多加利用。</p>
-                                </div>
+                            <div class="announcement-item">
+                                <span class="date">2026-04-20</span>
+                                <p>全新 UI 介面上線，提供更佳的操作體驗。</p>
                             </div>
-                        </section>
-                    </div>
-                    
-                    <div class="home-side-col">
-                        <section class="widget form-box-panel">
-                            <div class="widget-header">
-                                <h3><ion-icon name="link-outline"></ion-icon> Quick Links</h3>
+                            <div class="announcement-item">
+                                <span class="date">2026-04-01</span>
+                                <p>AI 訓練大廳測試開放，歡迎多加利用。</p>
                             </div>
-                            <div class="bottom-quick-links vertical-layout">
-                                <div class="quick-link-card">
-                                    <ion-icon name="logo-python" class="ql-icon"></ion-icon>
-                                    <h4 data-i18n="ql_jupyter_title">JupyterLab</h4>
-                                    <p data-i18n="ql_jupyter_desc">進入進階開發環境</p>
-                                    <button class="ready-btn mini-btn">Go <ion-icon name="arrow-forward-outline"></ion-icon></button>
-                                </div>
-                                <div class="quick-link-card">
-                                    <ion-icon name="globe-outline" class="ql-icon"></ion-icon>
-                                    <h4 data-i18n="ql_school_title">學校首頁</h4>
-                                    <p data-i18n="ql_school_desc">前往 MCU 官方網站</p>
-                                    <button class="ready-btn mini-btn" onclick="window.open('https://www.mcu.edu.tw/', '_blank')">Go <ion-icon name="arrow-forward-outline"></ion-icon></button>
-                                </div>
-                                <div class="quick-link-card">
-                                    <ion-icon name="help-buoy-outline" class="ql-icon"></ion-icon>
-                                    <h4 data-i18n="ql_support_title">問題回報</h4>
-                                    <p data-i18n="ql_support_desc">回報系統問題與建議</p>
-                                    <button class="ready-btn mini-btn">Go <ion-icon name="arrow-forward-outline"></ion-icon></button>
-                                </div>
+                        </div>
+                    </section>
+
+                    <section class="widget form-box-panel">
+                        <div class="widget-header">
+                            <h3><ion-icon name="link-outline"></ion-icon> Quick Links</h3>
+                        </div>
+                        <div class="bottom-quick-links">
+                            <div class="quick-link-card">
+                                <ion-icon name="logo-python" class="ql-icon"></ion-icon>
+                                <h4 data-i18n="ql_jupyter_title">JupyterLab</h4>
+                                <p data-i18n="ql_jupyter_desc">進入進階開發環境</p>
+                                <button class="ready-btn mini-btn">Go <ion-icon
+                                        name="arrow-forward-outline"></ion-icon></button>
                             </div>
-                        </section>
-                    </div>
+                            <div class="quick-link-card">
+                                <ion-icon name="globe-outline" class="ql-icon"></ion-icon>
+                                <h4 data-i18n="ql_school_title">學校首頁</h4>
+                                <p data-i18n="ql_school_desc">前往 MCU 官方網站</p>
+                                <button class="ready-btn mini-btn"
+                                    onclick="window.open('https://www.mcu.edu.tw/', '_blank')">Go <ion-icon
+                                        name="arrow-forward-outline"></ion-icon></button>
+                            </div>
+                            <div class="quick-link-card">
+                                <ion-icon name="help-buoy-outline" class="ql-icon"></ion-icon>
+                                <h4 data-i18n="ql_support_title">問題回報</h4>
+                                <p data-i18n="ql_support_desc">回報系統問題與建議</p>
+                                <button class="ready-btn mini-btn">Go <ion-icon
+                                        name="arrow-forward-outline"></ion-icon></button>
+                            </div>
+                        </div>
+                    </section>
                 </div>
             </main>
 
@@ -233,92 +244,226 @@
             <main id="dashboard-page" class="page-view">
 
                 <!-- ZH: 頂部: 新增任務表單 | EN: TOP: Submit New Job -->
-                <section class="widget submit-widget form-box-panel" style="margin-bottom: 25px;">
-                    <div class="widget-header">
-                        <h3 data-i18n="job_compose">New Task</h3>
-                    </div>
-                    <form id="job-form" class="job-form"
-                        style="flex-direction:row; flex-wrap:wrap; gap:15px; align-items:flex-end;">
-                        <div class="input row-input" style="flex:1; min-width:180px; margin:0;">
-                            <input type="text" id="job-name" required placeholder=" ">
-                            <label data-i18n="label_job_name">Job Name</label>
-                            <ion-icon name="document-text-outline"></ion-icon>
-                        </div>
-                        <div class="input row-input" style="flex:1; min-width:180px; margin:0;">
-                            <input type="text" id="model-name" required placeholder=" ">
-                            <label data-i18n="label_model_name">Model Identifier</label>
-                            <ion-icon name="cube-outline"></ion-icon>
-                        </div>
-                        <div class="input-select-group" style="flex:0 0 160px;">
-                            <select id="job-priority" class="select-box">
-                                <option value="0" data-i18n="priority_0">0 - BATCH</option>
-                                <option value="1" data-i18n="priority_1" selected>1 - NORMAL</option>
-                                <option value="2" data-i18n="priority_2">2 - HIGH</option>
-                            </select>
-                        </div>
-                        <div class="input row-input dataset-upload-container"
-                            style="flex:1; min-width:200px; margin:0; position:relative;">
-                            <input type="file" id="datasetFile" accept=".zip,.csv,.jsonl" style="padding-top: 25px;">
-                            <label data-i18n="label_dataset">資料集 (自動推薦)</label>
-                            <ion-icon name="cloud-upload-outline"></ion-icon>
-                        </div>
-                        <div class="input row-input" style="flex:0 0 80px; margin:0;">
-                            <input type="number" id="job-epochs" min="1" max="1000" value="10">
-                            <label data-i18n="label_epochs">Epochs</label>
-                        </div>
-                        <div class="input row-input" style="flex:0 0 80px; margin:0;">
-                            <input type="number" id="job-batch" min="1" max="512" value="32">
-                            <label data-i18n="label_batch">Batch Size</label>
-                        </div>
-                        <button type="submit" class="ready-btn" id="submit-job-btn"
-                            style="flex:0 0 auto; width:auto; min-width:140px; margin:0;">
-                            <span data-i18n="btn_dispatch">Dispatch Task</span>
-                        </button>
-                    </form>
-                </section>
-
                 <!-- ZH: 運算任務分頁 (高算力 / 中低算力) | EN: Compute Task Sub-tabs -->
                 <div class="compute-sub-tabs">
                     <button class="sub-tab-btn active" id="sub-tab-high" data-subtab="compute-high">
-                        <ion-icon name="flash-outline" style="color:#f59e0b;"></ion-icon> <span data-i18n="compute_high">High Compute</span>
+                        <ion-icon name="flash-outline" style="color:#f59e0b;"></ion-icon> <span
+                            data-i18n="compute_high">High Compute</span>
                     </button>
                     <button class="sub-tab-btn" id="sub-tab-midlow" data-subtab="compute-midlow">
-                        <ion-icon name="speedometer-outline" style="color:#3b82f6;"></ion-icon> <span data-i18n="compute_mid_low">Mid / Low Compute</span>
+                        <ion-icon name="speedometer-outline" style="color:#3b82f6;"></ion-icon> <span
+                            data-i18n="compute_mid_low">Mid / Low Compute</span>
                     </button>
                 </div>
-                
+
                 <div class="compute-tab-content">
                     <!-- ZH: 左側: 高算力任務 (Priority >= 2) | EN: Left: High Compute (Priority >= 2) -->
-                    <section class="widget form-box-panel compute-panel sub-page-view active" id="compute-high-page">
-                        <div class="widget-header split">
-                            <h3><span data-i18n="compute_high_desc">High Compute Queue (GPU Processing)</span></h3>
-                            <ion-icon name="refresh-circle-outline" class="refresh-icon refresh-jobs-btn"
-                                title="Refresh"></ion-icon>
-                        </div>
-                        <div class="job-list-container scrollbar-custom" id="job-list-high">
-                            <div class="empty-state">
-                                <ion-icon name="radio-outline"></ion-icon>
-                                <p data-i18n="msg_no_signal">No Signal / Queue Empty</p>
+                    <section class="compute-panel sub-page-view active" id="compute-high-page"
+                        style="background: transparent; box-shadow: none; padding: 0;">
+                        <div style="display: flex; flex-direction: column; gap: 20px;">
+                            <div class="widget form-box-panel">
+                                <div class="widget-header">
+                                    <h3 data-i18n="job_compose">New Task</h3>
+                                </div>
+                                <form id="job-form-high" class="job-form"
+                                    style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; align-items: start;">
+                                    <div class="field-group" style="display: flex; flex-direction: column; gap: 8px;">
+                                        <label data-i18n="label_job_name"
+                                            style="font-size: 13px; color: var(--text-muted);">Job Name</label>
+                                        <div style="position: relative;">
+                                            <input type="text" id="job-name-high" required
+                                                placeholder="Enter task name..."
+                                                style="width: 100%; padding: 10px 10px 10px 35px; border: none; border-bottom: 1px solid rgba(255,255,255,0.2); border-radius: 0; background: transparent; color: var(--text-color); box-sizing: border-box; font-family: inherit; font-size: 14px; outline: none; transition: border-color 0.3s;">
+                                            <ion-icon name="document-text-outline"
+                                                style="position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: var(--text-muted); font-size: 16px;"></ion-icon>
+                                        </div>
+                                    </div>
+                                    <div class="field-group dataset-upload-container"
+                                        style="display: flex; flex-direction: column; gap: 8px;">
+                                        <label data-i18n="label_dataset"
+                                            style="font-size: 13px; color: var(--text-muted);">Dataset Upload</label>
+                                        <div style="position: relative;">
+                                            <input type="file" id="datasetFile-high" accept=".zip,.csv,.jsonl"
+                                                style="width: 100%; padding: 10px 10px 10px 35px; border: none; border-bottom: 1px solid rgba(255,255,255,0.2); border-radius: 0; background: transparent; color: var(--text-color); box-sizing: border-box; font-family: inherit; font-size: 14px; cursor: pointer; outline: none; transition: border-color 0.3s;">
+                                            <ion-icon name="cloud-upload-outline"
+                                                style="position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: var(--text-muted); font-size: 16px;"></ion-icon>
+                                        </div>
+                                    </div>
+
+                                    <div id="auto-detect-group-high"
+                                        style="display: none; grid-column: 1 / -1; grid-template-columns: 1fr 1fr; gap: 20px;">
+                                        <div class="field-group"
+                                            style="display: flex; flex-direction: column; gap: 8px;">
+                                            <label data-i18n="label_model_name"
+                                                style="font-size: 13px; color: var(--text-muted);">Model Identifier
+                                                (Auto-detected)</label>
+                                            <div style="position: relative;">
+                                                <input type="text" id="model-name-high" readonly placeholder=" "
+                                                    style="width: 100%; padding: 10px 10px 10px 35px; border: none; border-bottom: 1px solid rgba(255,255,255,0.2); border-radius: 0; background: transparent; color: var(--accent-glow); box-sizing: border-box; font-family: inherit; font-size: 14px; outline: none;">
+                                                <ion-icon name="cube-outline"
+                                                    style="position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: var(--text-muted); font-size: 16px;"></ion-icon>
+                                            </div>
+                                        </div>
+                                        <div style="display: flex; gap: 20px;">
+                                            <div class="field-group"
+                                                style="display: flex; flex-direction: column; gap: 8px; flex: 1;">
+                                                <label data-i18n="label_epochs"
+                                                    style="font-size: 13px; color: var(--text-muted);">Epochs</label>
+                                                <div style="position: relative;">
+                                                    <input type="number" id="job-epochs-high" readonly placeholder=" "
+                                                        style="width: 100%; padding: 10px 10px; border: none; border-bottom: 1px solid rgba(255,255,255,0.2); border-radius: 0; background: transparent; color: var(--text-color); box-sizing: border-box; font-family: inherit; font-size: 14px; outline: none; text-align: center;">
+                                                </div>
+                                            </div>
+                                            <div class="field-group"
+                                                style="display: flex; flex-direction: column; gap: 8px; flex: 1;">
+                                                <label data-i18n="label_batch"
+                                                    style="font-size: 13px; color: var(--text-muted);">Batch
+                                                    Size</label>
+                                                <div style="position: relative;">
+                                                    <input type="number" id="job-batch-high" readonly placeholder=" "
+                                                        style="width: 100%; padding: 10px 10px; border: none; border-bottom: 1px solid rgba(255,255,255,0.2); border-radius: 0; background: transparent; color: var(--text-color); box-sizing: border-box; font-family: inherit; font-size: 14px; outline: none; text-align: center;">
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div
+                                        style="grid-column: 1 / -1; display: flex; justify-content: space-between; align-items: center; border-top: 1px dashed rgba(255,255,255,0.1); padding-top: 15px;">
+                                        <span
+                                            style="margin-right: 15px; font-size: 13px; color: var(--accent-glow); flex-shrink: 0;"><ion-icon
+                                                name="analytics-outline" style="vertical-align: middle;"></ion-icon>
+                                            <span data-i18n="priority_high_desc">High Priority GPU
+                                                Processing</span></span>
+                                        <button type="submit" class="ready-btn"
+                                            style="margin:0; flex: 1; text-align: center;">
+                                            <span data-i18n="btn_dispatch">Dispatch Task</span>
+                                        </button>
+                                    </div>
+                                </form>
+                            </div>
+
+                            <div class="widget form-box-panel">
+                                <div class="widget-header split">
+                                    <h3><span data-i18n="compute_high_desc">High Compute Queue (GPU Processing)</span>
+                                    </h3>
+                                    <ion-icon name="refresh-circle-outline" class="refresh-icon refresh-jobs-btn"
+                                        title="Refresh"></ion-icon>
+                                </div>
+                                <div class="job-list-container scrollbar-custom" id="job-list-high">
+                                    <div class="empty-state">
+                                        <ion-icon name="radio-outline"></ion-icon>
+                                        <p data-i18n="msg_no_signal">No Signal / Queue Empty</p>
+                                    </div>
+                                </div>
                             </div>
                         </div>
                     </section>
 
                     <!-- ZH: 右側: 中低算力任務 (Priority 0, 1) | EN: Right: Mid/Low Compute (Priority 0, 1) -->
-                    <section class="widget form-box-panel compute-panel sub-page-view" id="compute-midlow-page">
-                        <div class="widget-header split">
-                            <h3><span data-i18n="compute_midlow_desc">Mid/Low Compute Queue (Service Layer Processing)</span></h3>
-                            <ion-icon name="refresh-circle-outline" class="refresh-icon refresh-jobs-btn"
-                                title="Refresh"></ion-icon>
-                        </div>
-                        <div class="job-list-container scrollbar-custom" id="job-list-midlow">
-                            <div class="empty-state">
-                                <ion-icon name="radio-outline"></ion-icon>
-                                <p data-i18n="msg_no_signal">No Signal / Queue Empty</p>
+                    <section class="compute-panel sub-page-view" id="compute-midlow-page"
+                        style="background: transparent; box-shadow: none; padding: 0;">
+                        <div style="display: flex; flex-direction: column; gap: 20px;">
+                            <div class="widget form-box-panel">
+                                <div class="widget-header">
+                                    <h3 data-i18n="job_compose">New Task</h3>
+                                </div>
+                                <form id="job-form-midlow" class="job-form"
+                                    style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; align-items: start;">
+                                    <div class="field-group" style="display: flex; flex-direction: column; gap: 8px;">
+                                        <label data-i18n="label_job_name"
+                                            style="font-size: 13px; color: var(--text-muted);">Job Name</label>
+                                        <div style="position: relative;">
+                                            <input type="text" id="job-name-midlow" required
+                                                placeholder="Enter task name..."
+                                                style="width: 100%; padding: 10px 10px 10px 35px; border: none; border-bottom: 1px solid rgba(255,255,255,0.2); border-radius: 0; background: transparent; color: var(--text-color); box-sizing: border-box; font-family: inherit; font-size: 14px; outline: none; transition: border-color 0.3s;">
+                                            <ion-icon name="document-text-outline"
+                                                style="position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: var(--text-muted); font-size: 16px;"></ion-icon>
+                                        </div>
+                                    </div>
+                                    <div class="field-group dataset-upload-container"
+                                        style="display: flex; flex-direction: column; gap: 8px;">
+                                        <label data-i18n="label_dataset"
+                                            style="font-size: 13px; color: var(--text-muted);">Dataset Upload</label>
+                                        <div style="position: relative;">
+                                            <input type="file" id="datasetFile-midlow" accept=".zip,.csv,.jsonl"
+                                                style="width: 100%; padding: 10px 10px 10px 35px; border: none; border-bottom: 1px solid rgba(255,255,255,0.2); border-radius: 0; background: transparent; color: var(--text-color); box-sizing: border-box; font-family: inherit; font-size: 14px; cursor: pointer; outline: none; transition: border-color 0.3s;">
+                                            <ion-icon name="cloud-upload-outline"
+                                                style="position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: var(--text-muted); font-size: 16px;"></ion-icon>
+                                        </div>
+                                    </div>
+
+                                    <div id="auto-detect-group-midlow"
+                                        style="display: none; grid-column: 1 / -1; grid-template-columns: 1fr 1fr; gap: 20px;">
+                                        <div class="field-group"
+                                            style="display: flex; flex-direction: column; gap: 8px;">
+                                            <label data-i18n="label_model_name"
+                                                style="font-size: 13px; color: var(--text-muted);">Model Identifier
+                                                (Auto-detected)</label>
+                                            <div style="position: relative;">
+                                                <input type="text" id="model-name-midlow" readonly placeholder=" "
+                                                    style="width: 100%; padding: 10px 10px 10px 35px; border: none; border-bottom: 1px solid rgba(255,255,255,0.2); border-radius: 0; background: transparent; color: #3b82f6; box-sizing: border-box; font-family: inherit; font-size: 14px; outline: none;">
+                                                <ion-icon name="cube-outline"
+                                                    style="position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: var(--text-muted); font-size: 16px;"></ion-icon>
+                                            </div>
+                                        </div>
+                                        <div style="display: flex; gap: 20px;">
+                                            <div class="field-group"
+                                                style="display: flex; flex-direction: column; gap: 8px; flex: 1;">
+                                                <label data-i18n="label_epochs"
+                                                    style="font-size: 13px; color: var(--text-muted);">Epochs</label>
+                                                <div style="position: relative;">
+                                                    <input type="number" id="job-epochs-midlow" readonly placeholder=" "
+                                                        style="width: 100%; padding: 10px 10px; border: none; border-bottom: 1px solid rgba(255,255,255,0.2); border-radius: 0; background: transparent; color: var(--text-color); box-sizing: border-box; font-family: inherit; font-size: 14px; outline: none; text-align: center;">
+                                                </div>
+                                            </div>
+                                            <div class="field-group"
+                                                style="display: flex; flex-direction: column; gap: 8px; flex: 1;">
+                                                <label data-i18n="label_batch"
+                                                    style="font-size: 13px; color: var(--text-muted);">Batch
+                                                    Size</label>
+                                                <div style="position: relative;">
+                                                    <input type="number" id="job-batch-midlow" readonly placeholder=" "
+                                                        style="width: 100%; padding: 10px 10px; border: none; border-bottom: 1px solid rgba(255,255,255,0.2); border-radius: 0; background: transparent; color: var(--text-color); box-sizing: border-box; font-family: inherit; font-size: 14px; outline: none; text-align: center;">
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div
+                                        style="grid-column: 1 / -1; display: flex; justify-content: space-between; align-items: center; border-top: 1px dashed rgba(255,255,255,0.1); padding-top: 15px;">
+                                        <span
+                                            style="margin-right: 15px; font-size: 13px; color: #3b82f6; flex-shrink: 0;"><ion-icon
+                                                name="analytics-outline" style="vertical-align: middle;"></ion-icon>
+                                            <span data-i18n="priority_normal_desc">Normal Priority
+                                                Processing</span></span>
+                                        <button type="submit" class="ready-btn"
+                                            style="margin:0; flex: 1; border-color: #3b82f6; color: #3b82f6; text-align: center;"
+                                            onmouseover="this.style.background='rgba(59, 130, 246, 0.1)'"
+                                            onmouseout="this.style.background='transparent'">
+                                            <span data-i18n="btn_dispatch">Dispatch Task</span>
+                                        </button>
+                                    </div>
+                                </form>
+                            </div>
+
+                            <div class="widget form-box-panel">
+                                <div class="widget-header split">
+                                    <h3><span data-i18n="compute_midlow_desc">Mid/Low Compute Queue (Service Layer
+                                            Processing)</span></h3>
+                                    <ion-icon name="refresh-circle-outline" class="refresh-icon refresh-jobs-btn"
+                                        title="Refresh"></ion-icon>
+                                </div>
+                                <div class="job-list-container scrollbar-custom" id="job-list-midlow">
+                                    <div class="empty-state">
+                                        <ion-icon name="radio-outline"></ion-icon>
+                                        <p data-i18n="msg_no_signal">No Signal / Queue Empty</p>
+                                    </div>
+                                </div>
                             </div>
                         </div>
                     </section>
                 </div>
-                
+
             </main>
 
             <!-- ZH: 分頁 2: AI 助手視圖 (全螢幕) | EN: PAGE 2: Assistant View (Full Screen) -->
@@ -511,9 +656,12 @@
                 <div class="settings-grid">
                     <section class="widget form-box-panel">
                         <div class="widget-header">
-                            <h3><ion-icon name="briefcase-outline" style="margin-right:6px;color:#f59e0b;"></ion-icon> <span data-i18n="doc_portfolio_title">未來作品集</span></h3>
+                            <h3><ion-icon name="briefcase-outline" style="margin-right:6px;color:#f59e0b;"></ion-icon>
+                                <span data-i18n="doc_portfolio_title">未來作品集</span>
+                            </h3>
                         </div>
-                        <p style="color:var(--text-muted);line-height:1.6;" data-i18n="doc_portfolio_desc">展示您的 AI 訓練成果與模型作品。</p>
+                        <p style="color:var(--text-muted);line-height:1.6;" data-i18n="doc_portfolio_desc">展示您的 AI
+                            訓練成果與模型作品。</p>
                         <div class="empty-state" style="margin-top:10px;">
                             <ion-icon name="construct-outline"></ion-icon>
                             <p data-i18n="doc_coming_soon">內容建置中，敬請期待...</p>
@@ -522,9 +670,11 @@
 
                     <section class="widget form-box-panel">
                         <div class="widget-header">
-                            <h3><ion-icon name="bulb-outline" style="margin-right:6px;color:#6366f1;"></ion-icon> <span data-i18n="doc_solutions_title">問題解法</span></h3>
+                            <h3><ion-icon name="bulb-outline" style="margin-right:6px;color:#6366f1;"></ion-icon> <span
+                                    data-i18n="doc_solutions_title">問題解法</span></h3>
                         </div>
-                        <p style="color:var(--text-muted);line-height:1.6;" data-i18n="doc_solutions_desc">常見問題的解決方案與除錯技巧。</p>
+                        <p style="color:var(--text-muted);line-height:1.6;" data-i18n="doc_solutions_desc">
+                            常見問題的解決方案與除錯技巧。</p>
                         <div class="empty-state" style="margin-top:10px;">
                             <ion-icon name="construct-outline"></ion-icon>
                             <p data-i18n="doc_coming_soon">內容建置中，敬請期待...</p>
@@ -533,9 +683,12 @@
 
                     <section class="widget form-box-panel">
                         <div class="widget-header">
-                            <h3><ion-icon name="school-outline" style="margin-right:6px;color:#10b981;"></ion-icon> <span data-i18n="doc_tutorial_title">模型製作教學</span></h3>
+                            <h3><ion-icon name="school-outline" style="margin-right:6px;color:#10b981;"></ion-icon>
+                                <span data-i18n="doc_tutorial_title">模型製作教學</span>
+                            </h3>
                         </div>
-                        <p style="color:var(--text-muted);line-height:1.6;" data-i18n="doc_tutorial_desc">從零開始學習如何訓練與部署 AI 模型。</p>
+                        <p style="color:var(--text-muted);line-height:1.6;" data-i18n="doc_tutorial_desc">從零開始學習如何訓練與部署
+                            AI 模型。</p>
                         <div class="empty-state" style="margin-top:10px;">
                             <ion-icon name="construct-outline"></ion-icon>
                             <p data-i18n="doc_coming_soon">內容建置中，敬請期待...</p>
@@ -568,7 +721,8 @@
                                 <div class="stat-row"><span class="stat-label" data-i18n="token_used">Used:</span> <span
                                         class="stat-value highlight" id="token-used">0</span></div>
                                 <div class="stat-row"><span class="stat-label" data-i18n="token_limit">Limit:</span>
-                                    <span class="stat-value" id="token-limit">0</span></div>
+                                    <span class="stat-value" id="token-limit">0</span>
+                                </div>
                                 <div class="stat-row"><span class="stat-label" data-i18n="token_reset">Reset
                                         Date:</span> <span class="stat-value warning" id="token-reset">--</span></div>
                             </div>

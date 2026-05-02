@@ -110,6 +110,8 @@ def update_user(db: Session, db_user: models.User, update_data: schemas.UserUpda
         db_user.email = update_data.email
     if update_data.password is not None and update_data.password.strip():
         db_user.hashed_password = get_password_hash(update_data.password)
+    if update_data.tutorial_dismissed is not None:
+        db_user.tutorial_dismissed = update_data.tutorial_dismissed
     db.commit()
     db.refresh(db_user)
     return db_user

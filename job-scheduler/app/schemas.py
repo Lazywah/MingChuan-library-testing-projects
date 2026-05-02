@@ -44,6 +44,7 @@ class UserUpdate(BaseModel):
     """ZH: 使用者更新個人資料請求 | EN: User profile update request"""
     email: Optional[EmailStr] = None
     password: Optional[str] = None
+    tutorial_dismissed: Optional[int] = None
 
 
 class UserResponse(BaseModel):
@@ -54,6 +55,7 @@ class UserResponse(BaseModel):
     role: str
     is_active: int
     online_status: Optional[int] = 0
+    tutorial_dismissed: int = 0
     last_login_ip: Optional[str] = None
     last_login_time: Optional[datetime] = None
     created_at: datetime
