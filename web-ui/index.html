@@ -111,15 +111,22 @@
                 </button>
                 
                 <!-- New Links -->
-                <button class="tab-btn" id="nav-doc-lib"><ion-icon name="library-outline"></ion-icon> <span data-i18n="nav_docs">Document Library</span></button>
+                <button class="tab-btn" id="nav-doc-lib" data-tab="docs"><ion-icon name="library-outline"></ion-icon> <span data-i18n="nav_docs">Document Library</span></button>
             </div>
 
-            <!-- Token Usage Summary -->
+            <!-- Token Usage Summary with Pie Chart -->
             <div class="drawer-widget">
                 <h4 data-i18n="drawer_token">Token Usage</h4>
-                <div class="drawer-token-stats">
-                    <div class="stat"><span data-i18n="token_used">Used</span>: <b id="drawer-token-used">0</b></div>
-                    <div class="stat"><span data-i18n="token_limit">Limit</span>: <b id="drawer-token-limit">0</b></div>
+                <div class="drawer-token-visual">
+                    <svg class="token-donut" viewBox="0 0 36 36" width="80" height="80">
+                        <circle class="donut-bg" cx="18" cy="18" r="15.9" fill="none" stroke="rgba(255,255,255,0.1)" stroke-width="3"/>
+                        <circle class="donut-fill" id="drawer-token-ring" cx="18" cy="18" r="15.9" fill="none" stroke="var(--accent-glow)" stroke-width="3" stroke-dasharray="100" stroke-dashoffset="100" stroke-linecap="round" transform="rotate(-90 18 18)"/>
+                        <text x="18" y="19" text-anchor="middle" dominant-baseline="middle" class="donut-text" id="drawer-token-percent">0%</text>
+                    </svg>
+                    <div class="drawer-token-stats">
+                        <div class="stat"><span data-i18n="token_used">Used</span>: <b id="drawer-token-used">0</b></div>
+                        <div class="stat"><span data-i18n="token_limit">Limit</span>: <b id="drawer-token-limit">0</b></div>
+                    </div>
                 </div>
             </div>
             <!-- Available Features -->
@@ -496,6 +503,44 @@
                             </form>
                         </div>
                     </div>
+                </div>
+            </main>
+
+            <!-- ZH: 分頁: 文件庫 | EN: PAGE: Document Library -->
+            <main id="docs-page" class="page-view">
+                <div class="settings-grid">
+                    <section class="widget form-box-panel">
+                        <div class="widget-header">
+                            <h3><ion-icon name="briefcase-outline" style="margin-right:6px;color:#f59e0b;"></ion-icon> <span data-i18n="doc_portfolio_title">未來作品集</span></h3>
+                        </div>
+                        <p style="color:var(--text-muted);line-height:1.6;" data-i18n="doc_portfolio_desc">展示您的 AI 訓練成果與模型作品。</p>
+                        <div class="empty-state" style="margin-top:10px;">
+                            <ion-icon name="construct-outline"></ion-icon>
+                            <p data-i18n="doc_coming_soon">內容建置中，敬請期待...</p>
+                        </div>
+                    </section>
+
+                    <section class="widget form-box-panel">
+                        <div class="widget-header">
+                            <h3><ion-icon name="bulb-outline" style="margin-right:6px;color:#6366f1;"></ion-icon> <span data-i18n="doc_solutions_title">問題解法</span></h3>
+                        </div>
+                        <p style="color:var(--text-muted);line-height:1.6;" data-i18n="doc_solutions_desc">常見問題的解決方案與除錯技巧。</p>
+                        <div class="empty-state" style="margin-top:10px;">
+                            <ion-icon name="construct-outline"></ion-icon>
+                            <p data-i18n="doc_coming_soon">內容建置中，敬請期待...</p>
+                        </div>
+                    </section>
+
+                    <section class="widget form-box-panel">
+                        <div class="widget-header">
+                            <h3><ion-icon name="school-outline" style="margin-right:6px;color:#10b981;"></ion-icon> <span data-i18n="doc_tutorial_title">模型製作教學</span></h3>
+                        </div>
+                        <p style="color:var(--text-muted);line-height:1.6;" data-i18n="doc_tutorial_desc">從零開始學習如何訓練與部署 AI 模型。</p>
+                        <div class="empty-state" style="margin-top:10px;">
+                            <ion-icon name="construct-outline"></ion-icon>
+                            <p data-i18n="doc_coming_soon">內容建置中，敬請期待...</p>
+                        </div>
+                    </section>
                 </div>
             </main>
 

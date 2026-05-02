@@ -16,7 +16,7 @@ const TRANSLATIONS = {
         login_title: "系統登入",
         label_username: "使用者名稱",
         label_password: "密碼",
-        btn_login: "傳送授權",
+        btn_login: "登入",
         // 導覽
         nav_compute: "運算任務",
         nav_assistant: "AI 助手",
@@ -123,13 +123,41 @@ const TRANSLATIONS = {
         tutorial_step3_title: "系統設定",
         tutorial_step3_desc: "查看您的 Token 配額、切換主題和語言、管理帳戶。",
         tutorial_dismiss: "不再顯示",
-        tutorial_ok: "了解！"
+        tutorial_ok: "了解！",
+        // 首頁 & 面板
+        nav_home: "首頁",
+        nav_docs: "文件庫",
+        drawer_title: "資訊面板",
+        drawer_token: "Token 用量",
+        drawer_features: "可用功能",
+        drawer_announcements: "公告與更新",
+        feat_1: "高算力 GPU",
+        feat_2: "AI 文字助手",
+        feat_3: "圖片生成 (即將推出)",
+        anno_1: "系統升級至 Blackwell 架構完成。",
+        ql_jupyter_title: "JupyterLab",
+        ql_jupyter_desc: "進入進階開發環境",
+        ql_school_title: "學校首頁",
+        ql_school_desc: "前往 MCU 官方網站",
+        ql_support_title: "問題回報",
+        ql_support_desc: "回報系統問題與建議",
+        compute_high_desc: "高算力佇列 (GPU 處理)",
+        compute_midlow_desc: "中低算力佇列 (服務層處理)",
+        // 文件庫頁面
+        doc_lib_title: "文件庫",
+        doc_portfolio_title: "未來作品集",
+        doc_portfolio_desc: "展示您的 AI 訓練成果與模型作品。",
+        doc_solutions_title: "問題解法",
+        doc_solutions_desc: "常見問題的解決方案與除錯技巧。",
+        doc_tutorial_title: "模型製作教學",
+        doc_tutorial_desc: "從零開始學習如何訓練與部署 AI 模型。",
+        doc_coming_soon: "內容建置中，敬請期待..."
     },
     en: {
         login_title: "System Login",
         label_username: "Username",
         label_password: "Password",
-        btn_login: "Submit Auth",
+        btn_login: "Login",
         // Navigation
         nav_compute: "Compute",
         nav_assistant: "Assistant",
@@ -236,7 +264,35 @@ const TRANSLATIONS = {
         tutorial_step3_title: "Settings",
         tutorial_step3_desc: "Check your token quota, switch themes & language, and manage your account.",
         tutorial_dismiss: "Don't show again",
-        tutorial_ok: "Got it!"
+        tutorial_ok: "Got it!",
+        // Home & Drawer
+        nav_home: "Home",
+        nav_docs: "Documents",
+        drawer_title: "Info Board",
+        drawer_token: "Token Usage",
+        drawer_features: "Available Features",
+        drawer_announcements: "Announcements & Updates",
+        feat_1: "High Compute GPU",
+        feat_2: "AI Text Assistant",
+        feat_3: "Image Gen (Soon)",
+        anno_1: "System upgraded to Blackwell architecture.",
+        ql_jupyter_title: "JupyterLab",
+        ql_jupyter_desc: "Access advanced dev environment",
+        ql_school_title: "School Homepage",
+        ql_school_desc: "Visit MCU official website",
+        ql_support_title: "Report Issues",
+        ql_support_desc: "Report bugs & suggestions",
+        compute_high_desc: "High Compute Queue (GPU Processing)",
+        compute_midlow_desc: "Mid/Low Compute Queue (Service Layer)",
+        // Document Library page
+        doc_lib_title: "Document Library",
+        doc_portfolio_title: "Future Portfolio",
+        doc_portfolio_desc: "Showcase your AI training results and model works.",
+        doc_solutions_title: "Problem Solutions",
+        doc_solutions_desc: "Common solutions and debugging tips.",
+        doc_tutorial_title: "Model Training Tutorial",
+        doc_tutorial_desc: "Learn to train and deploy AI models from scratch.",
+        doc_coming_soon: "Content under construction, stay tuned..."
     }
 };
 
@@ -664,6 +720,9 @@ function switchToDashboard() {
     if (headerLoginBtn) headerLoginBtn.style.display = 'none';
     if (userInfoDisplay) userInfoDisplay.style.display = 'flex';
 
+    // ZH: 顯示需登入才能用的導覽項目 | EN: Show auth-gated nav items
+    toggleAuthGatedUI(true);
+
     // ZH: 教學導覽: 首次登入時顯示 | EN: Show tutorial on first login
     if (!isTutorialDismissed()) {
         showTutorial();
@@ -680,6 +739,21 @@ function switchToLogin() {
     const userInfoDisplay = document.getElementById('user-info-display');
     if (headerLoginBtn) headerLoginBtn.style.display = 'flex';
     if (userInfoDisplay) userInfoDisplay.style.display = 'none';
+
+    // ZH: 隱藏需登入才能用的導覽項目 | EN: Hide auth-gated nav items
+    toggleAuthGatedUI(false);
+}
+
+// ZH: 切換需登入才能用的 UI 元素 | EN: Toggle auth-gated UI elements
+function toggleAuthGatedUI(show) {
+    const authTabs = ['tab-dash', 'tab-chat', 'tab-settings'];
+    authTabs.forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.style.display = show ? 'flex' : 'none';
+    });
+    // ZH: 教學按鈕 (底部 ⓘ) | EN: Tutorial info button
+    const tutorialBtn = document.getElementById('nav-quick-tutorial');
+    if (tutorialBtn) tutorialBtn.style.display = show ? 'flex' : 'none';
 }
 
 // =========================
@@ -761,6 +835,12 @@ function updateTokenDisplay(data) {
     const drawerTokenLimit = document.getElementById('drawer-token-limit');
     if (drawerTokenUsed) drawerTokenUsed.textContent = (data.tokens_used || 0).toLocaleString();
     if (drawerTokenLimit) drawerTokenLimit.textContent = (data.tokens_limit || 0).toLocaleString();
+
+    // Update drawer donut chart
+    const drawerTokenRing = document.getElementById('drawer-token-ring');
+    const drawerTokenPercent = document.getElementById('drawer-token-percent');
+    if (drawerTokenRing) drawerTokenRing.style.strokeDashoffset = 100 - (100 * normalizedPercentage);
+    if (drawerTokenPercent) drawerTokenPercent.textContent = `${percentage}%`;
 
     console.log('Token display updated:', {
         percentage,
