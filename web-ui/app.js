@@ -442,6 +442,29 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
+    // ZH: 下拉選單內的 Profile / Password 按鈕綁定 | EN: Bind Profile/Password buttons in dropdown
+    const navProfileBtn = document.getElementById('nav-profile-btn');
+    const profileModal = document.getElementById('profile-modal');
+    if (navProfileBtn && profileModal) {
+        navProfileBtn.addEventListener('click', () => {
+            profileModal.classList.remove('hidden');
+            if (userDropdownMenu) userDropdownMenu.style.display = 'none';
+        });
+        document.getElementById('profile-close-btn').addEventListener('click', () => profileModal.classList.add('hidden'));
+        document.getElementById('profile-backdrop').addEventListener('click', () => profileModal.classList.add('hidden'));
+    }
+
+    const navPasswordBtn = document.getElementById('nav-password-btn');
+    const passwordModal = document.getElementById('password-modal');
+    if (navPasswordBtn && passwordModal) {
+        navPasswordBtn.addEventListener('click', () => {
+            passwordModal.classList.remove('hidden');
+            if (userDropdownMenu) userDropdownMenu.style.display = 'none';
+        });
+        document.getElementById('password-close-btn').addEventListener('click', () => passwordModal.classList.add('hidden'));
+        document.getElementById('password-backdrop').addEventListener('click', () => passwordModal.classList.add('hidden'));
+    }
+
     newChatBtn.addEventListener('click', createNewSession);
 
     const jobFormHigh = document.getElementById('job-form-high');
@@ -872,8 +895,8 @@ function updateTokenDisplay(data) {
     // Update Side Drawer Token Stats
     const drawerTokenUsed = document.getElementById('drawer-token-used');
     const drawerTokenLimit = document.getElementById('drawer-token-limit');
-    if (drawerTokenUsed) drawerTokenUsed.textContent = (data.tokens_used || 0).toLocaleString();
-    if (drawerTokenLimit) drawerTokenLimit.textContent = (data.tokens_limit || 0).toLocaleString();
+    if (drawerTokenUsed) drawerTokenUsed.textContent = String(data.tokens_used || 0).padStart(8, ' ');
+    if (drawerTokenLimit) drawerTokenLimit.textContent = String(data.tokens_limit || 0).padStart(8, ' ');
 
     // Update drawer donut chart
     const drawerTokenRing = document.getElementById('drawer-token-ring');

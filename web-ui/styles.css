@@ -5,6 +5,7 @@
         linear-gradient(to bottom, rgb(14, 3, 42) 0%, rgba(68, 26, 167, 0.8) 50%, #000 100%);
 
     --bg-panel: rgba(0, 0, 0, 0.4);
+    --bg-solid: #111118;
     --bg-input: transparent;
     --border-color: #c8c8c8;
     --border-glow-color: rgba(255, 255, 255, 0.8);
@@ -22,6 +23,7 @@
         linear-gradient(to bottom, #f0f4f8 0%, #dbeafe 50%, #e0e7ff 100%);
 
     --bg-panel: rgba(255, 255, 255, 0.6);
+    --bg-solid: #ffffff;
     --border-color: #6366f1;
     --border-glow-color: rgba(99, 102, 241, 0.6);
     --accent-glow: #4f46e5;
@@ -1785,7 +1787,7 @@ ion-icon {
 
 .bottom-quick-links {
     display: grid;
-    grid-template-columns: repeat(3, 1fr);
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
     gap: 15px;
     margin-top: 15px;
 }
@@ -1937,18 +1939,6 @@ ion-icon {
 }
 
 /* Home Page Styles */
-.home-grid {
-    display: grid;
-    grid-template-columns: 2fr 1fr;
-    gap: 25px;
-    width: 100%;
-}
-
-@media (max-width: 900px) {
-    .home-grid {
-        grid-template-columns: 1fr;
-    }
-}
 
 .home-main-col, .home-side-col {
     display: flex;
