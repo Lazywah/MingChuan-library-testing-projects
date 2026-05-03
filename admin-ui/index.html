@@ -196,8 +196,48 @@
                     <span style="font-size: 13px; color: var(--text-muted);" data-i18n="batch_token_label">Batch set all users' token limit:</span>
                     <input type="number" id="batch-token-limit" class="config-select" style="width: 160px; padding: 6px 10px; border-radius: 8px;" placeholder="e.g. 5000000" value="100000">
                     <button id="btn-batch-tokens" class="ready-btn config-save-btn" style="width: auto; padding: 6px 16px; font-size: 13px;" data-i18n="btn_batch_apply">Apply to All</button>
+                    <div style="flex-grow:1;"></div>
+                    <button id="btn-provision-user" class="ready-btn config-save-btn" style="width: auto; padding: 6px 16px; font-size: 13px;" data-i18n="btn_add_test">
+                        <ion-icon name="person-add-outline" style="margin-right:4px;"></ion-icon>Add Test Account
+                    </button>
                 </div>
             </section>
+
+            <!-- Provision User Modal -->
+            <div id="provision-modal" class="tutorial-modal hidden">
+                <div class="tutorial-backdrop" id="provision-backdrop"></div>
+                <div class="tutorial-content" style="max-width: 480px; padding: 30px;">
+                    <button class="tutorial-close" id="provision-close-btn"><ion-icon name="close-outline"></ion-icon></button>
+                    <h2 style="margin-bottom: 20px; display: flex; align-items: center; gap: 8px;">
+                        <ion-icon name="person-add-outline"></ion-icon>
+                        <span data-i18n="add_test_title">Add Test Account</span>
+                    </h2>
+                    <form id="provision-form" style="display: flex; flex-direction: column; gap: 15px;">
+                        <div class="input-wrap">
+                            <ion-icon name="person-outline"></ion-icon>
+                            <input type="text" id="provision-username" required data-i18n="th_username" placeholder="Username">
+                        </div>
+                        <div class="input-wrap">
+                            <ion-icon name="mail-outline"></ion-icon>
+                            <input type="email" id="provision-email" required data-i18n="th_email" placeholder="Email">
+                        </div>
+                        <div class="input-wrap" style="flex: 1;">
+                            <ion-icon name="shield-outline"></ion-icon>
+                            <select id="provision-role" class="config-select" style="width: 100%; padding: 10px; border-radius: 8px;">
+                                <option value="student">Student</option>
+                                <option value="teacher">Teacher</option>
+                                <option value="admin">Admin</option>
+                            </select>
+                        </div>
+                        <button type="submit" class="ready-btn config-save-btn" style="width: 100%;" data-i18n="btn_add_test_submit">Create Account</button>
+                    </form>
+                    <!-- Temp password result -->
+                    <div id="provision-result" class="hidden" style="margin-top: 15px; padding: 15px; border-radius: 8px; background: var(--bg-panel); border: 1px solid var(--border-color);">
+                        <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 8px;" data-i18n="add_test_temp_password">Temporary Password (shown once):</p>
+                        <code id="provision-temp-pw" style="font-size: 16px; font-weight: bold; color: #10b981; word-break: break-all;"></code>
+                    </div>
+                </div>
+            </div>
 
             <!-- User Edit Modal -->
             <div id="user-edit-modal" class="tutorial-modal hidden">

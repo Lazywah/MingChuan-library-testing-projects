@@ -56,6 +56,12 @@ class AdminUserUpdate(BaseModel):
     tokens_limit: Optional[int] = None               # ZH: Token 月度上限 | EN: Monthly token limit
 
 
+class AdminProvisionUser(BaseModel):
+    """ZH: 管理員初始化帳號請求 | EN: Admin provision user request"""
+    username: str                                    # ZH: 使用者名稱 | EN: Username
+    email: EmailStr                                  # ZH: 電子郵件 | EN: Email
+    role: Optional[str] = "student"                  # ZH: 角色 | EN: Role
+
 class UserResponse(BaseModel):
     """ZH: 使用者資訊回應 (不含密碼) | EN: User info response (no password)"""
     id: str

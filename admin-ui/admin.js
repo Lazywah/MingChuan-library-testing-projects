@@ -48,7 +48,16 @@ const TRANSLATIONS = {
         toast_user_update_failed: "更新失敗",
         batch_token_label: "批量設定所有使用者 Token 上限：",
         btn_batch_apply: "套用到所有人",
-        toast_batch_updated: "已更新 {count} 位使用者的 Token 上限"
+        toast_batch_updated: "已更新 {count} 位使用者的 Token 上限",
+        btn_reset: "初始化",
+        confirm_reset_user: "確定要初始化使用者 {name} 的帳號嗎？\n密碼將被重置，用量將歸零。",
+        toast_user_reset: "帳號已初始化",
+        btn_add_test: "新增測試用帳號",
+        add_test_title: "新增測試用帳號",
+        btn_add_test_submit: "建立帳號",
+        add_test_temp_password: "臨時密碼（僅顯示一次）：",
+        toast_add_test_ok: "測試帳號已建立",
+        toast_add_test_fail: "建立失敗"
     },
     en: {
         btn_back_hub: "Back to Hub",
@@ -96,7 +105,16 @@ const TRANSLATIONS = {
         toast_user_update_failed: "Update failed",
         batch_token_label: "Batch set all users' token limit:",
         btn_batch_apply: "Apply to All",
-        toast_batch_updated: "Updated {count} users' token limit"
+        toast_batch_updated: "Updated {count} users' token limit",
+        btn_reset: "Initialize",
+        confirm_reset_user: "Are you sure to initialize user {name}?\nPassword will be reset, usage will be cleared.",
+        toast_user_reset: "Account initialized",
+        btn_add_test: "Add Test Account",
+        add_test_title: "Add Test Account",
+        btn_add_test_submit: "Create Account",
+        add_test_temp_password: "Temporary Password (shown once):",
+        toast_add_test_ok: "Test account created",
+        toast_add_test_fail: "Creation failed"
     }
 };
 
@@ -325,10 +343,39 @@ function renderAdminUsers(users) {
             <td>${u.last_login_ip || 'N/A'}</td>
             <td>${loginStr}</td>
             <td>${tokensStr}</td>
-            <td><button class="ready-btn" style="width:auto; padding:4px 12px; margin:0; font-size:12px; min-width:auto;" onclick="openEditUser('${u.id}')" data-i18n="btn_edit">${TRANSLATIONS[currentLang]?.btn_edit || 'Edit'}</button></td>
+            <td>
+                    <div style="display:flex; gap:4px;">
+                        <button class="ready-btn" style="width:auto; padding:4px 12px; margin:0; font-size:12px; min-width:auto;" onclick="openEditUser('${u.id}')" data-i18n="btn_edit">${TRANSLATIONS[currentLang]?.btn_edit || 'Edit'}</button>
+                        <button class="ready-btn" style="width:auto; padding:4px 12px; margin:0; font-size:12px; min-width:auto; border-color:#f59e0b; color:#f59e0b;" onclick="resetUser('${u.id}', '${u.username}')" data-i18n="btn_reset">${TRANSLATIONS[currentLang]?.btn_reset || 'Initialize'}</button>
+                    </div>
+                </td>
         `;
         tbody.appendChild(tr);
     });
+}
+
+async function resetUser(userId, username) {
+    const msg = (TRANSLATIONS[currentLang]?.confirm_reset_user || 'Initialize user {name}?').replace('{name}', username);
+    if (!confirm(msg)) return;
+
+    try {
+        // Reset password to random + clear token usage
+        const res = await fetch(`${API_BASE}/admin/users/${userId}/reset`, {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${authToken}` }
+        });
+        if (!res.ok) throw new Error('Reset failed');
+        const data = await res.json();
+        
+        // Show the new temp password
+        alert((TRANSLATIONS[currentLang]?.add_test_temp_password || 'Temporary Password:') + '\n\n' + data.temp_password);
+        
+        showToast(TRANSLATIONS[currentLang]?.toast_user_reset || 'Account initialized');
+        fetchAdminData();
+    } catch (err) {
+        console.error(err);
+        showToast(TRANSLATIONS[currentLang]?.toast_user_update_failed || 'Failed', true);
+    }
 }
 
 function renderAdminJobs(jobs) {
@@ -556,6 +603,57 @@ async function batchUpdateTokens() {
     }
 }
 
+// -------------------------
+// Provision User Modal
+// -------------------------
+function openProvision() {
+    document.getElementById('provision-username').value = '';
+    document.getElementById('provision-email').value = '';
+    document.getElementById('provision-role').value = 'student';
+    document.getElementById('provision-result').classList.add('hidden');
+    document.getElementById('provision-modal').classList.remove('hidden');
+    applyTranslations();
+}
+
+function closeProvision() {
+    document.getElementById('provision-modal').classList.add('hidden');
+}
+
+async function submitProvision(e) {
+    e.preventDefault();
+    const payload = {
+        username: document.getElementById('provision-username').value,
+        email: document.getElementById('provision-email').value,
+        role: document.getElementById('provision-role').value
+    };
+
+    try {
+        const res = await fetch(`${API_BASE}/admin/users/provision`, {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${authToken}`,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(payload)
+        });
+        if (!res.ok) {
+            const err = await res.json();
+            throw new Error(err.detail || 'Failed');
+        }
+        const data = await res.json();
+        
+        // Show temp password
+        document.getElementById('provision-temp-pw').textContent = data.temp_password;
+        document.getElementById('provision-result').classList.remove('hidden');
+        
+        showToast(TRANSLATIONS[currentLang]?.toast_add_test_ok || 'Test account created');
+        fetchAdminData();
+    } catch (err) {
+        console.error(err);
+        showToast((TRANSLATIONS[currentLang]?.toast_add_test_fail || 'Failed') + ': ' + err.message, true);
+    }
+}
+
 document.addEventListener('DOMContentLoaded', () => {
     const loginForm = document.getElementById('admin-login-form');
     if (loginForm) {
@@ -590,6 +688,16 @@ document.addEventListener('DOMContentLoaded', () => {
     // Batch Token Update Binding
     const batchBtn = document.getElementById('btn-batch-tokens');
     if (batchBtn) batchBtn.addEventListener('click', batchUpdateTokens);
+
+    // Provision User Modal Bindings
+    const provisionBtn = document.getElementById('btn-provision-user');
+    if (provisionBtn) provisionBtn.addEventListener('click', openProvision);
+    const provisionForm = document.getElementById('provision-form');
+    if (provisionForm) provisionForm.addEventListener('submit', submitProvision);
+    const provisionCloseBtn = document.getElementById('provision-close-btn');
+    if (provisionCloseBtn) provisionCloseBtn.addEventListener('click', closeProvision);
+    const provisionBackdrop = document.getElementById('provision-backdrop');
+    if (provisionBackdrop) provisionBackdrop.addEventListener('click', closeProvision);
 
     // Initialize Theme & Lang
     applyTheme(currentTheme);

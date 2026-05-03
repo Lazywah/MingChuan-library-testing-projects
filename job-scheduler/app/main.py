@@ -80,18 +80,40 @@ async def lifespan(app: FastAPI):
     # ZH: Module 2: 初始化資料庫 | EN: Module 2: Initialize database
     init_db()
 
-    # ZH: 啟動時同步全域 Token 額度至所有使用者 | EN: Sync global token limit to all users on startup
+    # ZH: 啟動時智慧同步全域 Token 額度 | EN: Smart sync global token limit on startup
+    # ZH: 只有當 yml 的值被修改過（與上次同步不同），才批量更新所有使用者
+    # EN: Only batch-update all users when the yml value actually changed since last sync
     from .database import SessionLocal
     from . import models
     try:
         db = SessionLocal()
-        updated = db.query(models.TokenUsage).filter(
-            models.TokenUsage.tokens_limit != settings.DEFAULT_MONTHLY_TOKEN_LIMIT
-        ).update({models.TokenUsage.tokens_limit: settings.DEFAULT_MONTHLY_TOKEN_LIMIT})
-        db.commit()
-        if updated > 0:
-            logger.info(f"ZH: 已同步 {updated} 位使用者的 Token 額度為 {settings.DEFAULT_MONTHLY_TOKEN_LIMIT} | "
-                        f"EN: Synced {updated} users' token limit to {settings.DEFAULT_MONTHLY_TOKEN_LIMIT}")
+        # 讀取上次同步的值
+        last_sync = db.query(models.SystemConfig).filter(
+            models.SystemConfig.key == "last_synced_token_limit"
+        ).first()
+        last_val = int(last_sync.value) if last_sync else None
+        current_val = settings.DEFAULT_MONTHLY_TOKEN_LIMIT
+
+        if last_val != current_val:
+            # yml 的值變了，批量更新所有使用者
+            updated = db.query(models.TokenUsage).update(
+                {models.TokenUsage.tokens_limit: current_val}
+            )
+            # 記錄本次同步值
+            if last_sync:
+                last_sync.value = str(current_val)
+            else:
+                db.add(models.SystemConfig(
+                    key="last_synced_token_limit",
+                    value=str(current_val),
+                    description="Last synced DEFAULT_MONTHLY_TOKEN_LIMIT from env"
+                ))
+            db.commit()
+            if updated > 0:
+                logger.info(f"ZH: yml 額度已從 {last_val} 變更為 {current_val}，已同步 {updated} 位使用者 | "
+                            f"EN: yml limit changed {last_val} → {current_val}, synced {updated} users")
+        else:
+            logger.info("ZH: yml Token 額度未變更，跳過同步 | EN: yml token limit unchanged, skip sync")
         db.close()
     except Exception as e:
         logger.warning(f"ZH: Token 額度同步失敗: {e} | EN: Token limit sync failed: {e}")
