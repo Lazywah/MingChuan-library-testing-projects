@@ -1187,7 +1187,7 @@ ion-icon {
     display: flex;
     align-items: center;
     gap: 10px;
-    z-index: 1000;
+    z-index: 99999;
     transition: 0.4s;
     box-shadow: 0 0 20px rgba(0, 0, 0, 0.5);
 }
