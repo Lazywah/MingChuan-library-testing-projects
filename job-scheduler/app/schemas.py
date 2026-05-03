@@ -61,6 +61,7 @@ class AdminProvisionUser(BaseModel):
     username: str                                    # ZH: 使用者名稱 | EN: Username
     email: EmailStr                                  # ZH: 電子郵件 | EN: Email
     role: Optional[str] = "student"                  # ZH: 角色 | EN: Role
+    password: Optional[str] = None                   # ZH: 自訂密碼，若無則自動產生 | EN: Custom password, if empty auto-generate
 
 class AdminDeleteUser(BaseModel):
     """ZH: 管理員刪除使用者請求 | EN: Admin delete user request"""

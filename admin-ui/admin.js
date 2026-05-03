@@ -760,6 +760,7 @@ async function batchUpdateTokens() {
 function openProvision() {
     document.getElementById('provision-username').value = '';
     document.getElementById('provision-email').value = '';
+    document.getElementById('provision-password').value = '';
     document.getElementById('provision-role').value = 'student';
     document.getElementById('provision-result').classList.add('hidden');
     document.getElementById('provision-modal').classList.remove('hidden');
@@ -777,6 +778,10 @@ async function submitProvision(e) {
         email: document.getElementById('provision-email').value,
         role: document.getElementById('provision-role').value
     };
+    const pw = document.getElementById('provision-password').value;
+    if (pw) {
+        payload.password = pw;
+    }
 
     try {
         const res = await fetch(`${API_BASE}/admin/users/provision`, {

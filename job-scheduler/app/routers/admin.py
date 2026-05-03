@@ -199,9 +199,9 @@ def provision_user(
     if crud.get_user_by_email(db, data.email):
         raise HTTPException(status_code=400, detail="Email already exists")
     
-    # ZH: 產生臨時密碼 | EN: Generate temp password
+    # ZH: 使用自訂密碼或產生臨時密碼 | EN: Use custom password or generate temp password
     import secrets
-    temp_password = secrets.token_urlsafe(12)
+    temp_password = data.password if data.password else secrets.token_urlsafe(12)
     
     # ZH: 建立使用者 | EN: Create user
     user_create = schemas.UserCreate(
