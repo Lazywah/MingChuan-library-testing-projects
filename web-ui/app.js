@@ -475,6 +475,17 @@ document.addEventListener('DOMContentLoaded', () => {
         document.getElementById('password-backdrop').addEventListener('click', () => passwordModal.classList.add('hidden'));
     }
 
+    const navAdminBtn = document.getElementById('nav-admin-btn');
+    if (navAdminBtn) {
+        navAdminBtn.addEventListener('click', () => {
+            // ZH: 導向管理面板前，確保 admin_hud_token 有值 | EN: Ensure admin_hud_token is set before redirect
+            if (authToken) {
+                localStorage.setItem('admin_hud_token', authToken);
+            }
+            window.location.href = 'admin.html';
+        });
+    }
+
     newChatBtn.addEventListener('click', createNewSession);
 
     const jobFormHigh = document.getElementById('job-form-high');
@@ -812,10 +823,7 @@ if (loginForm) {
             });
             if (meRes.ok) {
                 const meData = await meRes.json();
-                if (meData.role === 'admin') {
-                    window.location.href = 'admin.html';
-                    return;
-                }
+                // Admin stays here, can click "Admin Panel" if needed
             }
 
             await fetchDashboardData();
@@ -836,11 +844,8 @@ async function checkAuth() {
         if (!res.ok) throw new Error('expired');
         const userData = await res.json();
 
-        // ZH: 管理員自動導向管理面板 | EN: Redirect admin to admin panel
-        if (userData.role === 'admin') {
-            window.location.href = 'admin.html';
-            return;
-        }
+        // ZH: 管理員不再自動導向，允許使用使用者大廳 | EN: Admin can now use the user hub
+        // if (userData.role === 'admin') ...
 
         await fetchDashboardData();
         switchToDashboard();
@@ -913,6 +918,12 @@ async function fetchUserProfile() {
         if (userDisplay) userDisplay.textContent = data.username;
         if (userRole) userRole.textContent = data.role.toUpperCase();
         
+        // ZH: 顯示或隱藏管理員面板按鈕 | EN: Toggle admin panel button
+        const navAdminBtn = document.getElementById('nav-admin-btn');
+        if (navAdminBtn) {
+            navAdminBtn.style.display = data.role === 'admin' ? 'flex' : 'none';
+        }
+
         // ZH: 依照帳號掛載其專屬的聊天歷史紀錄 | EN: Load specific chat sessions per user
         window.currentUsername = data.username;
         window.currentUserRole = data.role;
@@ -930,7 +941,6 @@ async function fetchUserProfile() {
         
         renderSessions();
         renderActiveChat();
-
     }
 }
 

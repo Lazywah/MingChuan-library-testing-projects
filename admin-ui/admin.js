@@ -350,11 +350,15 @@ function renderAdminUsers(users) {
             const roleStr = u.role === 'admin' ? '<span class="status-badge running">Admin</span>' : `<span class="status-badge completed">${u.role}</span>`;
             const statusStr = u.is_active ? '<span style="color:var(--neon-green)">Active</span>' : '<span style="color:var(--neon-pink)">Disabled</span>';
             
-            // Online status indicator (within 5 mins)
-            const isOnline = u.online_status === 1;
-            const onlineDot = isOnline 
-                ? '<span style="display:inline-block; width:8px; height:8px; border-radius:50%; background:#10b981; margin-right:6px; box-shadow:0 0 5px #10b981;" title="Online"></span>'
-                : '<span style="display:inline-block; width:8px; height:8px; border-radius:50%; background:#6b7280; margin-right:6px;" title="Offline"></span>';
+            // Online status indicator: red=disabled, green=online, gray=offline
+            let onlineDot;
+            if (!u.is_active) {
+                onlineDot = '<span style="display:inline-block; width:8px; height:8px; border-radius:50%; background:#ef4444; margin-right:6px; box-shadow:0 0 5px #ef4444;" title="Disabled"></span>';
+            } else if (u.online_status === 1) {
+                onlineDot = '<span style="display:inline-block; width:8px; height:8px; border-radius:50%; background:#10b981; margin-right:6px; box-shadow:0 0 5px #10b981;" title="Online"></span>';
+            } else {
+                onlineDot = '<span style="display:inline-block; width:8px; height:8px; border-radius:50%; background:#6b7280; margin-right:6px;" title="Offline"></span>';
+            }
             
             // Token display
             let tokensStr = 'N/A';
