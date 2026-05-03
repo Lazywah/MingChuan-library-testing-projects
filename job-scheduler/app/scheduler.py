@@ -23,39 +23,15 @@ async def _scheduler_loop():
     """
     ZH: 排程器主迴圈 (目前閒置，因為任務改由 Worker Agent 主動 Pull)
     EN: Scheduler main loop (currently idle, tasks are pulled by Worker Agent)
+    ZH: 測試帳號清理已移至 main.py 的啟動流程（每次重啟自動清除）
+    EN: Test account cleanup moved to main.py startup (auto-cleaned on restart)
     """
     global _scheduler_running
     logger.info("ZH: 排程器啟動 (Pull 模式下僅作佔位) | EN: Scheduler started (Idle in Pull mode)")
 
     while _scheduler_running:
-        try:
-            db = SessionLocal()
-            from . import models
-            from datetime import datetime, timedelta
-            from sqlalchemy import or_, and_
-            
-            # ZH: 清理超過 5 分鐘未活動的測試帳號 | EN: Clean up test accounts inactive for > 5 mins
-            cutoff_time = datetime.utcnow() - timedelta(minutes=5)
-            
-            stale_users = db.query(models.User).filter(
-                models.User.is_test_account == 1,
-                or_(
-                    and_(models.User.last_login_time.isnot(None), models.User.last_login_time < cutoff_time),
-                    and_(models.User.last_login_time.is_(None), models.User.created_at < cutoff_time)
-                )
-            ).all()
-            
-            for u in stale_users:
-                db.query(models.TokenUsage).filter(models.TokenUsage.user_id == u.id).delete()
-                db.delete(u)
-                logger.info(f"ZH: 自動刪除超時測試帳號: {u.username} | EN: Auto-deleted inactive test account: {u.username}")
-                
-            if stale_users:
-                db.commit()
-            db.close()
-        except Exception as e:
-            logger.error(f"ZH: 排程器清理錯誤: {e} | EN: Scheduler cleanup error: {e}")
-
+        # ZH: 保留迴圈供未來擴充（例如：定時清理超時任務）
+        # EN: Loop retained for future use (e.g., timeout cleanup)
         await asyncio.sleep(60)
 
     logger.info("ZH: 排程器已停止 | EN: Scheduler stopped")

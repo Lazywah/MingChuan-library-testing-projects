@@ -49,7 +49,12 @@ def get_all_jobs(
 ) -> Any:
     verify_admin(current_user)
     jobs = db.query(models.TrainingJob).order_by(models.TrainingJob.created_at.desc()).all()
-    return jobs
+    result = []
+    for j in jobs:
+        d = dict(j.__dict__)
+        d.pop('_sa_instance_state', None)
+        result.append(d)
+    return result
 
 @router.get("/models")
 def get_all_models(
@@ -58,7 +63,12 @@ def get_all_models(
 ) -> Any:
     verify_admin(current_user)
     mdls = db.query(models.Model).order_by(models.Model.created_at.desc()).all()
-    return mdls
+    result = []
+    for m in mdls:
+        d = dict(m.__dict__)
+        d.pop('_sa_instance_state', None)
+        result.append(d)
+    return result
 
 @router.get("/cluster/stats")
 def get_cluster_stats(
@@ -129,14 +139,19 @@ def batch_update_token_limit(
     return {"updated_count": updated, "new_limit": new_limit}
 
 
-@router.delete("/users/{user_id}")
+@router.post("/users/{user_id}/delete")
 def admin_delete_user(
     user_id: str,
+    payload: schemas.AdminDeleteUser,
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user)
 ) -> Any:
-    """ZH: 管理員刪除使用者 | EN: Admin delete user"""
+    """ZH: 管理員刪除使用者 (需驗證密碼) | EN: Admin delete user (requires password)"""
     verify_admin(current_user)
+    
+    # ZH: 驗證管理員密碼 | EN: Verify admin password
+    if not crud.verify_password(payload.admin_password, current_user.hashed_password):
+        raise HTTPException(status_code=403, detail="Invalid admin password")
     
     # ZH: 禁止刪除自己 | EN: Cannot delete self
     if user_id == current_user.id:

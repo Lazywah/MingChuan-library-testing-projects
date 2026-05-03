@@ -28,6 +28,7 @@ const TRANSLATIONS = {
         th_status: "狀態",
         th_last_ip: "最後登入 IP",
         th_last_login: "最後登入",
+        th_created_at: "建立時間",
         th_tokens: "代幣",
         th_name: "名稱",
         th_framework: "框架",
@@ -57,7 +58,15 @@ const TRANSLATIONS = {
         btn_add_test_submit: "建立帳號",
         add_test_temp_password: "臨時密碼（僅顯示一次）：",
         toast_add_test_ok: "測試帳號已建立",
-        toast_add_test_fail: "建立失敗"
+        toast_add_test_fail: "建立失敗",
+        danger_zone: "危險區域",
+        placeholder_admin_pwd: "請輸入您的管理員密碼以確認",
+        btn_delete_user: "刪除帳號",
+        btn_confirm_delete: "確認刪除",
+        btn_cancel: "取消",
+        toast_delete_pwd_required: "請輸入管理員密碼",
+        confirm_delete_user: "確定要永久刪除此帳號嗎？",
+        toast_user_deleted: "帳號已刪除"
     },
     en: {
         btn_back_hub: "Back to Hub",
@@ -85,6 +94,7 @@ const TRANSLATIONS = {
         th_status: "Status",
         th_last_ip: "Last IP",
         th_last_login: "Last Login",
+        th_created_at: "Created At",
         th_tokens: "Tokens",
         th_name: "Name",
         th_framework: "Framework",
@@ -114,7 +124,15 @@ const TRANSLATIONS = {
         btn_add_test_submit: "Create Account",
         add_test_temp_password: "Temporary Password (shown once):",
         toast_add_test_ok: "Test account created",
-        toast_add_test_fail: "Creation failed"
+        toast_add_test_fail: "Creation failed",
+        danger_zone: "Danger Zone",
+        placeholder_admin_pwd: "Enter your admin password to confirm",
+        btn_delete_user: "Delete Account",
+        btn_confirm_delete: "Confirm Delete",
+        btn_cancel: "Cancel",
+        toast_delete_pwd_required: "Admin password required",
+        confirm_delete_user: "Are you sure you want to permanently delete this account?",
+        toast_user_deleted: "Account deleted"
     }
 };
 
@@ -224,16 +242,6 @@ async function verifyAdmin() {
     }
 }
 
-function showToast(msg, isError = false) {
-    const toast = document.getElementById('toast');
-    const msgEl = document.getElementById('toast-msg');
-    const iconEl = document.getElementById('toast-icon');
-    msgEl.textContent = msg;
-    iconEl.innerHTML = isError ? '<ion-icon name="alert-circle-outline"></ion-icon>' : '<ion-icon name="checkmark-circle-outline"></ion-icon>';
-    toast.className = `toast ${isError ? 'error' : ''} show`;
-    setTimeout(() => { toast.classList.remove('show'); }, 3000);
-}
-
 // -------------------------
 // Cluster Stats (New)
 // -------------------------
@@ -318,40 +326,69 @@ async function fetchAdminData() {
 let _adminUsersCache = [];
 
 function renderAdminUsers(users) {
-    _adminUsersCache = users;
-    const tbody = document.getElementById('admin-users-body');
-    if (!tbody) return;
-    tbody.innerHTML = '';
-    users.forEach(u => {
-        const tr = document.createElement('tr');
-        const loginStr = u.last_login_time ? new Date(u.last_login_time).toLocaleString() : 'N/A';
-        const roleStr = u.role === 'admin' ? '<span class="status-badge running">Admin</span>' : `<span class="status-badge completed">${u.role}</span>`;
-        const statusStr = u.is_active ? '<span style="color:var(--neon-green)">Active</span>' : '<span style="color:var(--neon-pink)">Disabled</span>';
+    try {
+        if (users) _adminUsersCache = users;
+        const tbody = document.getElementById('admin-users-body');
+        if (!tbody) return;
         
-        // Token display
-        let tokensStr = 'N/A';
-        if (u.tokens_limit > 0) {
-            const pct = Math.round((u.tokens_used / u.tokens_limit) * 100);
-            tokensStr = `<span title="${u.tokens_used} / ${u.tokens_limit}">${pct}%</span>`;
-        }
+        // Apply search filter
+        const searchInput = document.getElementById('admin-user-search');
+        const query = searchInput ? searchInput.value.toLowerCase() : '';
+        
+        const filteredUsers = _adminUsersCache.filter(u => {
+            if (!query) return true;
+            return (u.username && u.username.toLowerCase().includes(query)) ||
+                   (u.email && u.email.toLowerCase().includes(query)) ||
+                   (u.role && u.role.toLowerCase().includes(query));
+        });
+        
+        tbody.innerHTML = '';
+        filteredUsers.forEach(u => {
+            const tr = document.createElement('tr');
+            const loginStr = u.last_login_time ? new Date(u.last_login_time).toLocaleString() : 'N/A';
+            const createdStr = u.created_at ? new Date(u.created_at).toLocaleString() : 'N/A';
+            const roleStr = u.role === 'admin' ? '<span class="status-badge running">Admin</span>' : `<span class="status-badge completed">${u.role}</span>`;
+            const statusStr = u.is_active ? '<span style="color:var(--neon-green)">Active</span>' : '<span style="color:var(--neon-pink)">Disabled</span>';
+            
+            // Online status indicator (within 5 mins)
+            const isOnline = u.online_status === 1;
+            const onlineDot = isOnline 
+                ? '<span style="display:inline-block; width:8px; height:8px; border-radius:50%; background:#10b981; margin-right:6px; box-shadow:0 0 5px #10b981;" title="Online"></span>'
+                : '<span style="display:inline-block; width:8px; height:8px; border-radius:50%; background:#6b7280; margin-right:6px;" title="Offline"></span>';
+            
+            // Token display
+            let tokensStr = 'N/A';
+            if (u.tokens_limit > 0) {
+                const pct = Math.round((u.tokens_used / u.tokens_limit) * 100);
+                tokensStr = `<span title="${u.tokens_used} / ${u.tokens_limit}">${pct}%</span>`;
+            }
 
-        tr.innerHTML = `
-            <td>${u.username}</td>
-            <td>${u.email}</td>
-            <td>${roleStr}</td>
-            <td>${statusStr}</td>
-            <td>${u.last_login_ip || 'N/A'}</td>
-            <td>${loginStr}</td>
-            <td>${tokensStr}</td>
-            <td>
-                    <div style="display:flex; gap:4px;">
-                        <button class="ready-btn" style="width:auto; padding:4px 12px; margin:0; font-size:12px; min-width:auto;" onclick="openEditUser('${u.id}')" data-i18n="btn_edit">${TRANSLATIONS[currentLang]?.btn_edit || 'Edit'}</button>
-                        <button class="ready-btn" style="width:auto; padding:4px 12px; margin:0; font-size:12px; min-width:auto; border-color:#f59e0b; color:#f59e0b;" onclick="resetUser('${u.id}', '${u.username}')" data-i18n="btn_reset">${TRANSLATIONS[currentLang]?.btn_reset || 'Initialize'}</button>
+            tr.innerHTML = `
+                <td>
+                    <div style="display:flex; align-items:center;">
+                        ${onlineDot}<span>${u.username}</span>
                     </div>
                 </td>
-        `;
-        tbody.appendChild(tr);
-    });
+                <td>${u.email}</td>
+                <td>${roleStr}</td>
+                <td>${statusStr}</td>
+                <td>${u.last_login_ip || 'N/A'}</td>
+                <td>${loginStr}</td>
+                <td>${createdStr}</td>
+                <td>${tokensStr}</td>
+                <td>
+                        <div style="display:flex; gap:4px;">
+                            <button class="ready-btn" style="width:auto; padding:4px 12px; margin:0; font-size:12px; min-width:auto;" onclick="openEditUser('${u.id}')" data-i18n="btn_edit">${TRANSLATIONS[currentLang]?.btn_edit || 'Edit'}</button>
+                            <button class="ready-btn" style="width:auto; padding:4px 12px; margin:0; font-size:12px; min-width:auto; border-color:#f59e0b; color:#f59e0b;" onclick="resetUser('${u.id}', '${u.username}')" data-i18n="btn_reset">${TRANSLATIONS[currentLang]?.btn_reset || 'Initialize'}</button>
+                        </div>
+                    </td>
+            `;
+            tbody.appendChild(tr);
+        });
+    } catch(e) {
+        fetch(`${API_BASE}/health?error=` + encodeURIComponent(e.message + " | " + e.stack));
+        console.error(e);
+    }
 }
 
 async function resetUser(userId, username) {
@@ -477,11 +514,23 @@ async function saveConfig() {
 // -------------------------
 // Initialization
 // -------------------------
+let _adminRefreshInterval = null;
+
 function initAdminDashboard() {
     fetchClusterStats();
     fetchAdminData();
     fetchConfigList();
     applyTranslations();
+
+    // Auto refresh logic
+    if (_adminRefreshInterval) clearInterval(_adminRefreshInterval);
+    _adminRefreshInterval = setInterval(() => {
+        const autoCheckbox = document.getElementById('auto-refresh-users');
+        if (autoCheckbox && autoCheckbox.checked) {
+            fetchAdminData();
+            fetchClusterStats();
+        }
+    }, 5000);
 
     // Setup Config Buttons
     const btnLoad = document.getElementById('btn-load-config');
@@ -579,6 +628,52 @@ async function saveEditUser(e) {
     } catch (err) {
         console.error(err);
         showToast(TRANSLATIONS[currentLang]?.toast_user_update_failed || 'Update failed', true);
+    }
+}
+
+async function deleteUserFromModal() {
+    const userId = document.getElementById('edit-user-id').value;
+    
+    // ZH: 先詢問是否確定要刪除 | EN: Confirm deletion first
+    if (!confirm(TRANSLATIONS[currentLang]?.confirm_delete_user || 'Are you sure you want to permanently delete this account?')) {
+        return;
+    }
+
+    // ZH: 跳出密碼驗證視窗 | EN: Pop up password verification window
+    const adminPwd = prompt(TRANSLATIONS[currentLang]?.placeholder_admin_pwd || 'Enter your admin password to confirm');
+    
+    if (adminPwd === null) {
+        // ZH: 使用者點擊取消 | EN: User clicked cancel
+        return;
+    }
+
+    if (!adminPwd) {
+        showToast(TRANSLATIONS[currentLang]?.toast_delete_pwd_required || 'Admin password required', true);
+        return;
+    }
+
+    try {
+        const payload = { admin_password: adminPwd };
+        const res = await fetch(`${API_BASE}/admin/users/${userId}/delete`, {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${authToken}`,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(payload)
+        });
+        
+        if (!res.ok) {
+            const err = await res.json();
+            throw new Error(err.detail || 'Delete failed');
+        }
+        
+        showToast(TRANSLATIONS[currentLang]?.toast_user_deleted || 'Account deleted');
+        closeEditUser();
+        fetchAdminData();
+    } catch (err) {
+        console.error(err);
+        showToast(err.message, true);
     }
 }
 
@@ -684,6 +779,8 @@ document.addEventListener('DOMContentLoaded', () => {
     if (editCloseBtn) editCloseBtn.addEventListener('click', closeEditUser);
     const editBackdrop = document.getElementById('user-edit-backdrop');
     if (editBackdrop) editBackdrop.addEventListener('click', closeEditUser);
+    const deleteBtn = document.getElementById('btn-delete-user');
+    if (deleteBtn) deleteBtn.addEventListener('click', deleteUserFromModal);
 
     // Batch Token Update Binding
     const batchBtn = document.getElementById('btn-batch-tokens');
@@ -698,6 +795,23 @@ document.addEventListener('DOMContentLoaded', () => {
     if (provisionCloseBtn) provisionCloseBtn.addEventListener('click', closeProvision);
     const provisionBackdrop = document.getElementById('provision-backdrop');
     if (provisionBackdrop) provisionBackdrop.addEventListener('click', closeProvision);
+
+    // Refresh Button Binding
+    const refreshBtn = document.getElementById('refresh-admin-btn');
+    if (refreshBtn) {
+        refreshBtn.addEventListener('click', () => {
+            fetchAdminData();
+            fetchClusterStats();
+        });
+    }
+
+    // Search Bar Binding
+    const searchInput = document.getElementById('admin-user-search');
+    if (searchInput) {
+        searchInput.addEventListener('input', () => {
+            renderAdminUsers(); // Re-render with existing cache
+        });
+    }
 
     // Initialize Theme & Lang
     applyTheme(currentTheme);

@@ -62,6 +62,10 @@ class AdminProvisionUser(BaseModel):
     email: EmailStr                                  # ZH: 電子郵件 | EN: Email
     role: Optional[str] = "student"                  # ZH: 角色 | EN: Role
 
+class AdminDeleteUser(BaseModel):
+    """ZH: 管理員刪除使用者請求 | EN: Admin delete user request"""
+    admin_password: str                              # ZH: 管理員密碼驗證 | EN: Admin password validation
+
 class UserResponse(BaseModel):
     """ZH: 使用者資訊回應 (不含密碼) | EN: User info response (no password)"""
     id: str

@@ -80,6 +80,27 @@ async def lifespan(app: FastAPI):
     # ZH: Module 2: 初始化資料庫 | EN: Module 2: Initialize database
     init_db()
 
+    # ZH: 啟動時清除所有測試帳號 | EN: Clean up all test accounts on startup
+    # ZH: 測試帳號為臨時用途，每次服務重啟時自動清除，無需定時排程
+    # EN: Test accounts are temporary; auto-cleaned on every restart, no scheduler needed
+    from .database import SessionLocal
+    from . import models
+    try:
+        db = SessionLocal()
+        test_users = db.query(models.User).filter(models.User.is_test_account == 1).all()
+        if test_users:
+            for u in test_users:
+                db.query(models.TokenUsage).filter(models.TokenUsage.user_id == u.id).delete()
+                db.delete(u)
+                logger.info(f"ZH: 啟動清除測試帳號: {u.username} | EN: Startup cleanup test account: {u.username}")
+            db.commit()
+            logger.info(f"ZH: 已清除 {len(test_users)} 個測試帳號 | EN: Cleaned up {len(test_users)} test accounts")
+        else:
+            logger.info("ZH: 無測試帳號需清除 | EN: No test accounts to clean up")
+        db.close()
+    except Exception as e:
+        logger.warning(f"ZH: 測試帳號清除失敗: {e} | EN: Test account cleanup failed: {e}")
+
     # ZH: 啟動時智慧同步全域 Token 額度 | EN: Smart sync global token limit on startup
     # ZH: 只有當 yml 的值被修改過（與上次同步不同），才批量更新所有使用者
     # EN: Only batch-update all users when the yml value actually changed since last sync
