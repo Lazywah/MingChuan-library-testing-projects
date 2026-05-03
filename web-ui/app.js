@@ -482,7 +482,7 @@ document.addEventListener('DOMContentLoaded', () => {
             if (authToken) {
                 localStorage.setItem('admin_hud_token', authToken);
             }
-            window.location.href = 'admin.html';
+            window.location.href = window.location.protocol + '//' + window.location.hostname + ':8888/';
         });
     }
 
