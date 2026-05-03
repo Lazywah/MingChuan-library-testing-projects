@@ -182,6 +182,8 @@ def provision_user(
         role=data.role or "student"
     )
     db_user = crud.create_user(db, user_create)
+    db_user.is_test_account = 1
+    db.commit()
     
     return {
         "id": db_user.id,

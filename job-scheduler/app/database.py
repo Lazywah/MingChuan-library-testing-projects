@@ -138,6 +138,8 @@ def init_db():
             except Exception: pass
             try: conn.execute(text("ALTER TABLE users ADD COLUMN online_status INTEGER DEFAULT 0"))
             except Exception: pass
+            try: conn.execute(text("ALTER TABLE users ADD COLUMN is_test_account INTEGER DEFAULT 0"))
+            except Exception: pass
     except Exception as e:
         logger.warning(f"DB Migration checks: {e}")
 

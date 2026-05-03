@@ -66,6 +66,7 @@ class User(Base):
     last_login_time = Column(DateTime, nullable=True)                         # ZH: 最後登入時間 | EN: Last login time
     last_login_ip = Column(String, nullable=True)                             # ZH: 最後登入IP | EN: Last login IP
     online_status = Column(Integer, default=0)                                # ZH: 在線狀態 (0:離線, 1:線上) | EN: Online status
+    is_test_account = Column(Integer, default=0)                              # ZH: 測試帳號標記 (0:否, 1:是) | EN: Test account flag
     tutorial_dismissed = Column(Integer, default=0)                           # ZH: 是否不再顯示教學 (0:否, 1:是) | EN: Tutorial dismissed (0:no, 1:yes)
     created_at = Column(DateTime, default=datetime.utcnow)                    # ZH: 建立時間 | EN: Created at
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)  # ZH: 更新時間 | EN: Updated at
