@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, status
 from sqlalchemy.orm import Session
 from typing import List, Any
 import logging
@@ -6,6 +6,7 @@ import logging
 from .. import models, schemas, crud
 from ..auth import get_current_user
 from ..database import get_db
+from ..services import email_service
 
 logger = logging.getLogger(__name__)
 
@@ -187,6 +188,7 @@ def admin_verify_action(
 @router.post("/users/provision")
 def provision_user(
     data: schemas.AdminProvisionUser,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user)
 ) -> Any:
@@ -214,6 +216,16 @@ def provision_user(
     db_user.is_test_account = 1
     db.commit()
     
+    # ZH: 發送帳號建立通知 | EN: Send account provision alert
+    if db_user.email:
+        background_tasks.add_task(
+            email_service.send_temp_password,
+            db_user.email,
+            db_user.username,
+            temp_password,
+            True
+        )
+    
     return {
         "id": db_user.id,
         "username": db_user.username,
@@ -226,6 +238,7 @@ def provision_user(
 @router.post("/users/{user_id}/reset")
 def reset_user_account(
     user_id: str,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user)
 ) -> Any:
@@ -247,6 +260,16 @@ def reset_user_account(
         usage.tokens_used = 0
     
     db.commit()
+    
+    # ZH: 發送密碼重設通知 | EN: Send password reset alert
+    if db_user.email:
+        background_tasks.add_task(
+            email_service.send_temp_password,
+            db_user.email,
+            db_user.username,
+            temp_password,
+            False
+        )
     
     return {
         "username": db_user.username,

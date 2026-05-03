@@ -72,6 +72,15 @@ class Settings(BaseSettings):
     # ------------------------------------------------------------------
     LOG_LEVEL: str = "INFO"
 
+    # ------------------------------------------------------------------
+    # ZH: SMTP 郵件設定 | EN: SMTP Email Configuration
+    # ------------------------------------------------------------------
+    SMTP_SERVER: str = ""
+    SMTP_PORT: int = 587
+    SMTP_USERNAME: str = ""
+    SMTP_PASSWORD: str = ""
+    SMTP_FROM_EMAIL: str = "noreply@ai-platform.local"
+
     class Config:
         env_file = ".env"
         case_sensitive = True

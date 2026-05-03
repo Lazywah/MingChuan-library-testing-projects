@@ -23,7 +23,7 @@ EN: Modular design:
 ==============================================================================
 """
 
-from fastapi import APIRouter, Depends, HTTPException, status, Request
+from fastapi import APIRouter, Depends, HTTPException, status, Request, BackgroundTasks
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 from datetime import datetime
@@ -31,6 +31,7 @@ from datetime import datetime
 from .. import crud, schemas, models
 from ..auth import authenticate_user, create_access_token, get_current_user
 from ..database import get_db
+from ..services import email_service
 
 import logging
 
@@ -84,7 +85,12 @@ def register(user: schemas.UserCreate, db: Session = Depends(get_db)):
 # EN: Flow: Receive credentials → verify → issue JWT token
 # ==============================================================================
 @router.post("/login", response_model=schemas.Token)
-def login(request: Request, form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
+def login(
+    request: Request,
+    background_tasks: BackgroundTasks,
+    form_data: OAuth2PasswordRequestForm = Depends(),
+    db: Session = Depends(get_db)
+):
     """
     ZH: 使用者登入，回傳 JWT access token
     EN: User login, returns JWT access token
@@ -130,6 +136,15 @@ def login(request: Request, form_data: OAuth2PasswordRequestForm = Depends(), db
     except Exception as e:
         logger.error(f"Failed to update login status: {e}")
 
+    # ZH: 發送登入通知 | EN: Send login alert
+    if user.email:
+        background_tasks.add_task(
+            email_service.send_login_alert,
+            user.email,
+            user.username,
+            request.client.host if request.client else "Unknown"
+        )
+
     access_token = create_access_token(
         data={"sub": user.username, "role": user.role}
     )
@@ -140,6 +155,7 @@ def login(request: Request, form_data: OAuth2PasswordRequestForm = Depends(), db
 @router.post("/forgot-password")
 def forgot_password(
     payload: schemas.AuthForgotPassword,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db)
 ):
     """ZH: 忘記密碼 - 產生隨機臨時密碼 | EN: Forgot password - Generate random temp password"""
@@ -161,8 +177,17 @@ def forgot_password(
     user.hashed_password = passlib.hash.bcrypt.hash(temp_password)
     db.commit()
     
+    # ZH: 發送臨時密碼郵件 | EN: Send temp password email
+    background_tasks.add_task(
+        email_service.send_temp_password,
+        user.email,
+        user.username,
+        temp_password,
+        False
+    )
+    
     logger.info(f"ZH: 忘記密碼重設成功: {user.username} | EN: Password reset successful: {user.username}")
-    return {"message": "Password reset successful", "temp_password": temp_password}
+    return {"message": "Password reset successful, temporary password sent to email"}
 
 
 # ==============================================================================
@@ -201,6 +226,7 @@ def read_users_me(current_user: models.User = Depends(get_current_user)):
 @router.put("/me", response_model=schemas.UserResponse)
 def update_users_me(
     update_data: schemas.UserUpdate,
+    background_tasks: BackgroundTasks,
     current_user: models.User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
@@ -208,7 +234,16 @@ def update_users_me(
     ZH: 更新已登入使用者的個人資訊 (修改信箱、密碼)
     EN: Update logged-in user's profile info (email, password)
     """
+    password_changed = update_data.password is not None and update_data.password != ""
     updated_user = crud.update_user(db, current_user, update_data)
+    
+    if password_changed and updated_user.email:
+        background_tasks.add_task(
+            email_service.send_password_change_alert,
+            updated_user.email,
+            updated_user.username
+        )
+        
     return updated_user
 # ==============================================================================
 # ZH: GET /usage - 查詢 Token 用量
