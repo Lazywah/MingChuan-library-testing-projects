@@ -137,6 +137,34 @@ def login(request: Request, form_data: OAuth2PasswordRequestForm = Depends(), db
     return {"access_token": access_token, "token_type": "bearer"}
 
 
+@router.post("/forgot-password")
+def forgot_password(
+    payload: schemas.AuthForgotPassword,
+    db: Session = Depends(get_db)
+):
+    """ZH: 忘記密碼 - 產生隨機臨時密碼 | EN: Forgot password - Generate random temp password"""
+    user = crud.get_user_by_username(db, payload.username)
+    if not user or user.email != payload.email:
+        # ZH: 安全考量，無論是否找到，都回傳模糊訊息或直接回報錯誤
+        # EN: Security consideration, return vague message or standard error
+        raise HTTPException(status_code=400, detail="Invalid username or email")
+        
+    import secrets
+    import string
+    import passlib.hash
+    
+    # 產生 8 碼英數混合密碼
+    alphabet = string.ascii_letters + string.digits
+    temp_password = ''.join(secrets.choice(alphabet) for i in range(8))
+    
+    # 更新密碼
+    user.hashed_password = passlib.hash.bcrypt.hash(temp_password)
+    db.commit()
+    
+    logger.info(f"ZH: 忘記密碼重設成功: {user.username} | EN: Password reset successful: {user.username}")
+    return {"message": "Password reset successful", "temp_password": temp_password}
+
+
 # ==============================================================================
 # ZH: GET /me - 取得當前使用者資訊
 # EN: GET /me - Get current user info

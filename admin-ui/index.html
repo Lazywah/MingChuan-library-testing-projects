@@ -251,8 +251,8 @@
                 <div class="tutorial-content" style="max-width: 480px; padding: 30px;">
                     <button class="tutorial-close" id="user-edit-close-btn"><ion-icon name="close-outline"></ion-icon></button>
                     <h2 style="margin-bottom: 20px; display: flex; align-items: center; gap: 8px;">
-                        <ion-icon name="create-outline"></ion-icon>
-                        <span data-i18n="edit_user_title">Edit User</span>
+                        <ion-icon name="person-circle-outline"></ion-icon>
+                        <span data-i18n="view_user_title">View User</span>
                     </h2>
                     <form id="user-edit-form" style="display: flex; flex-direction: column; gap: 15px;">
                         <input type="hidden" id="edit-user-id">
@@ -262,16 +262,16 @@
                         </div>
                         <div class="input-wrap">
                             <ion-icon name="mail-outline"></ion-icon>
-                            <input type="email" id="edit-email" data-i18n="th_email" placeholder="Email">
+                            <input type="email" id="edit-email" disabled data-i18n="th_email" placeholder="Email">
                         </div>
-                        <div class="input-wrap">
+                        <div class="input-wrap" id="edit-pwd-container" style="display: none;">
                             <ion-icon name="key-outline"></ion-icon>
                             <input type="text" id="edit-password" data-i18n="edit_new_password" placeholder="New Password (leave blank to keep)">
                         </div>
                         <div style="display: flex; gap: 10px;">
                             <div class="input-wrap" style="flex: 1;">
                                 <ion-icon name="shield-outline"></ion-icon>
-                                <select id="edit-role" class="config-select" style="width: 100%; padding: 10px; border-radius: 8px;">
+                                <select id="edit-role" disabled class="config-select" style="width: 100%; padding: 10px; border-radius: 8px;">
                                     <option value="student">Student</option>
                                     <option value="teacher">Teacher</option>
                                     <option value="admin">Admin</option>
@@ -279,7 +279,7 @@
                             </div>
                             <div class="input-wrap" style="flex: 1;">
                                 <ion-icon name="toggle-outline"></ion-icon>
-                                <select id="edit-active" class="config-select" style="width: 100%; padding: 10px; border-radius: 8px;">
+                                <select id="edit-active" disabled class="config-select" style="width: 100%; padding: 10px; border-radius: 8px;">
                                     <option value="1" data-i18n="status_active">Active</option>
                                     <option value="0" data-i18n="status_disabled">Disabled</option>
                                 </select>
@@ -287,14 +287,15 @@
                         </div>
                         <div class="input-wrap">
                             <ion-icon name="wallet-outline"></ion-icon>
-                            <input type="number" id="edit-tokens-limit" data-i18n="edit_tokens_limit" placeholder="Token Monthly Limit">
+                            <input type="number" id="edit-tokens-limit" disabled data-i18n="edit_tokens_limit" placeholder="Token Monthly Limit">
                         </div>
                         <div style="display: flex; gap: 10px; margin-top: 5px;">
                             <div style="flex: 1; font-size: 13px; color: var(--text-muted);">
                                 <span data-i18n="edit_tokens_used">Used</span>: <strong id="edit-tokens-used-display">0</strong>
                             </div>
                         </div>
-                        <button type="submit" class="ready-btn config-save-btn" style="width: 100%;" data-i18n="btn_save_config">Save Changes</button>
+                        <button type="button" id="btn-unlock-edit" class="ready-btn" style="width: 100%; background: var(--bg-card); color: var(--text-color); border: 1px solid var(--border-color);"><ion-icon name="lock-open-outline" style="vertical-align: middle; margin-right: 5px;"></ion-icon><span data-i18n="btn_unlock_edit">Unlock Edit</span></button>
+                        <button type="submit" id="btn-save-edit" class="ready-btn config-save-btn" style="width: 100%; display: none;" data-i18n="btn_save_config">Save Changes</button>
                     </form>
                     
                     <hr style="border:0; border-top:1px solid rgba(255,255,255,0.1); margin: 20px 0;">

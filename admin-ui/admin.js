@@ -588,6 +588,15 @@ function openEditUser(userId) {
     document.getElementById('edit-tokens-limit').value = userData.tokens_limit || 5000000;
     document.getElementById('edit-tokens-used-display').textContent = (userData.tokens_used || 0).toLocaleString();
     
+    // Reset to View Mode
+    document.getElementById('edit-email').disabled = true;
+    document.getElementById('edit-role').disabled = true;
+    document.getElementById('edit-active').disabled = true;
+    document.getElementById('edit-tokens-limit').disabled = true;
+    document.getElementById('edit-pwd-container').style.display = 'none';
+    document.getElementById('btn-unlock-edit').style.display = 'block';
+    document.getElementById('btn-save-edit').style.display = 'none';
+    
     const modal = document.getElementById('user-edit-modal');
     modal.classList.remove('hidden');
     applyTranslations();
@@ -628,6 +637,49 @@ async function saveEditUser(e) {
     } catch (err) {
         console.error(err);
         showToast(TRANSLATIONS[currentLang]?.toast_user_update_failed || 'Update failed', true);
+    }
+}
+
+async function unlockEdit() {
+    const adminPwd = prompt(TRANSLATIONS[currentLang]?.placeholder_admin_pwd || 'Enter your admin password to confirm');
+    
+    if (adminPwd === null) return; // cancelled
+    if (!adminPwd) {
+        showToast(TRANSLATIONS[currentLang]?.toast_delete_pwd_required || 'Admin password required', true);
+        return;
+    }
+
+    try {
+        const payload = { admin_password: adminPwd };
+        const res = await fetch(`${API_BASE}/admin/verify`, {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${authToken}`,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(payload)
+        });
+        
+        if (!res.ok) {
+            const err = await res.json();
+            throw new Error(err.detail || 'Verification failed');
+        }
+        
+        // Unlock the form fields
+        document.getElementById('edit-email').disabled = false;
+        document.getElementById('edit-role').disabled = false;
+        document.getElementById('edit-active').disabled = false;
+        document.getElementById('edit-tokens-limit').disabled = false;
+        document.getElementById('edit-pwd-container').style.display = 'block';
+        
+        // Swap buttons
+        document.getElementById('btn-unlock-edit').style.display = 'none';
+        document.getElementById('btn-save-edit').style.display = 'block';
+        
+        showToast(TRANSLATIONS[currentLang]?.toast_edit_unlocked || 'Edit mode unlocked');
+    } catch (err) {
+        console.error(err);
+        showToast(err.message, true);
     }
 }
 
@@ -779,6 +831,8 @@ document.addEventListener('DOMContentLoaded', () => {
     if (editCloseBtn) editCloseBtn.addEventListener('click', closeEditUser);
     const editBackdrop = document.getElementById('user-edit-backdrop');
     if (editBackdrop) editBackdrop.addEventListener('click', closeEditUser);
+    const unlockBtn = document.getElementById('btn-unlock-edit');
+    if (unlockBtn) unlockBtn.addEventListener('click', unlockEdit);
     const deleteBtn = document.getElementById('btn-delete-user');
     if (deleteBtn) deleteBtn.addEventListener('click', deleteUserFromModal);
 

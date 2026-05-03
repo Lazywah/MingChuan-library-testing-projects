@@ -66,6 +66,15 @@ class AdminDeleteUser(BaseModel):
     """ZH: 管理員刪除使用者請求 | EN: Admin delete user request"""
     admin_password: str                              # ZH: 管理員密碼驗證 | EN: Admin password validation
 
+class AdminVerify(BaseModel):
+    """ZH: 管理員權限驗證請求 | EN: Admin privilege verification request"""
+    admin_password: str                              # ZH: 管理員密碼驗證 | EN: Admin password validation
+
+class AuthForgotPassword(BaseModel):
+    """ZH: 忘記密碼請求 | EN: Forgot password request"""
+    username: str
+    email: EmailStr
+
 class UserResponse(BaseModel):
     """ZH: 使用者資訊回應 (不含密碼) | EN: User info response (no password)"""
     id: str

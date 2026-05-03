@@ -170,6 +170,20 @@ def admin_delete_user(
     return {"message": f"User {db_user.username} deleted", "deleted_id": user_id}
 
 
+@router.post("/verify")
+def admin_verify_action(
+    payload: schemas.AdminVerify,
+    current_user: models.User = Depends(get_current_user)
+) -> Any:
+    """ZH: 管理員權限動作驗證 (解鎖編輯等) | EN: Admin action verification (e.g. unlock edit)"""
+    verify_admin(current_user)
+    
+    # ZH: 驗證管理員密碼 | EN: Verify admin password
+    if not crud.verify_password(payload.admin_password, current_user.hashed_password):
+        raise HTTPException(status_code=403, detail="Invalid admin password")
+        
+    return {"message": "Verification successful"}
+
 @router.post("/users/provision")
 def provision_user(
     data: schemas.AdminProvisionUser,

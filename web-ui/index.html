@@ -73,11 +73,46 @@
                         <ion-icon name="eye-outline" class="eye-open"></ion-icon>
                     </span>
                 </div>
+                <div style="text-align: right; margin-bottom: 15px; width: 100%;">
+                    <a href="#" id="forgot-pwd-link" style="color: var(--neon-blue); font-size: 0.9em; text-decoration: none; font-weight: bold; padding: 5px;" data-i18n="forgot_password">Forgot Password?</a>
+                </div>
 
                 <button type="submit" class="ready-btn" id="login-btn">
                     <span data-i18n="btn_login">Submit</span>
                 </button>
             </form>
+        </div>
+    </div>
+
+    <!-- ZH: 忘記密碼面板 | EN: Forgot Password Modal -->
+    <div id="forgot-pwd-modal" class="glass-modal hidden">
+        <div class="glass-backdrop"></div>
+        <div class="form-box active-popup" id="forgot-pwd-form-box">
+            <span class="close" id="forgot-pwd-close-btn" title="Close">
+                <ion-icon name="close-circle-outline"></ion-icon>
+            </span>
+            <form id="forgot-pwd-form">
+                <h1 data-i18n="forgot_password">Forgot Password</h1>
+                <p style="text-align: center; font-size: 13px; color: var(--text-muted); margin-bottom: 20px;" data-i18n="forgot_password_desc">Please enter your Username and Email to reset.</p>
+                <div class="input">
+                    <input type="text" id="forgot-username" required autocomplete="off" placeholder=" ">
+                    <label data-i18n="label_username">Username</label>
+                    <ion-icon name="person-outline"></ion-icon>
+                </div>
+                <div class="input">
+                    <input type="email" id="forgot-email" required autocomplete="off" placeholder=" ">
+                    <label data-i18n="th_email">Email</label>
+                    <ion-icon name="mail-outline"></ion-icon>
+                </div>
+                <button type="submit" class="ready-btn" id="forgot-pwd-submit-btn">
+                    <span data-i18n="btn_reset_pwd">Reset Password</span>
+                </button>
+            </form>
+            <div id="temp-pwd-result" class="hidden" style="margin-top: 20px; padding: 15px; border-radius: 8px; background: rgba(0,255,0,0.1); border: 1px solid rgba(0,255,0,0.3); text-align: center;">
+                <p style="font-size: 13px; color: var(--text-primary); margin-bottom: 8px;" data-i18n="temp_pwd_desc">Your temporary password is:</p>
+                <code id="temp-pwd-display" style="font-size: 20px; font-weight: bold; color: #10b981; letter-spacing: 2px;"></code>
+                <p style="font-size: 12px; color: var(--text-muted); margin-top: 10px;" data-i18n="temp_pwd_warning">Please login and change it immediately.</p>
+            </div>
         </div>
     </div>
 

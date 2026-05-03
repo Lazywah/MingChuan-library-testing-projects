@@ -17,6 +17,11 @@ const TRANSLATIONS = {
         label_username: "使用者名稱",
         label_password: "密碼",
         btn_login: "登入",
+        forgot_password: "忘記密碼",
+        forgot_password_desc: "請輸入您的帳號與信箱以重設密碼",
+        btn_reset_pwd: "重設密碼",
+        temp_pwd_desc: "您的臨時密碼為：",
+        temp_pwd_warning: "請使用此密碼登入後，盡速於設定中更改您的密碼。",
         // 導覽
         nav_compute: "運算任務",
         nav_assistant: "AI 助手",
@@ -160,6 +165,11 @@ const TRANSLATIONS = {
         label_username: "Username",
         label_password: "Password",
         btn_login: "Login",
+        forgot_password: "Forgot Password",
+        forgot_password_desc: "Please enter your Username and Email to reset.",
+        btn_reset_pwd: "Reset Password",
+        temp_pwd_desc: "Your temporary password is:",
+        temp_pwd_warning: "Please login with this password and change it immediately.",
         // Navigation
         nav_compute: "Compute",
         nav_assistant: "Assistant",
@@ -544,6 +554,59 @@ document.addEventListener('DOMContentLoaded', () => {
     if (loginCloseBtn) {
         loginCloseBtn.addEventListener('click', () => {
             if (loginView) loginView.classList.add('hidden');
+        });
+    }
+
+    // ZH: 忘記密碼相關綁定 | EN: Forgot password bindings
+    const forgotPwdLink = document.getElementById('forgot-pwd-link');
+    const forgotPwdModal = document.getElementById('forgot-pwd-modal');
+    const forgotPwdCloseBtn = document.getElementById('forgot-pwd-close-btn');
+    const forgotPwdForm = document.getElementById('forgot-pwd-form');
+
+    if (forgotPwdLink && forgotPwdModal) {
+        forgotPwdLink.addEventListener('click', (e) => {
+            e.preventDefault();
+            forgotPwdModal.classList.remove('hidden');
+        });
+    }
+
+    if (forgotPwdCloseBtn && forgotPwdModal) {
+        forgotPwdCloseBtn.addEventListener('click', () => {
+            forgotPwdModal.classList.add('hidden');
+            document.getElementById('temp-pwd-result').classList.add('hidden');
+        });
+    }
+
+    if (forgotPwdForm) {
+        forgotPwdForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const uname = document.getElementById('forgot-username').value;
+            const email = document.getElementById('forgot-email').value;
+            const btn = document.getElementById('forgot-pwd-submit-btn');
+            btn.disabled = true;
+
+            try {
+                const res = await fetch(`${API_BASE}/auth/forgot-password`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username: uname, email: email })
+                });
+
+                if (!res.ok) {
+                    const err = await res.json();
+                    throw new Error(err.detail || 'Reset failed');
+                }
+
+                const data = await res.json();
+                document.getElementById('temp-pwd-display').textContent = data.temp_password;
+                document.getElementById('temp-pwd-result').classList.remove('hidden');
+                showToast('toast_auth_ok'); // Or a custom success msg
+            } catch (err) {
+                console.error(err);
+                showToast(err.message, true);
+            } finally {
+                btn.disabled = false;
+            }
         });
     }
 });
