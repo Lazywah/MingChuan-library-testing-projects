@@ -424,7 +424,17 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     document.querySelectorAll('#logout-btn').forEach(btn => {
-        btn.addEventListener('click', () => {
+        btn.addEventListener('click', async () => {
+            if (authToken) {
+                try {
+                    await fetch(`${API_BASE}/auth/logout`, {
+                        method: 'POST',
+                        headers: { 'Authorization': `Bearer ${authToken}` }
+                    });
+                } catch (e) {
+                    console.error('Logout API failed', e);
+                }
+            }
             authToken = null;
             localStorage.removeItem('ai_hud_token');
             if (pollInterval) clearInterval(pollInterval);

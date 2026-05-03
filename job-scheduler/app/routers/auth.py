@@ -166,6 +166,23 @@ def forgot_password(
 
 
 # ==============================================================================
+# ZH: POST /logout - 登出並更新狀態
+# EN: POST /logout - Logout and update status
+# ==============================================================================
+@router.post("/logout")
+def logout(
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """ZH: 登出 - 將在線狀態設為離線 | EN: Logout - Set online status to offline"""
+    try:
+        current_user.online_status = 0
+        db.commit()
+    except Exception as e:
+        logger.error(f"Failed to update logout status: {e}")
+    return {"message": "Logged out successfully"}
+
+# ==============================================================================
 # ZH: GET /me - 取得當前使用者資訊
 # EN: GET /me - Get current user info
 # ==============================================================================

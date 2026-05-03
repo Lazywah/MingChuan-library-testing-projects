@@ -828,6 +828,26 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
+    const logoutBtn = document.getElementById('admin-logout-btn');
+    if (logoutBtn) {
+        logoutBtn.addEventListener('click', async () => {
+            if (authToken) {
+                try {
+                    await fetch(`${API_BASE}/auth/logout`, {
+                        method: 'POST',
+                        headers: { 'Authorization': `Bearer ${authToken}` }
+                    });
+                } catch (e) {
+                    console.error('Logout API failed', e);
+                }
+            }
+            authToken = null;
+            localStorage.removeItem('admin_hud_token');
+            document.getElementById('admin-main-layout').style.display = 'none';
+            document.getElementById('admin-login-modal').style.display = 'flex';
+        });
+    }
+
     // User Edit Modal Bindings
     const editForm = document.getElementById('user-edit-form');
     if (editForm) editForm.addEventListener('submit', saveEditUser);
