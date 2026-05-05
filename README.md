@@ -59,16 +59,32 @@
 
 ---
 
+## 🌍 跨作業系統相容性 (Cross-OS Compatibility)
+
+得益於全面的 **Docker 容器化 (Containerization)**，本專案**所有層級（服務層、GPU 節點）**皆已消除對特定作業系統環境腳本 (`.bat`, `.sh`, `.ps1`) 的依賴，達成 **Windows、Linux (Ubuntu/CentOS 等) 與 macOS** 的完全相容。
+
+唯一的差異在於「安裝 Docker 引擎」以及「終端機指令格式」：
+
+| 作業系統 | Docker 安裝方式 | 啟動指令差異 | 檔案路徑格式差異 |
+|---------|---------------|-------------|----------------|
+| **Windows** | 安裝 Docker Desktop (需啟用 WSL2) | `docker-compose up -d --build` (部分舊版使用 `-` 符號) | 使用 `\` 或 `/` 皆可 |
+| **Linux (Ubuntu)** | `sudo apt install docker.io docker-compose-v2` | `docker compose up -d --build` (官方 V2 新版指令) | 嚴格區分大小寫，使用 `/` |
+| **macOS** | 安裝 Docker Desktop for Mac | `docker compose up -d --build` | 使用 `/` |
+
+*(註：專案內遺留的 `scripts/deploy.sh` 僅為 Linux/macOS 開發者提供的快速組合包，並非部署的必要依賴。)*
+
+---
+
 ## 🛠️ 各層級部署步驟與工具
 
 ### 💻 工作站 (Workstation)
 *   **初次部署**：
-    1. 安裝 Git, Python 3, Docker (若需本機測試)。
+    1. 安裝 Git 以及對應您 OS 的 Docker 版本。
     2. 執行 `git clone` 取得專案代碼。
     3. 複製 `.env.example` 為 `.env` 並填寫本機開發參數。
 *   **往後部署 / 日常維護**：
-    *   **工具**：VS Code, Git, `pytest` (執行 `tests/`)。
-    *   **步驟**：開發新功能後，提交版本控制，或透過 `scripts/deploy.sh` 等工具將更新推送到服務層。
+    *   **工具**：VS Code, Git, `pytest`。
+    *   **步驟**：開發新功能後提交版本控制。
 
 ### ☁️ 服務層 (Service Layer)
 *   **前置條件**：Docker 24.x+, Docker Compose 2.x+
