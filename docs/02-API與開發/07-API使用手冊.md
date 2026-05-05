@@ -1,5 +1,16 @@
 # 02 - API 使用手冊 | API Reference
 
+## 📑 目錄 | Table of Contents
+- [認證 API \| Authentication API](#認證-api--authentication-api)
+- [訓練任務 API \| Training Jobs API](#訓練任務-api--training-jobs-api)
+- [AI 助手 API \| AI Assistant API (Chat)](#ai-助手-api--ai-assistant-api-chat)
+- [資料集 API \| Datasets API](#資料集-api--datasets-api)
+- [系統 API \| System API](#系統-api--system-api)
+- [管理員 API \| Admin API](#管理員-api--admin-api)
+- [錯誤碼 \| Error Codes](#錯誤碼--error-codes)
+
+---
+
 > **Base URL**: `http://localhost:8002`  
 > **Swagger UI**: `http://localhost:8002/docs`
 
@@ -83,6 +94,21 @@ curl http://localhost:8002/api/v1/auth/usage \
   "usage_percentage": 0.1,
   "reset_date": "2026-05-01T00:00:00"
 }
+```
+
+### POST `/api/v1/auth/logout` — 使用者登出
+
+```bash
+curl -X POST http://localhost:8002/api/v1/auth/logout \
+  -H "Authorization: Bearer YOUR_TOKEN"
+```
+
+### POST `/api/v1/auth/forgot-password` — 忘記密碼 (發送重設信件)
+
+```bash
+curl -X POST http://localhost:8002/api/v1/auth/forgot-password \
+  -H "Content-Type: application/json" \
+  -d '{"email": "student01@example.com"}'
 ```
 
 ---
@@ -204,12 +230,62 @@ curl http://localhost:8002/api/v1/chat/history \
 
 ---
 
+## 資料集 API | Datasets API
+
+### POST `/api/v1/datasets/upload` — 上傳資料集並取得推薦參數
+
+支援上傳 `.csv`, `.jsonl`, `.zip` 格式的資料集。系統將自動解析檔案並回傳建議的 hyperparameters。
+
+```bash
+curl -X POST http://localhost:8002/api/v1/datasets/upload \
+  -H "Authorization: Bearer YOUR_TOKEN" \
+  -F "file=@/path/to/your/dataset.csv"
+```
+
+回應 (200):
+```json
+{
+  "message": "Upload successful",
+  "dataset_path": "/data/datasets/<uuid>_<filename>",
+  "suggested_config": {
+    "epochs": 5,
+    "batch_size": 16,
+    "learning_rate": 0.001
+  }
+}
+```
+
+---
+
 ## 系統 API | System API
 
 ### GET `/health` — 健康檢查
 
 ```bash
 curl http://localhost:8002/health
+```
+
+### GET `/api/v1/system/files` — 取得系統設定檔列表 (Admin Only)
+
+```bash
+curl http://localhost:8002/api/v1/system/files \
+  -H "Authorization: Bearer ADMIN_TOKEN"
+```
+
+### GET `/api/v1/system/files/{filename}` — 讀取特定設定檔內容 (Admin Only)
+
+```bash
+curl http://localhost:8002/api/v1/system/files/.env \
+  -H "Authorization: Bearer ADMIN_TOKEN"
+```
+
+### PUT `/api/v1/system/files/{filename}` — 儲存特定設定檔內容 (Admin Only)
+
+```bash
+curl -X PUT http://localhost:8002/api/v1/system/files/.env \
+  -H "Authorization: Bearer ADMIN_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"content": "SMTP_SERVER=smtp.gmail.com\n..."}'
 ```
 
 ---
@@ -239,6 +315,48 @@ curl http://localhost:8002/api/v1/admin/jobs \
 ```bash
 curl http://localhost:8002/api/v1/admin/models \
   -H "Authorization: Bearer ADMIN_TOKEN"
+```
+
+### POST `/api/v1/admin/users/provision` — 直接配發帳號
+
+管理員建立帳號，系統會自動寄出包含隨機密碼的歡迎信。
+
+```bash
+curl -X POST http://localhost:8002/api/v1/admin/users/provision \
+  -H "Authorization: Bearer ADMIN_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"email": "newuser@example.com", "role": "student"}'
+```
+
+### POST `/api/v1/admin/users/{user_id}/reset` — 重設使用者密碼
+
+隨機產生新密碼並透過 Email 寄送給該使用者。
+
+```bash
+curl -X POST http://localhost:8002/api/v1/admin/users/{user_id}/reset \
+  -H "Authorization: Bearer ADMIN_TOKEN"
+```
+
+### DELETE `/api/v1/admin/users/{user_id}` — 刪除使用者
+
+```bash
+curl -X DELETE http://localhost:8002/api/v1/admin/users/{user_id} \
+  -H "Authorization: Bearer ADMIN_TOKEN"
+```
+
+### PUT `/api/v1/admin/users/batch/tokens` — 批量更新 Token 額度
+
+大量重置或增加選定使用者的 Token 上限或使用量。
+
+```bash
+curl -X PUT http://localhost:8002/api/v1/admin/users/batch/tokens \
+  -H "Authorization: Bearer ADMIN_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "user_ids": ["uuid-1", "uuid-2"],
+    "action": "reset_usage",
+    "value": 0
+  }'
 ```
 
 ---

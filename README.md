@@ -5,6 +5,19 @@
 
 ---
 
+## 📑 目錄 | Table of Contents
+- [架構概覽 \| Architecture Overview](#-架構概覽--architecture-overview)
+- [介面預覽 \| UI Preview](#-介面預覽--ui-preview)
+- [特色功能 \| Features](#-特色功能--features)
+- [CodeSpace 專案檔案層級分類](#-codespace-專案檔案層級分類)
+- [跨作業系統相容性 (Cross-OS Compatibility)](#-跨作業系統相容性-cross-os-compatibility)
+- [各層級部署步驟與工具](#-各層級部署步驟與工具)
+- [文檔導覽 \| Documentation Index](#-文檔導覽--documentation-index)
+- [模組架構 \| Module Architecture](#-模組架構--module-architecture)
+- [測試 \| Testing](#-測試--testing)
+
+---
+
 ## 🏗️ 架構概覽 | Architecture Overview
 
 ```
@@ -27,6 +40,8 @@
 - **i18n 多國語言**：全系統支援中英文即時切換，包含 Aria 無障礙標籤同步。
 - **高科技 HUD 視覺**：Cyberpunk 風格玻璃擬態 (Glassmorphism) 介面設計。
 - **SSE 異常處理**：穩健的串流攔截機制，確保 Token 用盡時不會遺失對話進度。
+- **自動化參數建議 (Auto-Config)**：上傳資料集時，後端自動解析內容並推薦訓練參數。
+- **SMTP 郵件通知系統**：支援帳號建立、密碼變更與登入狀態的即時 Email 通知。
 
 ---
 
@@ -152,6 +167,8 @@
 |------|------|------|
 | **Chat Router** | `.../routers/chat.py` | AI 助手串流代理 |
 | **Jobs Router** | `.../routers/jobs.py` | 任務管理與狀態追蹤 |
+| **Datasets Router**| `.../routers/datasets.py`| 資料集上傳與參數自動推薦 |
+| **System Router** | `.../routers/system.py`| 系統設定檔管理 API |
 | **Scheduler** | `.../scheduler.py` | 非同步任務排程核心 |
 | **Auth** | `.../auth.py` | JWT 認證與權限控管 |
 
