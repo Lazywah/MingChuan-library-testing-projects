@@ -8,6 +8,17 @@ const TRANSLATIONS = {
         admin_cluster_status: "叢集資源即時監控",
         admin_users: "使用者管理",
         admin_models: "模型管理",
+        btn_add_model: "新增模型",
+        btn_edit_model: "編輯",
+        btn_delete_model: "刪除",
+        edit_model_title: "編輯模型",
+        confirm_delete_model: "確定要刪除模型 {name} 嗎？",
+        toast_model_created: "模型已新增",
+        toast_model_updated: "模型已更新",
+        toast_model_deleted: "模型已刪除",
+        toast_model_failed: "模型操作失敗",
+        th_description: "描述",
+        th_storage_path: "儲存路徑",
         admin_jobs: "全域任務",
         admin_configs: "系統設定檔",
         tab_high_compute: "高算力運算",
@@ -90,6 +101,17 @@ const TRANSLATIONS = {
         admin_cluster_status: "Cluster Hardware Status",
         admin_users: "User Management",
         admin_models: "Models",
+        btn_add_model: "Add Model",
+        btn_edit_model: "Edit",
+        btn_delete_model: "Delete",
+        edit_model_title: "Edit Model",
+        confirm_delete_model: "Are you sure you want to delete model {name}?",
+        toast_model_created: "Model created",
+        toast_model_updated: "Model updated",
+        toast_model_deleted: "Model deleted",
+        toast_model_failed: "Model operation failed",
+        th_description: "Description",
+        th_storage_path: "Storage Path",
         admin_jobs: "All Jobs",
         admin_configs: "System Configs",
         tab_high_compute: "High Compute",
@@ -603,19 +625,133 @@ async function reprioritizeJob(jobId, jobName) {
     }
 }
 
+let _adminModelsCache = [];
+
 function renderAdminModels(models) {
+    if (models) _adminModelsCache = models;
     const tbody = document.getElementById('admin-models-body');
     if (!tbody) return;
     tbody.innerHTML = '';
-    models.forEach(m => {
+    if (_adminModelsCache.length === 0) {
         const tr = document.createElement('tr');
+        tr.innerHTML = `<td colspan="6" style="text-align:center; color:var(--text-muted); padding:20px;">No models</td>`;
+        tbody.appendChild(tr);
+        return;
+    }
+    const editLabel = TRANSLATIONS[currentLang]?.btn_edit_model || 'Edit';
+    const deleteLabel = TRANSLATIONS[currentLang]?.btn_delete_model || 'Delete';
+    _adminModelsCache.forEach(m => {
+        const tr = document.createElement('tr');
+        const publicBadge = m.is_public ? '<span class="status-badge completed">Public</span>' : '<span class="status-badge pending">Private</span>';
         tr.innerHTML = `
-            <td>${m.name}</td>
+            <td><strong>${m.name}</strong><br><small style="color:var(--text-muted)">${m.id ? m.id.substring(0, 8) : ''}</small></td>
             <td>${m.framework || 'N/A'}</td>
-            <td>${m.is_public ? 'Yes' : 'No'}</td>
+            <td style="max-width:200px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" title="${m.description || ''}">${m.description || '—'}</td>
+            <td style="max-width:180px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" title="${m.storage_path || ''}">${m.storage_path || 'N/A'}</td>
+            <td>${publicBadge}</td>
+            <td>
+                <div style="display:flex; gap:4px;">
+                    <button class="job-action-btn priority-btn" onclick="openModelModal('${m.id}')">${editLabel}</button>
+                    <button class="job-action-btn cancel-btn" onclick="deleteModel('${m.id}', '${m.name.replace(/'/g, "\\'")  }')">${deleteLabel}</button>
+                </div>
+            </td>
         `;
         tbody.appendChild(tr);
     });
+}
+
+function openModelModal(modelId) {
+    const modal = document.getElementById('model-modal');
+    const title = document.getElementById('model-modal-title');
+    document.getElementById('model-edit-id').value = '';
+    document.getElementById('model-name').value = '';
+    document.getElementById('model-framework').value = '';
+    document.getElementById('model-description').value = '';
+    document.getElementById('model-storage-path').value = '';
+    document.getElementById('model-is-public').value = '0';
+
+    if (modelId) {
+        // Edit mode
+        const m = _adminModelsCache.find(x => x.id === modelId);
+        if (m) {
+            document.getElementById('model-edit-id').value = m.id;
+            document.getElementById('model-name').value = m.name || '';
+            document.getElementById('model-framework').value = m.framework || '';
+            document.getElementById('model-description').value = m.description || '';
+            document.getElementById('model-storage-path').value = m.storage_path || '';
+            document.getElementById('model-is-public').value = m.is_public ? '1' : '0';
+        }
+        title.textContent = TRANSLATIONS[currentLang]?.edit_model_title || 'Edit Model';
+    } else {
+        title.textContent = TRANSLATIONS[currentLang]?.btn_add_model || 'Add Model';
+    }
+    modal.classList.remove('hidden');
+}
+
+function closeModelModal() {
+    document.getElementById('model-modal').classList.add('hidden');
+}
+
+async function submitModelForm(e) {
+    e.preventDefault();
+    const editId = document.getElementById('model-edit-id').value;
+    const payload = {
+        name: document.getElementById('model-name').value,
+        framework: document.getElementById('model-framework').value || null,
+        description: document.getElementById('model-description').value || null,
+        storage_path: document.getElementById('model-storage-path').value,
+        is_public: parseInt(document.getElementById('model-is-public').value)
+    };
+
+    try {
+        let res;
+        if (editId) {
+            // Update
+            res = await fetch(`${API_BASE}/admin/models/${editId}`, {
+                method: 'PUT',
+                headers: { 'Authorization': `Bearer ${authToken}`, 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+        } else {
+            // Create
+            res = await fetch(`${API_BASE}/admin/models`, {
+                method: 'POST',
+                headers: { 'Authorization': `Bearer ${authToken}`, 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+        }
+        if (!res.ok) {
+            const err = await res.json();
+            throw new Error(err.detail || 'Failed');
+        }
+        showToast(editId ? (TRANSLATIONS[currentLang]?.toast_model_updated || 'Model updated') : (TRANSLATIONS[currentLang]?.toast_model_created || 'Model created'));
+        closeModelModal();
+        fetchAdminData();
+    } catch (err) {
+        console.error(err);
+        showToast((TRANSLATIONS[currentLang]?.toast_model_failed || 'Model operation failed') + ': ' + err.message, true);
+    }
+}
+
+async function deleteModel(modelId, modelName) {
+    const msg = (TRANSLATIONS[currentLang]?.confirm_delete_model || 'Delete model {name}?').replace('{name}', modelName);
+    if (!confirm(msg)) return;
+
+    try {
+        const res = await fetch(`${API_BASE}/admin/models/${modelId}`, {
+            method: 'DELETE',
+            headers: { 'Authorization': `Bearer ${authToken}` }
+        });
+        if (!res.ok) {
+            const err = await res.json();
+            throw new Error(err.detail || 'Delete failed');
+        }
+        showToast(TRANSLATIONS[currentLang]?.toast_model_deleted || 'Model deleted');
+        fetchAdminData();
+    } catch (err) {
+        console.error(err);
+        showToast((TRANSLATIONS[currentLang]?.toast_model_failed || 'Failed') + ': ' + err.message, true);
+    }
 }
 
 // -------------------------
@@ -1041,6 +1177,10 @@ document.addEventListener('DOMContentLoaded', () => {
     if (provisionCloseBtn) provisionCloseBtn.addEventListener('click', closeProvision);
     const provisionBackdrop = document.getElementById('provision-backdrop');
     if (provisionBackdrop) provisionBackdrop.addEventListener('click', closeProvision);
+
+    // Model Modal Bindings
+    const modelBackdrop = document.getElementById('model-modal-backdrop');
+    if (modelBackdrop) modelBackdrop.addEventListener('click', closeModelModal);
 
     // Refresh Button Binding
     const refreshBtn = document.getElementById('refresh-admin-btn');

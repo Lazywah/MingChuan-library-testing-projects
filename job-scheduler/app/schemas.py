@@ -75,6 +75,22 @@ class AdminJobPriority(BaseModel):
     """ZH: 管理員修改任務優先級請求 | EN: Admin update job priority request"""
     priority: int = Field(..., ge=0, le=5)           # ZH: 新優先級 (0-5) | EN: New priority (0-5)
 
+class AdminModelCreate(BaseModel):
+    """ZH: 管理員新增模型請求 | EN: Admin create model request"""
+    name: str                                        # ZH: 模型名稱 | EN: Model name
+    description: Optional[str] = None                # ZH: 描述 | EN: Description
+    framework: Optional[str] = None                  # ZH: 框架 | EN: Framework (PyTorch/TF/etc.)
+    storage_path: str                                # ZH: 儲存路徑 | EN: Storage path
+    is_public: Optional[int] = 0                     # ZH: 公開旗標 | EN: Public flag
+
+class AdminModelUpdate(BaseModel):
+    """ZH: 管理員更新模型請求 | EN: Admin update model request"""
+    name: Optional[str] = None
+    description: Optional[str] = None
+    framework: Optional[str] = None
+    storage_path: Optional[str] = None
+    is_public: Optional[int] = None
+
 class AuthForgotPassword(BaseModel):
     """ZH: 忘記密碼請求 | EN: Forgot password request"""
     username: str

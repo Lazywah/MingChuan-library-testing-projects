@@ -332,3 +332,98 @@ def admin_update_job_priority(
 
     logger.info(f"Admin {current_user.username} changed job {job_id[:8]} priority: {old_priority} -> {data.priority}")
     return {"job_id": job.id, "priority": job.priority, "old_priority": old_priority, "message": "Priority updated"}
+
+
+# ==============================================================================
+# ZH: 模型管理 CRUD | EN: Model Management CRUD
+# ==============================================================================
+
+@router.post("/models")
+def admin_create_model(
+    data: schemas.AdminModelCreate,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user)
+) -> Any:
+    """ZH: 管理員新增模型 | EN: Admin create model"""
+    verify_admin(current_user)
+
+    # ZH: 檢查名稱重複 | EN: Check duplicate name
+    existing = db.query(models.Model).filter(models.Model.name == data.name).first()
+    if existing:
+        raise HTTPException(status_code=400, detail=f"Model '{data.name}' already exists")
+
+    new_model = models.Model(
+        name=data.name,
+        description=data.description,
+        framework=data.framework,
+        storage_path=data.storage_path,
+        is_public=data.is_public or 0,
+        uploaded_by=current_user.id
+    )
+    db.add(new_model)
+    db.commit()
+    db.refresh(new_model)
+
+    logger.info(f"Admin {current_user.username} created model '{data.name}'")
+    d = dict(new_model.__dict__)
+    d.pop('_sa_instance_state', None)
+    return d
+
+
+@router.put("/models/{model_id}")
+def admin_update_model(
+    model_id: str,
+    data: schemas.AdminModelUpdate,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user)
+) -> Any:
+    """ZH: 管理員更新模型資訊 | EN: Admin update model info"""
+    verify_admin(current_user)
+
+    mdl = db.query(models.Model).filter(models.Model.id == model_id).first()
+    if not mdl:
+        raise HTTPException(status_code=404, detail="Model not found")
+
+    if data.name is not None:
+        # ZH: 檢查名稱重複 | EN: Check duplicate name
+        dup = db.query(models.Model).filter(models.Model.name == data.name, models.Model.id != model_id).first()
+        if dup:
+            raise HTTPException(status_code=400, detail=f"Model name '{data.name}' already taken")
+        mdl.name = data.name
+    if data.description is not None:
+        mdl.description = data.description
+    if data.framework is not None:
+        mdl.framework = data.framework
+    if data.storage_path is not None:
+        mdl.storage_path = data.storage_path
+    if data.is_public is not None:
+        mdl.is_public = data.is_public
+
+    db.commit()
+    db.refresh(mdl)
+
+    logger.info(f"Admin {current_user.username} updated model '{mdl.name}'")
+    d = dict(mdl.__dict__)
+    d.pop('_sa_instance_state', None)
+    return d
+
+
+@router.delete("/models/{model_id}")
+def admin_delete_model(
+    model_id: str,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user)
+) -> Any:
+    """ZH: 管理員刪除模型 | EN: Admin delete model"""
+    verify_admin(current_user)
+
+    mdl = db.query(models.Model).filter(models.Model.id == model_id).first()
+    if not mdl:
+        raise HTTPException(status_code=404, detail="Model not found")
+
+    model_name = mdl.name
+    db.delete(mdl)
+    db.commit()
+
+    logger.info(f"Admin {current_user.username} deleted model '{model_name}'")
+    return {"message": f"Model '{model_name}' deleted", "deleted_id": model_id}
