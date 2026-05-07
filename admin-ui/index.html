@@ -305,7 +305,7 @@
                 </div>
             </div>
 
-            <!-- ZH: 模型管理 | EN: Model Management -->
+            <!-- ZH: 模型管理 (API/本地 分頁) | EN: Model Management (API/Local Tabs) -->
             <section class="widget form-box-panel" style="grid-column: 1 / -1;">
                 <div class="widget-header split">
                     <h3><ion-icon name="cube-outline" style="margin-right:6px;"></ion-icon> <span
@@ -316,8 +316,34 @@
                         </button>
                     </div>
                 </div>
-                <div class="admin-table-wrap scrollbar-custom" style="max-height: 350px; overflow-y: auto;">
-                    <table class="admin-table sticky-header" id="admin-models-table">
+                <!-- Tab Buttons -->
+                <div style="display:flex; gap:0; border-bottom: 1px solid var(--border-color); padding: 0 15px;">
+                    <button id="tab-api-models" class="admin-job-tab active" onclick="switchModelTab('api')">
+                        <ion-icon name="cloud-outline"></ion-icon> <span data-i18n="tab_api_models">API 模型</span>
+                    </button>
+                    <button id="tab-local-models" class="admin-job-tab" onclick="switchModelTab('local')">
+                        <ion-icon name="server-outline"></ion-icon> <span data-i18n="tab_local_models">本地模型</span>
+                    </button>
+                </div>
+                <!-- API Models Table -->
+                <div id="admin-models-api-panel" class="admin-table-wrap scrollbar-custom" style="max-height: 350px; overflow-y: auto;">
+                    <table class="admin-table sticky-header">
+                        <thead>
+                            <tr>
+                                <th data-i18n="th_name">名稱</th>
+                                <th>Provider</th>
+                                <th>Model ID</th>
+                                <th>描述</th>
+                                <th data-i18n="th_public">公開</th>
+                                <th data-i18n="th_actions">操作</th>
+                            </tr>
+                        </thead>
+                        <tbody id="admin-models-api-body"><!-- JS --></tbody>
+                    </table>
+                </div>
+                <!-- Local Models Table -->
+                <div id="admin-models-local-panel" class="admin-table-wrap scrollbar-custom" style="max-height: 350px; overflow-y: auto; display: none;">
+                    <table class="admin-table sticky-header">
                         <thead>
                             <tr>
                                 <th data-i18n="th_name">名稱</th>
@@ -328,7 +354,7 @@
                                 <th data-i18n="th_actions">操作</th>
                             </tr>
                         </thead>
-                        <tbody id="admin-models-body"><!-- JS --></tbody>
+                        <tbody id="admin-models-local-body"><!-- JS --></tbody>
                     </table>
                 </div>
             </section>
@@ -336,7 +362,7 @@
             <!-- Model Edit/Add Modal -->
             <div id="model-modal" class="tutorial-modal hidden">
                 <div class="tutorial-backdrop" id="model-modal-backdrop"></div>
-                <div class="tutorial-content" style="max-width: 500px; padding: 30px;">
+                <div class="tutorial-content" style="max-width: 520px; padding: 30px;">
                     <button class="tutorial-close" id="model-modal-close-btn" onclick="closeModelModal()"><ion-icon name="close-outline"></ion-icon></button>
                     <h2 style="margin-bottom: 20px; display: flex; align-items: center; gap: 8px;">
                         <ion-icon name="cube-outline"></ion-icon>
@@ -344,21 +370,58 @@
                     </h2>
                     <form id="model-form" style="display: flex; flex-direction: column; gap: 15px;" onsubmit="submitModelForm(event)">
                         <input type="hidden" id="model-edit-id">
+                        <!-- Model Type Selector -->
+                        <div class="input-wrap" style="flex: 1;">
+                            <ion-icon name="swap-horizontal-outline"></ion-icon>
+                            <select id="model-type" class="config-select" style="width: 100%; padding: 10px; border-radius: 8px;" onchange="toggleModelTypeFields()">
+                                <option value="api">API 模型 (雲端)</option>
+                                <option value="local">本地模型 (Local)</option>
+                            </select>
+                        </div>
+                        <!-- Common Fields -->
                         <div class="input-wrap">
                             <ion-icon name="text-outline"></ion-icon>
                             <input type="text" id="model-name" required placeholder="模型名稱 (Model Name)">
                         </div>
                         <div class="input-wrap">
-                            <ion-icon name="code-slash-outline"></ion-icon>
-                            <input type="text" id="model-framework" placeholder="框架 (e.g. PyTorch, TensorFlow)">
-                        </div>
-                        <div class="input-wrap">
                             <ion-icon name="document-text-outline"></ion-icon>
                             <input type="text" id="model-description" placeholder="描述 (Description)">
                         </div>
-                        <div class="input-wrap">
-                            <ion-icon name="folder-outline"></ion-icon>
-                            <input type="text" id="model-storage-path" required placeholder="儲存路徑 (Storage Path)">
+                        <!-- API-specific Fields -->
+                        <div id="model-api-fields">
+                            <div style="display: flex; flex-direction: column; gap: 15px;">
+                                <div class="input-wrap" style="flex: 1;">
+                                    <ion-icon name="cloud-outline"></ion-icon>
+                                    <select id="model-api-provider" class="config-select" style="width: 100%; padding: 10px; border-radius: 8px;">
+                                        <option value="openai">OpenAI</option>
+                                        <option value="anthropic">Anthropic (Claude)</option>
+                                        <option value="google">Google (Gemini)</option>
+                                        <option value="ollama">Ollama (本地 API)</option>
+                                        <option value="other">其他 (Other)</option>
+                                    </select>
+                                </div>
+                                <div class="input-wrap">
+                                    <ion-icon name="link-outline"></ion-icon>
+                                    <input type="text" id="model-api-endpoint" placeholder="API Endpoint (e.g. https://api.openai.com/v1)">
+                                </div>
+                                <div class="input-wrap">
+                                    <ion-icon name="pricetag-outline"></ion-icon>
+                                    <input type="text" id="model-api-model-id" placeholder="上游模型 ID (e.g. gpt-4o, claude-3.5-sonnet)">
+                                </div>
+                            </div>
+                        </div>
+                        <!-- Local-specific Fields -->
+                        <div id="model-local-fields" style="display: none;">
+                            <div style="display: flex; flex-direction: column; gap: 15px;">
+                                <div class="input-wrap">
+                                    <ion-icon name="code-slash-outline"></ion-icon>
+                                    <input type="text" id="model-framework" placeholder="框架 (e.g. PyTorch, TensorFlow, ONNX)">
+                                </div>
+                                <div class="input-wrap">
+                                    <ion-icon name="folder-outline"></ion-icon>
+                                    <input type="text" id="model-storage-path" placeholder="儲存路徑 (Storage Path)">
+                                </div>
+                            </div>
                         </div>
                         <div class="input-wrap" style="flex: 1;">
                             <ion-icon name="eye-outline"></ion-icon>

@@ -20,6 +20,8 @@ const TRANSLATIONS = {
         th_description: "描述",
         th_storage_path: "儲存路徑",
         admin_jobs: "全域任務",
+        tab_api_models: "API 模型",
+        tab_local_models: "本地模型",
         admin_configs: "系統設定檔",
         tab_high_compute: "高算力運算",
         tab_midlow_compute: "中低算力運算",
@@ -113,6 +115,8 @@ const TRANSLATIONS = {
         th_description: "Description",
         th_storage_path: "Storage Path",
         admin_jobs: "All Jobs",
+        tab_api_models: "API Models",
+        tab_local_models: "Local Models",
         admin_configs: "System Configs",
         tab_high_compute: "High Compute",
         tab_midlow_compute: "Mid/Low Compute",
@@ -626,33 +630,56 @@ async function reprioritizeJob(jobId, jobName) {
 }
 
 let _adminModelsCache = [];
+let _activeModelTab = 'api';
 
 function renderAdminModels(models) {
     if (models) _adminModelsCache = models;
-    const tbody = document.getElementById('admin-models-body');
+
+    const apiModels = _adminModelsCache.filter(m => (m.model_type || 'local') === 'api');
+    const localModels = _adminModelsCache.filter(m => (m.model_type || 'local') === 'local');
+
+    _renderApiModelTable('admin-models-api-body', apiModels);
+    _renderLocalModelTable('admin-models-local-body', localModels);
+
+    // Update tab counts
+    const tabApi = document.getElementById('tab-api-models');
+    const tabLocal = document.getElementById('tab-local-models');
+    if (tabApi) {
+        let c = tabApi.querySelector('.tab-count');
+        if (!c) { c = document.createElement('span'); c.className = 'tab-count'; tabApi.appendChild(c); }
+        c.textContent = apiModels.length;
+    }
+    if (tabLocal) {
+        let c = tabLocal.querySelector('.tab-count');
+        if (!c) { c = document.createElement('span'); c.className = 'tab-count'; tabLocal.appendChild(c); }
+        c.textContent = localModels.length;
+    }
+}
+
+function _renderApiModelTable(tbodyId, models) {
+    const tbody = document.getElementById(tbodyId);
     if (!tbody) return;
     tbody.innerHTML = '';
-    if (_adminModelsCache.length === 0) {
-        const tr = document.createElement('tr');
-        tr.innerHTML = `<td colspan="6" style="text-align:center; color:var(--text-muted); padding:20px;">No models</td>`;
-        tbody.appendChild(tr);
+    if (models.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="6" style="text-align:center; color:var(--text-muted); padding:20px;">No API models</td></tr>`;
         return;
     }
     const editLabel = TRANSLATIONS[currentLang]?.btn_edit_model || 'Edit';
     const deleteLabel = TRANSLATIONS[currentLang]?.btn_delete_model || 'Delete';
-    _adminModelsCache.forEach(m => {
+    models.forEach(m => {
         const tr = document.createElement('tr');
         const publicBadge = m.is_public ? '<span class="status-badge completed">Public</span>' : '<span class="status-badge pending">Private</span>';
+        const providerBadge = `<span class="status-badge running">${m.api_provider || 'N/A'}</span>`;
         tr.innerHTML = `
             <td><strong>${m.name}</strong><br><small style="color:var(--text-muted)">${m.id ? m.id.substring(0, 8) : ''}</small></td>
-            <td>${m.framework || 'N/A'}</td>
-            <td style="max-width:200px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" title="${m.description || ''}">${m.description || '—'}</td>
-            <td style="max-width:180px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" title="${m.storage_path || ''}">${m.storage_path || 'N/A'}</td>
+            <td>${providerBadge}</td>
+            <td style="font-family:monospace; font-size:12px;">${m.api_model_id || 'N/A'}</td>
+            <td style="max-width:180px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" title="${m.description || ''}">${m.description || '\u2014'}</td>
             <td>${publicBadge}</td>
             <td>
                 <div style="display:flex; gap:4px;">
                     <button class="job-action-btn priority-btn" onclick="openModelModal('${m.id}')">${editLabel}</button>
-                    <button class="job-action-btn cancel-btn" onclick="deleteModel('${m.id}', '${m.name.replace(/'/g, "\\'")  }')">${deleteLabel}</button>
+                    <button class="job-action-btn cancel-btn" onclick="deleteModel('${m.id}', '${m.name.replace(/'/g, "\\'")}')">${deleteLabel}</button>
                 </div>
             </td>
         `;
@@ -660,31 +687,96 @@ function renderAdminModels(models) {
     });
 }
 
+function _renderLocalModelTable(tbodyId, models) {
+    const tbody = document.getElementById(tbodyId);
+    if (!tbody) return;
+    tbody.innerHTML = '';
+    if (models.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="6" style="text-align:center; color:var(--text-muted); padding:20px;">No local models</td></tr>`;
+        return;
+    }
+    const editLabel = TRANSLATIONS[currentLang]?.btn_edit_model || 'Edit';
+    const deleteLabel = TRANSLATIONS[currentLang]?.btn_delete_model || 'Delete';
+    models.forEach(m => {
+        const tr = document.createElement('tr');
+        const publicBadge = m.is_public ? '<span class="status-badge completed">Public</span>' : '<span class="status-badge pending">Private</span>';
+        tr.innerHTML = `
+            <td><strong>${m.name}</strong><br><small style="color:var(--text-muted)">${m.id ? m.id.substring(0, 8) : ''}</small></td>
+            <td>${m.framework || 'N/A'}</td>
+            <td style="max-width:180px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" title="${m.description || ''}">${m.description || '\u2014'}</td>
+            <td style="max-width:160px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" title="${m.storage_path || ''}">${m.storage_path || 'N/A'}</td>
+            <td>${publicBadge}</td>
+            <td>
+                <div style="display:flex; gap:4px;">
+                    <button class="job-action-btn priority-btn" onclick="openModelModal('${m.id}')">${editLabel}</button>
+                    <button class="job-action-btn cancel-btn" onclick="deleteModel('${m.id}', '${m.name.replace(/'/g, "\\'")}')">${deleteLabel}</button>
+                </div>
+            </td>
+        `;
+        tbody.appendChild(tr);
+    });
+}
+
+function switchModelTab(tab) {
+    _activeModelTab = tab;
+    const tabApi = document.getElementById('tab-api-models');
+    const tabLocal = document.getElementById('tab-local-models');
+    const panelApi = document.getElementById('admin-models-api-panel');
+    const panelLocal = document.getElementById('admin-models-local-panel');
+
+    if (tab === 'api') {
+        tabApi.classList.add('active');
+        tabLocal.classList.remove('active');
+        panelApi.style.display = '';
+        panelLocal.style.display = 'none';
+    } else {
+        tabApi.classList.remove('active');
+        tabLocal.classList.add('active');
+        panelApi.style.display = 'none';
+        panelLocal.style.display = '';
+    }
+}
+
+function toggleModelTypeFields() {
+    const type = document.getElementById('model-type').value;
+    document.getElementById('model-api-fields').style.display = (type === 'api') ? '' : 'none';
+    document.getElementById('model-local-fields').style.display = (type === 'local') ? '' : 'none';
+}
+
 function openModelModal(modelId) {
     const modal = document.getElementById('model-modal');
     const title = document.getElementById('model-modal-title');
+    // Reset all fields
     document.getElementById('model-edit-id').value = '';
+    document.getElementById('model-type').value = _activeModelTab || 'api';
     document.getElementById('model-name').value = '';
-    document.getElementById('model-framework').value = '';
     document.getElementById('model-description').value = '';
+    document.getElementById('model-framework').value = '';
     document.getElementById('model-storage-path').value = '';
+    document.getElementById('model-api-provider').value = 'openai';
+    document.getElementById('model-api-endpoint').value = '';
+    document.getElementById('model-api-model-id').value = '';
     document.getElementById('model-is-public').value = '0';
 
     if (modelId) {
-        // Edit mode
         const m = _adminModelsCache.find(x => x.id === modelId);
         if (m) {
             document.getElementById('model-edit-id').value = m.id;
+            document.getElementById('model-type').value = m.model_type || 'local';
             document.getElementById('model-name').value = m.name || '';
-            document.getElementById('model-framework').value = m.framework || '';
             document.getElementById('model-description').value = m.description || '';
+            document.getElementById('model-framework').value = m.framework || '';
             document.getElementById('model-storage-path').value = m.storage_path || '';
+            document.getElementById('model-api-provider').value = m.api_provider || 'openai';
+            document.getElementById('model-api-endpoint').value = m.api_endpoint || '';
+            document.getElementById('model-api-model-id').value = m.api_model_id || '';
             document.getElementById('model-is-public').value = m.is_public ? '1' : '0';
         }
         title.textContent = TRANSLATIONS[currentLang]?.edit_model_title || 'Edit Model';
     } else {
         title.textContent = TRANSLATIONS[currentLang]?.btn_add_model || 'Add Model';
     }
+    toggleModelTypeFields();
     modal.classList.remove('hidden');
 }
 
@@ -695,25 +787,33 @@ function closeModelModal() {
 async function submitModelForm(e) {
     e.preventDefault();
     const editId = document.getElementById('model-edit-id').value;
+    const modelType = document.getElementById('model-type').value;
     const payload = {
         name: document.getElementById('model-name').value,
-        framework: document.getElementById('model-framework').value || null,
+        model_type: modelType,
         description: document.getElementById('model-description').value || null,
-        storage_path: document.getElementById('model-storage-path').value,
         is_public: parseInt(document.getElementById('model-is-public').value)
     };
+
+    if (modelType === 'api') {
+        payload.api_provider = document.getElementById('model-api-provider').value || null;
+        payload.api_endpoint = document.getElementById('model-api-endpoint').value || null;
+        payload.api_model_id = document.getElementById('model-api-model-id').value || null;
+        payload.storage_path = '';
+    } else {
+        payload.framework = document.getElementById('model-framework').value || null;
+        payload.storage_path = document.getElementById('model-storage-path').value || '';
+    }
 
     try {
         let res;
         if (editId) {
-            // Update
             res = await fetch(`${API_BASE}/admin/models/${editId}`, {
                 method: 'PUT',
                 headers: { 'Authorization': `Bearer ${authToken}`, 'Content-Type': 'application/json' },
                 body: JSON.stringify(payload)
             });
         } else {
-            // Create
             res = await fetch(`${API_BASE}/admin/models`, {
                 method: 'POST',
                 headers: { 'Authorization': `Bearer ${authToken}`, 'Content-Type': 'application/json' },

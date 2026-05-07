@@ -354,11 +354,15 @@ def admin_create_model(
 
     new_model = models.Model(
         name=data.name,
+        model_type=data.model_type or "local",
         description=data.description,
         framework=data.framework,
-        storage_path=data.storage_path,
+        storage_path=data.storage_path or "",
         is_public=data.is_public or 0,
-        uploaded_by=current_user.id
+        uploaded_by=current_user.id,
+        api_provider=data.api_provider,
+        api_endpoint=data.api_endpoint,
+        api_model_id=data.api_model_id
     )
     db.add(new_model)
     db.commit()
@@ -392,12 +396,20 @@ def admin_update_model(
         mdl.name = data.name
     if data.description is not None:
         mdl.description = data.description
+    if data.model_type is not None:
+        mdl.model_type = data.model_type
     if data.framework is not None:
         mdl.framework = data.framework
     if data.storage_path is not None:
         mdl.storage_path = data.storage_path
     if data.is_public is not None:
         mdl.is_public = data.is_public
+    if data.api_provider is not None:
+        mdl.api_provider = data.api_provider
+    if data.api_endpoint is not None:
+        mdl.api_endpoint = data.api_endpoint
+    if data.api_model_id is not None:
+        mdl.api_model_id = data.api_model_id
 
     db.commit()
     db.refresh(mdl)

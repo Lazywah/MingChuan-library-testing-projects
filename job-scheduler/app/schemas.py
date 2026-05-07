@@ -78,18 +78,27 @@ class AdminJobPriority(BaseModel):
 class AdminModelCreate(BaseModel):
     """ZH: 管理員新增模型請求 | EN: Admin create model request"""
     name: str                                        # ZH: 模型名稱 | EN: Model name
+    model_type: str = "local"                         # ZH: 模型類型 (api/local) | EN: Model type
     description: Optional[str] = None                # ZH: 描述 | EN: Description
     framework: Optional[str] = None                  # ZH: 框架 | EN: Framework (PyTorch/TF/etc.)
-    storage_path: str                                # ZH: 儲存路徑 | EN: Storage path
+    storage_path: Optional[str] = ""                  # ZH: 儲存路徑 | EN: Storage path
     is_public: Optional[int] = 0                     # ZH: 公開旗標 | EN: Public flag
+    # ZH: API 模型專用 | EN: API model fields
+    api_provider: Optional[str] = None               # ZH: 供應商 (anthropic/openai/google/ollama) | EN: Provider
+    api_endpoint: Optional[str] = None               # ZH: API 端點 | EN: Endpoint URL
+    api_model_id: Optional[str] = None               # ZH: 上游模型 ID | EN: Upstream model ID
 
 class AdminModelUpdate(BaseModel):
     """ZH: 管理員更新模型請求 | EN: Admin update model request"""
     name: Optional[str] = None
+    model_type: Optional[str] = None
     description: Optional[str] = None
     framework: Optional[str] = None
     storage_path: Optional[str] = None
     is_public: Optional[int] = None
+    api_provider: Optional[str] = None
+    api_endpoint: Optional[str] = None
+    api_model_id: Optional[str] = None
 
 class AuthForgotPassword(BaseModel):
     """ZH: 忘記密碼請求 | EN: Forgot password request"""

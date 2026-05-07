@@ -139,12 +139,19 @@ class Model(Base):
 
     id = Column(String, primary_key=True, default=generate_uuid)
     name = Column(String, unique=True, nullable=False)                        # ZH: 模型名稱 | EN: Model name
+    model_type = Column(String, default="local")                              # ZH: 模型類型 (api/local) | EN: Model type
     description = Column(Text)                                                # ZH: 描述 | EN: Description
     framework = Column(String)                                                # ZH: 框架 | EN: Framework
-    storage_path = Column(String, nullable=False)                             # ZH: 儲存路徑 | EN: Storage path
+    storage_path = Column(String, default="")                                 # ZH: 儲存路徑 (本地模型用) | EN: Storage path (local)
     size_bytes = Column(Integer)                                              # ZH: 檔案大小 | EN: File size
     uploaded_by = Column(String, nullable=False)                              # ZH: 上傳者 | EN: Uploader
     is_public = Column(Integer, default=0)                                    # ZH: 公開旗標 | EN: Public flag
+
+    # ZH: API 模型專用欄位 | EN: API model-specific fields
+    api_provider = Column(String)                                             # ZH: API 供應商 (anthropic/openai/google) | EN: API provider
+    api_endpoint = Column(String)                                             # ZH: API 端點 URL | EN: API endpoint URL
+    api_model_id = Column(String)                                             # ZH: 上游模型 ID (e.g. gpt-4o) | EN: Upstream model ID
+
     created_at = Column(DateTime, default=datetime.utcnow)
 
 
