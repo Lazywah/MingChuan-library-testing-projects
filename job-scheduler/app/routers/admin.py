@@ -276,3 +276,59 @@ def reset_user_account(
         "temp_password": temp_password,
         "message": f"Account {db_user.username} has been initialized"
     }
+
+
+@router.post("/jobs/{job_id}/cancel")
+def admin_cancel_job(
+    job_id: str,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user)
+) -> Any:
+    """ZH: 管理員強制取消任務 | EN: Admin force-cancel a job"""
+    verify_admin(current_user)
+
+    job = db.query(models.TrainingJob).filter(models.TrainingJob.id == job_id).first()
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+
+    if job.status not in ("pending", "queued"):
+        raise HTTPException(
+            status_code=400,
+            detail=f"Cannot cancel job with status '{job.status}'. Only pending/queued jobs can be cancelled."
+        )
+
+    job.status = "cancelled"
+    db.commit()
+    db.refresh(job)
+
+    logger.info(f"Admin {current_user.username} cancelled job {job_id[:8]}")
+    return {"job_id": job.id, "status": job.status, "message": "Job cancelled"}
+
+
+@router.put("/jobs/{job_id}/priority")
+def admin_update_job_priority(
+    job_id: str,
+    data: schemas.AdminJobPriority,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user)
+) -> Any:
+    """ZH: 管理員修改任務優先級 | EN: Admin update job priority"""
+    verify_admin(current_user)
+
+    job = db.query(models.TrainingJob).filter(models.TrainingJob.id == job_id).first()
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+
+    if job.status not in ("pending", "queued"):
+        raise HTTPException(
+            status_code=400,
+            detail=f"Cannot reprioritize job with status '{job.status}'. Only pending/queued jobs can be changed."
+        )
+
+    old_priority = job.priority
+    job.priority = data.priority
+    db.commit()
+    db.refresh(job)
+
+    logger.info(f"Admin {current_user.username} changed job {job_id[:8]} priority: {old_priority} -> {data.priority}")
+    return {"job_id": job.id, "priority": job.priority, "old_priority": old_priority, "message": "Priority updated"}

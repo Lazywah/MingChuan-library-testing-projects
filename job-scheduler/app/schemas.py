@@ -71,6 +71,10 @@ class AdminVerify(BaseModel):
     """ZH: 管理員權限驗證請求 | EN: Admin privilege verification request"""
     admin_password: str                              # ZH: 管理員密碼驗證 | EN: Admin password validation
 
+class AdminJobPriority(BaseModel):
+    """ZH: 管理員修改任務優先級請求 | EN: Admin update job priority request"""
+    priority: int = Field(..., ge=0, le=5)           # ZH: 新優先級 (0-5) | EN: New priority (0-5)
+
 class AuthForgotPassword(BaseModel):
     """ZH: 忘記密碼請求 | EN: Forgot password request"""
     username: str

@@ -10,6 +10,22 @@ const TRANSLATIONS = {
         admin_models: "模型管理",
         admin_jobs: "全域任務",
         admin_configs: "系統設定檔",
+        tab_high_compute: "高算力運算",
+        tab_midlow_compute: "中低算力運算",
+        filter_all: "全部",
+        filter_pending: "等待中",
+        filter_running: "執行中",
+        filter_completed: "已完成",
+        filter_failed: "失敗",
+        filter_cancelled: "已取消",
+        btn_cancel_job: "取消任務",
+        btn_reprioritize: "修改優先級",
+        confirm_cancel_job: "確定要取消任務 {name} 嗎？",
+        prompt_new_priority: "請輸入新的優先級 (0~5)：",
+        toast_job_cancelled: "任務已取消",
+        toast_job_priority_updated: "優先級已更新",
+        toast_job_action_failed: "操作失敗",
+        th_progress: "進度",
         msg_loading: "載入中...",
         toast_refresh: "已重新整理管理員資料",
         btn_logout: "登出",
@@ -76,6 +92,22 @@ const TRANSLATIONS = {
         admin_models: "Models",
         admin_jobs: "All Jobs",
         admin_configs: "System Configs",
+        tab_high_compute: "High Compute",
+        tab_midlow_compute: "Mid/Low Compute",
+        filter_all: "All",
+        filter_pending: "Pending",
+        filter_running: "Running",
+        filter_completed: "Completed",
+        filter_failed: "Failed",
+        filter_cancelled: "Cancelled",
+        btn_cancel_job: "Cancel Job",
+        btn_reprioritize: "Reprioritize",
+        confirm_cancel_job: "Are you sure you want to cancel job {name}?",
+        prompt_new_priority: "Enter new priority (0~5):",
+        toast_job_cancelled: "Job cancelled",
+        toast_job_priority_updated: "Priority updated",
+        toast_job_action_failed: "Action failed",
+        th_progress: "Progress",
         msg_loading: "Loading...",
         toast_refresh: "Refreshed Admin Data",
         btn_logout: "Logout",
@@ -419,25 +451,156 @@ async function resetUser(userId, username) {
     }
 }
 
+let _adminJobsCache = [];
+let _activeJobTab = 'high';
+
 function renderAdminJobs(jobs) {
-    const tbody = document.getElementById('admin-jobs-body');
+    if (jobs) _adminJobsCache = jobs;
+
+    const statusFilter = document.getElementById('admin-jobs-status-filter');
+    const filterVal = statusFilter ? statusFilter.value : 'all';
+
+    let filtered = _adminJobsCache;
+    if (filterVal !== 'all') {
+        filtered = _adminJobsCache.filter(j => j.status === filterVal);
+    }
+
+    const highJobs = filtered.filter(j => j.priority >= 2);
+    const midlowJobs = filtered.filter(j => j.priority < 2);
+
+    _renderJobTable('admin-jobs-high-body', highJobs);
+    _renderJobTable('admin-jobs-midlow-body', midlowJobs);
+
+    // Update tab counts
+    const tabHigh = document.getElementById('tab-high-compute');
+    const tabMidlow = document.getElementById('tab-midlow-compute');
+    if (tabHigh) {
+        let countEl = tabHigh.querySelector('.tab-count');
+        if (!countEl) { countEl = document.createElement('span'); countEl.className = 'tab-count'; tabHigh.appendChild(countEl); }
+        countEl.textContent = highJobs.length;
+    }
+    if (tabMidlow) {
+        let countEl = tabMidlow.querySelector('.tab-count');
+        if (!countEl) { countEl = document.createElement('span'); countEl.className = 'tab-count'; tabMidlow.appendChild(countEl); }
+        countEl.textContent = midlowJobs.length;
+    }
+}
+
+function _renderJobTable(tbodyId, jobs) {
+    const tbody = document.getElementById(tbodyId);
     if (!tbody) return;
     tbody.innerHTML = '';
+    if (jobs.length === 0) {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `<td colspan="6" style="text-align:center; color:var(--text-muted); padding:20px;">No jobs</td>`;
+        tbody.appendChild(tr);
+        return;
+    }
     jobs.forEach(j => {
         const tr = document.createElement('tr');
         let statusBadge = `<span class="status-badge pending">${j.status}</span>`;
         if (j.status === 'running') statusBadge = `<span class="status-badge running">${j.status}</span>`;
         if (j.status === 'completed') statusBadge = `<span class="status-badge completed">${j.status}</span>`;
         if (j.status === 'failed') statusBadge = `<span class="status-badge failed">${j.status}</span>`;
-        
+        if (j.status === 'cancelled') statusBadge = `<span class="status-badge" style="border-color:#6b7280; color:#6b7280;">${j.status}</span>`;
+
+        const progress = j.progress || 0;
+        const progressBar = `<div class="job-progress-bar"><div class="job-progress-bar-fill" style="width:${progress}%;"></div></div><small style="color:var(--text-muted);">${Math.round(progress)}%</small>`;
+
+        const canManage = (j.status === 'pending' || j.status === 'queued');
+        const cancelLabel = TRANSLATIONS[currentLang]?.btn_cancel_job || 'Cancel';
+        const prioLabel = TRANSLATIONS[currentLang]?.btn_reprioritize || 'Reprioritize';
+        const actionsHtml = canManage ? `
+            <div style="display:flex; gap:4px; flex-wrap:wrap;">
+                <button class="job-action-btn priority-btn" onclick="reprioritizeJob('${j.id}', '${j.job_name}')">${prioLabel}</button>
+                <button class="job-action-btn cancel-btn" onclick="cancelJobAdmin('${j.id}', '${j.job_name}')">${cancelLabel}</button>
+            </div>` : `<span style="color:var(--text-muted); font-size:12px;">—</span>`;
+
         tr.innerHTML = `
-            <td>${j.job_name}<br><small style="color:var(--text-muted)">${j.id.split('-')[0]}</small></td>
-            <td>${j.user_id}</td>
+            <td>${j.job_name}<br><small style="color:var(--text-muted)">${j.id.substring(0, 8)}</small></td>
+            <td>${j.user_id ? j.user_id.substring(0, 8) : 'N/A'}</td>
             <td>${statusBadge}</td>
             <td>${j.priority}</td>
+            <td>${progressBar}</td>
+            <td>${actionsHtml}</td>
         `;
         tbody.appendChild(tr);
     });
+}
+
+function switchJobTab(tab) {
+    _activeJobTab = tab;
+    const tabHigh = document.getElementById('tab-high-compute');
+    const tabMidlow = document.getElementById('tab-midlow-compute');
+    const panelHigh = document.getElementById('admin-jobs-high-panel');
+    const panelMidlow = document.getElementById('admin-jobs-midlow-panel');
+
+    if (tab === 'high') {
+        tabHigh.classList.add('active');
+        tabMidlow.classList.remove('active');
+        panelHigh.style.display = '';
+        panelMidlow.style.display = 'none';
+    } else {
+        tabHigh.classList.remove('active');
+        tabMidlow.classList.add('active');
+        panelHigh.style.display = 'none';
+        panelMidlow.style.display = '';
+    }
+}
+
+function filterAdminJobs() {
+    renderAdminJobs(); // Re-render with existing cache
+}
+
+async function cancelJobAdmin(jobId, jobName) {
+    const msg = (TRANSLATIONS[currentLang]?.confirm_cancel_job || 'Cancel job {name}?').replace('{name}', jobName);
+    if (!confirm(msg)) return;
+
+    try {
+        const res = await fetch(`${API_BASE}/admin/jobs/${jobId}/cancel`, {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${authToken}` }
+        });
+        if (!res.ok) {
+            const err = await res.json();
+            throw new Error(err.detail || 'Cancel failed');
+        }
+        showToast(TRANSLATIONS[currentLang]?.toast_job_cancelled || 'Job cancelled');
+        fetchAdminData();
+    } catch (err) {
+        console.error(err);
+        showToast((TRANSLATIONS[currentLang]?.toast_job_action_failed || 'Action failed') + ': ' + err.message, true);
+    }
+}
+
+async function reprioritizeJob(jobId, jobName) {
+    const input = prompt((TRANSLATIONS[currentLang]?.prompt_new_priority || 'Enter new priority (0~5):'));
+    if (input === null) return;
+    const newPriority = parseInt(input);
+    if (isNaN(newPriority) || newPriority < 0 || newPriority > 5) {
+        showToast('Priority must be 0~5', true);
+        return;
+    }
+
+    try {
+        const res = await fetch(`${API_BASE}/admin/jobs/${jobId}/priority`, {
+            method: 'PUT',
+            headers: {
+                'Authorization': `Bearer ${authToken}`,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ priority: newPriority })
+        });
+        if (!res.ok) {
+            const err = await res.json();
+            throw new Error(err.detail || 'Update failed');
+        }
+        showToast(TRANSLATIONS[currentLang]?.toast_job_priority_updated || 'Priority updated');
+        fetchAdminData();
+    } catch (err) {
+        console.error(err);
+        showToast((TRANSLATIONS[currentLang]?.toast_job_action_failed || 'Action failed') + ': ' + err.message, true);
+    }
 }
 
 function renderAdminModels(models) {

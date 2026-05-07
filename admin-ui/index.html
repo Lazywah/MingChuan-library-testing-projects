@@ -325,23 +325,61 @@
                 </div>
             </section>
 
-            <!-- ZH: 全域排程管理 | EN: Global Job Queue -->
-            <section class="widget form-box-panel">
-                <div class="widget-header">
+            <!-- ZH: 全域排程管理 (分層分頁) | EN: Global Job Queue (Tabbed Tiers) -->
+            <section class="widget form-box-panel" style="grid-column: 1 / -1;">
+                <div class="widget-header split">
                     <h3><ion-icon name="list-outline" style="margin-right:6px;"></ion-icon> <span
                             data-i18n="admin_jobs">全域任務</span></h3>
+                    <div style="display:flex; gap:10px; align-items:center;">
+                        <select id="admin-jobs-status-filter" class="config-select" style="padding: 4px 10px; border-radius: 8px; font-size: 13px;" onchange="filterAdminJobs()">
+                            <option value="all" data-i18n="filter_all">全部</option>
+                            <option value="pending" data-i18n="filter_pending">Pending</option>
+                            <option value="running" data-i18n="filter_running">Running</option>
+                            <option value="completed" data-i18n="filter_completed">Completed</option>
+                            <option value="failed" data-i18n="filter_failed">Failed</option>
+                            <option value="cancelled" data-i18n="filter_cancelled">Cancelled</option>
+                        </select>
+                    </div>
                 </div>
-                <div class="admin-table-wrap scrollbar-custom">
-                    <table class="admin-table" id="admin-jobs-table">
+                <!-- Tab Buttons -->
+                <div style="display:flex; gap:0; border-bottom: 1px solid var(--border-color); padding: 0 15px;">
+                    <button id="tab-high-compute" class="admin-job-tab active" onclick="switchJobTab('high')">
+                        <ion-icon name="flash-outline"></ion-icon> <span data-i18n="tab_high_compute">高算力運算</span>
+                    </button>
+                    <button id="tab-midlow-compute" class="admin-job-tab" onclick="switchJobTab('midlow')">
+                        <ion-icon name="layers-outline"></ion-icon> <span data-i18n="tab_midlow_compute">中低算力運算</span>
+                    </button>
+                </div>
+                <!-- High Compute Table -->
+                <div id="admin-jobs-high-panel" class="admin-table-wrap scrollbar-custom" style="max-height: 420px; overflow-y: auto;">
+                    <table class="admin-table sticky-header" id="admin-jobs-high-table">
                         <thead>
                             <tr>
-                                <th data-i18n="th_job">Job</th>
-                                <th data-i18n="th_user">User</th>
-                                <th data-i18n="th_status">Status</th>
-                                <th data-i18n="th_priority">Priority</th>
+                                <th data-i18n="th_job">任務</th>
+                                <th data-i18n="th_user">使用者</th>
+                                <th data-i18n="th_status">狀態</th>
+                                <th data-i18n="th_priority">優先級</th>
+                                <th>進度</th>
+                                <th data-i18n="th_actions">操作</th>
                             </tr>
                         </thead>
-                        <tbody id="admin-jobs-body"><!-- JS --></tbody>
+                        <tbody id="admin-jobs-high-body"><!-- JS --></tbody>
+                    </table>
+                </div>
+                <!-- Mid/Low Compute Table -->
+                <div id="admin-jobs-midlow-panel" class="admin-table-wrap scrollbar-custom" style="max-height: 420px; overflow-y: auto; display: none;">
+                    <table class="admin-table sticky-header" id="admin-jobs-midlow-table">
+                        <thead>
+                            <tr>
+                                <th data-i18n="th_job">任務</th>
+                                <th data-i18n="th_user">使用者</th>
+                                <th data-i18n="th_status">狀態</th>
+                                <th data-i18n="th_priority">優先級</th>
+                                <th>進度</th>
+                                <th data-i18n="th_actions">操作</th>
+                            </tr>
+                        </thead>
+                        <tbody id="admin-jobs-midlow-body"><!-- JS --></tbody>
                     </table>
                 </div>
             </section>

@@ -2098,3 +2098,131 @@ ion-icon {
 .bottom-quick-links.vertical-layout .quick-link-card {
     padding: 15px;
 }
+
+/* ==========================================================================
+   ZH: 管理員表格 — 欄位名固定 (Sticky Header)
+   EN: Admin Tables — Sticky Header for all tables
+   ========================================================================== */
+.admin-table-wrap {
+    overflow-y: auto;
+}
+
+.admin-table thead th {
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    background: var(--bg-solid);
+    box-shadow: 0 1px 0 var(--border-color);
+}
+
+[data-theme='light'] .admin-table thead th {
+    background: #f8f9fb;
+}
+
+/* ==========================================================================
+   ZH: 任務管理分頁按鈕
+   EN: Job Management Tab Buttons
+   ========================================================================== */
+.admin-job-tab {
+    background: transparent;
+    border: none;
+    border-bottom: 2px solid transparent;
+    color: var(--text-muted);
+    padding: 10px 20px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    transition: all 0.3s ease;
+    font-family: var(--font-main);
+}
+
+.admin-job-tab:hover {
+    color: var(--text-primary);
+}
+
+.admin-job-tab.active {
+    color: var(--accent-glow);
+    border-bottom-color: var(--accent-glow);
+}
+
+[data-theme='light'] .admin-job-tab.active {
+    color: #4f46e5;
+    border-bottom-color: #4f46e5;
+}
+
+/* Job action buttons inside table */
+.job-action-btn {
+    background: transparent;
+    border: 1px solid var(--border-color);
+    color: var(--text-muted);
+    padding: 3px 10px;
+    border-radius: 6px;
+    font-size: 12px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    font-family: var(--font-main);
+}
+
+.job-action-btn:hover {
+    color: var(--text-primary);
+    border-color: var(--text-primary);
+}
+
+.job-action-btn.cancel-btn {
+    border-color: #fb7185;
+    color: #fb7185;
+}
+
+.job-action-btn.cancel-btn:hover {
+    background: rgba(251, 113, 133, 0.15);
+}
+
+.job-action-btn.priority-btn {
+    border-color: #f59e0b;
+    color: #f59e0b;
+}
+
+.job-action-btn.priority-btn:hover {
+    background: rgba(245, 158, 11, 0.15);
+}
+
+/* Job progress bar inside table cell */
+.job-progress-bar {
+    width: 100%;
+    max-width: 120px;
+    height: 6px;
+    background: rgba(255,255,255,0.1);
+    border-radius: 3px;
+    overflow: hidden;
+}
+
+.job-progress-bar-fill {
+    height: 100%;
+    background: var(--neon-blue, #3b82f6);
+    border-radius: 3px;
+    transition: width 0.3s ease;
+}
+
+/* Tab count badge */
+.tab-count {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 20px;
+    height: 20px;
+    padding: 0 6px;
+    border-radius: 10px;
+    font-size: 11px;
+    font-weight: 700;
+    background: rgba(255,255,255,0.1);
+    color: var(--text-muted);
+    margin-left: 4px;
+}
+
+.admin-job-tab.active .tab-count {
+    background: rgba(255,255,255,0.2);
+    color: var(--accent-glow);
+}
