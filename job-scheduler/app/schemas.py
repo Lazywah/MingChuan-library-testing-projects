@@ -38,6 +38,7 @@ class UserCreate(BaseModel):
     email: EmailStr                                  # ZH: 電子郵件 (自動驗證格式) | EN: Email (auto-validated)
     password: str                                    # ZH: 密碼 (明文，後端會雜湊) | EN: Password (plaintext, hashed by backend)
     role: Optional[str] = "student"                  # ZH: 角色 (預設 student) | EN: Role (default: student)
+    department: Optional[str] = None                 # ZH: 學系資訊 | EN: Department
 
 
 class UserUpdate(BaseModel):
@@ -45,6 +46,7 @@ class UserUpdate(BaseModel):
     email: Optional[EmailStr] = None
     password: Optional[str] = None
     tutorial_dismissed: Optional[int] = None
+    department: Optional[str] = None
 
 
 class AdminUserUpdate(BaseModel):
@@ -54,6 +56,7 @@ class AdminUserUpdate(BaseModel):
     role: Optional[str] = None                       # ZH: student/teacher/admin
     is_active: Optional[int] = None                  # ZH: 0=停用 1=啟用 | EN: 0=disabled 1=enabled
     tokens_limit: Optional[int] = None               # ZH: Token 月度上限 | EN: Monthly token limit
+    department: Optional[str] = None                 # ZH: 學系資訊 | EN: Department
 
 
 class AdminProvisionUser(BaseModel):
@@ -62,6 +65,7 @@ class AdminProvisionUser(BaseModel):
     email: EmailStr                                  # ZH: 電子郵件 | EN: Email
     role: Optional[str] = "student"                  # ZH: 角色 | EN: Role
     password: Optional[str] = None                   # ZH: 自訂密碼，若無則自動產生 | EN: Custom password, if empty auto-generate
+    department: Optional[str] = None                 # ZH: 學系資訊 | EN: Department
 
 class AdminDeleteUser(BaseModel):
     """ZH: 管理員刪除使用者請求 | EN: Admin delete user request"""
@@ -114,6 +118,9 @@ class UserResponse(BaseModel):
     is_active: int
     online_status: Optional[int] = 0
     tutorial_dismissed: int = 0
+    department: Optional[str] = None
+    login_count: int = 0
+    lifetime_tokens_used: int = 0
     last_login_ip: Optional[str] = None
     last_login_time: Optional[datetime] = None
     created_at: datetime

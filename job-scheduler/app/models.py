@@ -68,6 +68,9 @@ class User(Base):
     online_status = Column(Integer, default=0)                                # ZH: 在線狀態 (0:離線, 1:線上) | EN: Online status
     is_test_account = Column(Integer, default=0)                              # ZH: 測試帳號標記 (0:否, 1:是) | EN: Test account flag
     tutorial_dismissed = Column(Integer, default=0)                           # ZH: 是否不再顯示教學 (0:否, 1:是) | EN: Tutorial dismissed (0:no, 1:yes)
+    department = Column(String, nullable=True)                                # ZH: 學系資訊 | EN: Department
+    login_count = Column(Integer, default=0)                                  # ZH: 登入次數 | EN: Login count
+    lifetime_tokens_used = Column(Integer, default=0)                         # ZH: 歷史累計 Token 數 | EN: Lifetime tokens used
     created_at = Column(DateTime, default=datetime.utcnow)                    # ZH: 建立時間 | EN: Created at
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)  # ZH: 更新時間 | EN: Updated at
 

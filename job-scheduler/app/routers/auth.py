@@ -127,11 +127,12 @@ def login(
             headers={"WWW-Authenticate": "Bearer"},
         )
 
-    # ZH: 記錄上線狀態 | EN: Record online status
+    # ZH: 記錄上線狀態與次數 | EN: Record online status and login count
     try:
         user.last_login_time = datetime.utcnow()
         user.last_login_ip = request.client.host if request.client else "Unknown"
         user.online_status = 1
+        user.login_count += 1
         db.commit()
     except Exception as e:
         logger.error(f"Failed to update login status: {e}")

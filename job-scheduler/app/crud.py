@@ -85,7 +85,8 @@ def create_user(db: Session, user: schemas.UserCreate) -> models.User:
         username=user.username,
         email=user.email,
         hashed_password=hashed_password,
-        role=user.role
+        role=user.role,
+        department=user.department
     )
     db.add(db_user)
     db.commit()
@@ -110,13 +111,15 @@ def update_user(db: Session, db_user: models.User, update_data: schemas.UserUpda
         db_user.email = update_data.email
     if update_data.password is not None and update_data.password.strip():
         db_user.hashed_password = get_password_hash(update_data.password)
-    if update_data.tutorial_dismissed is not None:
+    if getattr(update_data, "tutorial_dismissed", None) is not None:
         db_user.tutorial_dismissed = update_data.tutorial_dismissed
+    if getattr(update_data, "department", None) is not None:
+        db_user.department = update_data.department
     db.commit()
     db.refresh(db_user)
     return db_user
 
-def create_sso_user(db: Session, username: str, email: str, role: str = "student") -> models.User:
+def create_sso_user(db: Session, username: str, email: str, role: str = "student", department: str = None) -> models.User:
     """SSO 登入時自動建立帳號 (無需讓使用者輸入密碼，系統給予隨機 hash 密碼)"""
     import secrets
     random_password = secrets.token_urlsafe(16)
@@ -126,7 +129,8 @@ def create_sso_user(db: Session, username: str, email: str, role: str = "student
         username=username,
         email=email,
         hashed_password=hashed_password,
-        role=role
+        role=role,
+        department=department
     )
     db.add(db_user)
     db.commit()
@@ -189,6 +193,12 @@ def increment_token_usage(db: Session, user_id: str, tokens: int) -> models.Toke
         usage.reset_date = _calculate_next_reset_date()
 
     usage.tokens_used += tokens
+    
+    # ZH: 同步更新 User 表的歷史總使用量 | EN: Sync update User's lifetime token usage
+    user = get_user_by_id(db, user_id)
+    if user:
+        user.lifetime_tokens_used += tokens
+        
     db.commit()
     db.refresh(usage)
     return usage

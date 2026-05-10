@@ -143,6 +143,12 @@ def init_db():
             except Exception: pass
             try: conn.execute(text("ALTER TABLE users ADD COLUMN tutorial_dismissed INTEGER DEFAULT 0"))
             except Exception: pass
+            try: conn.execute(text("ALTER TABLE users ADD COLUMN department VARCHAR"))
+            except Exception: pass
+            try: conn.execute(text("ALTER TABLE users ADD COLUMN login_count INTEGER DEFAULT 0"))
+            except Exception: pass
+            try: conn.execute(text("ALTER TABLE users ADD COLUMN lifetime_tokens_used INTEGER DEFAULT 0"))
+            except Exception: pass
 
             # --- models 表遷移 | models table migrations ---
             try: conn.execute(text("ALTER TABLE models ADD COLUMN model_type VARCHAR DEFAULT 'local'"))
