@@ -439,3 +439,70 @@ def admin_delete_model(
 
     logger.info(f"Admin {current_user.username} deleted model '{model_name}'")
     return {"message": f"Model '{model_name}' deleted", "deleted_id": model_id}
+
+@router.get("/analytics")
+def get_analytics(
+    department: str = "all",
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user)
+) -> Any:
+    """ZH: 取得管理員分析數據 | EN: Get admin analytics data"""
+    verify_admin(current_user)
+    from sqlalchemy import func
+    
+    # 1. User stats (grouped by department)
+    dept_stats = []
+    
+    base_user_query = db.query(
+        models.User.department,
+        func.count(models.User.id).label("user_count"),
+        func.sum(models.User.login_count).label("total_logins"),
+        func.sum(models.User.lifetime_tokens_used).label("total_tokens")
+    )
+    
+    if department != "all":
+        # Check specific department
+        user_stats = base_user_query.filter(models.User.department == department).group_by(models.User.department).first()
+        if user_stats:
+            dept_stats.append({
+                "department": user_stats.department or "Unknown",
+                "user_count": user_stats.user_count,
+                "total_logins": user_stats.total_logins or 0,
+                "total_tokens": user_stats.total_tokens or 0
+            })
+    else:
+        # Group by all departments
+        all_user_stats = base_user_query.group_by(models.User.department).all()
+        for stat in all_user_stats:
+            dept_stats.append({
+                "department": stat.department or "Unknown",
+                "user_count": stat.user_count,
+                "total_logins": stat.total_logins or 0,
+                "total_tokens": stat.total_tokens or 0
+            })
+            
+    # 2. Tool usage stats
+    tool_query = db.query(
+        models.ChatHistory.tool_type,
+        func.count(models.ChatHistory.id).label("usage_count")
+    )
+    
+    if department != "all":
+        # Join with User to filter by department
+        tool_query = tool_query.join(models.User, models.ChatHistory.user_id == models.User.id)\
+            .filter(models.User.department == department)
+            
+    tool_stats = tool_query.group_by(models.ChatHistory.tool_type).all()
+    
+    tools_breakdown = []
+    for stat in tool_stats:
+        tools_breakdown.append({
+            "tool_type": stat.tool_type or "chat",
+            "usage_count": stat.usage_count
+        })
+
+    return {
+        "department_filter": department,
+        "department_stats": dept_stats,
+        "tools_breakdown": tools_breakdown
+    }

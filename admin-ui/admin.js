@@ -22,6 +22,8 @@ const TRANSLATIONS = {
         admin_jobs: "全域任務",
         tab_api_models: "API 模型",
         tab_local_models: "本地模型",
+        tab_management: "管理介面",
+        tab_analytics: "數據分析",
         admin_configs: "系統設定檔",
         tab_high_compute: "高算力運算",
         tab_midlow_compute: "中低算力運算",
@@ -117,6 +119,8 @@ const TRANSLATIONS = {
         admin_jobs: "All Jobs",
         tab_api_models: "API Models",
         tab_local_models: "Local Models",
+        tab_management: "Management",
+        tab_analytics: "Analytics",
         admin_configs: "System Configs",
         tab_high_compute: "High Compute",
         tab_midlow_compute: "Mid/Low Compute",
@@ -226,7 +230,170 @@ function showToast(msg, isError = false) {
     msgEl.textContent = msg;
     iconEl.innerHTML = isError ? '<ion-icon name="alert-circle-outline"></ion-icon>' : '<ion-icon name="checkmark-circle-outline"></ion-icon>';
     toast.className = `toast ${isError ? 'error' : ''} show`;
-    setTimeout(() => { toast.classList.remove('show'); }, 3000);
+    setTimeout(() => { toast.classList.add('hidden'); }, 3000);
+}
+
+// ==========================================
+// ZH: 數據分析邏輯 | EN: Analytics Logic
+// ==========================================
+let deptChartInstance = null;
+let toolChartInstance = null;
+
+function switchAdminMainTab(tabId) {
+    document.querySelectorAll('.model-tabs button[id^="nav-tab-"]').forEach(btn => btn.classList.remove('active'));
+    document.getElementById('nav-tab-' + tabId).classList.add('active');
+
+    document.querySelectorAll('.admin-tab-content').forEach(content => {
+        content.style.display = 'none';
+        content.classList.remove('active');
+    });
+    
+    const target = document.getElementById('tab-' + tabId);
+    if (target) {
+        target.style.display = 'block';
+        target.classList.add('active');
+        
+        if (tabId === 'analytics') {
+            fetchAnalyticsData();
+        }
+    }
+}
+
+async function fetchAnalyticsData() {
+    const dept = document.getElementById('analytics-dept-filter').value || 'all';
+    try {
+        const res = await fetch(`${API_BASE}/admin/analytics?department=${dept}`, {
+            headers: { 'Authorization': `Bearer ${authToken}` }
+        });
+        if (res.status === 401) {
+            handleAuthError();
+            return;
+        }
+        if (!res.ok) throw new Error('Failed to fetch analytics data');
+        
+        const data = await res.json();
+        renderAnalyticsUI(data);
+    } catch (e) {
+        console.error(e);
+        showToast("Error loading analytics data", false);
+    }
+}
+
+function renderAnalyticsUI(data) {
+    // 1. Render Stats
+    let totalUsers = 0, totalLogins = 0, totalTokens = 0;
+    
+    // Check if we need to populate department filter (only once when 'all' is selected and options are few)
+    const select = document.getElementById('analytics-dept-filter');
+    if (data.department_filter === 'all' && select.options.length === 1) {
+        data.department_stats.forEach(stat => {
+            if (stat.department && stat.department !== 'Unknown') {
+                const opt = document.createElement('option');
+                opt.value = stat.department;
+                opt.textContent = stat.department;
+                select.appendChild(opt);
+            }
+        });
+    }
+
+    data.department_stats.forEach(s => {
+        totalUsers += s.user_count;
+        totalLogins += s.total_logins;
+        totalTokens += s.total_tokens;
+    });
+
+    document.getElementById('stat-total-users').textContent = totalUsers.toLocaleString();
+    document.getElementById('stat-total-logins').textContent = totalLogins.toLocaleString();
+    document.getElementById('stat-total-tokens').textContent = totalTokens.toLocaleString();
+
+    // 2. Render Dept Usage Chart (Bar)
+    const deptLabels = data.department_stats.map(s => s.department || 'Unknown');
+    const deptTokens = data.department_stats.map(s => s.total_tokens);
+    const deptCtx = document.getElementById('deptUsageChart').getContext('2d');
+    
+    if (deptChartInstance) {
+        deptChartInstance.destroy();
+    }
+    
+    deptChartInstance = new Chart(deptCtx, {
+        type: 'bar',
+        data: {
+            labels: deptLabels,
+            datasets: [{
+                label: 'Total Tokens Used',
+                data: deptTokens,
+                backgroundColor: 'rgba(56, 189, 248, 0.7)',
+                borderColor: 'rgba(56, 189, 248, 1)',
+                borderWidth: 1,
+                borderRadius: 4
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { labels: { color: getComputedStyle(document.body).getPropertyValue('--text-primary') || '#888' } }
+            },
+            scales: {
+                x: { ticks: { color: getComputedStyle(document.body).getPropertyValue('--text-primary') || '#888' }, grid: { color: 'rgba(128,128,128,0.2)' } },
+                y: { ticks: { color: getComputedStyle(document.body).getPropertyValue('--text-primary') || '#888' }, grid: { color: 'rgba(128,128,128,0.2)' }, beginAtZero: true }
+            }
+        }
+    });
+
+    // 3. Render Tool Usage Chart (Pie)
+    const toolLabels = data.tools_breakdown.map(t => {
+        const tr = t.tool_type;
+        return tr === 'chat' ? 'Chat' : tr === 'video_gen' ? 'Video Gen' : tr === 'writing' ? 'Writing' : tr;
+    });
+    const toolCounts = data.tools_breakdown.map(t => t.usage_count);
+    const toolCtx = document.getElementById('toolUsageChart').getContext('2d');
+    
+    if (toolChartInstance) {
+        toolChartInstance.destroy();
+    }
+    
+    toolChartInstance = new Chart(toolCtx, {
+        type: 'pie',
+        data: {
+            labels: toolLabels,
+            datasets: [{
+                data: toolCounts,
+                backgroundColor: [
+                    'rgba(244, 114, 182, 0.8)', // pink
+                    'rgba(56, 189, 248, 0.8)',  // blue
+                    'rgba(250, 204, 21, 0.8)',  // yellow
+                    'rgba(167, 139, 250, 0.8)'  // purple
+                ],
+                borderWidth: 1,
+                borderColor: '#1e293b'
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { position: 'right', labels: { color: getComputedStyle(document.body).getPropertyValue('--text-primary') || '#888' } }
+            }
+        }
+    });
+}
+
+function exportAnalyticsCharts() {
+    if (!deptChartInstance && !toolChartInstance) return;
+    
+    const downloadCanvas = (chart, filename) => {
+        if (!chart) return;
+        const link = document.createElement('a');
+        link.download = filename;
+        link.href = chart.toBase64Image();
+        link.click();
+    };
+
+    downloadCanvas(deptChartInstance, 'department_usage.png');
+    setTimeout(() => {
+        downloadCanvas(toolChartInstance, 'tool_usage.png');
+    }, 500);
 }
 
 // 獨立的 Admin Login 流程
@@ -432,6 +599,7 @@ function renderAdminUsers(users) {
                     </div>
                 </td>
                 <td>${u.email}</td>
+                <td>${u.department || 'N/A'}</td>
                 <td>${roleStr}</td>
                 <td>${statusStr}</td>
                 <td>${u.last_login_ip || 'N/A'}</td>
@@ -985,6 +1153,7 @@ function openEditUser(userId) {
     document.getElementById('edit-user-id').value = userId;
     document.getElementById('edit-username').value = userData.username;
     document.getElementById('edit-email').value = userData.email;
+    document.getElementById('edit-department').value = userData.department || '';
     document.getElementById('edit-password').value = '';
     document.getElementById('edit-role').value = userData.role;
     document.getElementById('edit-active').value = userData.is_active;
@@ -993,9 +1162,11 @@ function openEditUser(userId) {
     
     // Reset to View Mode
     document.getElementById('edit-email').disabled = true;
+    document.getElementById('edit-department').disabled = true;
     document.getElementById('edit-role').disabled = true;
     document.getElementById('edit-active').disabled = true;
     document.getElementById('edit-tokens-limit').disabled = true;
+    document.getElementById('edit-dept-container').style.display = 'none';
     document.getElementById('edit-pwd-container').style.display = 'none';
     document.getElementById('btn-unlock-edit').style.display = 'block';
     document.getElementById('btn-save-edit').style.display = 'none';
@@ -1014,6 +1185,7 @@ async function saveEditUser(e) {
     const userId = document.getElementById('edit-user-id').value;
     const payload = {
         email: document.getElementById('edit-email').value || null,
+        department: document.getElementById('edit-department').value || null,
         role: document.getElementById('edit-role').value,
         is_active: parseInt(document.getElementById('edit-active').value),
         tokens_limit: parseInt(document.getElementById('edit-tokens-limit').value) || null
@@ -1070,9 +1242,11 @@ async function unlockEdit() {
         
         // Unlock the form fields
         document.getElementById('edit-email').disabled = false;
+        document.getElementById('edit-department').disabled = false;
         document.getElementById('edit-role').disabled = false;
         document.getElementById('edit-active').disabled = false;
         document.getElementById('edit-tokens-limit').disabled = false;
+        document.getElementById('edit-dept-container').style.display = 'block';
         document.getElementById('edit-pwd-container').style.display = 'block';
         
         // Swap buttons
@@ -1159,6 +1333,7 @@ async function batchUpdateTokens() {
 function openProvision() {
     document.getElementById('provision-username').value = '';
     document.getElementById('provision-email').value = '';
+    document.getElementById('provision-department').value = '';
     document.getElementById('provision-password').value = '';
     document.getElementById('provision-role').value = 'student';
     document.getElementById('provision-result').classList.add('hidden');
@@ -1175,6 +1350,7 @@ async function submitProvision(e) {
     const payload = {
         username: document.getElementById('provision-username').value,
         email: document.getElementById('provision-email').value,
+        department: document.getElementById('provision-department').value || null,
         role: document.getElementById('provision-role').value
     };
     const pw = document.getElementById('provision-password').value;

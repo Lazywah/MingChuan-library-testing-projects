@@ -170,6 +170,7 @@ class ChatHistory(Base):
     session_id = Column(String, index=True, nullable=False)                   # ZH: 對話工作階段 | EN: Chat session
     role = Column(String, nullable=False)                                     # ZH: 角色 | EN: Role (user/assistant)
     content = Column(Text, nullable=False)                                    # ZH: 訊息內容 | EN: Message content
+    tool_type = Column(String, default="chat")                                # ZH: 工具類型 (chat, video_gen, writing) | EN: Tool type
     tokens_used = Column(Integer, default=0)                                  # ZH: Token 消耗 | EN: Tokens used
     created_at = Column(DateTime, default=datetime.utcnow)
 

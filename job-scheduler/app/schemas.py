@@ -244,6 +244,7 @@ class ChatRequest(BaseModel):
     model_id: str                                    # ZH: 模型識別碼 (gemini-1.5, llama3)
     messages: List[ChatMessage]                      # ZH: 對話歷史 | EN: Message history
     stream: Optional[bool] = True                    # ZH: 是否串流 | EN: Request streaming
+    tool_type: Optional[str] = "chat"                # ZH: 工具類型 | EN: Tool type
 
 
 class ChatHistoryResponse(BaseModel):

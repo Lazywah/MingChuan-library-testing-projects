@@ -159,7 +159,11 @@ def init_db():
             except Exception: pass
             try: conn.execute(text("ALTER TABLE models ADD COLUMN api_model_id VARCHAR"))
             except Exception: pass
+            # --- chat_history 表遷移 | chat_history table migrations ---
+            try: conn.execute(text("ALTER TABLE chat_history ADD COLUMN tool_type VARCHAR DEFAULT 'chat'"))
+            except Exception: pass
+
     except Exception as e:
-        logger.warning(f"DB Migration checks: {e}")
+        logger.warning(f"Manual DB migration skipped or partially failed: {e}")
 
     logger.info(f"ZH: 資料庫初始化完成 ({settings.DATABASE_PATH}) | EN: Database initialized ({settings.DATABASE_PATH})")

@@ -11,6 +11,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Playpen+Sans:wght@400;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="styles.css">
     <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
         .admin-layout {
             padding: 20px;
@@ -22,7 +23,17 @@
             display: flex;
             justify-content: space-between;
             align-items: center;
-            margin-bottom: 20px;
+            margin-bottom: 30px;
+            padding: 15px 25px;
+            background: var(--bg-panel);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border: 1px solid var(--border-color);
+            border-radius: 16px;
+            box-shadow: 0 4px 30px rgba(0, 0, 0, 0.2);
+            position: sticky;
+            top: 20px;
+            z-index: 1000;
         }
 
         .back-link {
@@ -46,8 +57,8 @@
         }
 
         .stat-card {
-            background: rgba(0, 0, 0, 0.4);
-            border: 1px solid rgba(255, 255, 255, 0.1);
+            background: var(--bg-panel);
+            border: 1px solid var(--border-color);
             border-radius: 12px;
             padding: 15px;
             display: flex;
@@ -71,7 +82,7 @@
         }
 
         .progress-bar-bg {
-            background: rgba(255, 255, 255, 0.1);
+            background: rgba(128, 128, 128, 0.2);
             height: 6px;
             border-radius: 3px;
             overflow: hidden;
@@ -141,18 +152,30 @@
 
     <div class="admin-layout" id="admin-main-layout" style="display: none;">
         <div class="admin-nav">
-            <a href="javascript:void(0);" onclick="window.location.href = window.location.protocol + '//' + window.location.hostname + '/train/';" class="back-link" style="text-decoration: none; color: var(--neon-blue); display: flex; align-items: center; gap: 5px; cursor: pointer;">
-                <ion-icon name="arrow-back-outline"></ion-icon> <span data-i18n="btn_back_hub">返回大廳</span>
-            </a>
-            <h2 style="margin: 0; display: flex; align-items: center; gap: 8px;"><ion-icon name="settings-outline"></ion-icon> <span
-                    data-i18n="admin_dashboard">管理員儀表板</span></h2>
+            <div style="display: flex; align-items: center; gap: 20px;">
+                <a href="javascript:void(0);" onclick="window.location.href = window.location.protocol + '//' + window.location.hostname + '/train/';" class="back-link" style="text-decoration: none; color: var(--neon-blue); display: flex; align-items: center; gap: 5px; cursor: pointer;">
+                    <ion-icon name="arrow-back-outline"></ion-icon> <span data-i18n="btn_back_hub">大廳</span>
+                </a>
+                <div style="width: 1px; height: 30px; background: var(--border-color); opacity: 0.5;"></div>
+                <h2 style="margin: 0; display: flex; align-items: center; gap: 8px; font-size: 1.5em; text-shadow: 0 0 10px var(--border-glow-color);">
+                    <ion-icon name="shield-checkmark-outline" style="color: var(--neon-pink);"></ion-icon> 
+                    <span data-i18n="admin_dashboard">管理中心</span>
+                </h2>
+            </div>
+            
+            <div class="model-tabs" style="display:flex; gap: 16px; background: var(--bg-panel); border: 1px solid var(--border-color); border-radius: 12px; padding: 6px;">
+                <button id="nav-tab-management" class="model-tab active" onclick="switchAdminMainTab('management')" data-i18n="tab_management" style="border-radius: 8px; border: none; padding: 8px 20px;">管理介面</button>
+                <button id="nav-tab-analytics" class="model-tab" onclick="switchAdminMainTab('analytics')" data-i18n="tab_analytics" style="border-radius: 8px; border: none; padding: 8px 20px;">數據分析</button>
+            </div>
+            
             <button id="admin-logout-btn" class="ready-btn"
-                style="width:auto; min-width:120px; border-color:#fb7185; color:#fb7185; padding: 8px 18px; font-size: 1.1em; display: inline-flex; align-items: center; justify-content: center; gap: 8px;">
+                style="width:auto; min-width:auto; border-color:#fb7185; background: rgba(251, 113, 133, 0.1); color:#fb7185; padding: 8px 20px; font-size: 1em; display: inline-flex; align-items: center; justify-content: center; gap: 8px; border-radius: 10px;">
                 <ion-icon name="log-out-outline" style="font-size: 1.2em;"></ion-icon> <span data-i18n="btn_logout">登出</span>
             </button>
         </div>
 
-        <div class="admin-grid">
+        <div id="tab-management" class="admin-tab-content active">
+            <div class="admin-grid">
             <!-- ZH: 叢集資源監控 | EN: Cluster Status -->
             <section class="widget form-box-panel" style="grid-column: 1 / -1;">
                 <div class="widget-header">
@@ -185,6 +208,7 @@
                             <tr>
                                 <th data-i18n="th_username">Username</th>
                                 <th data-i18n="th_email">Email</th>
+                                <th data-i18n="th_department">Department</th>
                                 <th data-i18n="th_role">Role</th>
                                 <th data-i18n="th_status">Status</th>
                                 <th data-i18n="th_last_ip">Last IP</th>
@@ -231,6 +255,10 @@
                             <ion-icon name="lock-closed-outline"></ion-icon>
                             <input type="text" id="provision-password" placeholder="Password (Leave blank to auto-generate)" data-i18n-placeholder="add_test_custom_password">
                         </div>
+                        <div class="input-wrap">
+                            <ion-icon name="business-outline"></ion-icon>
+                            <input type="text" id="provision-department" placeholder="Department (Optional)" data-i18n-placeholder="th_department">
+                        </div>
                         <div class="input-wrap" style="flex: 1;">
                             <ion-icon name="shield-outline"></ion-icon>
                             <select id="provision-role" class="config-select" style="width: 100%; padding: 10px; border-radius: 8px;">
@@ -267,6 +295,10 @@
                         <div class="input-wrap">
                             <ion-icon name="mail-outline"></ion-icon>
                             <input type="email" id="edit-email" disabled data-i18n="th_email" placeholder="Email">
+                        </div>
+                        <div class="input-wrap" id="edit-dept-container" style="display: none;">
+                            <ion-icon name="business-outline"></ion-icon>
+                            <input type="text" id="edit-department" data-i18n-placeholder="th_department" placeholder="Department">
                         </div>
                         <div class="input-wrap" id="edit-pwd-container" style="display: none;">
                             <ion-icon name="key-outline"></ion-icon>
@@ -514,7 +546,59 @@
                 </div>
             </section>
         </div>
-    </div>
+        </div> <!-- End of tab-management -->
+
+        <!-- Analytics Tab Content -->
+        <div id="tab-analytics" class="admin-tab-content" style="display: none;">
+            <div class="admin-grid">
+                <section class="widget form-box-panel" style="grid-column: 1 / -1;">
+                    <div class="widget-header split">
+                        <h3><ion-icon name="stats-chart-outline" style="margin-right:6px;"></ion-icon> <span data-i18n="analytics_overview">數據總覽</span></h3>
+                        <div style="display:flex; gap:10px; align-items:center;">
+                            <span data-i18n="filter_dept" style="font-size: 14px; color: var(--text-muted);">學系:</span>
+                            <select id="analytics-dept-filter" class="config-select" style="padding: 4px 10px; border-radius: 8px;" onchange="fetchAnalyticsData()">
+                                <option value="all">全校 (All)</option>
+                            </select>
+                            <button class="ready-btn config-save-btn" onclick="exportAnalyticsCharts()" style="padding: 4px 12px; font-size: 13px; width: auto;" data-i18n="btn_export_chart"><ion-icon name="download-outline" style="margin-right: 4px;"></ion-icon>匯出圖表</button>
+                            <ion-icon name="refresh-circle-outline" onclick="fetchAnalyticsData()" class="refresh-icon" title="Refresh"></ion-icon>
+                        </div>
+                    </div>
+                    <div id="analytics-stats-container" class="cluster-stats-grid">
+                        <div class="stat-card">
+                            <h4 data-i18n="stat_total_users">總帳號數</h4>
+                            <div class="stat-row" style="font-size: 1.8em; font-weight: bold; color: var(--text-primary);" id="stat-total-users">-</div>
+                        </div>
+                        <div class="stat-card">
+                            <h4 data-i18n="stat_total_logins">總登入次數</h4>
+                            <div class="stat-row" style="font-size: 1.8em; font-weight: bold; color: var(--text-primary);" id="stat-total-logins">-</div>
+                        </div>
+                        <div class="stat-card">
+                            <h4 data-i18n="stat_total_tokens">總消耗 Tokens</h4>
+                            <div class="stat-row" style="font-size: 1.8em; font-weight: bold; color: var(--text-primary);" id="stat-total-tokens">-</div>
+                        </div>
+                    </div>
+                </section>
+                
+                <section class="widget form-box-panel" style="grid-column: 1 / 2;">
+                    <div class="widget-header">
+                        <h3><ion-icon name="bar-chart-outline" style="margin-right:6px;"></ion-icon> <span data-i18n="chart_dept_usage">各系所 Token 用量</span></h3>
+                    </div>
+                    <div style="padding: 20px; background: rgba(128,128,128,0.1); border-radius: 8px; position: relative;">
+                        <canvas id="deptUsageChart"></canvas>
+                    </div>
+                </section>
+                
+                <section class="widget form-box-panel" style="grid-column: 2 / 3;">
+                    <div class="widget-header">
+                        <h3><ion-icon name="pie-chart-outline" style="margin-right:6px;"></ion-icon> <span data-i18n="chart_tool_usage">工具使用佔比</span></h3>
+                    </div>
+                    <div style="padding: 20px; background: rgba(128,128,128,0.1); border-radius: 8px; display:flex; justify-content:center; position: relative;">
+                        <canvas id="toolUsageChart" style="max-height: 300px;"></canvas>
+                    </div>
+                </section>
+            </div>
+        </div> <!-- End of tab-analytics -->
+    </div> <!-- End of admin-layout -->
 
     <!-- 載入 Ionicons -->
     <script type="module" src="https://unpkg.com/ionicons@7.1.0/dist/ionicons/ionicons.esm.js"></script>
