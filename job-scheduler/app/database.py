@@ -129,9 +129,10 @@ def init_db():
     Base.metadata.create_all(bind=engine)
 
     # ZH: 手動遷移 - 自動補齊新增的欄位 (供開發使用) | EN: Manual migration - auto append new columns
-    from sqlalchemy import text
+    from sqlalchemy import text, inspect
     try:
         with engine.begin() as conn:
+            # --- users 表遷移 | users table migrations ---
             try: conn.execute(text("ALTER TABLE users ADD COLUMN last_login_time DATETIME"))
             except Exception: pass
             try: conn.execute(text("ALTER TABLE users ADD COLUMN last_login_ip VARCHAR"))
@@ -139,6 +140,18 @@ def init_db():
             try: conn.execute(text("ALTER TABLE users ADD COLUMN online_status INTEGER DEFAULT 0"))
             except Exception: pass
             try: conn.execute(text("ALTER TABLE users ADD COLUMN is_test_account INTEGER DEFAULT 0"))
+            except Exception: pass
+            try: conn.execute(text("ALTER TABLE users ADD COLUMN tutorial_dismissed INTEGER DEFAULT 0"))
+            except Exception: pass
+
+            # --- models 表遷移 | models table migrations ---
+            try: conn.execute(text("ALTER TABLE models ADD COLUMN model_type VARCHAR DEFAULT 'local'"))
+            except Exception: pass
+            try: conn.execute(text("ALTER TABLE models ADD COLUMN api_provider VARCHAR"))
+            except Exception: pass
+            try: conn.execute(text("ALTER TABLE models ADD COLUMN api_endpoint VARCHAR"))
+            except Exception: pass
+            try: conn.execute(text("ALTER TABLE models ADD COLUMN api_model_id VARCHAR"))
             except Exception: pass
     except Exception as e:
         logger.warning(f"DB Migration checks: {e}")
