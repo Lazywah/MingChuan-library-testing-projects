@@ -136,6 +136,25 @@ def login(
     except Exception as e:
         logger.error(f"Failed to update login status: {e}")
 
+    # ZH: 寫入實體登入紀錄檔 (排除測試帳號) | EN: Write to physical login log (exclude test accounts)
+    if not getattr(user, 'is_test_account', 0):
+        try:
+            from ..config import settings
+            import os
+            
+            log_dir = os.path.dirname(settings.DATABASE_PATH)
+            if not os.path.exists(log_dir):
+                os.makedirs(log_dir, exist_ok=True)
+                
+            log_path = os.path.join(log_dir, "login.log")
+            timestamp = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC")
+            ip_addr = request.client.host if request.client else "Unknown"
+            
+            with open(log_path, "a", encoding="utf-8") as f:
+                f.write(f"[{timestamp}] User '{user.username}' (Role: {user.role}, Email: {user.email}) logged in from IP: {ip_addr}\n")
+        except Exception as e:
+            logger.error(f"Failed to write login log: {e}")
+
     # ZH: 發送登入通知 | EN: Send login alert
     if user.email:
         background_tasks.add_task(
