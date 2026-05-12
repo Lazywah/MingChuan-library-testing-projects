@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Header
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
 from typing import List, Optional
@@ -6,10 +6,24 @@ import logging
 
 from ..database import get_db
 from .. import crud, models
+from ..config import settings
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["Worker 節點通訊 Worker Nodes"])
+
+
+def verify_worker_token(authorization: Optional[str] = Header(None)):
+    """
+    ZH: 驗證 Worker 節點的靜態 API Token（格式：Bearer <token>）
+    EN: Validate the Worker node's static API token (format: Bearer <token>)
+    """
+    expected = f"Bearer {settings.WORKER_API_TOKEN}"
+    if not authorization or authorization != expected:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="ZH: Worker Token 無效或未提供 | EN: Invalid or missing Worker API Token"
+        )
 
 class TakeJobRequest(BaseModel):
     node_id: str
@@ -26,7 +40,7 @@ class JobUpdatePayload(BaseModel):
     error_message: Optional[str] = None
 
 @router.post("/take", response_model=TakeJobResponse)
-def take_job(req: TakeJobRequest, db: Session = Depends(get_db)):
+def take_job(req: TakeJobRequest, db: Session = Depends(get_db), _: None = Depends(verify_worker_token)):
     """
     ZH: Worker 節點請求任務
     EN: Worker node requesting a job
@@ -70,7 +84,7 @@ def take_job(req: TakeJobRequest, db: Session = Depends(get_db)):
     }
 
 @router.post("/jobs/{job_id}/update")
-def update_job(job_id: str, payload: JobUpdatePayload, db: Session = Depends(get_db)):
+def update_job(job_id: str, payload: JobUpdatePayload, db: Session = Depends(get_db), _: None = Depends(verify_worker_token)):
     """
     ZH: Worker 回報任務進度與狀態
     EN: Worker reports job progress and status

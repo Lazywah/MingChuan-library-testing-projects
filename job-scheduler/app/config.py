@@ -57,6 +57,12 @@ class Settings(BaseSettings):
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 120
 
     # ------------------------------------------------------------------
+    # ZH: Worker 節點靜態 Token (與 gpu-worker/docker-compose.yml 的 API_TOKEN 一致)
+    # EN: Worker node static token (must match API_TOKEN in gpu-worker/docker-compose.yml)
+    # ------------------------------------------------------------------
+    WORKER_API_TOKEN: str = "mcu-secret-token-change-in-production"
+
+    # ------------------------------------------------------------------
     # ZH: 資料庫設定 | EN: Database
     # ------------------------------------------------------------------
     DATABASE_PATH: str = "/data/ai_platform.db"
