@@ -37,10 +37,13 @@ import os
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
 
 from .database import init_db
 from .scheduler import start_scheduler, stop_scheduler
 from .config import settings, SCHEDULER_POLICY
+from .rate_limit import limiter
 from .routers import auth, jobs
 
 import logging
@@ -176,6 +179,10 @@ app = FastAPI(
     docs_url="/docs",       # ZH: Swagger UI 路徑 | EN: Swagger UI path
     redoc_url="/redoc",     # ZH: ReDoc 路徑 | EN: ReDoc path
 )
+
+# ZH: 掛載速率限制器 | EN: Mount rate limiter
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 
 # ==============================================================================

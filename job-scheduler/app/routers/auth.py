@@ -26,12 +26,13 @@ EN: Modular design:
 from fastapi import APIRouter, Depends, HTTPException, status, Request, BackgroundTasks
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
-from datetime import datetime
+from datetime import datetime, timezone
 
 from .. import crud, schemas, models
 from ..auth import authenticate_user, create_access_token, get_current_user
 from ..database import get_db
 from ..services import email_service
+from ..rate_limit import limiter
 
 import logging
 
@@ -85,7 +86,8 @@ def register(user: schemas.UserCreate, db: Session = Depends(get_db)):
 # EN: Flow: Receive credentials → verify → issue JWT token
 # ==============================================================================
 @router.post("/login", response_model=schemas.Token)
-def login(
+@limiter.limit("10/minute")
+async def login(
     request: Request,
     background_tasks: BackgroundTasks,
     form_data: OAuth2PasswordRequestForm = Depends(),
@@ -129,7 +131,7 @@ def login(
 
     # ZH: 記錄上線狀態與次數 | EN: Record online status and login count
     try:
-        user.last_login_time = datetime.utcnow()
+        user.last_login_time = datetime.now(timezone.utc)
         user.last_login_ip = request.client.host if request.client else "Unknown"
         user.online_status = 1
         user.login_count += 1
@@ -148,7 +150,7 @@ def login(
                 os.makedirs(log_dir, exist_ok=True)
                 
             log_path = os.path.join(log_dir, "login.log")
-            timestamp = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC")
+            timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
             ip_addr = request.client.host if request.client else "Unknown"
             
             with open(log_path, "a", encoding="utf-8") as f:
