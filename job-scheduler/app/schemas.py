@@ -233,10 +233,31 @@ class JobStatusResponse(BaseModel):
         from_attributes = True
 
 
+class JobListItem(BaseModel):
+    """ZH: 任務列表項目 (不含大型 logs 欄位) | EN: Job list item (excludes large logs field)"""
+    job_id: str
+    job_name: str
+    status: str
+    progress: float
+    priority: Optional[int] = 0
+    model_name: Optional[str] = None
+    user_id: Optional[str] = None
+    gpu_server: Optional[str] = None
+    gpu_id: Optional[int] = None
+    started_at: Optional[datetime] = None
+    completed_at: Optional[datetime] = None
+    created_at: Optional[datetime] = None
+    error_message: Optional[str] = None
+    output_path: Optional[str] = None
+
+    class Config:
+        from_attributes = True
+
+
 class JobListResponse(BaseModel):
     """ZH: 任務列表回應 (含分頁) | EN: Job list response (with pagination)"""
     total: int                                       # ZH: 總筆數 | EN: Total count
-    jobs: List[JobStatusResponse]                    # ZH: 任務清單 | EN: Job list
+    jobs: List[JobListItem]                          # ZH: 任務清單 (不含 logs) | EN: Job list (no logs)
 
 
 class JobCancelResponse(BaseModel):
@@ -261,6 +282,7 @@ class ChatRequest(BaseModel):
     messages: List[ChatMessage]                      # ZH: 對話歷史 | EN: Message history
     stream: Optional[bool] = True                    # ZH: 是否串流 | EN: Request streaming
     tool_type: Optional[str] = "chat"                # ZH: 工具類型 | EN: Tool type
+    session_id: Optional[str] = None                 # ZH: 對話 session ID | EN: Chat session ID
 
 
 class ChatHistoryResponse(BaseModel):

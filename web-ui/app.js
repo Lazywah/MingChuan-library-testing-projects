@@ -1305,7 +1305,8 @@ if (chatForm) {
                 body: JSON.stringify({
                     model_id: chatModelSelect.value,
                     messages: currentSession.messages,
-                    stream: true
+                    stream: true,
+                    session_id: activeSessionId
                 })
             });
 
