@@ -446,3 +446,52 @@ def create_chat_history(db: Session, chat: models.ChatHistory) -> models.ChatHis
     db.add(chat)
     # ZH: 注意：此處不呼叫 commit()，由呼叫者控制事務 | EN: Caller handles commit
     return chat
+
+
+# ==============================================================================
+# ZH: Token 估算 | EN: Token Estimation
+# ==============================================================================
+
+def estimate_job_tokens(config: Optional[dict]) -> int:
+    """
+    ZH: 依訓練配置估算 Token 消耗（epochs × 1000，最低 1000）
+    EN: Estimate token cost from training config (epochs × 1000, minimum 1000)
+    """
+    epochs = 10
+    if config and "epochs" in config:
+        try:
+            epochs = int(config["epochs"])
+        except (TypeError, ValueError):
+            pass
+    return max(1000, epochs * 1000)
+
+
+# ==============================================================================
+# ZH: Worker 心跳 CRUD | EN: Worker Heartbeat CRUD
+# ==============================================================================
+
+def upsert_worker_heartbeat(
+    db: Session, node_id: str, available_gpus: List[str], gpu_utilization: float
+) -> models.WorkerHeartbeat:
+    """ZH: 更新或新增 Worker 節點心跳 | EN: Upsert worker heartbeat record"""
+    node = db.query(models.WorkerHeartbeat).filter(
+        models.WorkerHeartbeat.node_id == node_id
+    ).first()
+    now = datetime.now(timezone.utc)
+    if node:
+        node.available_gpus = json.dumps(available_gpus)
+        node.gpu_utilization = gpu_utilization
+        node.last_seen = now
+        node.is_online = True
+    else:
+        node = models.WorkerHeartbeat(
+            node_id=node_id,
+            available_gpus=json.dumps(available_gpus),
+            gpu_utilization=gpu_utilization,
+            last_seen=now,
+            is_online=True,
+        )
+        db.add(node)
+    db.commit()
+    db.refresh(node)
+    return node
