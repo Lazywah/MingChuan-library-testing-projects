@@ -7,6 +7,7 @@
 - [資料集 API \| Datasets API](#資料集-api--datasets-api)
 - [系統 API \| System API](#系統-api--system-api)
 - [管理員 API \| Admin API](#管理員-api--admin-api)（使用者管理、任務管理、模型管理、分析）
+- [Worker API \| Worker Heartbeat API](#post-apiv1workerheartbeat--worker-節點心跳上報)
 - [錯誤碼 \| Error Codes](#錯誤碼--error-codes)
 
 ---
@@ -469,14 +470,52 @@ curl -X DELETE http://localhost:8002/api/v1/admin/models/MODEL_ID \
   -H "Authorization: Bearer ADMIN_TOKEN"
 ```
 
+### POST `/api/v1/worker/heartbeat` — Worker 節點心跳上報
+
+Worker 節點定期（建議每 30 秒）呼叫此端點，回報存活狀態與 GPU 使用率。認證使用靜態 Bearer Token（`WORKER_API_TOKEN`）。
+
+```bash
+curl -X POST http://localhost:8002/api/v1/worker/heartbeat \
+  -H "Authorization: Bearer YOUR_WORKER_API_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "node_id": "gpu-node-01",
+    "available_gpus": ["0", "1"],
+    "gpu_utilization": 45.2
+  }'
+```
+
+回應 (200):
+```json
+{
+  "status": "ok",
+  "node_id": "gpu-node-01"
+}
+```
+
 ### GET `/api/v1/admin/cluster/stats` — 叢集資源狀態
+
+回傳所有已回報心跳的 Worker 節點狀態，資料來自 `worker_heartbeats` 表。
 
 ```bash
 curl http://localhost:8002/api/v1/admin/cluster/stats \
   -H "Authorization: Bearer ADMIN_TOKEN"
 ```
 
-> 目前為 Worker Pull 模式，回傳即時節點狀態陣列。
+回應 (200):
+```json
+[
+  {
+    "node_id": "gpu-node-01",
+    "available_gpus": "[\"0\", \"1\"]",
+    "gpu_utilization": 45.2,
+    "last_seen": "2026-05-13T10:30:00Z",
+    "status": "online"
+  }
+]
+```
+
+> Worker 需呼叫 `POST /worker/heartbeat` 後，此端點才有資料。節點 `is_online` 標記由 scheduler 定期清理控制。
 
 ### GET `/api/v1/admin/analytics` — 數據分析總覽
 
