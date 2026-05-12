@@ -21,16 +21,27 @@
 ## 🏗️ 架構概覽 | Architecture Overview
 
 ```
-使用層 (Workstations)  →  Nginx (:80)  →  TRAIN_HUD (整合介面 /train/)
-                                               ↓
-                                         Job Scheduler (API Gateway /api/v1/)
-                                               ↓
-                                         Portkey (LLM Gateway) / GPU Servers
+工作站 (Browser)
+    │ HTTP
+    ▼
+Nginx (:80)
+    ├── /train/        → web-ui       (靜態 HTML/CSS/JS)
+    ├── /              → Open WebUI   (備用對話介面)
+    └── /api/v1/       → job-scheduler (FastAPI :8002)
+                               ├── SQLite     (任務佇列 / 使用者資料)
+                               ├── Redis      (Session / Cache)
+                               └── Portkey (LLM Gateway :8000)
+                                       └── 外部 LLM API (Gemini / OpenAI 等)
+
+GPU Worker Agent (Pull 輪詢 ← /api/v1/worker/take)
+    └── docker run --gpus all  (隔離訓練容器，完成後自動銷毀)
+
+管理員介面 (Port 8888) ← 獨立於使用者介面，防止暴力破解
 ```
 
 ## 📸 介面預覽 | UI Preview
 
-![AI Hub 四宮格導覽](file:///C:/Users/User/.gemini/antigravity/brain/fa44ed6b-0ae3-4d4a-b60a-c08d3f771e42/media__1775763352154.png)
+![AI Hub 四宮格導覽](docs/images/ai-hub-preview.png)
 *全新的 AI Hub 入口導覽大廳，提供直覺的分類服務*
 
 ---
