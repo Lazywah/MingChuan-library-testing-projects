@@ -23,7 +23,7 @@ EN: Modular design:
 ==============================================================================
 """
 
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, EmailStr, Field, ConfigDict
 from datetime import datetime
 from typing import Optional, Dict, Any, List
 
@@ -111,6 +111,8 @@ class AuthForgotPassword(BaseModel):
 
 class UserResponse(BaseModel):
     """ZH: 使用者資訊回應 (不含密碼) | EN: User info response (no password)"""
+    model_config = ConfigDict(from_attributes=True)
+
     id: str
     username: str
     email: str
@@ -124,9 +126,6 @@ class UserResponse(BaseModel):
     last_login_ip: Optional[str] = None
     last_login_time: Optional[datetime] = None
     created_at: datetime
-
-    class Config:
-        from_attributes = True  # ZH: 允許從 ORM 物件轉換 | EN: Allow conversion from ORM objects
 
 
 class Token(BaseModel):
@@ -206,21 +205,22 @@ class JobCreate(BaseModel):
 
 class JobResponse(BaseModel):
     """ZH: 任務建立回應 | EN: Job creation response"""
+    model_config = ConfigDict(from_attributes=True)
+
     job_id: str
     status: str
-    queue_position: Optional[int] = None             # ZH: 佇列位置 | EN: Queue position
-    estimated_start_time: Optional[str] = None       # ZH: 預估開始時間 | EN: Estimated start
-
-    class Config:
-        from_attributes = True
+    queue_position: Optional[int] = None
+    estimated_start_time: Optional[str] = None
 
 
 class JobStatusResponse(BaseModel):
     """ZH: 任務狀態查詢回應 | EN: Job status query response"""
+    model_config = ConfigDict(from_attributes=True)
+
     job_id: str
     job_name: str
-    status: str                                      # ZH: pending/queued/running/completed/failed/cancelled
-    progress: float                                  # ZH: 完成百分比 (0-100) | EN: Completion %
+    status: str
+    progress: float
     gpu_server: Optional[str] = None
     gpu_id: Optional[int] = None
     started_at: Optional[datetime] = None
@@ -229,12 +229,11 @@ class JobStatusResponse(BaseModel):
     output_path: Optional[str] = None
     logs: Optional[str] = None
 
-    class Config:
-        from_attributes = True
-
 
 class JobListItem(BaseModel):
     """ZH: 任務列表項目 (不含大型 logs 欄位) | EN: Job list item (excludes large logs field)"""
+    model_config = ConfigDict(from_attributes=True)
+
     job_id: str
     job_name: str
     status: str
@@ -249,9 +248,6 @@ class JobListItem(BaseModel):
     created_at: Optional[datetime] = None
     error_message: Optional[str] = None
     output_path: Optional[str] = None
-
-    class Config:
-        from_attributes = True
 
 
 class JobListResponse(BaseModel):
@@ -287,8 +283,58 @@ class ChatRequest(BaseModel):
 
 class ChatHistoryResponse(BaseModel):
     """ZH: 歷史對話紀錄回應 | EN: Chat history response"""
+    model_config = ConfigDict(from_attributes=True)
+
     session_id: str
     messages: List[ChatMessage]
 
-    class Config:
-        from_attributes = True
+
+# ==============================================================================
+# ZH: 管理員回應 Schema | EN: Admin Response Schemas
+# ==============================================================================
+
+class AdminUserListItem(BaseModel):
+    """ZH: 管理員使用者列表項目（含 Token 狀態）| EN: Admin user list item with token status"""
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    username: str
+    email: str
+    role: str
+    is_active: int
+    online_status: Optional[int] = 0
+    last_login_time: Optional[datetime] = None
+    last_login_ip: Optional[str] = None
+    department: Optional[str] = None
+    created_at: Optional[datetime] = None
+    tokens_used: int = 0
+    tokens_limit: int = 0
+
+
+class AdminJobListItem(BaseModel):
+    """ZH: 管理員任務列表項目 | EN: Admin job list item"""
+    model_config = ConfigDict(from_attributes=True)
+
+    job_id: str
+    job_name: str
+    model_name: Optional[str] = None
+    user_id: Optional[str] = None
+    status: str
+    priority: Optional[int] = 0
+    progress: float = 0.0
+    gpu_server: Optional[str] = None
+    created_at: Optional[datetime] = None
+    started_at: Optional[datetime] = None
+    completed_at: Optional[datetime] = None
+    error_message: Optional[str] = None
+
+
+# ==============================================================================
+# ZH: Worker 心跳 Schema | EN: Worker Heartbeat Schemas
+# ==============================================================================
+
+class WorkerHeartbeatPayload(BaseModel):
+    """ZH: Worker 心跳上報請求 | EN: Worker heartbeat report request"""
+    node_id: str
+    available_gpus: List[str]
+    gpu_utilization: Optional[float] = 0.0  # ZH: GPU 使用率 % | EN: GPU utilization %
