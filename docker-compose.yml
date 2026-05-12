@@ -47,7 +47,13 @@ services:
       # ZH: 全域額度設定 | EN: Global Quota settings
       DEFAULT_MONTHLY_TOKEN_LIMIT: ${DEFAULT_MONTHLY_TOKEN_LIMIT:-100000}
       TOKEN_RESET_DAY: ${TOKEN_RESET_DAY:-1}
-      
+
+      # ZH: Worker 節點驗證 Token | EN: Worker node auth token
+      WORKER_API_TOKEN: ${WORKER_API_TOKEN:-mcu-secret-token-change-in-production}
+
+      # ZH: CORS 允許來源（逗號分隔，留空允許所有） | EN: CORS origins (comma-sep, empty = allow all)
+      CORS_ORIGINS: ${CORS_ORIGINS:-}
+
       # ZH: 日誌 | EN: Logging
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
       
