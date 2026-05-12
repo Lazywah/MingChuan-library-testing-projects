@@ -33,6 +33,7 @@ EN: Modular design (building-block assembly):
 ==============================================================================
 """
 
+import os
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -183,9 +184,14 @@ app = FastAPI(
 # ZH: 允許 Open WebUI 及其他前端跨域呼叫 API
 # EN: Allows Open WebUI and other frontends to call API cross-origin
 # ==============================================================================
+# ZH: 開發模式允許所有來源；正式上線時請在 .env 設定 CORS_ORIGINS（逗號分隔）
+# EN: Dev mode allows all origins; set CORS_ORIGINS (comma-separated) in .env for production
+_raw_origins = os.environ.get("CORS_ORIGINS", "")
+allowed_origins = [o.strip() for o in _raw_origins.split(",") if o.strip()] or ["*"]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],           # ZH: 開發環境允許所有來源 | EN: Dev allows all origins
+    allow_origins=allowed_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
