@@ -1,8 +1,12 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Header
 from sqlalchemy.orm import Session
+from sqlalchemy import update
 from pydantic import BaseModel
 from typing import List, Optional
+import json
+import hmac
 import logging
+from datetime import datetime, timezone
 
 from ..database import get_db
 from .. import crud, models
@@ -15,15 +19,17 @@ router = APIRouter(tags=["Worker 節點通訊 Worker Nodes"])
 
 def verify_worker_token(authorization: Optional[str] = Header(None)):
     """
-    ZH: 驗證 Worker 節點的靜態 API Token（格式：Bearer <token>）
-    EN: Validate the Worker node's static API token (format: Bearer <token>)
+    ZH: 驗證 Worker 節點的靜態 API Token（使用 hmac.compare_digest 防計時攻擊）
+    EN: Validate Worker API token using hmac.compare_digest to prevent timing attacks
     """
+    if not authorization:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED,
+                            detail="Missing Worker API Token")
     expected = f"Bearer {settings.WORKER_API_TOKEN}"
-    if not authorization or authorization != expected:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="ZH: Worker Token 無效或未提供 | EN: Invalid or missing Worker API Token"
-        )
+    if not hmac.compare_digest(authorization, expected):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED,
+                            detail="Invalid Worker API Token")
+
 
 class TakeJobRequest(BaseModel):
     node_id: str
@@ -39,47 +45,63 @@ class JobUpdatePayload(BaseModel):
     output_path: Optional[str] = None
     error_message: Optional[str] = None
 
+
 @router.post("/take", response_model=TakeJobResponse)
 def take_job(req: TakeJobRequest, db: Session = Depends(get_db), _: None = Depends(verify_worker_token)):
     """
-    ZH: Worker 節點請求任務
-    EN: Worker node requesting a job
+    ZH: Worker 節點請求任務（原子搶佔，防止多節點重複領取）
+    EN: Worker claims a job atomically, preventing double-dispatch across nodes
     """
     if not req.available_gpus:
         return {"job": None}
-        
-    # ZH: 取得 pending 任務 (依照優先權或建立時間) | EN: Get pending jobs
+
+    # ZH: 取得最高優先級的 pending 任務 ID
+    # EN: Get the highest-priority pending job ID
     pending_jobs = crud.get_pending_jobs(db)
     if not pending_jobs:
         return {"job": None}
-        
+
     job = pending_jobs[0]
     gpu_id = req.available_gpus[0]
-    
-    # ZH: 標記為 running | EN: Mark as running
-    crud.update_job_status(
-        db, job.id,
-        status="running",
-        gpu_server=req.node_id,
-        gpu_id=gpu_id
+
+    # ZH: 原子搶佔：只有當 status 仍為 "pending" 時才更新
+    # EN: Atomic claim: only update if status is still "pending"
+    # ZH: 若另一 Worker 已搶先，rowcount=0，直接回傳 None
+    # EN: If another worker claimed it first, rowcount=0, return None
+    result = db.execute(
+        update(models.TrainingJob)
+        .where(models.TrainingJob.id == job.id)
+        .where(models.TrainingJob.status == "pending")
+        .values(
+            status="running",
+            gpu_server=req.node_id,
+            gpu_id=gpu_id,
+            started_at=datetime.now(timezone.utc),
+        )
     )
-    
-    # ZH: 解析 Config | EN: Parse config
-    import json
+    db.commit()
+
+    if result.rowcount == 0:
+        logger.info(f"Job {job.id[:8]} already claimed by another worker, skipping")
+        return {"job": None}
+
+    db.refresh(job)
+
     config = {}
     if job.config:
         try:
             config = json.loads(job.config)
-        except:
-            pass
-            
+        except json.JSONDecodeError:
+            logger.warning(f"Failed to parse config for job {job.id[:8]}")
+
+    logger.info(f"Worker {req.node_id} claimed job {job.id[:8]} on GPU {gpu_id}")
     return {
         "job": {
             "job_id": job.id,
             "script_path": job.script_path or "/workspace/train.py",
             "dataset_path": job.dataset_path,
             "config": config,
-            "gpu_id": gpu_id
+            "gpu_id": gpu_id,
         }
     }
 
