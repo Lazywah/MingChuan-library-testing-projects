@@ -6,7 +6,7 @@
 - [AI 助手 API \| AI Assistant API (Chat)](#ai-助手-api--ai-assistant-api-chat)
 - [資料集 API \| Datasets API](#資料集-api--datasets-api)
 - [系統 API \| System API](#系統-api--system-api)
-- [管理員 API \| Admin API](#管理員-api--admin-api)
+- [管理員 API \| Admin API](#管理員-api--admin-api)（使用者管理、任務管理、模型管理、分析）
 - [錯誤碼 \| Error Codes](#錯誤碼--error-codes)
 
 ---
@@ -317,47 +317,180 @@ curl http://localhost:8002/api/v1/admin/models \
   -H "Authorization: Bearer ADMIN_TOKEN"
 ```
 
-### POST `/api/v1/admin/users/provision` — 直接配發帳號
+### PUT `/api/v1/admin/users/{user_id}` — 修改使用者資訊
 
-管理員建立帳號，系統會自動寄出包含隨機密碼的歡迎信。
+```bash
+curl -X PUT http://localhost:8002/api/v1/admin/users/USER_ID \
+  -H "Authorization: Bearer ADMIN_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "email": "new@example.com",
+    "role": "teacher",
+    "is_active": 1,
+    "tokens_limit": 2000000,
+    "password": "newpass123"
+  }'
+```
+
+> 所有欄位均為選填，只傳入需要修改的欄位即可。`password` 留空則不變更。
+
+### POST `/api/v1/admin/users/provision` — 配發帳號
+
+管理員建立永久帳號，回傳臨時密碼並透過 Email 通知使用者。
 
 ```bash
 curl -X POST http://localhost:8002/api/v1/admin/users/provision \
   -H "Authorization: Bearer ADMIN_TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{"email": "newuser@example.com", "role": "student"}'
+  -d '{
+    "username": "student01",
+    "email": "student01@school.edu.tw",
+    "role": "student",
+    "password": "optional-custom-password"
+  }'
 ```
 
-### POST `/api/v1/admin/users/{user_id}/reset` — 重設使用者密碼
+回應: `{"id": "uuid", "username": "...", "email": "...", "role": "...", "temp_password": "..."}`
 
-隨機產生新密碼並透過 Email 寄送給該使用者。
+### POST `/api/v1/admin/users/{user_id}/reset` — 初始化帳號
+
+重設密碼為新隨機值，同時歸零 Token 用量，透過 Email 寄送新密碼。
 
 ```bash
-curl -X POST http://localhost:8002/api/v1/admin/users/{user_id}/reset \
+curl -X POST http://localhost:8002/api/v1/admin/users/USER_ID/reset \
   -H "Authorization: Bearer ADMIN_TOKEN"
 ```
 
-### DELETE `/api/v1/admin/users/{user_id}` — 刪除使用者
+### POST `/api/v1/admin/users/{user_id}/delete` — 刪除使用者
+
+需提供管理員本人密碼驗證，防止誤操作。
 
 ```bash
-curl -X DELETE http://localhost:8002/api/v1/admin/users/{user_id} \
-  -H "Authorization: Bearer ADMIN_TOKEN"
+curl -X POST http://localhost:8002/api/v1/admin/users/USER_ID/delete \
+  -H "Authorization: Bearer ADMIN_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"admin_password": "YOUR_ADMIN_PASSWORD"}'
 ```
 
-### PUT `/api/v1/admin/users/batch/tokens` — 批量更新 Token 額度
+### POST `/api/v1/admin/verify` — 管理員密碼驗證
 
-大量重置或增加選定使用者的 Token 上限或使用量。
+用於解鎖高風險操作前的身份確認，回傳成功才可繼續。
 
 ```bash
+curl -X POST http://localhost:8002/api/v1/admin/verify \
+  -H "Authorization: Bearer ADMIN_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"admin_password": "YOUR_ADMIN_PASSWORD"}'
+```
+
+回應: `{"message": "Verification successful"}`
+
+### PUT `/api/v1/admin/users/batch/tokens` — 批量更新 Token
+
+支援兩種操作：`reset_usage`（歸零用量）與 `set_limit`（設定月度上限）。
+
+```bash
+# 歸零選定使用者的用量
 curl -X PUT http://localhost:8002/api/v1/admin/users/batch/tokens \
   -H "Authorization: Bearer ADMIN_TOKEN" \
   -H "Content-Type: application/json" \
+  -d '{"user_ids": ["uuid-1", "uuid-2"], "action": "reset_usage", "value": 0}'
+
+# 設定選定使用者的月度上限
+curl -X PUT http://localhost:8002/api/v1/admin/users/batch/tokens \
+  -H "Authorization: Bearer ADMIN_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"user_ids": ["uuid-1", "uuid-2"], "action": "set_limit", "value": 2000000}'
+```
+
+### POST `/api/v1/admin/jobs/{job_id}/cancel` — 強制取消任務
+
+僅限 `pending` / `queued` 狀態的任務可取消。
+
+```bash
+curl -X POST http://localhost:8002/api/v1/admin/jobs/JOB_ID/cancel \
+  -H "Authorization: Bearer ADMIN_TOKEN"
+```
+
+### PUT `/api/v1/admin/jobs/{job_id}/priority` — 修改任務優先級
+
+優先級範圍 0–5，數字越大越優先。僅限 `pending` / `queued` 狀態。
+
+```bash
+curl -X PUT http://localhost:8002/api/v1/admin/jobs/JOB_ID/priority \
+  -H "Authorization: Bearer ADMIN_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"priority": 5}'
+```
+
+回應: `{"job_id": "...", "priority": 5, "old_priority": 1, "message": "Priority updated"}`
+
+### POST `/api/v1/admin/models` — 新增模型
+
+```bash
+# API 模型（雲端）
+curl -X POST http://localhost:8002/api/v1/admin/models \
+  -H "Authorization: Bearer ADMIN_TOKEN" \
+  -H "Content-Type: application/json" \
   -d '{
-    "user_ids": ["uuid-1", "uuid-2"],
-    "action": "reset_usage",
-    "value": 0
+    "name": "Claude 3.5 Sonnet",
+    "model_type": "api",
+    "api_provider": "anthropic",
+    "api_model_id": "claude-sonnet-4-6",
+    "is_public": 1
+  }'
+
+# 本地模型
+curl -X POST http://localhost:8002/api/v1/admin/models \
+  -H "Authorization: Bearer ADMIN_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "ResNet50",
+    "model_type": "local",
+    "framework": "PyTorch",
+    "storage_path": "/models/resnet50",
+    "is_public": 0
   }'
 ```
+
+### PUT `/api/v1/admin/models/{model_id}` — 更新模型資訊
+
+```bash
+curl -X PUT http://localhost:8002/api/v1/admin/models/MODEL_ID \
+  -H "Authorization: Bearer ADMIN_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"description": "更新後的描述", "is_public": 1}'
+```
+
+### DELETE `/api/v1/admin/models/{model_id}` — 刪除模型
+
+```bash
+curl -X DELETE http://localhost:8002/api/v1/admin/models/MODEL_ID \
+  -H "Authorization: Bearer ADMIN_TOKEN"
+```
+
+### GET `/api/v1/admin/cluster/stats` — 叢集資源狀態
+
+```bash
+curl http://localhost:8002/api/v1/admin/cluster/stats \
+  -H "Authorization: Bearer ADMIN_TOKEN"
+```
+
+> 目前為 Worker Pull 模式，回傳即時節點狀態陣列。
+
+### GET `/api/v1/admin/analytics` — 數據分析總覽
+
+```bash
+# 全校數據
+curl "http://localhost:8002/api/v1/admin/analytics" \
+  -H "Authorization: Bearer ADMIN_TOKEN"
+
+# 篩選特定學系
+curl "http://localhost:8002/api/v1/admin/analytics?department=資訊工程學系" \
+  -H "Authorization: Bearer ADMIN_TOKEN"
+```
+
+回應包含：各學系 Token 用量、工具使用佔比、總登入次數等統計數據。
 
 ---
 
