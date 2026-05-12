@@ -1,6 +1,37 @@
-from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, status
+"""
+==============================================================================
+Router: 管理員路由群組 (Admin Routes)
+==============================================================================
+ZH: 用途：提供管理員專屬的使用者、任務、模型管理與數據分析端點
+EN: Purpose: Admin-only endpoints for user/job/model management and analytics
+
+ZH: 所有端點均需 JWT 認證且 role=admin，透過 require_admin Depends 強制執行
+EN: All endpoints require JWT auth and role=admin, enforced via require_admin Depends
+
+ZH: 端點清單：
+    GET    /users                → 列出所有使用者（含 Token 狀態，JOIN 單查詢，支援分頁）
+    PUT    /users/{id}           → 更新使用者（email/role/active/limit/password）
+    PUT    /users/batch/tokens   → 批量設定 Token
+    POST   /users/{id}/delete    → 刪除使用者（需驗管理員密碼）
+    POST   /users/{id}/reset     → 初始化帳號（重置密碼 + 歸零用量）
+    POST   /users/provision      → 配發新帳號
+    POST   /verify               → 管理員密碼驗證
+    GET    /jobs                 → 列出所有任務（支援分頁）
+    POST   /jobs/{id}/cancel     → 強制取消任務
+    PUT    /jobs/{id}/priority   → 調整任務優先級
+    GET    /models               → 列出所有模型
+    POST   /models               → 新增模型
+    PUT    /models/{id}          → 更新模型
+    DELETE /models/{id}          → 刪除模型
+    GET    /cluster/stats        → 叢集 GPU 節點狀態（Worker heartbeat）
+    GET    /analytics            → 數據分析（學系/工具分布）
+==============================================================================
+"""
+
+from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, Query
 from sqlalchemy.orm import Session
-from typing import List, Any
+from sqlalchemy import func
+from typing import Any, Optional
 import logging
 
 from .. import models, schemas, crud
@@ -12,123 +43,66 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["管理員 Admin"])
 
-def verify_admin(current_user: models.User):
+
+# ==============================================================================
+# ZH: 管理員身份驗證 Depends（取代舊的普通函式，確保注入鏈完整）
+# EN: Admin auth Depends (replaces plain function to stay within FastAPI DI chain)
+# ==============================================================================
+
+def require_admin(current_user: models.User = Depends(get_current_user)) -> models.User:
+    """ZH: 確保呼叫者為 admin，否則拋出 403 | EN: Ensure caller is admin, raise 403 otherwise"""
     if current_user.role != "admin":
         raise HTTPException(status_code=403, detail="Forbidden: Admins only")
+    return current_user
 
-@router.get("/users")
+
+# ==============================================================================
+# ZH: 使用者管理 | EN: User Management
+# ==============================================================================
+
+@router.get("/users", response_model=list[schemas.AdminUserListItem])
 def get_all_users(
-    db: Session = Depends(get_db), 
-    current_user: models.User = Depends(get_current_user)
-) -> Any:
-    verify_admin(current_user)
-    users = db.query(models.User).order_by(models.User.created_at.desc()).all()
-    # 手動加上 Token 狀態
-    result = []
-    for u in users:
-        usage = crud.get_token_usage(db, u.id)
-        u_dict = {
-            "id": u.id,
-            "username": u.username,
-            "email": u.email,
-            "role": u.role,
-            "is_active": u.is_active,
-            "online_status": u.online_status,
-            "last_login_time": u.last_login_time,
-            "last_login_ip": u.last_login_ip,
-            "created_at": u.created_at,
-            "tokens_used": usage.tokens_used if usage else 0,
-            "tokens_limit": usage.tokens_limit if usage else 0
-        }
-        result.append(u_dict)
-    return result
-
-@router.get("/jobs")
-def get_all_jobs(
+    skip: int = Query(0, ge=0, description="ZH: 跳過筆數 | EN: Records to skip"),
+    limit: int = Query(100, ge=1, le=500, description="ZH: 每頁筆數 | EN: Records per page"),
     db: Session = Depends(get_db),
-    current_user: models.User = Depends(get_current_user)
+    _: models.User = Depends(require_admin),
 ) -> Any:
-    verify_admin(current_user)
-    jobs = db.query(models.TrainingJob).order_by(models.TrainingJob.created_at.desc()).all()
-    result = []
-    for j in jobs:
-        d = dict(j.__dict__)
-        d.pop('_sa_instance_state', None)
-        result.append(d)
-    return result
-
-@router.get("/models")
-def get_all_models(
-    db: Session = Depends(get_db),
-    current_user: models.User = Depends(get_current_user)
-) -> Any:
-    verify_admin(current_user)
-    mdls = db.query(models.Model).order_by(models.Model.created_at.desc()).all()
-    result = []
-    for m in mdls:
-        d = dict(m.__dict__)
-        d.pop('_sa_instance_state', None)
-        result.append(d)
-    return result
-
-@router.get("/cluster/stats")
-def get_cluster_stats(
-    current_user: models.User = Depends(get_current_user)
-) -> Any:
-    verify_admin(current_user)
-    # ZH: 目前為 Pull 模式，若無即時收集機制，可回傳空陣列 | EN: Pull mode, return empty list
-    return []
-
-
-@router.put("/users/{user_id}")
-def admin_update_user(
-    user_id: str,
-    update_data: schemas.AdminUserUpdate,
-    db: Session = Depends(get_db),
-    current_user: models.User = Depends(get_current_user)
-) -> Any:
-    """ZH: 管理員修改使用者資訊 | EN: Admin update user details"""
-    verify_admin(current_user)
-    
-    db_user = db.query(models.User).filter(models.User.id == user_id).first()
-    if not db_user:
-        raise HTTPException(status_code=404, detail="User not found")
-    
-    if update_data.email is not None:
-        db_user.email = update_data.email
-    if update_data.role is not None:
-        db_user.role = update_data.role
-    if update_data.is_active is not None:
-        db_user.is_active = update_data.is_active
-    if update_data.password is not None and update_data.password.strip():
-        db_user.hashed_password = crud.get_password_hash(update_data.password)
-    
-    # Token limit update
-    if update_data.tokens_limit is not None:
-        usage = crud.get_token_usage(db, user_id)
-        if usage:
-            usage.tokens_limit = update_data.tokens_limit
-    
-    db.commit()
-    db.refresh(db_user)
-    
-    usage = crud.get_token_usage(db, user_id)
-    return {
-        "id": db_user.id,
-        "username": db_user.username,
-        "email": db_user.email,
-        "role": db_user.role,
-        "is_active": db_user.is_active,
-        "tokens_used": usage.tokens_used if usage else 0,
-        "tokens_limit": usage.tokens_limit if usage else 0
-    }
+    """
+    ZH: 列出所有使用者，單次 JOIN 查詢避免 N+1，支援分頁
+    EN: List all users with token usage via single JOIN query, supports pagination
+    """
+    rows = (
+        db.query(models.User, models.TokenUsage)
+        .outerjoin(models.TokenUsage, models.TokenUsage.user_id == models.User.id)
+        .order_by(models.User.created_at.desc())
+        .offset(skip)
+        .limit(limit)
+        .all()
+    )
+    return [
+        schemas.AdminUserListItem(
+            id=u.id,
+            username=u.username,
+            email=u.email,
+            role=u.role,
+            is_active=u.is_active,
+            online_status=u.online_status,
+            last_login_time=u.last_login_time,
+            last_login_ip=u.last_login_ip,
+            department=u.department,
+            created_at=u.created_at,
+            tokens_used=t.tokens_used if t else 0,
+            tokens_limit=t.tokens_limit if t else 0,
+        )
+        for u, t in rows
+    ]
 
 
 @router.put("/users/batch/tokens")
 def batch_update_tokens(
     payload: schemas.BatchTokenUpdate,
     db: Session = Depends(get_db),
-    current_user: models.User = Depends(get_current_user)
+    _: models.User = Depends(require_admin),
 ) -> Any:
     """
     ZH: 管理員批量更新指定使用者的 Token 狀態
@@ -137,16 +111,10 @@ def batch_update_tokens(
     ZH: action = reset_usage → 將 tokens_used 歸零
     ZH: action = set_limit   → 將 tokens_limit 設為 payload.value
     """
-    verify_admin(current_user)
-
     if not payload.user_ids:
         raise HTTPException(status_code=400, detail="user_ids cannot be empty")
-
     if payload.action not in ("reset_usage", "set_limit"):
-        raise HTTPException(
-            status_code=400,
-            detail="action must be 'reset_usage' or 'set_limit'"
-        )
+        raise HTTPException(status_code=400, detail="action must be 'reset_usage' or 'set_limit'")
 
     updated = 0
     for uid in payload.user_ids:
@@ -155,7 +123,7 @@ def batch_update_tokens(
             continue
         if payload.action == "reset_usage":
             usage.tokens_used = 0
-        elif payload.action == "set_limit":
+        else:
             usage.tokens_limit = payload.value
         updated += 1
 
@@ -163,98 +131,123 @@ def batch_update_tokens(
     return {"updated_count": updated, "action": payload.action, "value": payload.value}
 
 
+@router.put("/users/{user_id}")
+def admin_update_user(
+    user_id: str,
+    update_data: schemas.AdminUserUpdate,
+    db: Session = Depends(get_db),
+    _: models.User = Depends(require_admin),
+) -> Any:
+    """ZH: 管理員修改使用者資訊 | EN: Admin update user details"""
+    db_user = db.query(models.User).filter(models.User.id == user_id).first()
+    if not db_user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    if update_data.email is not None:
+        db_user.email = update_data.email
+    if update_data.role is not None:
+        db_user.role = update_data.role
+    if update_data.is_active is not None:
+        db_user.is_active = update_data.is_active
+    if update_data.department is not None:
+        db_user.department = update_data.department
+    if update_data.password is not None and update_data.password.strip():
+        db_user.hashed_password = crud.get_password_hash(update_data.password)
+
+    if update_data.tokens_limit is not None:
+        usage = crud.get_token_usage(db, user_id)
+        if usage:
+            usage.tokens_limit = update_data.tokens_limit
+
+    db.commit()
+    db.refresh(db_user)
+
+    usage = crud.get_token_usage(db, user_id)
+    return {
+        "id": db_user.id,
+        "username": db_user.username,
+        "email": db_user.email,
+        "role": db_user.role,
+        "is_active": db_user.is_active,
+        "tokens_used": usage.tokens_used if usage else 0,
+        "tokens_limit": usage.tokens_limit if usage else 0,
+    }
+
+
 @router.post("/users/{user_id}/delete")
 def admin_delete_user(
     user_id: str,
     payload: schemas.AdminDeleteUser,
     db: Session = Depends(get_db),
-    current_user: models.User = Depends(get_current_user)
+    current_user: models.User = Depends(require_admin),
 ) -> Any:
-    """ZH: 管理員刪除使用者 (需驗證密碼) | EN: Admin delete user (requires password)"""
-    verify_admin(current_user)
-    
-    # ZH: 驗證管理員密碼 | EN: Verify admin password
+    """ZH: 管理員刪除使用者 (需驗證密碼) | EN: Admin delete user (requires password verification)"""
     if not crud.verify_password(payload.admin_password, current_user.hashed_password):
         raise HTTPException(status_code=403, detail="Invalid admin password")
-    
-    # ZH: 禁止刪除自己 | EN: Cannot delete self
     if user_id == current_user.id:
         raise HTTPException(status_code=400, detail="Cannot delete yourself")
-    
+
     db_user = db.query(models.User).filter(models.User.id == user_id).first()
     if not db_user:
         raise HTTPException(status_code=404, detail="User not found")
-    
-    # ZH: 刪除關聯的 Token 用量記錄 | EN: Delete associated token usage
+
     db.query(models.TokenUsage).filter(models.TokenUsage.user_id == user_id).delete()
-    # ZH: 刪除使用者 | EN: Delete user
     db.delete(db_user)
     db.commit()
-    
+
+    logger.info(f"User {db_user.username} deleted by admin {current_user.username}")
     return {"message": f"User {db_user.username} deleted", "deleted_id": user_id}
 
 
 @router.post("/verify")
 def admin_verify_action(
     payload: schemas.AdminVerify,
-    current_user: models.User = Depends(get_current_user)
+    current_user: models.User = Depends(require_admin),
 ) -> Any:
-    """ZH: 管理員權限動作驗證 (解鎖編輯等) | EN: Admin action verification (e.g. unlock edit)"""
-    verify_admin(current_user)
-    
-    # ZH: 驗證管理員密碼 | EN: Verify admin password
+    """ZH: 管理員密碼驗證（解鎖敏感操作）| EN: Admin password verification (unlock sensitive actions)"""
     if not crud.verify_password(payload.admin_password, current_user.hashed_password):
         raise HTTPException(status_code=403, detail="Invalid admin password")
-        
     return {"message": "Verification successful"}
+
 
 @router.post("/users/provision")
 def provision_user(
     data: schemas.AdminProvisionUser,
     background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
-    current_user: models.User = Depends(get_current_user)
+    _: models.User = Depends(require_admin),
 ) -> Any:
-    """ZH: 管理員初始化帳號（預先建立，待 SSO 接管）| EN: Admin provision user account"""
-    verify_admin(current_user)
-    
-    # ZH: 檢查重複 | EN: Check duplicates
+    """ZH: 管理員配發新帳號（預先建立，待 SSO 接管）| EN: Admin provision a new user account"""
     if crud.get_user_by_username(db, data.username):
         raise HTTPException(status_code=400, detail="Username already exists")
     if crud.get_user_by_email(db, data.email):
         raise HTTPException(status_code=400, detail="Email already exists")
-    
-    # ZH: 使用自訂密碼或產生臨時密碼 | EN: Use custom password or generate temp password
+
     import secrets
     temp_password = data.password if data.password else secrets.token_urlsafe(12)
-    
-    # ZH: 建立使用者 | EN: Create user
+
     user_create = schemas.UserCreate(
         username=data.username,
         email=data.email,
         password=temp_password,
-        role=data.role or "student"
+        role=data.role or "student",
     )
     db_user = crud.create_user(db, user_create)
-    db_user.is_test_account = 0  # ZH: 管理員配發的帳號為正式帳號，不應在重啟時被清除
+    db_user.is_test_account = 0
     db.commit()
-    
-    # ZH: 發送帳號建立通知 | EN: Send account provision alert
+
     if db_user.email:
         background_tasks.add_task(
             email_service.send_temp_password,
-            db_user.email,
-            db_user.username,
-            temp_password,
-            True
+            db_user.email, db_user.username, temp_password, True,
         )
-    
+
     return {
         "id": db_user.id,
         "username": db_user.username,
         "email": db_user.email,
         "role": db_user.role,
-        "temp_password": temp_password
+        "temp_password": temp_password,
     }
 
 
@@ -263,61 +256,89 @@ def reset_user_account(
     user_id: str,
     background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
-    current_user: models.User = Depends(get_current_user)
+    current_user: models.User = Depends(require_admin),
 ) -> Any:
-    """ZH: 初始化帳號 — 重置密碼 + 歸零 Token 用量 | EN: Initialize account — reset password + clear token usage"""
-    verify_admin(current_user)
-    
+    """ZH: 初始化帳號 — 重置密碼 + 歸零 Token 用量 | EN: Reset password and clear token usage"""
     db_user = db.query(models.User).filter(models.User.id == user_id).first()
     if not db_user:
         raise HTTPException(status_code=404, detail="User not found")
-    
-    # ZH: 產生新臨時密碼 | EN: Generate new temp password
+
     import secrets
     temp_password = secrets.token_urlsafe(12)
     db_user.hashed_password = crud.get_password_hash(temp_password)
-    
-    # ZH: 歸零 Token 用量 | EN: Clear token usage
+
     usage = crud.get_token_usage(db, user_id)
     if usage:
         usage.tokens_used = 0
-    
+
     db.commit()
-    
-    # ZH: 發送密碼重設通知 | EN: Send password reset alert
+
     if db_user.email:
         background_tasks.add_task(
             email_service.send_temp_password,
-            db_user.email,
-            db_user.username,
-            temp_password,
-            False
+            db_user.email, db_user.username, temp_password, False,
         )
-    
+
+    logger.info(f"Account {db_user.username} reset by admin {current_user.username}")
     return {
         "username": db_user.username,
         "temp_password": temp_password,
-        "message": f"Account {db_user.username} has been initialized"
+        "message": f"Account {db_user.username} has been initialized",
     }
+
+
+# ==============================================================================
+# ZH: 任務管理 | EN: Job Management
+# ==============================================================================
+
+@router.get("/jobs", response_model=list[schemas.AdminJobListItem])
+def get_all_jobs(
+    skip: int = Query(0, ge=0),
+    limit: int = Query(100, ge=1, le=500),
+    db: Session = Depends(get_db),
+    _: models.User = Depends(require_admin),
+) -> Any:
+    """ZH: 列出所有任務，支援分頁 | EN: List all jobs with pagination"""
+    jobs = (
+        db.query(models.TrainingJob)
+        .order_by(models.TrainingJob.created_at.desc())
+        .offset(skip)
+        .limit(limit)
+        .all()
+    )
+    return [
+        schemas.AdminJobListItem(
+            job_id=j.id,
+            job_name=j.job_name,
+            model_name=j.model_name,
+            user_id=j.user_id,
+            status=j.status,
+            priority=j.priority,
+            progress=j.progress,
+            gpu_server=j.gpu_server,
+            created_at=j.created_at,
+            started_at=j.started_at,
+            completed_at=j.completed_at,
+            error_message=j.error_message,
+        )
+        for j in jobs
+    ]
 
 
 @router.post("/jobs/{job_id}/cancel")
 def admin_cancel_job(
     job_id: str,
     db: Session = Depends(get_db),
-    current_user: models.User = Depends(get_current_user)
+    current_user: models.User = Depends(require_admin),
 ) -> Any:
     """ZH: 管理員強制取消任務 | EN: Admin force-cancel a job"""
-    verify_admin(current_user)
-
     job = db.query(models.TrainingJob).filter(models.TrainingJob.id == job_id).first()
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
-
     if job.status not in ("pending", "queued"):
         raise HTTPException(
             status_code=400,
-            detail=f"Cannot cancel job with status '{job.status}'. Only pending/queued jobs can be cancelled."
+            detail=f"Cannot cancel job with status '{job.status}'. Only pending/queued jobs can be cancelled.",
         )
 
     job.status = "cancelled"
@@ -333,19 +354,16 @@ def admin_update_job_priority(
     job_id: str,
     data: schemas.AdminJobPriority,
     db: Session = Depends(get_db),
-    current_user: models.User = Depends(get_current_user)
+    current_user: models.User = Depends(require_admin),
 ) -> Any:
     """ZH: 管理員修改任務優先級 | EN: Admin update job priority"""
-    verify_admin(current_user)
-
     job = db.query(models.TrainingJob).filter(models.TrainingJob.id == job_id).first()
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
-
     if job.status not in ("pending", "queued"):
         raise HTTPException(
             status_code=400,
-            detail=f"Cannot reprioritize job with status '{job.status}'. Only pending/queued jobs can be changed."
+            detail=f"Cannot reprioritize job with status '{job.status}'.",
         )
 
     old_priority = job.priority
@@ -354,47 +372,56 @@ def admin_update_job_priority(
     db.refresh(job)
 
     logger.info(f"Admin {current_user.username} changed job {job_id[:8]} priority: {old_priority} -> {data.priority}")
-    return {"job_id": job.id, "priority": job.priority, "old_priority": old_priority, "message": "Priority updated"}
+    return {"job_id": job.id, "priority": job.priority, "old_priority": old_priority}
 
 
 # ==============================================================================
-# ZH: 模型管理 CRUD | EN: Model Management CRUD
+# ZH: 模型管理 | EN: Model Management
 # ==============================================================================
+
+@router.get("/models")
+def get_all_models(
+    db: Session = Depends(get_db),
+    _: models.User = Depends(require_admin),
+) -> Any:
+    """ZH: 列出所有模型 | EN: List all models"""
+    mdls = db.query(models.Model).order_by(models.Model.created_at.desc()).all()
+    return [
+        {
+            "id": m.id, "name": m.name, "model_type": m.model_type,
+            "description": m.description, "framework": m.framework,
+            "storage_path": m.storage_path, "size_bytes": m.size_bytes,
+            "uploaded_by": m.uploaded_by, "is_public": m.is_public,
+            "api_provider": m.api_provider, "api_endpoint": m.api_endpoint,
+            "api_model_id": m.api_model_id, "created_at": m.created_at,
+        }
+        for m in mdls
+    ]
+
 
 @router.post("/models")
 def admin_create_model(
     data: schemas.AdminModelCreate,
     db: Session = Depends(get_db),
-    current_user: models.User = Depends(get_current_user)
+    current_user: models.User = Depends(require_admin),
 ) -> Any:
     """ZH: 管理員新增模型 | EN: Admin create model"""
-    verify_admin(current_user)
-
-    # ZH: 檢查名稱重複 | EN: Check duplicate name
-    existing = db.query(models.Model).filter(models.Model.name == data.name).first()
-    if existing:
+    if db.query(models.Model).filter(models.Model.name == data.name).first():
         raise HTTPException(status_code=400, detail=f"Model '{data.name}' already exists")
 
     new_model = models.Model(
-        name=data.name,
-        model_type=data.model_type or "local",
-        description=data.description,
-        framework=data.framework,
-        storage_path=data.storage_path or "",
-        is_public=data.is_public or 0,
-        uploaded_by=current_user.id,
-        api_provider=data.api_provider,
-        api_endpoint=data.api_endpoint,
-        api_model_id=data.api_model_id
+        name=data.name, model_type=data.model_type or "local",
+        description=data.description, framework=data.framework,
+        storage_path=data.storage_path or "", is_public=data.is_public or 0,
+        uploaded_by=current_user.id, api_provider=data.api_provider,
+        api_endpoint=data.api_endpoint, api_model_id=data.api_model_id,
     )
     db.add(new_model)
     db.commit()
     db.refresh(new_model)
 
     logger.info(f"Admin {current_user.username} created model '{data.name}'")
-    d = dict(new_model.__dict__)
-    d.pop('_sa_instance_state', None)
-    return d
+    return {"id": new_model.id, "name": new_model.name, "model_type": new_model.model_type}
 
 
 @router.put("/models/{model_id}")
@@ -402,56 +429,41 @@ def admin_update_model(
     model_id: str,
     data: schemas.AdminModelUpdate,
     db: Session = Depends(get_db),
-    current_user: models.User = Depends(get_current_user)
+    current_user: models.User = Depends(require_admin),
 ) -> Any:
     """ZH: 管理員更新模型資訊 | EN: Admin update model info"""
-    verify_admin(current_user)
-
     mdl = db.query(models.Model).filter(models.Model.id == model_id).first()
     if not mdl:
         raise HTTPException(status_code=404, detail="Model not found")
 
     if data.name is not None:
-        # ZH: 檢查名稱重複 | EN: Check duplicate name
-        dup = db.query(models.Model).filter(models.Model.name == data.name, models.Model.id != model_id).first()
+        dup = db.query(models.Model).filter(
+            models.Model.name == data.name, models.Model.id != model_id
+        ).first()
         if dup:
             raise HTTPException(status_code=400, detail=f"Model name '{data.name}' already taken")
         mdl.name = data.name
-    if data.description is not None:
-        mdl.description = data.description
-    if data.model_type is not None:
-        mdl.model_type = data.model_type
-    if data.framework is not None:
-        mdl.framework = data.framework
-    if data.storage_path is not None:
-        mdl.storage_path = data.storage_path
-    if data.is_public is not None:
-        mdl.is_public = data.is_public
-    if data.api_provider is not None:
-        mdl.api_provider = data.api_provider
-    if data.api_endpoint is not None:
-        mdl.api_endpoint = data.api_endpoint
-    if data.api_model_id is not None:
-        mdl.api_model_id = data.api_model_id
+
+    for field in ("description", "model_type", "framework", "storage_path",
+                  "is_public", "api_provider", "api_endpoint", "api_model_id"):
+        val = getattr(data, field, None)
+        if val is not None:
+            setattr(mdl, field, val)
 
     db.commit()
     db.refresh(mdl)
 
     logger.info(f"Admin {current_user.username} updated model '{mdl.name}'")
-    d = dict(mdl.__dict__)
-    d.pop('_sa_instance_state', None)
-    return d
+    return {"id": mdl.id, "name": mdl.name, "model_type": mdl.model_type}
 
 
 @router.delete("/models/{model_id}")
 def admin_delete_model(
     model_id: str,
     db: Session = Depends(get_db),
-    current_user: models.User = Depends(get_current_user)
+    current_user: models.User = Depends(require_admin),
 ) -> Any:
     """ZH: 管理員刪除模型 | EN: Admin delete model"""
-    verify_admin(current_user)
-
     mdl = db.query(models.Model).filter(models.Model.id == model_id).first()
     if not mdl:
         raise HTTPException(status_code=404, detail="Model not found")
@@ -463,69 +475,78 @@ def admin_delete_model(
     logger.info(f"Admin {current_user.username} deleted model '{model_name}'")
     return {"message": f"Model '{model_name}' deleted", "deleted_id": model_id}
 
+
+# ==============================================================================
+# ZH: 叢集狀態 | EN: Cluster Status
+# ==============================================================================
+
+@router.get("/cluster/stats")
+def get_cluster_stats(
+    db: Session = Depends(get_db),
+    _: models.User = Depends(require_admin),
+) -> Any:
+    """ZH: 取得 Worker 節點最新心跳狀態 | EN: Get latest Worker node heartbeat status"""
+    nodes = db.query(models.WorkerHeartbeat).order_by(models.WorkerHeartbeat.last_seen.desc()).all()
+    return [
+        {
+            "node_id": n.node_id,
+            "available_gpus": n.available_gpus,
+            "gpu_utilization": n.gpu_utilization,
+            "last_seen": n.last_seen,
+            "status": "online" if n.is_online else "offline",
+        }
+        for n in nodes
+    ]
+
+
+# ==============================================================================
+# ZH: 數據分析 | EN: Analytics
+# ==============================================================================
+
 @router.get("/analytics")
 def get_analytics(
-    department: str = "all",
+    department: Optional[str] = Query("all"),
     db: Session = Depends(get_db),
-    current_user: models.User = Depends(get_current_user)
+    _: models.User = Depends(require_admin),
 ) -> Any:
-    """ZH: 取得管理員分析數據 | EN: Get admin analytics data"""
-    verify_admin(current_user)
-    from sqlalchemy import func
-    
-    # 1. User stats (grouped by department)
-    dept_stats = []
-    
-    base_user_query = db.query(
+    """ZH: 取得管理員分析數據（學系/工具用量）| EN: Get admin analytics (department/tool usage)"""
+    base_q = db.query(
         models.User.department,
         func.count(models.User.id).label("user_count"),
         func.sum(models.User.login_count).label("total_logins"),
-        func.sum(models.User.lifetime_tokens_used).label("total_tokens")
+        func.sum(models.User.lifetime_tokens_used).label("total_tokens"),
     )
-    
+
     if department != "all":
-        # Check specific department
-        user_stats = base_user_query.filter(models.User.department == department).group_by(models.User.department).first()
-        if user_stats:
-            dept_stats.append({
-                "department": user_stats.department or "Unknown",
-                "user_count": user_stats.user_count,
-                "total_logins": user_stats.total_logins or 0,
-                "total_tokens": user_stats.total_tokens or 0
-            })
+        rows = base_q.filter(models.User.department == department).group_by(models.User.department).all()
     else:
-        # Group by all departments
-        all_user_stats = base_user_query.group_by(models.User.department).all()
-        for stat in all_user_stats:
-            dept_stats.append({
-                "department": stat.department or "Unknown",
-                "user_count": stat.user_count,
-                "total_logins": stat.total_logins or 0,
-                "total_tokens": stat.total_tokens or 0
-            })
-            
-    # 2. Tool usage stats
-    tool_query = db.query(
+        rows = base_q.group_by(models.User.department).all()
+
+    dept_stats = [
+        {
+            "department": r.department or "Unknown",
+            "user_count": r.user_count,
+            "total_logins": r.total_logins or 0,
+            "total_tokens": r.total_tokens or 0,
+        }
+        for r in rows
+    ]
+
+    tool_q = db.query(
         models.ChatHistory.tool_type,
-        func.count(models.ChatHistory.id).label("usage_count")
+        func.count(models.ChatHistory.id).label("usage_count"),
     )
-    
     if department != "all":
-        # Join with User to filter by department
-        tool_query = tool_query.join(models.User, models.ChatHistory.user_id == models.User.id)\
-            .filter(models.User.department == department)
-            
-    tool_stats = tool_query.group_by(models.ChatHistory.tool_type).all()
-    
-    tools_breakdown = []
-    for stat in tool_stats:
-        tools_breakdown.append({
-            "tool_type": stat.tool_type or "chat",
-            "usage_count": stat.usage_count
-        })
+        tool_q = tool_q.join(models.User, models.ChatHistory.user_id == models.User.id).filter(
+            models.User.department == department
+        )
+    tool_stats = tool_q.group_by(models.ChatHistory.tool_type).all()
 
     return {
         "department_filter": department,
         "department_stats": dept_stats,
-        "tools_breakdown": tools_breakdown
+        "tools_breakdown": [
+            {"tool_type": s.tool_type or "chat", "usage_count": s.usage_count}
+            for s in tool_stats
+        ],
     }
