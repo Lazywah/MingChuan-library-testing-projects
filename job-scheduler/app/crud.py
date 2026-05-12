@@ -24,7 +24,7 @@ EN: Modular design:
 from sqlalchemy.orm import Session
 from sqlalchemy import desc
 from passlib.context import CryptContext
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional, List
 import json
 
@@ -188,7 +188,10 @@ def increment_token_usage(db: Session, user_id: str, tokens: int) -> models.Toke
         usage = create_token_usage(db, user_id)
 
     # ZH: 檢查是否需要月度重置 | EN: Check if monthly reset is needed
-    if datetime.utcnow() >= usage.reset_date:
+    reset_date = usage.reset_date
+    if reset_date is not None and reset_date.tzinfo is None:
+        reset_date = reset_date.replace(tzinfo=timezone.utc)
+    if reset_date is None or datetime.now(timezone.utc) >= reset_date:
         usage.tokens_used = 0
         usage.reset_date = _calculate_next_reset_date()
 
@@ -329,9 +332,9 @@ def update_job_status(
 
     # ZH: 自動設定時間戳 | EN: Auto-set timestamps
     if status == "running" and not job.started_at:
-        job.started_at = datetime.utcnow()
+        job.started_at = datetime.now(timezone.utc)
     elif status in ("completed", "failed", "cancelled"):
-        job.completed_at = datetime.utcnow()
+        job.completed_at = datetime.now(timezone.utc)
 
     db.commit()
     db.refresh(job)
@@ -387,7 +390,7 @@ def cancel_job(db: Session, job_id: str) -> Optional[models.TrainingJob]:
     if job.status not in ("pending", "queued"):
         return None
     job.status = "cancelled"
-    job.completed_at = datetime.utcnow()
+    job.completed_at = datetime.now(timezone.utc)
     db.commit()
     db.refresh(job)
     return job
@@ -420,7 +423,7 @@ def _calculate_next_reset_date() -> datetime:
     ZH: 邏輯：找到下一個每月第 TOKEN_RESET_DAY 天
     EN: Logic: find the next Nth day of the month
     """
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
     reset_day = min(settings.TOKEN_RESET_DAY, 28)  # ZH: 最多 28 避免日期溢出 | EN: Max 28
 
     if now.day < reset_day:

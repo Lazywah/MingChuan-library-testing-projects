@@ -37,7 +37,7 @@ EN: Table list (per AI_PROGRAMMING_SPEC.md Section 4.1):
 """
 
 from sqlalchemy import Column, String, Integer, DateTime, Text, Float
-from datetime import datetime
+from datetime import datetime, timezone
 import uuid
 
 from .database import Base
@@ -71,8 +71,8 @@ class User(Base):
     department = Column(String, nullable=True)                                # ZH: 學系資訊 | EN: Department
     login_count = Column(Integer, default=0)                                  # ZH: 登入次數 | EN: Login count
     lifetime_tokens_used = Column(Integer, default=0)                         # ZH: 歷史累計 Token 數 | EN: Lifetime tokens used
-    created_at = Column(DateTime, default=datetime.utcnow)                    # ZH: 建立時間 | EN: Created at
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)  # ZH: 更新時間 | EN: Updated at
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))                    # ZH: 建立時間 | EN: Created at
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))  # ZH: 更新時間 | EN: Updated at
 
 
 # ==============================================================================
@@ -89,7 +89,7 @@ class TokenUsage(Base):
     tokens_used = Column(Integer, default=0)                                  # ZH: 已使用量 | EN: Tokens consumed
     tokens_limit = Column(Integer, default=5_000_000)                         # ZH: 月度上限 | EN: Monthly limit
     reset_date = Column(DateTime, nullable=False)                             # ZH: 下次重置日 | EN: Next reset date
-    last_updated = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    last_updated = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
 
 
 # ==============================================================================
@@ -128,7 +128,7 @@ class TrainingJob(Base):
     output_path = Column(String)                                              # ZH: 模型產出路徑 | EN: Output path
 
     # ZH: 時間戳記 | EN: Timestamps
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     started_at = Column(DateTime)
     completed_at = Column(DateTime)
 
@@ -155,7 +155,7 @@ class Model(Base):
     api_endpoint = Column(String)                                             # ZH: API 端點 URL | EN: API endpoint URL
     api_model_id = Column(String)                                             # ZH: 上游模型 ID (e.g. gpt-4o) | EN: Upstream model ID
 
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
 
 # ==============================================================================
@@ -172,7 +172,7 @@ class ChatHistory(Base):
     content = Column(Text, nullable=False)                                    # ZH: 訊息內容 | EN: Message content
     tool_type = Column(String, default="chat")                                # ZH: 工具類型 (chat, video_gen, writing) | EN: Tool type
     tokens_used = Column(Integer, default=0)                                  # ZH: Token 消耗 | EN: Tokens used
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
 
 # ==============================================================================
@@ -185,4 +185,4 @@ class SystemConfig(Base):
     key = Column(String, primary_key=True)                                    # ZH: 設定鍵 | EN: Config key
     value = Column(String, nullable=False)                                    # ZH: 設定值 | EN: Config value
     description = Column(Text)                                                # ZH: 說明 | EN: Description
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))

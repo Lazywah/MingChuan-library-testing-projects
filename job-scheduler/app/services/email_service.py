@@ -2,7 +2,7 @@ import smtplib
 import logging
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
-from datetime import datetime
+from datetime import datetime, timezone
 from ..config import settings
 
 logger = logging.getLogger(__name__)
@@ -47,7 +47,7 @@ def send_login_alert(to_email: str, username: str, ip_address: str):
     EN: Send login alert
     """
     subject = "AI Platform - New Login Alert"
-    time_str = datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S UTC')
+    time_str = datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S UTC')
     html = f"""
     <html>
         <body>
@@ -71,7 +71,7 @@ def send_password_change_alert(to_email: str, username: str):
     EN: Send password change alert
     """
     subject = "AI Platform - Password Changed Successfully"
-    time_str = datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S UTC')
+    time_str = datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S UTC')
     html = f"""
     <html>
         <body>
