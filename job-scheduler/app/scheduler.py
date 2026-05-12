@@ -2,39 +2,85 @@
 ==============================================================================
 Module 8: 背景排程器 (Background Job Scheduler)
 ==============================================================================
-ZH: 用途：過去負責 SSH 推播任務，現已改為 Worker Agent (Pull) 模式。
-    此模組保留供未來擴充（例如：定時清理超時任務）。
-EN: Purpose: Previously handled SSH push, now replaced by Worker Agent (Pull).
-    Retained for future expansions (e.g., timeout cleanup).
+ZH: 用途：定時清理超時的 running 任務，防止 Worker 斷線後任務卡死。
+EN: Purpose: Periodically clean up timed-out running jobs to prevent Worker
+    disconnection from leaving jobs stuck in "running" state forever.
 ==============================================================================
 """
 
 import asyncio
 import logging
-from typing import Optional
+from datetime import datetime, timezone, timedelta
 
 from .config import settings, SCHEDULER_POLICY
 from .database import SessionLocal
-from . import crud
+from . import models
 
 logger = logging.getLogger(__name__)
 
-async def _scheduler_loop():
+_scheduler_running = False
+_scheduler_task = None
+
+CHECK_INTERVAL_SECONDS = 300  # ZH: 每 5 分鐘檢查一次 | EN: Check every 5 minutes
+
+
+async def _timeout_cleanup_loop():
     """
-    ZH: 排程器主迴圈 (目前閒置，因為任務改由 Worker Agent 主動 Pull)
-    EN: Scheduler main loop (currently idle, tasks are pulled by Worker Agent)
-    ZH: 測試帳號清理已移至 main.py 的啟動流程（每次重啟自動清除）
-    EN: Test account cleanup moved to main.py startup (auto-cleaned on restart)
+    ZH: 定時掃描長時間停在 running 的任務，超過閾值即標記為 failed。
+    EN: Periodically scan jobs stuck in running state beyond the timeout threshold.
+    ZH: 典型觸發情境：GPU Worker 意外斷線，任務永遠不會回報完成。
+    EN: Typical trigger: GPU Worker crashes, job never reports completion.
     """
-    global _scheduler_running
-    logger.info("ZH: 排程器啟動 (Pull 模式下僅作佔位) | EN: Scheduler started (Idle in Pull mode)")
+    logger.info(
+        f"ZH: 排程器啟動，超時閾值={settings.JOB_TIMEOUT_MINUTES} 分鐘 | "
+        f"EN: Scheduler started, timeout={settings.JOB_TIMEOUT_MINUTES} min"
+    )
 
     while _scheduler_running:
-        # ZH: 保留迴圈供未來擴充（例如：定時清理超時任務）
-        # EN: Loop retained for future use (e.g., timeout cleanup)
-        await asyncio.sleep(60)
+        try:
+            _cleanup_timed_out_jobs()
+        except Exception as e:
+            logger.error(f"ZH: 超時清理發生錯誤 | EN: Timeout cleanup error: {e}", exc_info=True)
+
+        await asyncio.sleep(CHECK_INTERVAL_SECONDS)
 
     logger.info("ZH: 排程器已停止 | EN: Scheduler stopped")
+
+
+def _cleanup_timed_out_jobs():
+    """ZH: 執行一次超時清理，在同步上下文中操作 DB | EN: One-shot timeout cleanup (sync DB access)"""
+    db = SessionLocal()
+    try:
+        cutoff = datetime.now(timezone.utc) - timedelta(minutes=settings.JOB_TIMEOUT_MINUTES)
+
+        stuck_jobs = (
+            db.query(models.TrainingJob)
+            .filter(
+                models.TrainingJob.status == "running",
+                models.TrainingJob.started_at < cutoff,
+            )
+            .all()
+        )
+
+        if not stuck_jobs:
+            return
+
+        for job in stuck_jobs:
+            job.status = "failed"
+            job.error_message = (
+                f"Timeout: job exceeded {settings.JOB_TIMEOUT_MINUTES} minutes without completion. "
+                f"Worker may have disconnected."
+            )
+            job.completed_at = datetime.now(timezone.utc)
+            logger.warning(
+                f"ZH: 任務超時，標記為 failed: {job.id[:8]} (node={job.gpu_server}) | "
+                f"EN: Job timed out, marked failed: {job.id[:8]} (node={job.gpu_server})"
+            )
+
+        db.commit()
+        logger.info(f"ZH: 本次清理了 {len(stuck_jobs)} 個超時任務 | EN: Cleaned up {len(stuck_jobs)} timed-out jobs")
+    finally:
+        db.close()
 
 
 # ==============================================================================
@@ -45,8 +91,8 @@ async def _scheduler_loop():
 async def start_scheduler():
     global _scheduler_task, _scheduler_running
     _scheduler_running = True
-    _scheduler_task = asyncio.create_task(_scheduler_loop())
-    logger.info(f"ZH: 排程器背景工作已啟動 | EN: Scheduler background task started")
+    _scheduler_task = asyncio.create_task(_timeout_cleanup_loop())
+    logger.info("ZH: 排程器背景工作已啟動 | EN: Scheduler background task started")
 
 
 async def stop_scheduler():
