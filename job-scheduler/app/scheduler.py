@@ -47,20 +47,30 @@ async def _timeout_cleanup_loop():
     logger.info("ZH: 排程器已停止 | EN: Scheduler stopped")
 
 
-def _cleanup_timed_out_jobs():
+def _cleanup_timed_out_jobs(db=None):
     """ZH: 執行一次超時清理，在同步上下文中操作 DB | EN: One-shot timeout cleanup (sync DB access)"""
-    db = SessionLocal()
+    _owns_db = db is None
+    if _owns_db:
+        db = SessionLocal()
     try:
         cutoff = datetime.now(timezone.utc) - timedelta(minutes=settings.JOB_TIMEOUT_MINUTES)
 
-        stuck_jobs = (
+        # ZH: SQLite 回傳 naive datetime，統一加 UTC tzinfo 再比較
+        # EN: SQLite returns naive datetimes; attach UTC tzinfo before comparing
+        all_running = (
             db.query(models.TrainingJob)
-            .filter(
-                models.TrainingJob.status == "running",
-                models.TrainingJob.started_at < cutoff,
-            )
+            .filter(models.TrainingJob.status == "running")
             .all()
         )
+        stuck_jobs = []
+        for job in all_running:
+            started = job.started_at
+            if started is None:
+                continue
+            if started.tzinfo is None:
+                started = started.replace(tzinfo=timezone.utc)
+            if started < cutoff:
+                stuck_jobs.append(job)
 
         if not stuck_jobs:
             return
@@ -80,7 +90,8 @@ def _cleanup_timed_out_jobs():
         db.commit()
         logger.info(f"ZH: 本次清理了 {len(stuck_jobs)} 個超時任務 | EN: Cleaned up {len(stuck_jobs)} timed-out jobs")
     finally:
-        db.close()
+        if _owns_db:
+            db.close()
 
 
 # ==============================================================================
