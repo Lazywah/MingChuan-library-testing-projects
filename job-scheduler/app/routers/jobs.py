@@ -74,10 +74,7 @@ def submit_job(
     EN: Submit a new training job
     """
     # ZH: 計算預估 Token 消耗 | EN: Calculate estimated token cost
-    epochs = 10
-    if job.config and "epochs" in job.config:
-        epochs = job.config["epochs"]
-    estimated_tokens = epochs * 1000  # ZH: 簡化計算 | EN: Simplified calculation
+    estimated_tokens = crud.estimate_job_tokens(job.config)
 
     # ZH: 檢查 Token 額度 | EN: Check token quota
     usage = crud.get_token_usage(db, user_id=current_user.id)
