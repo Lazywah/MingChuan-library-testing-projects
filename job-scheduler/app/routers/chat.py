@@ -151,12 +151,12 @@ async def chat_completions(
         if not full_text:
             return
         try:
-            crud.create_chat_history(db, models.ChatHistory(
+            db.add(models.ChatHistory(
                 user_id=current_user.id, session_id=session_id,
                 role="user", content=last_message,
                 tool_type=request.tool_type or "chat",
             ))
-            crud.create_chat_history(db, models.ChatHistory(
+            db.add(models.ChatHistory(
                 user_id=current_user.id, session_id=session_id,
                 role="assistant", content=full_text,
                 tool_type=request.tool_type or "chat",
@@ -165,13 +165,16 @@ async def chat_completions(
             # EN: Prefer upstream actual usage; fallback to char/3 estimate
             prompt_text = "".join(m.content for m in request.messages)
             estimated = total_tokens or max(1, (len(prompt_text) + len(full_text)) // 3)
-            try:
-                crud.increment_token_usage(db, current_user.id, estimated)
-            except Exception:
-                pass  # quota already checked upfront; ignore mid-stream overrun
+            usage = crud.get_token_usage(db, current_user.id)
+            if usage:
+                usage.tokens_used += estimated
+                user = crud.get_user_by_id(db, current_user.id)
+                if user:
+                    user.lifetime_tokens_used += estimated
             db.commit()
         except Exception as e:
-            logger.error(f"Failed to save chat history: {e}")
+            logger.error(f"Failed to save chat history: {e}", exc_info=True)
+            db.rollback()
 
     return StreamingResponse(stream_generator(), media_type="text/event-stream")
 
