@@ -36,7 +36,8 @@ EN: Table list (per AI_PROGRAMMING_SPEC.md Section 4.1):
 ==============================================================================
 """
 
-from sqlalchemy import Column, String, Integer, DateTime, Text, Float
+from sqlalchemy import Column, String, Integer, DateTime, Text, Float, ForeignKey
+from sqlalchemy.orm import relationship
 from datetime import datetime, timezone
 import uuid
 
@@ -85,7 +86,7 @@ class TokenUsage(Base):
     __tablename__ = "token_usage"
 
     id = Column(String, primary_key=True, default=generate_uuid)
-    user_id = Column(String, index=True, nullable=False)                      # ZH: 關聯使用者 | EN: Associated user
+    user_id = Column(String, ForeignKey("users.id", ondelete="CASCADE"), index=True, nullable=False)
     tokens_used = Column(Integer, default=0)                                  # ZH: 已使用量 | EN: Tokens consumed
     tokens_limit = Column(Integer, default=5_000_000)                         # ZH: 月度上限 | EN: Monthly limit
     reset_date = Column(DateTime, nullable=False)                             # ZH: 下次重置日 | EN: Next reset date
@@ -102,7 +103,7 @@ class TrainingJob(Base):
     __tablename__ = "training_jobs"
 
     id = Column(String, primary_key=True, default=generate_uuid)
-    user_id = Column(String, index=True, nullable=False)                      # ZH: 提交者 | EN: Submitter
+    user_id = Column(String, ForeignKey("users.id", ondelete="SET NULL"), index=True, nullable=True)
     job_name = Column(String, nullable=False)                                 # ZH: 任務名稱 | EN: Job name
     model_name = Column(String, nullable=False)                               # ZH: 模型名稱 | EN: Model name
     status = Column(String, default="pending", index=True)                    # ZH: 任務狀態 | EN: Job status
@@ -166,7 +167,7 @@ class ChatHistory(Base):
     __tablename__ = "chat_history"
 
     id = Column(String, primary_key=True, default=generate_uuid)
-    user_id = Column(String, index=True, nullable=False)
+    user_id = Column(String, ForeignKey("users.id", ondelete="CASCADE"), index=True, nullable=False)
     session_id = Column(String, index=True, nullable=False)                   # ZH: 對話工作階段 | EN: Chat session
     role = Column(String, nullable=False)                                     # ZH: 角色 | EN: Role (user/assistant)
     content = Column(Text, nullable=False)                                    # ZH: 訊息內容 | EN: Message content
@@ -186,3 +187,19 @@ class SystemConfig(Base):
     value = Column(String, nullable=False)                                    # ZH: 設定值 | EN: Config value
     description = Column(Text)                                                # ZH: 說明 | EN: Description
     updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
+
+
+# ==============================================================================
+# ZH: 表 7: WorkerHeartbeat - GPU Worker 節點心跳
+# EN: Table 7: WorkerHeartbeat - GPU Worker node heartbeat
+# ZH: 記錄各 Worker 節點最後一次回報時間與 GPU 狀態，供管理員儀表板顯示
+# EN: Tracks last heartbeat and GPU state per Worker node for admin dashboard
+# ==============================================================================
+class WorkerHeartbeat(Base):
+    __tablename__ = "worker_heartbeats"
+
+    node_id = Column(String, primary_key=True)                                # ZH: 節點識別碼 | EN: Node identifier
+    available_gpus = Column(Text, default="[]")                               # ZH: 可用 GPU 清單 (JSON) | EN: Available GPUs (JSON array)
+    gpu_utilization = Column(Float, default=0.0)                              # ZH: GPU 使用率 % | EN: GPU utilization %
+    last_seen = Column(DateTime, default=lambda: datetime.now(timezone.utc))  # ZH: 最後心跳時間 | EN: Last heartbeat time
+    is_online = Column(Integer, default=1)                                    # ZH: 是否在線 | EN: Online status
