@@ -54,6 +54,13 @@ services:
       # ZH: CORS 允許來源（逗號分隔，留空允許所有） | EN: CORS origins (comma-sep, empty = allow all)
       CORS_ORIGINS: ${CORS_ORIGINS:-}
 
+      # ZH: Portkey LLM 閘道位址 | EN: Portkey LLM gateway URL
+      PORTKEY_URL: ${PORTKEY_URL:-http://ai-platform-portkey:8000/v1/chat/completions}
+      PORTKEY_ENABLED: ${PORTKEY_ENABLED:-true}
+
+      # ZH: 任務超時閾值（分鐘）| EN: Job timeout threshold (minutes)
+      JOB_TIMEOUT_MINUTES: ${JOB_TIMEOUT_MINUTES:-120}
+
       # ZH: 日誌 | EN: Logging
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
       

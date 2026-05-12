@@ -74,6 +74,17 @@ class Settings(BaseSettings):
     TOKEN_RESET_DAY: int = 1
 
     # ------------------------------------------------------------------
+    # ZH: Portkey LLM Gateway | EN: Portkey LLM Gateway
+    # ------------------------------------------------------------------
+    PORTKEY_URL: str = "http://ai-platform-portkey:8000/v1/chat/completions"
+    PORTKEY_ENABLED: bool = True
+
+    # ------------------------------------------------------------------
+    # ZH: 任務超時設定 (分鐘) | EN: Job timeout (minutes)
+    # ------------------------------------------------------------------
+    JOB_TIMEOUT_MINUTES: int = 120
+
+    # ------------------------------------------------------------------
     # ZH: 日誌設定 | EN: Logging
     # ------------------------------------------------------------------
     LOG_LEVEL: str = "INFO"
