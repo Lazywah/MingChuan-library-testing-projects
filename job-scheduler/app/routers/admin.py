@@ -125,19 +125,42 @@ def admin_update_user(
 
 
 @router.put("/users/batch/tokens")
-def batch_update_token_limit(
-    new_limit: int,
+def batch_update_tokens(
+    payload: schemas.BatchTokenUpdate,
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user)
 ) -> Any:
-    """ZH: 批量更新所有使用者的 Token 月度上限 | EN: Batch update all users' monthly token limit"""
+    """
+    ZH: 管理員批量更新指定使用者的 Token 狀態
+    EN: Admin batch update token state for specified users
+
+    ZH: action = reset_usage → 將 tokens_used 歸零
+    ZH: action = set_limit   → 將 tokens_limit 設為 payload.value
+    """
     verify_admin(current_user)
-    
-    updated = db.query(models.TokenUsage).update(
-        {models.TokenUsage.tokens_limit: new_limit}
-    )
+
+    if not payload.user_ids:
+        raise HTTPException(status_code=400, detail="user_ids cannot be empty")
+
+    if payload.action not in ("reset_usage", "set_limit"):
+        raise HTTPException(
+            status_code=400,
+            detail="action must be 'reset_usage' or 'set_limit'"
+        )
+
+    updated = 0
+    for uid in payload.user_ids:
+        usage = db.query(models.TokenUsage).filter(models.TokenUsage.user_id == uid).first()
+        if not usage:
+            continue
+        if payload.action == "reset_usage":
+            usage.tokens_used = 0
+        elif payload.action == "set_limit":
+            usage.tokens_limit = payload.value
+        updated += 1
+
     db.commit()
-    return {"updated_count": updated, "new_limit": new_limit}
+    return {"updated_count": updated, "action": payload.action, "value": payload.value}
 
 
 @router.post("/users/{user_id}/delete")
@@ -213,7 +236,7 @@ def provision_user(
         role=data.role or "student"
     )
     db_user = crud.create_user(db, user_create)
-    db_user.is_test_account = 1
+    db_user.is_test_account = 0  # ZH: 管理員配發的帳號為正式帳號，不應在重啟時被清除
     db.commit()
     
     # ZH: 發送帳號建立通知 | EN: Send account provision alert
