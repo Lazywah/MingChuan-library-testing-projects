@@ -138,18 +138,23 @@ def list_jobs(
 
     job_list = []
     for job in jobs:
+        # ZH: 列表不回傳 logs（可能很大）；詳細日誌請用 GET /{job_id}
+        # EN: List excludes logs (potentially huge); use GET /{job_id} for full logs
         job_list.append({
             "job_id": job.id,
             "job_name": job.job_name,
+            "model_name": job.model_name,
+            "user_id": job.user_id,
             "status": job.status,
+            "priority": job.priority,
             "progress": job.progress,
             "gpu_server": job.gpu_server,
             "gpu_id": job.gpu_id,
             "started_at": job.started_at,
             "completed_at": job.completed_at,
+            "created_at": job.created_at,
             "error_message": job.error_message,
             "output_path": job.output_path,
-            "logs": job.logs,
         })
 
     return {"total": total, "jobs": job_list}
