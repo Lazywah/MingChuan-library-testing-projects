@@ -81,11 +81,16 @@ const TRANSLATIONS = {
         batch_token_label: "批量設定所有使用者 Token 上限：",
         btn_batch_apply: "套用到所有人",
         toast_batch_updated: "已更新 {count} 位使用者的 Token 上限",
+        btn_reset_all_usage: "歸零所有用量",
+        confirm_reset_all_usage: "確定要將所有使用者的 Token 用量歸零嗎？此操作無法復原。",
+        toast_batch_reset: "已歸零 {count} 位使用者的 Token 用量",
+        btn_reset_usage: "歸零用量",
+        toast_user_usage_reset: "使用者用量已歸零",
         btn_reset: "初始化",
         confirm_reset_user: "確定要初始化使用者 {name} 的帳號嗎？\n密碼將被重置，用量將歸零。",
         toast_user_reset: "帳號已初始化",
-        btn_add_test: "新增測試用帳號",
-        add_test_title: "新增測試用帳號",
+        btn_add_test: "建立帳號",
+        add_test_title: "建立帳號",
         btn_add_test_submit: "建立帳號",
         add_test_temp_password: "臨時密碼（僅顯示一次）：",
         toast_add_test_ok: "測試帳號已建立",
@@ -178,11 +183,16 @@ const TRANSLATIONS = {
         batch_token_label: "Batch set all users' token limit:",
         btn_batch_apply: "Apply to All",
         toast_batch_updated: "Updated {count} users' token limit",
+        btn_reset_all_usage: "Reset All Usage",
+        confirm_reset_all_usage: "Reset token usage to 0 for ALL users? This cannot be undone.",
+        toast_batch_reset: "Reset usage for {count} users",
+        btn_reset_usage: "Reset Usage",
+        toast_user_usage_reset: "User usage reset to 0",
         btn_reset: "Initialize",
         confirm_reset_user: "Are you sure to initialize user {name}?\nPassword will be reset, usage will be cleared.",
         toast_user_reset: "Account initialized",
-        btn_add_test: "Add Test Account",
-        add_test_title: "Add Test Account",
+        btn_add_test: "Provision User",
+        add_test_title: "Provision User",
         btn_add_test_submit: "Create Account",
         add_test_temp_password: "Temporary Password (shown once):",
         toast_add_test_ok: "Test account created",
@@ -1311,10 +1321,17 @@ async function batchUpdateTokens() {
     const newLimit = parseInt(limitInput.value);
     if (!newLimit || newLimit <= 0) return;
 
+    const userIds = _adminUsersCache.map(u => u.id);
+    if (userIds.length === 0) return;
+
     try {
-        const res = await fetch(`${API_BASE}/admin/users/batch/tokens?new_limit=${newLimit}`, {
+        const res = await fetch(`${API_BASE}/admin/users/batch/tokens`, {
             method: 'PUT',
-            headers: { 'Authorization': `Bearer ${authToken}` }
+            headers: {
+                'Authorization': `Bearer ${authToken}`,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ user_ids: userIds, action: 'set_limit', value: newLimit })
         });
         if (!res.ok) throw new Error('Batch update failed');
         const data = await res.json();
@@ -1324,6 +1341,54 @@ async function batchUpdateTokens() {
     } catch (err) {
         console.error(err);
         showToast(TRANSLATIONS[currentLang]?.toast_user_update_failed || 'Update failed', true);
+    }
+}
+
+async function batchResetUsage() {
+    const msg = TRANSLATIONS[currentLang]?.confirm_reset_all_usage || 'Reset token usage for ALL users?';
+    if (!confirm(msg)) return;
+
+    const userIds = _adminUsersCache.map(u => u.id);
+    if (userIds.length === 0) return;
+
+    try {
+        const res = await fetch(`${API_BASE}/admin/users/batch/tokens`, {
+            method: 'PUT',
+            headers: {
+                'Authorization': `Bearer ${authToken}`,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ user_ids: userIds, action: 'reset_usage', value: 0 })
+        });
+        if (!res.ok) throw new Error('Batch reset failed');
+        const data = await res.json();
+        const msg2 = (TRANSLATIONS[currentLang]?.toast_batch_reset || 'Reset usage for {count} users').replace('{count}', data.updated_count);
+        showToast(msg2);
+        fetchAdminData();
+    } catch (err) {
+        console.error(err);
+        showToast(TRANSLATIONS[currentLang]?.toast_user_update_failed || 'Operation failed', true);
+    }
+}
+
+async function resetUserUsage(userId) {
+    try {
+        const res = await fetch(`${API_BASE}/admin/users/batch/tokens`, {
+            method: 'PUT',
+            headers: {
+                'Authorization': `Bearer ${authToken}`,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ user_ids: [userId], action: 'reset_usage', value: 0 })
+        });
+        if (!res.ok) throw new Error('Reset failed');
+        showToast(TRANSLATIONS[currentLang]?.toast_user_usage_reset || 'User usage reset');
+        // Update the displayed used count in the open modal
+        document.getElementById('edit-tokens-used-display').textContent = '0';
+        fetchAdminData();
+    } catch (err) {
+        console.error(err);
+        showToast(TRANSLATIONS[currentLang]?.toast_user_update_failed || 'Reset failed', true);
     }
 }
 
@@ -1443,6 +1508,13 @@ document.addEventListener('DOMContentLoaded', () => {
     // Batch Token Update Binding
     const batchBtn = document.getElementById('btn-batch-tokens');
     if (batchBtn) batchBtn.addEventListener('click', batchUpdateTokens);
+    const batchResetBtn = document.getElementById('btn-batch-reset-usage');
+    if (batchResetBtn) batchResetBtn.addEventListener('click', batchResetUsage);
+    const resetUserUsageBtn = document.getElementById('btn-reset-user-usage');
+    if (resetUserUsageBtn) resetUserUsageBtn.addEventListener('click', () => {
+        const userId = document.getElementById('edit-user-id').value;
+        if (userId) resetUserUsage(userId);
+    });
 
     // Provision User Modal Bindings
     const provisionBtn = document.getElementById('btn-provision-user');
