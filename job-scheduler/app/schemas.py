@@ -159,6 +159,22 @@ class TokenIncrementRequest(BaseModel):
     tokens: int                                      # ZH: 要增加的 Token 數 | EN: Tokens to add
 
 
+class BatchTokenUpdate(BaseModel):
+    """
+    ZH: 管理員批量更新 Token 請求 | EN: Admin batch token update request
+
+    ZH: action 支援以下操作：
+        - reset_usage：將指定使用者的 tokens_used 歸零（value 忽略）
+        - set_limit：將指定使用者的 tokens_limit 設為 value
+    EN: Supported actions:
+        - reset_usage: Reset tokens_used to 0 for target users (value ignored)
+        - set_limit: Set tokens_limit to value for target users
+    """
+    user_ids: List[str]                              # ZH: 目標使用者 UUID 清單 | EN: Target user UUID list
+    action: str                                      # ZH: 操作類型 (reset_usage / set_limit) | EN: Action type
+    value: Optional[int] = 0                         # ZH: set_limit 時使用的新額度 | EN: New limit for set_limit action
+
+
 # ==============================================================================
 # ZH: 訓練任務 Schema | EN: Training Job Schemas
 # ==============================================================================
