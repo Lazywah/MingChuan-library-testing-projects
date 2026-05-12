@@ -1,4 +1,4 @@
-# 09 - SSO 整合設定指南
+# 05 - SSO 整合設定指南 | SSO Integration Guide
 
 ## 📑 目錄 | Table of Contents
 - [架構說明](#架構說明)

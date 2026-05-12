@@ -1,4 +1,4 @@
-# 02 - API 使用手冊 | API Reference
+# 07 - API 使用手冊 | API Reference
 
 ## 📑 目錄 | Table of Contents
 - [認證 API \| Authentication API](#認證-api--authentication-api)

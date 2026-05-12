@@ -1,4 +1,4 @@
-# 03 - GPU 伺服器部署指南 | GPU Server Deployment Guide
+# 02 - GPU 伺服器部署指南 | GPU Server Deployment Guide
 
 ## 📑 目錄 | Table of Contents
 - [概覽 \| Overview](#概覽--overview)
