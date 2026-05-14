@@ -15,6 +15,8 @@ API_TOKEN = os.environ.get("API_TOKEN", "mcu-secret-token")
 NODE_ID = os.environ.get("NODE_ID", "gpu-node-01")
 POLL_INTERVAL = int(os.environ.get("POLL_INTERVAL", "5"))
 STORAGE_MOUNT_PATH = os.environ.get("STORAGE_MOUNT_PATH", "C:\\storage")
+# Heartbeat is sent every HEARTBEAT_INTERVAL polls (default: every 30 s = 6 polls × 5 s)
+HEARTBEAT_INTERVAL = int(os.environ.get("HEARTBEAT_INTERVAL", "30"))
 
 HEADERS = {"Authorization": f"Bearer {API_TOKEN}"}
 
@@ -46,6 +48,48 @@ def get_available_gpus():
     except Exception as e:
         logger.error(f"Failed to query GPUs: {e}")
         return []
+
+def get_gpu_utilization() -> float:
+    """
+    Return the average GPU utilization (%) across all GPUs.
+    Returns 0.0 on failure.
+    """
+    try:
+        result = subprocess.run(
+            ["nvidia-smi", "--query-gpu=utilization.gpu", "--format=csv,noheader,nounits"],
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, check=True,
+        )
+        utils = [float(u.strip()) for u in result.stdout.strip().split("\n") if u.strip()]
+        return round(sum(utils) / len(utils), 1) if utils else 0.0
+    except Exception:
+        return 0.0
+
+
+def send_heartbeat(available_gpus: list) -> None:
+    """
+    POST /api/v1/worker/heartbeat to keep the service layer informed of this
+    node's availability and GPU utilisation.  Errors are logged but never fatal.
+    """
+    try:
+        gpu_util = get_gpu_utilization()
+        payload = {
+            "node_id": NODE_ID,
+            "available_gpus": available_gpus,
+            "gpu_utilization": gpu_util,
+        }
+        resp = requests.post(
+            f"{SERVICE_LAYER_URL}/api/v1/worker/heartbeat",
+            json=payload,
+            headers=HEADERS,
+            timeout=5,
+        )
+        if resp.status_code == 200:
+            logger.debug("Heartbeat OK — node=%s gpus=%s util=%.1f%%", NODE_ID, available_gpus, gpu_util)
+        else:
+            logger.warning("Heartbeat returned HTTP %d: %s", resp.status_code, resp.text[:120])
+    except Exception as e:
+        logger.warning("Heartbeat failed (service unreachable?): %s", e)
+
 
 def report_update(job_id, payload):
     url = f"{SERVICE_LAYER_URL}/api/v1/worker/jobs/{job_id}/update"
@@ -134,34 +178,42 @@ def execute_job(job):
         report_update(job_id, {"status": "failed", "error_message": str(e)})
 
 def poll_loop():
-    logger.info(f"Worker node {NODE_ID} started. Polling {SERVICE_LAYER_URL}...")
+    logger.info("Worker node %s started. Polling %s every %ds, heartbeat every %ds.",
+                NODE_ID, SERVICE_LAYER_URL, POLL_INTERVAL, HEARTBEAT_INTERVAL)
+
+    last_heartbeat = 0.0  # Unix timestamp of last successful heartbeat send
+
     while True:
         available_gpus = get_available_gpus()
-        
+
+        # ── Heartbeat (time-based, independent of GPU availability) ──────────
+        now = time.time()
+        if now - last_heartbeat >= HEARTBEAT_INTERVAL:
+            send_heartbeat(available_gpus)
+            last_heartbeat = now
+
+        # ── Job polling (only when a GPU is free) ─────────────────────────────
         if available_gpus:
             try:
-                # ZH: 嘗試領取任務 | EN: Try to take a job
                 response = requests.post(
                     f"{SERVICE_LAYER_URL}/api/v1/worker/take",
                     json={"node_id": NODE_ID, "available_gpus": available_gpus},
                     headers=HEADERS,
-                    timeout=5
+                    timeout=5,
                 )
-                
+
                 if response.status_code == 200:
                     data = response.json()
                     job = data.get("job")
                     if job:
-                        logger.info(f"Acquired job: {job.get('job_id')}")
-                        # ZH: 放入獨立的 Thread 執行，避免阻塞 Polling
-                        # EN: Execute in a separate thread to avoid blocking polling
-                        # Note: In a real multi-GPU setup, we might limit threads to len(available_gpus)
+                        logger.info("Acquired job: %s", job.get("job_id"))
+                        # Execute in a separate thread to avoid blocking the poll loop
                         t = threading.Thread(target=execute_job, args=(job,))
                         t.daemon = True
                         t.start()
             except Exception as e:
-                logger.debug(f"Polling failed: {e}")
-                
+                logger.debug("Polling failed: %s", e)
+
         time.sleep(POLL_INTERVAL)
 
 if __name__ == "__main__":
