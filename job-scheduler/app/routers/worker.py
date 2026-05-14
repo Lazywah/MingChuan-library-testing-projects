@@ -94,47 +94,52 @@ def take_job(
     if not pending_jobs:
         return {"job": None}
 
-    job = pending_jobs[0]
-    gpu_id = req.available_gpus[0]
+    gpu_id_str = req.available_gpus[0]
+    # H-7: ZH: gpu_id 欄位定義為 Integer，存入時轉型，回傳 Worker 時仍用字串
+    # EN: Column is Integer; cast before storing, return original string to worker
+    gpu_id_int = int(gpu_id_str) if gpu_id_str.isdigit() else 0
 
-    # ZH: 原子搶佔：只有當 status 仍為 "pending" 時才更新，rowcount=0 代表已被搶佔
-    # EN: Atomic claim: only succeeds if status is still "pending"; rowcount=0 means already taken
-    result = db.execute(
-        update(models.TrainingJob)
-        .where(models.TrainingJob.id == job.id)
-        .where(models.TrainingJob.status == "pending")
-        .values(
-            status="running",
-            gpu_server=req.node_id,
-            gpu_id=gpu_id,
-            started_at=datetime.now(timezone.utc),
+    # H-6: ZH: 若第一筆任務已被其他節點搶佔，依序嘗試下一筆，直到搶佔成功或清單用盡
+    # EN: If top job was already claimed, walk the list until one succeeds or all are taken
+    for job in pending_jobs:
+        result = db.execute(
+            update(models.TrainingJob)
+            .where(models.TrainingJob.id == job.id)
+            .where(models.TrainingJob.status == "pending")
+            .values(
+                status="running",
+                gpu_server=req.node_id,
+                gpu_id=gpu_id_int,
+                started_at=datetime.now(timezone.utc),
+            )
         )
-    )
-    db.commit()
+        db.commit()
 
-    if result.rowcount == 0:
-        logger.info(f"Job {job.id[:8]} already claimed by another worker, skipping")
-        return {"job": None}
+        if result.rowcount == 0:
+            logger.info(f"Job {job.id[:8]} already claimed by another worker, trying next")
+            continue  # H-6: try next job
 
-    db.refresh(job)
+        db.refresh(job)
 
-    config = {}
-    if job.config:
-        try:
-            config = json.loads(job.config)
-        except json.JSONDecodeError:
-            logger.warning(f"Failed to parse config for job {job.id[:8]}")
+        config = {}
+        if job.config:
+            try:
+                config = json.loads(job.config)
+            except json.JSONDecodeError:
+                logger.warning(f"Failed to parse config for job {job.id[:8]}")
 
-    logger.info(f"Worker {req.node_id} claimed job {job.id[:8]} on GPU {gpu_id}")
-    return {
-        "job": {
-            "job_id": job.id,
-            "script_path": job.script_path or "/workspace/train.py",
-            "dataset_path": job.dataset_path,
-            "config": config,
-            "gpu_id": gpu_id,
+        logger.info(f"Worker {req.node_id} claimed job {job.id[:8]} on GPU {gpu_id_str}")
+        return {
+            "job": {
+                "job_id": job.id,
+                "script_path": job.script_path or "/workspace/train.py",
+                "dataset_path": job.dataset_path,
+                "config": config,
+                "gpu_id": gpu_id_str,  # ZH: 字串格式，供 Worker 執行 docker --gpus | EN: String for worker's docker --gpus
+            }
         }
-    }
+
+    return {"job": None}
 
 
 @router.post("/heartbeat")

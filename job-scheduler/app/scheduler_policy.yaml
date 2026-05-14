@@ -1,9 +1,18 @@
 # ==============================================================================
-# ZH: 資源層 (High-End GPU Servers) 排程政策與硬體組態
-# EN: Resource Layer Scheduling Policy & Hardware Configuration
-# 
-# ZH: 依據架構圖設計，將資源層的配置獨立拆分以便於維護與擴展
-# EN: According to the architecture diagram, resource config is separated for easier maintenance
+# ZH: 資源層 (High-End GPU Servers) 排程政策
+# EN: Resource Layer Scheduling Policy
+#
+# ZH: Worker 節點不再於此靜態設定 IP。各 GPU 節點啟動後會透過
+#     POST /api/v1/worker/heartbeat 自動上報存活狀態與 GPU 使用率，
+#     管理介面的叢集儀表板直接從 WorkerHeartbeat 資料表讀取即時狀態。
+#     若需新增節點，只需在該節點的 gpu-worker/docker-compose.yml 設定
+#     正確的 SERVICE_LAYER_URL 與 NODE_ID，啟動後即自動出現在儀表板。
+#
+# EN: Worker nodes are no longer statically registered with IPs here.
+#     Each GPU node self-registers via POST /api/v1/worker/heartbeat on startup,
+#     reporting live status and GPU utilisation. The admin cluster dashboard reads
+#     directly from the WorkerHeartbeat table. To add a new node, set the correct
+#     SERVICE_LAYER_URL and NODE_ID in that node's gpu-worker/docker-compose.yml.
 # ==============================================================================
 
 # ZH: 佇列排程參數 | EN: Queue Scheduling Parameters
@@ -14,31 +23,6 @@ scheduling:
   max_epochs_per_job: 1000            # ZH: 每筆任務最高迭代次數
   max_batch_size: 512                 # ZH: 最高批次大小限制
 
-# ZH: 本地開發與除錯模式開關 (非 ssh 直連) | EN: Local mock mode toggle
+# ZH: 本地開發與除錯模式開關 | EN: Local mock mode toggle
 mock_mode: true
-
-# ZH: 資源層 GPU 運算節點池 | EN: Resource Layer GPU Compute Node Pool
-# ZH: 架構圖硬體規格：AMD EPYC Genoa + 256GB ECC + NVIDIA RTX 5090 * 2
-# ZH: 若 GPU 位於外網，請將 host 改為公網 IP/域名，並設定 port 為實際 SSH Port
-# EN: For WAN GPU servers, set host to public IP/domain and port to actual SSH port
-nodes:
-  - id: "gpu-node-01"
-    host: "192.168.1.100"           # ZH: 內網 IP 或公網 IP/域名 | EN: LAN or WAN IP/domain
-    port: 22                         # ZH: SSH 連線埠 (外網建議改為非標準 Port) | EN: SSH port
-    username: "gpu_admin"
-    ssh_key_path: "/root/.ssh/gpu_key"
-    hardware:
-      gpu: "NVIDIA RTX 5090 (32GB) x2"
-      memory_gb: 256
-      cpu_cores: 32
-
-  - id: "gpu-node-02"
-    host: "192.168.1.101"
-    port: 22
-    username: "gpu_admin"
-    ssh_key_path: "/root/.ssh/gpu_key"
-    hardware:
-      gpu: "NVIDIA RTX 5090 (32GB) x2"
-      memory_gb: 256
-      cpu_cores: 32
 

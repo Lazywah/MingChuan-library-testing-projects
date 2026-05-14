@@ -21,7 +21,11 @@ logger = logging.getLogger(__name__)
 _scheduler_running = False
 _scheduler_task = None
 
-CHECK_INTERVAL_SECONDS = 300  # ZH: 每 5 分鐘檢查一次 | EN: Check every 5 minutes
+# H-1: ZH: 從 scheduler_policy.yaml 讀取間隔，YAML 未設定則預設 300 秒
+# EN: Read interval from scheduler_policy.yaml; default 300 s if not configured
+CHECK_INTERVAL_SECONDS = SCHEDULER_POLICY.get("scheduling", {}).get(
+    "job_check_interval_seconds", 300
+)
 
 
 async def _timeout_cleanup_loop():

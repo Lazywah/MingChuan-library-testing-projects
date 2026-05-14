@@ -1,72 +1,22 @@
-from fastapi import APIRouter, HTTPException, Depends
-from pydantic import BaseModel
-import os
-from ..auth import get_current_user
-from .. import models
+# ==============================================================================
+# ZH: 系統設定檔直接編輯功能已停用
+# EN: Direct system file editing has been disabled
+#
+# ZH: 原因：允許管理員透過 API 以原始文字覆寫 .env / docker-compose.yml 存在
+#     嚴重的安全風險（可覆蓋 JWT_SECRET_KEY 等關鍵憑證）。
+# EN: Reason: Allowing admins to overwrite .env / docker-compose.yml via API
+#     posed a critical security risk (e.g. overwriting JWT_SECRET_KEY).
+#
+# ZH: 後續計畫：改以獨立的輸入框對個別設定值進行受控修改，並加入型別驗證
+#     與白名單限制，確保每個欄位僅接受合法範圍的資料。
+# EN: Future plan: Replace with individual input-box fields for controlled edits,
+#     with type validation and whitelisted keys to ensure only valid values
+#     are accepted per field.
+# ==============================================================================
+
+from fastapi import APIRouter
 
 router = APIRouter(prefix="/system", tags=["System Config Management"])
 
-# 允許管理的系統設定檔路徑 (對應到 Container 內掛載的路徑)
-ALLOWED_FILES = {
-    ".env": "/app/.env",
-    "docker-compose.yml": "/app/docker-compose.yml",
-    "scheduler_policy.yaml": "/app/app/scheduler_policy.yaml",
-    "sso_policy.yaml": "/app/app/sso_policy.yaml"
-}
-
-class FileContent(BaseModel):
-    content: str
-
-def verify_admin(current_user: models.User):
-    if current_user.role != "admin":
-        raise HTTPException(status_code=403, detail="Forbidden: Admins only")
-
-@router.get("/files")
-async def list_files(current_user: models.User = Depends(get_current_user)):
-    """
-    列出系統允許修改的設定檔清單
-    """
-    verify_admin(current_user)
-    return {
-        "files": list(ALLOWED_FILES.keys())
-    }
-
-@router.get("/files/{filename}")
-async def read_file(filename: str, current_user: models.User = Depends(get_current_user)):
-    """
-    讀取設定檔內容
-    """
-    verify_admin(current_user)
-    if filename not in ALLOWED_FILES:
-        raise HTTPException(status_code=403, detail="File not allowed or not found")
-        
-    filepath = ALLOWED_FILES[filename]
-    
-    if not os.path.exists(filepath):
-        # 為了相容性，若檔案不存在，回傳空內容而非報錯
-        return {"content": ""}
-        
-    try:
-        with open(filepath, "r", encoding="utf-8") as f:
-            content = f.read()
-        return {"content": content}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-@router.put("/files/{filename}")
-async def write_file(filename: str, payload: FileContent, current_user: models.User = Depends(get_current_user)):
-    """
-    更新設定檔內容
-    """
-    verify_admin(current_user)
-    if filename not in ALLOWED_FILES:
-        raise HTTPException(status_code=403, detail="File not allowed or not found")
-        
-    filepath = ALLOWED_FILES[filename]
-    
-    try:
-        with open(filepath, "w", encoding="utf-8") as f:
-            f.write(payload.content)
-        return {"message": f"Successfully updated {filename}"}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+# ZH: 此 router 目前不對外暴露任何端點。
+# EN: This router currently exposes no endpoints.

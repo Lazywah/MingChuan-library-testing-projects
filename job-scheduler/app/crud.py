@@ -199,15 +199,69 @@ def increment_token_usage(db: Session, user_id: str, tokens: int) -> models.Toke
         usage.reset_date = _calculate_next_reset_date()
 
     usage.tokens_used += tokens
-    
+
     # ZH: 同步更新 User 表的歷史總使用量 | EN: Sync update User's lifetime token usage
     user = get_user_by_id(db, user_id)
     if user:
         user.lifetime_tokens_used += tokens
-        
+
     db.commit()
     db.refresh(usage)
     return usage
+
+
+def try_deduct_tokens(db: Session, user_id: str, tokens: int) -> bool:
+    """
+    ZH: 原子性配額檢查 + Token 扣減，消除 TOCTOU 競爭條件。
+        以單一 SQL UPDATE 同時完成「餘額足夠才扣減」，rowcount=0 即代表超額。
+    EN: Atomic quota-check + token deduction to eliminate TOCTOU race condition.
+        A single SQL UPDATE deducts only when quota is sufficient; rowcount=0 means exceeded.
+
+    Returns:
+        True  — deduction succeeded
+        False — quota exceeded (caller should raise HTTP 429)
+    """
+    from sqlalchemy import update as _sa_update
+
+    # ZH: 先處理月度重置（在 flush 前完成，月初才發生，碰撞機率極低）
+    # EN: Handle monthly reset before the atomic UPDATE (only happens once/month)
+    usage = get_token_usage(db, user_id)
+    if not usage:
+        usage = create_token_usage(db, user_id)
+
+    reset_date = usage.reset_date
+    if reset_date is not None and reset_date.tzinfo is None:
+        reset_date = reset_date.replace(tzinfo=timezone.utc)
+    if reset_date is None or datetime.now(timezone.utc) >= reset_date:
+        usage.tokens_used = 0
+        usage.reset_date = _calculate_next_reset_date()
+        db.flush()  # Write reset to DB before the UPDATE reads tokens_used
+
+    # ZH: 原子性 UPDATE：WHERE 子句同時做配額檢查，避免兩步驟競爭
+    # EN: Atomic UPDATE: WHERE clause performs quota check, no two-step race
+    result = db.execute(
+        _sa_update(models.TokenUsage)
+        .where(
+            models.TokenUsage.user_id == user_id,
+            (models.TokenUsage.tokens_used + tokens) <= models.TokenUsage.tokens_limit,
+        )
+        .values(tokens_used=models.TokenUsage.tokens_used + tokens)
+        .execution_options(synchronize_session=False)
+    )
+
+    if result.rowcount == 0:
+        db.rollback()
+        return False  # Quota exceeded
+
+    # ZH: 同步更新終身使用量 | EN: Sync lifetime token usage
+    db.execute(
+        _sa_update(models.User)
+        .where(models.User.id == user_id)
+        .values(lifetime_tokens_used=models.User.lifetime_tokens_used + tokens)
+        .execution_options(synchronize_session=False)
+    )
+    db.commit()
+    return True
 
 
 # ==============================================================================

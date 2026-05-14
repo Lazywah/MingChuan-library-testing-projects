@@ -76,19 +76,18 @@ def submit_job(
     # ZH: 計算預估 Token 消耗 | EN: Calculate estimated token cost
     estimated_tokens = crud.estimate_job_tokens(job.config)
 
-    # ZH: 檢查 Token 額度 | EN: Check token quota
-    usage = crud.get_token_usage(db, user_id=current_user.id)
-    if usage and (usage.tokens_used + estimated_tokens) > usage.tokens_limit:
+    # ZH: 原子性配額檢查 + 扣減（單一 SQL UPDATE，消除 TOCTOU 競爭條件）
+    # EN: Atomic quota check + deduction (single SQL UPDATE, eliminates TOCTOU race)
+    if not crud.try_deduct_tokens(db, user_id=current_user.id, tokens=estimated_tokens):
+        usage = crud.get_token_usage(db, user_id=current_user.id)
+        remaining = (usage.tokens_limit - usage.tokens_used) if usage else 0
         raise HTTPException(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-            detail=f"ZH: Token 配額不足。剩餘: {usage.tokens_limit - usage.tokens_used}, "
+            detail=f"ZH: Token 配額不足。剩餘: {remaining}, "
                    f"需要: {estimated_tokens} | "
-                   f"EN: Insufficient quota. Remaining: {usage.tokens_limit - usage.tokens_used}, "
+                   f"EN: Insufficient quota. Remaining: {remaining}, "
                    f"Required: {estimated_tokens}"
         )
-
-    # ZH: 扣減 Token | EN: Deduct tokens
-    crud.increment_token_usage(db, user_id=current_user.id, tokens=estimated_tokens)
 
     # ZH: 建立任務 | EN: Create job
     db_job = crud.create_job(db=db, job=job, user_id=current_user.id)

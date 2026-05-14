@@ -196,10 +196,16 @@ app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 _raw_origins = os.environ.get("CORS_ORIGINS", "")
 allowed_origins = [o.strip() for o in _raw_origins.split(",") if o.strip()] or ["*"]
 
+# ZH: 瀏覽器規範：allow_origins=["*"] 與 allow_credentials=True 不相容（會被瀏覽器阻擋）。
+#     僅當有明確來源清單時才啟用 credentials，萬用字元時強制關閉。
+# EN: Browser spec: allow_origins=["*"] is incompatible with allow_credentials=True (browsers block it).
+#     Enable credentials only when an explicit origin list is provided; wildcard forces it off.
+_allow_credentials = "*" not in allowed_origins
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=allowed_origins,
-    allow_credentials=True,
+    allow_credentials=_allow_credentials,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -217,12 +223,11 @@ app.include_router(auth.router, prefix="/api/v1/auth")
 app.include_router(jobs.router, prefix="/api/v1/jobs")
 
 # ZH: 新增聊天助理與管理員路由 | EN: Chat assistant and admin routes
-from .routers import chat, admin, datasets, worker, system
+from .routers import chat, admin, datasets, worker
 app.include_router(chat.router, prefix="/api/v1/chat")
 app.include_router(admin.router, prefix="/api/v1/admin")
 app.include_router(datasets.router, prefix="/api/v1/datasets")
 app.include_router(worker.router, prefix="/api/v1/worker")
-app.include_router(system.router, prefix="/api/v1")
 
 
 # ==============================================================================
