@@ -33,6 +33,7 @@ import asyncio
 from .. import crud, schemas, models
 from ..auth import get_current_user
 from ..database import get_db
+from ..config import SCHEDULER_POLICY
 
 import json
 import logging
@@ -50,18 +51,28 @@ router = APIRouter(tags=["訓練任務 Training Jobs"])
 # EN: POST / - Submit new training job
 # ZH: 流程：
 #   1. 驗證 JWT → 取得使用者
-#   2. 計算預估 Token 消耗 (epochs × 1000)
-#   3. 扣減 Token 額度 (超額則拒絕)
-#   4. 建立 Job 記錄 (status=pending)
-#   5. 回傳 job_id 和佇列位置
-#   6. 排程器背景迴圈會自動取出並執行
+#   2. 政策檢查（scheduler_policy.yaml）：
+#      a. allow_students        → 學生申請開關
+#      b. max_concurrent_jobs   → 叢集執行中任務上限（admin/teacher 免檢）
+#      c. max_epochs_per_job    → 單筆任務迭代次數上限
+#      d. max_batch_size        → 單筆任務批次大小上限
+#   3. 計算預估 Token 消耗 (epochs × 1000)
+#   4. 扣減 Token 額度 (超額則拒絕)
+#   5. 建立 Job 記錄 (status=pending)
+#   6. 回傳 job_id 和佇列位置
+#   7. 排程器背景迴圈會自動取出並執行
 # EN: Flow:
 #   1. Verify JWT → get user
-#   2. Estimate token cost (epochs × 1000)
-#   3. Deduct token quota (reject if exceeded)
-#   4. Create job record (status=pending)
-#   5. Return job_id and queue position
-#   6. Scheduler background loop auto-picks and executes
+#   2. Policy checks (scheduler_policy.yaml):
+#      a. allow_students        → student submission gate
+#      b. max_concurrent_jobs   → cluster-wide running jobs cap (admin/teacher bypass)
+#      c. max_epochs_per_job    → per-job epochs cap
+#      d. max_batch_size        → per-job batch size cap
+#   3. Estimate token cost (epochs × 1000)
+#   4. Deduct token quota (reject if exceeded)
+#   5. Create job record (status=pending)
+#   6. Return job_id and queue position
+#   7. Scheduler background loop auto-picks and executes
 # ==============================================================================
 @router.post("", response_model=schemas.JobResponse, status_code=status.HTTP_201_CREATED)
 def submit_job(
@@ -73,6 +84,69 @@ def submit_job(
     ZH: 提交新的訓練任務
     EN: Submit a new training job
     """
+    policy = SCHEDULER_POLICY.get("scheduling", {})
+
+    # ------------------------------------------------------------------
+    # ZH: 政策檢查 a — 學生申請開關
+    # EN: Policy check a — student submission gate
+    # ------------------------------------------------------------------
+    if current_user.role == "student" and not policy.get("allow_students", True):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="ZH: 目前停止開放學生申請 GPU 排程任務，請聯繫教師或管理員 | "
+                   "EN: Student job submissions are currently disabled, contact a teacher or admin"
+        )
+
+    # ------------------------------------------------------------------
+    # ZH: 政策檢查 b — 叢集執行中任務上限（admin / teacher 免檢）
+    # EN: Policy check b — cluster running jobs cap (admin/teacher bypass)
+    # ------------------------------------------------------------------
+    if current_user.role not in ("admin", "teacher"):
+        max_concurrent = policy.get("max_concurrent_jobs", 4)
+        running_count = crud.get_running_jobs_count(db)
+        if running_count >= max_concurrent:
+            raise HTTPException(
+                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                detail=f"ZH: 叢集目前已有 {running_count}/{max_concurrent} 個任務執行中，"
+                       f"請稍後再試 | "
+                       f"EN: Cluster at capacity ({running_count}/{max_concurrent} running), "
+                       f"please try again later"
+            )
+
+    # ------------------------------------------------------------------
+    # ZH: 政策檢查 c — 單筆任務迭代次數上限
+    # EN: Policy check c — per-job epochs cap
+    # ------------------------------------------------------------------
+    max_epochs = policy.get("max_epochs_per_job", 1000)
+    if job.config and "epochs" in job.config:
+        try:
+            epochs_val = int(job.config["epochs"])
+            if epochs_val > max_epochs:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"ZH: epochs {epochs_val} 超過上限 {max_epochs} | "
+                           f"EN: epochs {epochs_val} exceeds maximum allowed {max_epochs}"
+                )
+        except (TypeError, ValueError):
+            pass  # ZH: 非整數值由後續訓練框架處理 | EN: Non-int handled by training framework
+
+    # ------------------------------------------------------------------
+    # ZH: 政策檢查 d — 單筆任務批次大小上限
+    # EN: Policy check d — per-job batch size cap
+    # ------------------------------------------------------------------
+    max_batch = policy.get("max_batch_size", 512)
+    if job.config and "batch_size" in job.config:
+        try:
+            batch_val = int(job.config["batch_size"])
+            if batch_val > max_batch:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"ZH: batch_size {batch_val} 超過上限 {max_batch} | "
+                           f"EN: batch_size {batch_val} exceeds maximum allowed {max_batch}"
+                )
+        except (TypeError, ValueError):
+            pass  # ZH: 非整數值由後續訓練框架處理 | EN: Non-int handled by training framework
+
     # ZH: 計算預估 Token 消耗 | EN: Calculate estimated token cost
     estimated_tokens = crud.estimate_job_tokens(job.config)
 
