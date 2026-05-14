@@ -1992,3 +1992,294 @@ ion-icon {
 .bottom-quick-links.vertical-layout .quick-link-card {
     padding: 15px;
 }
+
+
+/* ==============================================================================
+   NOTEBOOK MODULE STYLES
+   ============================================================================== */
+
+/* ── 工具列 ────────────────────────────────────────────────────────────────── */
+.nb-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 10px;
+    padding: 10px 14px;
+    margin-bottom: 10px;
+}
+.nb-toolbar-left,
+.nb-toolbar-right {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+.nb-select-group {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 4px 8px;
+}
+.nb-select-icon { font-size: 15px; color: var(--text-muted); }
+.nb-select-group select {
+    background: transparent;
+    border: none;
+    color: var(--text);
+    font-size: 13px;
+    outline: none;
+    cursor: pointer;
+    padding: 2px 2px;
+}
+.nb-custom-image {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    color: var(--text);
+    font-size: 12px;
+    padding: 5px 10px;
+    width: 220px;
+    outline: none;
+    transition: border-color 0.2s;
+}
+.nb-custom-image:focus { border-color: var(--accent); }
+.nb-save-status {
+    font-size: 11px;
+    color: var(--text-muted);
+    white-space: nowrap;
+}
+
+/* ── 按鈕 ──────────────────────────────────────────────────────────────────── */
+.nb-btn {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    padding: 6px 14px;
+    border: none;
+    border-radius: 8px;
+    font-size: 13px;
+    cursor: pointer;
+    font-weight: 500;
+    transition: opacity 0.15s, transform 0.1s;
+}
+.nb-btn:active { transform: scale(0.96); }
+.nb-btn-run  { background: var(--accent); color: #fff; }
+.nb-btn-stop { background: #ef4444;       color: #fff; }
+.nb-btn-upload {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 10px;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    font-size: 12px;
+    color: var(--text);
+    cursor: pointer;
+    transition: border-color 0.2s;
+}
+.nb-btn-upload:hover { border-color: var(--accent); }
+.nb-btn-icon {
+    background: transparent;
+    border: none;
+    color: var(--text-muted);
+    cursor: pointer;
+    padding: 3px;
+    border-radius: 5px;
+    display: flex;
+    align-items: center;
+    font-size: 16px;
+    transition: color 0.15s, background 0.15s;
+}
+.nb-btn-icon:hover { color: var(--text); background: var(--bg-hover); }
+
+/* ── 資料集列 ──────────────────────────────────────────────────────────────── */
+.nb-dataset-bar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 14px;
+    margin-bottom: 10px;
+    font-size: 13px;
+    flex-wrap: wrap;
+}
+.nb-dataset-name {
+    color: var(--accent-glow);
+    font-weight: 500;
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* ── 格子容器 ──────────────────────────────────────────────────────────────── */
+.nb-cells {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin-bottom: 10px;
+}
+
+/* ── 單一格子 ──────────────────────────────────────────────────────────────── */
+.nb-cell {
+    display: flex;
+    flex-direction: column;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    overflow: hidden;
+    transition: border-color 0.2s;
+}
+.nb-cell:hover { border-color: var(--accent); }
+.nb-cell-accent {
+    height: 3px;
+    width: 100%;
+    border-radius: 10px 10px 0 0;
+}
+.nb-cell-code  .nb-cell-accent { background: var(--accent); }
+.nb-cell-shell .nb-cell-accent { background: #f59e0b; }
+.nb-cell-markdown .nb-cell-accent { background: #6b7280; }
+
+.nb-cell-ctrl {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 4px 10px;
+    border-bottom: 1px solid var(--border);
+    background: var(--bg-elevated);
+}
+.nb-cell-type-badge {
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--text-muted);
+    background: var(--bg-hover);
+    padding: 2px 7px;
+    border-radius: 4px;
+}
+.nb-cell-ctrl-btns { display: flex; align-items: center; gap: 2px; }
+
+.nb-cell-body { padding: 0; }
+
+/* Monaco editor host */
+.nb-cell-editor-host {
+    width: 100%;
+    min-height: 120px;
+}
+
+/* Markdown 格子 */
+.nb-cell-md-rendered {
+    padding: 12px 16px;
+    font-size: 14px;
+    line-height: 1.6;
+    cursor: default;
+    min-height: 40px;
+}
+.nb-cell-md-rendered code {
+    background: var(--bg-hover);
+    padding: 1px 5px;
+    border-radius: 4px;
+    font-size: 12px;
+}
+.nb-cell-md-edit {
+    width: 100%;
+    min-height: 80px;
+    padding: 12px 16px;
+    background: transparent;
+    border: none;
+    color: var(--text);
+    font-size: 14px;
+    resize: vertical;
+    outline: none;
+    font-family: monospace;
+    line-height: 1.5;
+    box-sizing: border-box;
+}
+
+/* ── 新增格子列 ────────────────────────────────────────────────────────────── */
+.nb-add-row {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 14px;
+    flex-wrap: wrap;
+}
+.nb-add-btn {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 5px 12px;
+    background: transparent;
+    border: 1px dashed var(--border);
+    border-radius: 8px;
+    color: var(--text-muted);
+    font-size: 12px;
+    cursor: pointer;
+    transition: border-color 0.2s, color 0.2s;
+}
+.nb-add-btn:hover { border-color: var(--accent); color: var(--text); }
+
+/* ── 輸出面板 ──────────────────────────────────────────────────────────────── */
+.nb-output-panel {
+    padding: 12px 14px;
+    margin-top: 8px;
+}
+.nb-output-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 8px;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-muted);
+}
+.nb-output-actions { display: flex; align-items: center; gap: 6px; }
+.nb-job-status {
+    font-size: 11px;
+    padding: 2px 8px;
+    border-radius: 20px;
+    background: var(--bg-hover);
+}
+.nb-status-running   { background: #0ea5e9; color: #fff; }
+.nb-status-completed { background: #22c55e; color: #fff; }
+.nb-status-failed    { background: #ef4444; color: #fff; }
+.nb-status-cancelled { background: #6b7280; color: #fff; }
+
+.nb-progress-wrap {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 8px;
+}
+.nb-progress-bar {
+    flex: 1;
+    height: 6px;
+    background: var(--accent);
+    border-radius: 3px;
+    transition: width 0.4s ease;
+    width: 0%;
+}
+.nb-progress-text { font-size: 11px; color: var(--text-muted); min-width: 34px; }
+
+.nb-output-log {
+    background: var(--bg-elevated);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px 14px;
+    font-family: 'Courier New', monospace;
+    font-size: 12px;
+    line-height: 1.55;
+    color: var(--text);
+    white-space: pre-wrap;
+    word-break: break-all;
+    max-height: 420px;
+    overflow-y: auto;
+    min-height: 80px;
+}
+
+/* ── Notebook 面板全寬 ─────────────────────────────────────────────────────── */
+#compute-notebook-page { width: 100%; }
