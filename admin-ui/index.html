@@ -195,9 +195,9 @@
                     <h3><ion-icon name="people-outline" style="margin-right:6px;"></ion-icon> <span
                             data-i18n="admin_users">使用者管理</span></h3>
                     <div style="display:flex; gap:10px; align-items:center;">
-                        <input type="text" id="admin-user-search" class="config-select" placeholder="Search users... (Passwords are encrypted)" style="padding: 4px 10px; width: 250px; border-radius: 8px; font-size: 13px;">
+                        <input type="text" id="admin-user-search" class="config-select" data-i18n="placeholder_search_users" placeholder="Search users... (Passwords are encrypted)" style="padding: 4px 10px; width: 250px; border-radius: 8px; font-size: 13px;">
                         <label style="font-size:12px; display:flex; align-items:center; gap:4px; color:var(--text-muted); cursor:pointer;">
-                            <input type="checkbox" id="auto-refresh-users" checked> Auto Refresh
+                            <input type="checkbox" id="auto-refresh-users" checked> <span data-i18n="label_auto_refresh">Auto Refresh</span>
                         </label>
                         <ion-icon name="refresh-circle-outline" id="refresh-admin-btn" class="refresh-icon" title="Refresh"></ion-icon>
                     </div>
@@ -224,7 +224,7 @@
                 <!-- Batch Token Limit Update -->
                 <div style="padding: 10px 15px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
                     <span style="font-size: 13px; color: var(--text-muted);" data-i18n="batch_token_label">Batch set all users' token limit:</span>
-                    <input type="number" id="batch-token-limit" class="config-select" style="width: 160px; padding: 6px 10px; border-radius: 8px;" placeholder="e.g. 5000000" value="100000">
+                    <input type="number" id="batch-token-limit" class="config-select" style="width: 160px; padding: 6px 10px; border-radius: 8px;" data-i18n="placeholder_batch_token" placeholder="e.g. 5000000" value="100000">
                     <button id="btn-batch-tokens" class="ready-btn config-save-btn" style="width: auto; padding: 6px 16px; font-size: 13px;" data-i18n="btn_batch_apply">Apply to All</button>
                     <button id="btn-batch-reset-usage" class="ready-btn" style="width: auto; padding: 6px 16px; font-size: 13px; border-color: var(--neon-yellow); color: var(--neon-yellow); background: rgba(250,204,21,0.08);" data-i18n="btn_reset_all_usage">
                         <ion-icon name="refresh-outline" style="margin-right:4px; vertical-align:middle;"></ion-icon>Reset All Usage
@@ -256,18 +256,18 @@
                         </div>
                         <div class="input-wrap">
                             <ion-icon name="lock-closed-outline"></ion-icon>
-                            <input type="text" id="provision-password" placeholder="Password (Leave blank to auto-generate)" data-i18n-placeholder="add_test_custom_password">
+                            <input type="text" id="provision-password" data-i18n-placeholder="add_test_custom_password" placeholder="Password (Leave blank to auto-generate)">
                         </div>
                         <div class="input-wrap">
                             <ion-icon name="business-outline"></ion-icon>
-                            <input type="text" id="provision-department" placeholder="Department (Optional)" data-i18n-placeholder="th_department">
+                            <input type="text" id="provision-department" data-i18n-placeholder="placeholder_dept" placeholder="Department (Optional)">
                         </div>
                         <div class="input-wrap" style="flex: 1;">
                             <ion-icon name="shield-outline"></ion-icon>
                             <select id="provision-role" class="config-select" style="width: 100%; padding: 10px; border-radius: 8px;">
-                                <option value="student">Student</option>
-                                <option value="teacher">Teacher</option>
-                                <option value="admin">Admin</option>
+                                <option value="student" data-i18n="role_student">學生</option>
+                                <option value="teacher" data-i18n="role_teacher">教師</option>
+                                <option value="admin"   data-i18n="role_admin">管理員</option>
                             </select>
                         </div>
                         <button type="submit" class="ready-btn config-save-btn" style="width: 100%;" data-i18n="btn_add_test_submit">Create Account</button>
@@ -301,7 +301,7 @@
                         </div>
                         <div class="input-wrap" id="edit-dept-container" style="display: none;">
                             <ion-icon name="business-outline"></ion-icon>
-                            <input type="text" id="edit-department" data-i18n-placeholder="th_department" placeholder="Department">
+                            <input type="text" id="edit-department" data-i18n-placeholder="placeholder_dept" placeholder="Department (Optional)">
                         </div>
                         <div class="input-wrap" id="edit-pwd-container" style="display: none;">
                             <ion-icon name="key-outline"></ion-icon>
@@ -311,9 +311,9 @@
                             <div class="input-wrap" style="flex: 1;">
                                 <ion-icon name="shield-outline"></ion-icon>
                                 <select id="edit-role" disabled class="config-select" style="width: 100%; padding: 10px; border-radius: 8px;">
-                                    <option value="student">Student</option>
-                                    <option value="teacher">Teacher</option>
-                                    <option value="admin">Admin</option>
+                                    <option value="student" data-i18n="role_student">學生</option>
+                                    <option value="teacher" data-i18n="role_teacher">教師</option>
+                                    <option value="admin"   data-i18n="role_admin">管理員</option>
                                 </select>
                             </div>
                             <div class="input-wrap" style="flex: 1;">
@@ -488,18 +488,18 @@
                         <div class="input-wrap" style="flex: 1;">
                             <ion-icon name="swap-horizontal-outline"></ion-icon>
                             <select id="model-type" class="config-select" style="width: 100%; padding: 10px; border-radius: 8px;" onchange="toggleModelTypeFields()">
-                                <option value="api">API 模型 (雲端)</option>
-                                <option value="local">本地模型 (Local)</option>
+                                <option value="api"   data-i18n="opt_model_api">API 模型（雲端）</option>
+                                <option value="local" data-i18n="opt_model_local">本地模型</option>
                             </select>
                         </div>
                         <!-- Common Fields -->
                         <div class="input-wrap">
                             <ion-icon name="text-outline"></ion-icon>
-                            <input type="text" id="model-name" required placeholder="模型名稱 (Model Name)">
+                            <input type="text" id="model-name" required data-i18n="placeholder_model_name" placeholder="模型名稱">
                         </div>
                         <div class="input-wrap">
                             <ion-icon name="document-text-outline"></ion-icon>
-                            <input type="text" id="model-description" placeholder="描述 (Description)">
+                            <input type="text" id="model-description" data-i18n="placeholder_model_desc" placeholder="描述">
                         </div>
                         <!-- API-specific Fields -->
                         <div id="model-api-fields">
@@ -507,20 +507,20 @@
                                 <div class="input-wrap" style="flex: 1;">
                                     <ion-icon name="cloud-outline"></ion-icon>
                                     <select id="model-api-provider" class="config-select" style="width: 100%; padding: 10px; border-radius: 8px;">
-                                        <option value="openai">OpenAI</option>
-                                        <option value="anthropic">Anthropic (Claude)</option>
-                                        <option value="google">Google (Gemini)</option>
-                                        <option value="ollama">Ollama (本地 API)</option>
-                                        <option value="other">其他 (Other)</option>
+                                        <option value="openai"    data-i18n="opt_provider_openai">OpenAI</option>
+                                        <option value="anthropic" data-i18n="opt_provider_anthropic">Anthropic (Claude)</option>
+                                        <option value="google"    data-i18n="opt_provider_google">Google (Gemini)</option>
+                                        <option value="ollama"    data-i18n="opt_provider_ollama">Ollama（本地 API）</option>
+                                        <option value="other"     data-i18n="opt_provider_other">其他</option>
                                     </select>
                                 </div>
                                 <div class="input-wrap">
                                     <ion-icon name="link-outline"></ion-icon>
-                                    <input type="text" id="model-api-endpoint" placeholder="API Endpoint (e.g. https://api.openai.com/v1)">
+                                    <input type="text" id="model-api-endpoint" data-i18n="placeholder_model_endpoint" placeholder="API Endpoint (e.g. https://api.openai.com/v1)">
                                 </div>
                                 <div class="input-wrap">
                                     <ion-icon name="pricetag-outline"></ion-icon>
-                                    <input type="text" id="model-api-model-id" placeholder="上游模型 ID (e.g. gpt-4o, claude-3.5-sonnet)">
+                                    <input type="text" id="model-api-model-id" data-i18n="placeholder_model_id" placeholder="上游模型 ID (e.g. gpt-4o, claude-3.5-sonnet)">
                                 </div>
                             </div>
                         </div>
@@ -529,19 +529,19 @@
                             <div style="display: flex; flex-direction: column; gap: 15px;">
                                 <div class="input-wrap">
                                     <ion-icon name="code-slash-outline"></ion-icon>
-                                    <input type="text" id="model-framework" placeholder="框架 (e.g. PyTorch, TensorFlow, ONNX)">
+                                    <input type="text" id="model-framework" data-i18n="placeholder_model_framework" placeholder="框架 (e.g. PyTorch, TensorFlow, ONNX)">
                                 </div>
                                 <div class="input-wrap">
                                     <ion-icon name="folder-outline"></ion-icon>
-                                    <input type="text" id="model-storage-path" placeholder="儲存路徑 (Storage Path)">
+                                    <input type="text" id="model-storage-path" data-i18n="placeholder_model_storage" placeholder="儲存路徑">
                                 </div>
                             </div>
                         </div>
                         <div class="input-wrap" style="flex: 1;">
                             <ion-icon name="eye-outline"></ion-icon>
                             <select id="model-is-public" class="config-select" style="width: 100%; padding: 10px; border-radius: 8px;">
-                                <option value="0">私有 (Private)</option>
-                                <option value="1">公開 (Public)</option>
+                                <option value="0" data-i18n="opt_visibility_private">私有</option>
+                                <option value="1" data-i18n="opt_visibility_public">公開</option>
                             </select>
                         </div>
                         <button type="submit" class="ready-btn config-save-btn" style="width: 100%;" data-i18n="btn_save_config">儲存</button>
@@ -636,7 +636,7 @@
                         <div style="display:flex; gap:10px; align-items:center;">
                             <span data-i18n="filter_dept" style="font-size: 14px; color: var(--text-muted);">學系:</span>
                             <select id="analytics-dept-filter" class="config-select" style="padding: 4px 10px; border-radius: 8px;" onchange="fetchAnalyticsData()">
-                                <option value="all">全校 (All)</option>
+                                <option value="all" data-i18n="opt_dept_all">全校</option>
                             </select>
                             <button class="ready-btn config-save-btn" onclick="exportAnalyticsCharts()" style="padding: 4px 12px; font-size: 13px; width: auto;" data-i18n="btn_export_chart"><ion-icon name="download-outline" style="margin-right: 4px;"></ion-icon>匯出圖表</button>
                             <ion-icon name="refresh-circle-outline" onclick="fetchAnalyticsData()" class="refresh-icon" title="Refresh"></ion-icon>
