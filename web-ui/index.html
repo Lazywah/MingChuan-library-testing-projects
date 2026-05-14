@@ -311,7 +311,7 @@
             <main id="dashboard-page" class="page-view">
 
                 <!-- ZH: 頂部: 新增任務表單 | EN: TOP: Submit New Job -->
-                <!-- ZH: 運算任務分頁 (高算力 / 中低算力) | EN: Compute Task Sub-tabs -->
+                <!-- ZH: 運算任務分頁 (高算力 / 中低算力 / Notebook) | EN: Compute Task Sub-tabs -->
                 <div class="compute-sub-tabs">
                     <button class="sub-tab-btn active" id="sub-tab-high" data-subtab="compute-high">
                         <ion-icon name="flash-outline" style="color:#f59e0b;"></ion-icon> <span
@@ -320,6 +320,10 @@
                     <button class="sub-tab-btn" id="sub-tab-midlow" data-subtab="compute-midlow">
                         <ion-icon name="speedometer-outline" style="color:#3b82f6;"></ion-icon> <span
                             data-i18n="compute_mid_low">Mid / Low Compute</span>
+                    </button>
+                    <button class="sub-tab-btn" id="sub-tab-notebook" data-subtab="compute-notebook">
+                        <ion-icon name="code-slash-outline" style="color:#a78bfa;"></ion-icon> <span
+                            data-i18n="compute_notebook">Notebook</span>
                     </button>
                 </div>
 
@@ -528,6 +532,112 @@
                                 </div>
                             </div>
                         </div>
+                    </section>
+
+                    <!-- ZH: Notebook 面板 | EN: Notebook Panel -->
+                    <section class="compute-panel sub-page-view" id="compute-notebook-page"
+                        style="background: transparent; box-shadow: none; padding: 0; width: 100%;">
+
+                        <!-- ZH: 工具列 | EN: Toolbar -->
+                        <div class="nb-toolbar widget">
+                            <div class="nb-toolbar-left">
+                                <!-- ZH: 框架選擇 | EN: Framework selector -->
+                                <div class="nb-select-group">
+                                    <ion-icon name="cube-outline" class="nb-select-icon"></ion-icon>
+                                    <select id="nb-framework" title="Framework">
+                                        <option value="pytorch">PyTorch</option>
+                                        <option value="tensorflow">TensorFlow</option>
+                                        <option value="transformers">HuggingFace Transformers</option>
+                                        <option value="llama.cpp">llama.cpp</option>
+                                        <option value="vllm">vLLM</option>
+                                        <option value="custom">自訂 Custom</option>
+                                    </select>
+                                </div>
+                                <!-- ZH: 自訂 Image 輸入框（選 custom 才顯示）| EN: Custom image input -->
+                                <input id="nb-custom-image" class="nb-custom-image hidden"
+                                    type="text" placeholder="docker.io/your/image:tag" />
+                                <!-- ZH: 執行模式 | EN: Execution mode -->
+                                <div class="nb-select-group">
+                                    <ion-icon name="play-circle-outline" class="nb-select-icon"></ion-icon>
+                                    <select id="nb-mode">
+                                        <option value="training"  data-i18n-option="nb_mode_train">訓練 Training</option>
+                                        <option value="finetuning" data-i18n-option="nb_mode_finetune">微調 Fine-tuning</option>
+                                        <option value="inference" data-i18n-option="nb_mode_infer">推論 Inference</option>
+                                        <option value="preprocess" data-i18n-option="nb_mode_preprocess">資料前處理 Preprocess</option>
+                                    </select>
+                                </div>
+                                <!-- ZH: GPU 節點選擇 | EN: GPU node selector -->
+                                <div class="nb-select-group">
+                                    <ion-icon name="hardware-chip-outline" class="nb-select-icon"></ion-icon>
+                                    <select id="nb-gpu-node">
+                                        <option value="auto" data-i18n-option="nb_gpu_auto">自動 Auto</option>
+                                        <!-- ZH: 動態填充線上節點 | EN: Dynamically populated from /nodes -->
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="nb-toolbar-right">
+                                <span id="nb-save-status" class="nb-save-status" data-i18n="nb_saved">已儲存</span>
+                                <button id="nb-run-btn" class="nb-btn nb-btn-run">
+                                    <ion-icon name="play-outline"></ion-icon>
+                                    <span data-i18n="nb_run_all">Run All</span>
+                                </button>
+                                <button id="nb-stop-btn" class="nb-btn nb-btn-stop hidden">
+                                    <ion-icon name="stop-outline"></ion-icon>
+                                    <span data-i18n="nb_stop">Stop</span>
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- ZH: 資料集列 | EN: Dataset bar -->
+                        <div class="nb-dataset-bar widget">
+                            <ion-icon name="folder-open-outline" style="color:var(--accent-glow)"></ion-icon>
+                            <span data-i18n="nb_dataset_label">資料集 Dataset：</span>
+                            <span id="nb-dataset-name" class="nb-dataset-name" data-i18n="nb_dataset_none">（未選擇）</span>
+                            <label class="nb-btn nb-btn-upload" for="nb-dataset-input">
+                                <ion-icon name="cloud-upload-outline"></ion-icon>
+                                <span data-i18n="nb_upload">上傳</span>
+                            </label>
+                            <input id="nb-dataset-input" type="file"
+                                accept=".zip,.csv,.jsonl,.json,.txt,.tar,.gz" style="display:none">
+                        </div>
+
+                        <!-- ZH: 格子容器 | EN: Cells container -->
+                        <div id="nb-cells" class="nb-cells"></div>
+
+                        <!-- ZH: 新增格子列 | EN: Add cell row -->
+                        <div class="nb-add-row">
+                            <button class="nb-add-btn" id="nb-add-code"  data-type="code">
+                                <ion-icon name="add-outline"></ion-icon>
+                                <span data-i18n="nb_add_code">+ Code</span>
+                            </button>
+                            <button class="nb-add-btn" id="nb-add-shell" data-type="shell">
+                                <ion-icon name="terminal-outline"></ion-icon>
+                                <span data-i18n="nb_add_shell">+ Shell</span>
+                            </button>
+                            <button class="nb-add-btn" id="nb-add-md"   data-type="markdown">
+                                <ion-icon name="document-text-outline"></ion-icon>
+                                <span data-i18n="nb_add_md">+ Markdown</span>
+                            </button>
+                        </div>
+
+                        <!-- ZH: 輸出面板 | EN: Output panel -->
+                        <div id="nb-output-panel" class="nb-output-panel widget hidden">
+                            <div class="nb-output-header">
+                                <span data-i18n="nb_output_title">執行輸出 Output</span>
+                                <div class="nb-output-actions">
+                                    <span id="nb-job-status" class="nb-job-status"></span>
+                                    <button id="nb-clear-output" class="nb-btn-icon" title="Clear">
+                                        <ion-icon name="trash-outline"></ion-icon>
+                                    </button>
+                                </div>
+                            </div>
+                            <div class="nb-progress-wrap hidden" id="nb-progress-wrap">
+                                <div class="nb-progress-bar" id="nb-progress-bar"></div>
+                                <span id="nb-progress-text" class="nb-progress-text">0%</span>
+                            </div>
+                            <pre id="nb-output-log" class="nb-output-log scrollbar-custom"></pre>
+                        </div>
+
                     </section>
                 </div>
 
@@ -965,6 +1075,9 @@
             </div>
         </div>
     </div>
+
+    <!-- ZH: Monaco Editor (語法高亮程式碼編輯器) | EN: Monaco Editor (syntax-highlighting code editor) -->
+    <script src="https://cdn.jsdelivr.net/npm/monaco-editor@0.44.0/min/vs/loader.js"></script>
 
     <!-- ZH: 載入圖標庫與主程式碼 | EN: Load Icon library and Main Logic -->
     <script type="module" src="https://unpkg.com/ionicons@7.1.0/dist/ionicons/ionicons.esm.js"></script>
