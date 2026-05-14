@@ -282,6 +282,11 @@ def create_job(db: Session, job: schemas.JobCreate, user_id: str) -> models.Trai
         config=json.dumps(job.config) if job.config else None,
         script_path=job.script_path,
         dataset_path=job.dataset_path,
+        # ZH: Notebook 欄位 | EN: Notebook fields
+        docker_image=job.docker_image,
+        inline_code=job.inline_code,
+        entry_args=json.dumps(job.entry_args) if job.entry_args else None,
+        preferred_node=job.preferred_node if job.preferred_node not in (None, "auto", "") else None,
         status="pending"
     )
     db.add(db_job)
@@ -552,3 +557,62 @@ def upsert_worker_heartbeat(
     db.commit()
     db.refresh(node)
     return node
+
+
+# ==============================================================================
+# ZH: Notebook CRUD | EN: Notebook CRUD
+# ==============================================================================
+
+def get_notebook(db: Session, user_id: str) -> Optional[models.Notebook]:
+    """
+    ZH: 取得使用者的 Notebook（每人僅一份）
+    EN: Get user's notebook (one per user)
+    """
+    return db.query(models.Notebook).filter(
+        models.Notebook.user_id == user_id
+    ).first()
+
+
+def save_notebook(
+    db: Session,
+    user_id: str,
+    cells_json: str,
+    env_json: str
+) -> models.Notebook:
+    """
+    ZH: 建立或更新使用者的 Notebook（upsert）
+    EN: Create or update user's notebook (upsert)
+    """
+    notebook = db.query(models.Notebook).filter(
+        models.Notebook.user_id == user_id
+    ).first()
+
+    if notebook:
+        notebook.cells = cells_json
+        notebook.environment = env_json
+    else:
+        notebook = models.Notebook(
+            user_id=user_id,
+            cells=cells_json,
+            environment=env_json,
+        )
+        db.add(notebook)
+
+    db.commit()
+    db.refresh(notebook)
+    return notebook
+
+
+# ==============================================================================
+# ZH: Worker 節點查詢 | EN: Worker Node Query
+# ==============================================================================
+
+def get_online_worker_nodes(db: Session, timeout_seconds: int = 90) -> List[models.WorkerHeartbeat]:
+    """
+    ZH: 取得在線的 Worker 節點列表（最後心跳在 timeout_seconds 秒內）
+    EN: Get online worker nodes (last heartbeat within timeout_seconds)
+    """
+    cutoff = datetime.now(timezone.utc) - timedelta(seconds=timeout_seconds)
+    return db.query(models.WorkerHeartbeat).filter(
+        models.WorkerHeartbeat.last_seen >= cutoff
+    ).order_by(models.WorkerHeartbeat.node_id).all()
