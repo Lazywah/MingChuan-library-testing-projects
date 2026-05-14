@@ -6,6 +6,7 @@ import subprocess
 import requests
 import re
 import threading
+import shutil
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger(__name__)
@@ -121,40 +122,96 @@ def report_update(job_id, payload, *, retries: int = 3, backoff: float = 2.0) ->
 
 def parse_progress(log_line):
     """
-    ZH: 解析常見的進度格式，例如 "Epoch 2/10" 或 "Progress: 25%"
+    ZH: 解析常見的進度格式
     EN: Parse common progress formats
+
+    ZH: 支援格式：
+        - "Epoch 2/10"           PyTorch 訓練
+        - "Progress: 25%"        通用格式
+        - "[  2/ 10]"            llama.cpp fine-tune / gguf 工具
+        - "step 50/200"          HuggingFace Trainer
+    EN: Supported formats:
+        - "Epoch 2/10"           PyTorch training
+        - "Progress: 25%"        Generic
+        - "[  2/ 10]"            llama.cpp fine-tune / gguf tools
+        - "step 50/200"          HuggingFace Trainer
     """
-    match = re.search(r'Epoch (\d+)/(\d+)', log_line)
+    # ZH: PyTorch: Epoch 2/10 | EN: PyTorch
+    match = re.search(r'Epoch (\d+)/(\d+)', log_line, re.IGNORECASE)
     if match:
         current, total = int(match.group(1)), int(match.group(2))
         return (current / total) * 100.0
-    
-    match = re.search(r'Progress:? (\d+(?:\.\d+)?)%', log_line)
+
+    # ZH: HuggingFace Trainer: step 50/200 | EN: HuggingFace
+    match = re.search(r'\bstep\s+(\d+)/(\d+)', log_line, re.IGNORECASE)
+    if match:
+        current, total = int(match.group(1)), int(match.group(2))
+        return (current / total) * 100.0
+
+    # ZH: llama.cpp fine-tune: [  2/ 10] | EN: llama.cpp
+    match = re.search(r'\[\s*(\d+)\s*/\s*(\d+)\s*\]', log_line)
+    if match:
+        current, total = int(match.group(1)), int(match.group(2))
+        return (current / total) * 100.0
+
+    # ZH: 通用百分比: Progress: 25% | EN: Generic percentage
+    match = re.search(r'Progress:?\s*(\d+(?:\.\d+)?)%', log_line, re.IGNORECASE)
     if match:
         return float(match.group(1))
-    
+
     return None
 
 def execute_job(job):
-    job_id = job.get("job_id")
-    script = job.get("script_path", "/workspace/train.py")
-    gpu_id = job.get("gpu_id", "0")
-    
-    logger.info(f"Starting job {job_id} on GPU {gpu_id} executing {script}")
-    
-    # ZH: 通知主機任務已開始 | EN: Notify master job started
+    job_id    = job.get("job_id")
+    gpu_id    = job.get("gpu_id", "0")
+    image     = job.get("docker_image") or DEFAULT_IMAGE
+    inline_code = job.get("inline_code")
+    entry_args  = job.get("entry_args")   # list[str] or None
+
+    logger.info(f"Starting job {job_id} on GPU {gpu_id} | image={image}")
+
+    # ZH: 通知服務層任務已開始 | EN: Notify service layer job started
     report_update(job_id, {"status": "running"})
 
-    # ZH: 準備 docker run 指令 | EN: Prepare docker run command
-    # ZH: 注意！這裡啟動的是兄弟容器 (Sibling container)
+    # ZH: 決定容器入口指令與額外 -v 掛載 | EN: Determine container entry and extra mounts
+    extra_mounts: list[str] = []
+    code_dir: str | None = None
+
+    if inline_code:
+        # ZH: Notebook 模式 — 將 compileNotebook() 產出的 shell script 寫入暫存目錄
+        # EN: Notebook mode — write compiled shell script to temp dir and mount it
+        code_dir = f"/tmp/job_{job_id}"
+        os.makedirs(code_dir, exist_ok=True)
+        script_file = os.path.join(code_dir, "run.sh")
+        with open(script_file, "w", encoding="utf-8") as f:
+            f.write(inline_code)
+        os.chmod(script_file, 0o755)
+        extra_mounts = ["-v", f"{code_dir}:/job_code"]
+        entry = ["bash", "-eu", "/job_code/run.sh"]
+        logger.info(f"Notebook mode: script written to {script_file}")
+    elif entry_args:
+        # ZH: 自訂入口（llama.cpp、vLLM 等非 Python 工具）
+        # EN: Custom entry (llama.cpp, vLLM, and other non-Python tools)
+        entry = entry_args
+    else:
+        # ZH: 傳統模式 — 執行 script_path 指向的 Python 腳本
+        # EN: Legacy mode — run Python script at script_path
+        script = job.get("script_path", "/workspace/train.py")
+        entry = ["python", "-u", script]
+
+    # ZH: 組裝 docker run 指令（兄弟容器模式）
+    # EN: Build docker run command (sibling container pattern)
     cmd = [
         "docker", "run", "--rm",
         "--gpus", f"device={gpu_id}",
         "-v", f"{STORAGE_MOUNT_PATH}:/workspace",
-        DEFAULT_IMAGE,
-        "python", "-u", script
+        *extra_mounts,
+        image,
+        *entry
     ]
-    
+
+    logger.info(f"CMD: {' '.join(cmd)}")
+
     try:
         process = subprocess.Popen(
             cmd,
@@ -162,41 +219,46 @@ def execute_job(job):
             stderr=subprocess.STDOUT,
             text=True
         )
-        
+
         for line in process.stdout:
             line = line.strip()
             if not line:
                 continue
-            
+
             logger.info(f"[{job_id}] {line}")
             payload = {"log": line}
-            
+
             prog = parse_progress(line)
             if prog is not None:
                 payload["progress"] = prog
-                
+
             report_update(job_id, payload)
-            
+
         process.wait()
-        
+
         if process.returncode == 0:
             logger.info(f"Job {job_id} completed successfully.")
-            # ZH: 假設產出在 /workspace/outputs/job_id/ | EN: Assume output in /workspace/outputs/job_id/
             report_update(job_id, {
-                "status": "completed", 
-                "progress": 100.0,
+                "status":      "completed",
+                "progress":    100.0,
                 "output_path": f"/workspace/outputs/{job_id}/model.pt"
             })
         else:
             logger.error(f"Job {job_id} failed with exit code {process.returncode}.")
             report_update(job_id, {
-                "status": "failed",
+                "status":        "failed",
                 "error_message": f"Docker container exited with code {process.returncode}"
             })
-            
+
     except Exception as e:
         logger.error(f"Failed to execute job {job_id}: {e}")
         report_update(job_id, {"status": "failed", "error_message": str(e)})
+
+    finally:
+        # ZH: 清理 Notebook 暫存目錄 | EN: Clean up notebook temp directory
+        if code_dir and os.path.exists(code_dir):
+            shutil.rmtree(code_dir, ignore_errors=True)
+            logger.debug(f"Cleaned up temp dir: {code_dir}")
 
 def poll_loop():
     logger.info("Worker node %s started. Polling %s every %ds, heartbeat every %ds.",
