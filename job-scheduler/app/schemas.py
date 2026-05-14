@@ -23,7 +23,7 @@ EN: Modular design:
 ==============================================================================
 """
 
-from pydantic import BaseModel, EmailStr, Field, ConfigDict
+from pydantic import BaseModel, EmailStr, Field, ConfigDict, field_validator
 from datetime import datetime
 from typing import Optional, Dict, Any, List
 
@@ -39,6 +39,18 @@ class UserCreate(BaseModel):
     password: str                                    # ZH: 密碼 (明文，後端會雜湊) | EN: Password (plaintext, hashed by backend)
     role: Optional[str] = "student"                  # ZH: 角色 (預設 student) | EN: Role (default: student)
     department: Optional[str] = None                 # ZH: 學系資訊 | EN: Department
+
+    # C-4: ZH: 防止公開註冊自行提升為 admin/teacher，只允許 student
+    # EN: Block self-elevation to admin/teacher via public registration — student only
+    @field_validator("role")
+    @classmethod
+    def role_must_be_student(cls, v: Optional[str]) -> str:
+        if v not in (None, "student"):
+            raise ValueError(
+                "ZH: 公開註冊只允許 student 角色，teacher/admin 由管理員配發 | "
+                "EN: Public registration only allows role=student; teacher/admin are provisioned by admins"
+            )
+        return v or "student"
 
 
 class UserUpdate(BaseModel):

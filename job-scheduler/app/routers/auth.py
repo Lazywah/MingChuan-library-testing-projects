@@ -28,8 +28,10 @@ from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 from datetime import datetime, timezone
 
+import hmac as _hmac
+
 from .. import crud, schemas, models
-from ..auth import authenticate_user, create_access_token, get_current_user
+from ..auth import authenticate_user, create_access_token, get_current_user, require_role
 from ..database import get_db
 from ..services import email_service
 from ..rate_limit import limiter
@@ -52,13 +54,14 @@ router = APIRouter(tags=["認證 Authentication"])
 # EN: Flow: Validate data → check duplicate → hash password → create user + quota
 # ==============================================================================
 @router.post("/register", response_model=schemas.UserResponse, status_code=status.HTTP_201_CREATED)
-def register(user: schemas.UserCreate, db: Session = Depends(get_db)):
+@limiter.limit("5/minute")  # C-1: ZH: 防止暴力大量建號 | EN: Prevent mass account creation
+async def register(request: Request, user: schemas.UserCreate, db: Session = Depends(get_db)):
     """
     ZH: 註冊新使用者
     EN: Register a new user
 
-    ZH: 限制：username 和 email 必須唯一
-    EN: Constraints: username and email must be unique
+    ZH: 限制：username 和 email 必須唯一；角色限定 student
+    EN: Constraints: username and email must be unique; role forced to student
     """
     # ZH: 檢查使用者名稱是否已存在 | EN: Check if username exists
     if crud.get_user_by_username(db, username=user.username):
@@ -109,7 +112,8 @@ async def login(
         for sso_user in mock_users:
             sso_id = sso_user.get("student_id")
             sso_pwd = sso_user.get("password", sso_id)
-            if sso_id == form_data.username and sso_pwd == form_data.password:
+            # H-3: ZH: 使用 hmac.compare_digest 防計時攻擊 | EN: Use constant-time compare to prevent timing attacks
+            if sso_id == form_data.username and _hmac.compare_digest(sso_pwd, form_data.password):
                 # 符合列表，擷取或建立此使用者
                 user = crud.get_user_by_username(db, username=form_data.username)
                 if not user:
@@ -154,7 +158,8 @@ async def login(
             ip_addr = request.client.host if request.client else "Unknown"
             
             with open(log_path, "a", encoding="utf-8") as f:
-                f.write(f"[{timestamp}] User '{user.username}' (Role: {user.role}, Email: {user.email}) logged in from IP: {ip_addr}\n")
+                # H-2: ZH: 不記錄 Email，避免個資洩漏 | EN: Omit email to avoid PII exposure
+                f.write(f"[{timestamp}] User '{user.username}' (Role: {user.role}) logged in from IP: {ip_addr}\n")
         except Exception as e:
             logger.error(f"Failed to write login log: {e}")
 
@@ -175,7 +180,9 @@ async def login(
 
 
 @router.post("/forgot-password")
-def forgot_password(
+@limiter.limit("3/hour")  # C-2: ZH: 防郵件炸彈 | EN: Prevent email-bombing via reset requests
+async def forgot_password(
+    request: Request,
     payload: schemas.AuthForgotPassword,
     background_tasks: BackgroundTasks,
     db: Session = Depends(get_db)
@@ -186,30 +193,38 @@ def forgot_password(
         # ZH: 安全考量，無論是否找到，都回傳模糊訊息或直接回報錯誤
         # EN: Security consideration, return vague message or standard error
         raise HTTPException(status_code=400, detail="Invalid username or email")
-        
+
     import secrets
     import string
     import passlib.hash
-    
+    from ..config import settings as _settings
+
     # 產生 8 碼英數混合密碼
     alphabet = string.ascii_letters + string.digits
     temp_password = ''.join(secrets.choice(alphabet) for i in range(8))
-    
+
     # 更新密碼
     user.hashed_password = passlib.hash.bcrypt.hash(temp_password)
     db.commit()
-    
-    # ZH: 發送臨時密碼郵件 | EN: Send temp password email
-    background_tasks.add_task(
-        email_service.send_temp_password,
-        user.email,
-        user.username,
-        temp_password,
-        False
-    )
-    
+
+    # C-11: ZH: 有設定 SMTP 則寄信，否則將臨時密碼回傳 (避免密碼消失無法取得)
+    # EN: Send email when SMTP is configured; otherwise return temp password in response
+    email_sent = bool(_settings.SMTP_SERVER)
+    if email_sent:
+        background_tasks.add_task(
+            email_service.send_temp_password,
+            user.email,
+            user.username,
+            temp_password,
+            False
+        )
+
     logger.info(f"ZH: 忘記密碼重設成功: {user.username} | EN: Password reset successful: {user.username}")
-    return {"message": "Password reset successful, temporary password sent to email"}
+    return {
+        "message": "Password reset successful",
+        "temp_password": None if email_sent else temp_password,
+        "email_sent": email_sent,
+    }
 
 
 # ==============================================================================
@@ -298,26 +313,30 @@ def get_token_usage(
 # ==============================================================================
 # ZH: POST /usage/increment - 增加 Token 使用量
 # EN: POST /usage/increment - Increment token usage
-# ZH: 用途：供 Job Scheduler 或 Portkey Token Tracking 呼叫
-# EN: Purpose: Called by Job Scheduler or Portkey Token Tracking
+# ZH: 用途：供 Job Scheduler 或 Portkey Token Tracking 呼叫（限 admin 角色）
+# EN: Purpose: Called by Job Scheduler or Portkey (admin role required)
 # ==============================================================================
 @router.post("/usage/increment")
 def increment_token_usage(
     request: schemas.TokenIncrementRequest,
-    current_user: models.User = Depends(get_current_user),
+    # C-3: ZH: 限制為 admin 角色，防止一般使用者自行操控 Token 計數
+    # EN: Restrict to admin role — prevents students from self-manipulating counters
+    current_user: models.User = Depends(require_role("admin")),
     db: Session = Depends(get_db)
 ):
     """
-    ZH: 增加使用者 Token 使用量，超過上限回傳 429
-    EN: Increment user token usage, returns 429 if limit exceeded
+    ZH: 扣減指定使用者 Token 配額（原子 UPDATE），超額回傳 429
+    EN: Atomically deduct token quota; returns 429 if limit exceeded
     """
-    usage = crud.increment_token_usage(db, user_id=current_user.id, tokens=request.tokens)
-
-    if usage.tokens_used > usage.tokens_limit:
+    # C-3: ZH: 改用原子扣減，防止超額後仍計入 | EN: Atomic deduct — never over-credits then checks
+    success = crud.try_deduct_tokens(db, user_id=current_user.id, tokens=request.tokens)
+    if not success:
+        usage = crud.get_token_usage(db, user_id=current_user.id)
+        remaining = (usage.tokens_limit - usage.tokens_used) if usage else 0
         raise HTTPException(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-            detail=f"ZH: Token 配額已超出。已用: {usage.tokens_used}, 上限: {usage.tokens_limit} | "
-                   f"EN: Token quota exceeded. Used: {usage.tokens_used}, Limit: {usage.tokens_limit}"
+            detail=f"ZH: Token 配額不足。剩餘: {remaining}, 需要: {request.tokens} | "
+                   f"EN: Insufficient quota. Remaining: {remaining}, Required: {request.tokens}"
         )
-
-    return {"status": "success", "tokens_used": usage.tokens_used}
+    usage = crud.get_token_usage(db, user_id=current_user.id)
+    return {"status": "success", "tokens_used": usage.tokens_used if usage else 0}

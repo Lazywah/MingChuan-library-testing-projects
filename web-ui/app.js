@@ -619,9 +619,25 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
 
                 const data = await res.json();
-                document.getElementById('temp-pwd-display').textContent = data.temp_password;
-                document.getElementById('temp-pwd-result').classList.remove('hidden');
-                showToast('toast_auth_ok'); // Or a custom success msg
+                // C-11: ZH: 若 SMTP 未設定，後端回傳 temp_password；已設定則回傳 null (密碼寄至信箱)
+                // EN: When SMTP is not configured the backend returns temp_password; configured → null (emailed)
+                const pwdDisplay = document.getElementById('temp-pwd-display');
+                const pwdResult = document.getElementById('temp-pwd-result');
+                if (data.temp_password) {
+                    // ZH: SMTP 未設定，直接顯示臨時密碼 | EN: SMTP not configured — display directly
+                    pwdDisplay.textContent = data.temp_password;
+                    pwdDisplay.style.display = '';
+                    pwdResult.querySelector('[data-i18n="temp_pwd_desc"]').textContent =
+                        'Your temporary password is:';
+                } else {
+                    // ZH: 密碼已寄出，不顯示 | EN: Password emailed — hide the code block
+                    pwdDisplay.textContent = '';
+                    pwdDisplay.style.display = 'none';
+                    pwdResult.querySelector('[data-i18n="temp_pwd_desc"]').textContent =
+                        '臨時密碼已寄至您的信箱，請查收後盡快登入並修改。';
+                }
+                pwdResult.classList.remove('hidden');
+                showToast('toast_auth_ok');
             } catch (err) {
                 console.error(err);
                 showToast(err.message, true);
@@ -1053,21 +1069,19 @@ function formatDate(dateStr) {
 
 async function fetchJobs() {
     try {
-        console.log('Fetching jobs from API...');
         const res = await fetch(`${API_BASE}/jobs`, {
             headers: { 'Authorization': `Bearer ${authToken}` }
         });
 
         if (!res.ok) {
-            console.error('Jobs API response not OK:', res.status, res.statusText);
             renderJobs([]);
             return;
         }
 
         const data = await res.json();
-        console.log('Jobs data received:', data);
-        const jobs = data.items || data || [];
-        console.log('Jobs to render:', jobs);
+        // C-10: ZH: API 回傳 {total, jobs:[...]}，修正之前錯誤的 data.items 取值
+        // EN: API returns {total, jobs:[...]} — fix incorrect data.items key
+        const jobs = data.jobs || [];
         renderJobs(jobs);
     } catch (e) {
         console.error('Error fetching jobs:', e);
@@ -1105,25 +1119,35 @@ function renderJobs(jobs) {
                 case 'failed': statusColor = '#ef4444'; statusBg = 'rgba(239,68,68,0.1)'; break;
                 case 'queued': case 'pending': statusColor = '#f59e0b'; statusBg = 'rgba(245,158,11,0.1)'; break;
             }
+            // C-7: ZH: 結構 HTML 用 innerHTML（無使用者輸入），動態文字用 textContent 防 XSS
+            // EN: Static structure via innerHTML (no user input); user-supplied text via textContent to prevent XSS
             card.innerHTML = `
                 <div class="job-head">
                     <div class="job-info">
-                        <span class="job-title">${jobName}</span>
-                        <span class="job-id">ID: ${jobId}</span>
+                        <span class="job-title"></span>
+                        <span class="job-id"></span>
                     </div>
                     <span class="job-status" style="background:${statusBg}; border:1px solid ${statusColor}; color:${statusColor};">
                         ${t(`status_${jobStatus.toLowerCase()}`) || jobStatus.toUpperCase()}
                     </span>
                 </div>
                 <div class="job-meta">
-                    <span class="job-model">${modelName}</span>
+                    <span class="job-model"></span>
                     <span class="job-priority">Priority: ${job.priority || 0}</span>
                 </div>
                 <div class="job-progress-bar"><div class="job-progress-fill" style="width:${jobProgress}%"></div></div>
                 <div style="margin-top: 10px; text-align: right;">
-                    <button class="ready-btn" style="padding: 4px 10px; font-size: 0.8em; min-width: auto; width: auto;" onclick="openJobDetails('${jobId}')" data-i18n="btn_view_details">查看詳情</button>
+                    <button class="ready-btn" style="padding: 4px 10px; font-size: 0.8em; min-width: auto; width: auto;" data-i18n="btn_view_details">查看詳情</button>
                 </div>
             `;
+            // C-7: ZH: 用 textContent 寫入使用者可控的欄位，確保不被解析為 HTML
+            // EN: Use textContent for user-controlled fields — never parsed as HTML
+            card.querySelector('.job-title').textContent = jobName;
+            card.querySelector('.job-id').textContent = `ID: ${jobId}`;
+            card.querySelector('.job-model').textContent = modelName;
+            // C-7: ZH: 用 addEventListener 取代 onclick 屬性，避免 jobId 逃逸引號
+            // EN: Use addEventListener instead of inline onclick to avoid jobId string-escape
+            card.querySelector('button.ready-btn').addEventListener('click', () => openJobDetails(jobId));
             container.appendChild(card);
         });
         applyTranslations(); // Translate the newly added buttons
@@ -1370,7 +1394,12 @@ function renderBubble(msg) {
 function createBubble(role, content) {
     const div = document.createElement('div');
     div.className = role === 'user' ? 'user-bubble' : 'ai-bubble';
-    div.innerHTML = `<div class="bubble-content">${content}</div>`;
+    // C-8: ZH: 使用 textContent 防止歷史訊息中的 HTML 注入
+    // EN: Use textContent to prevent HTML injection from chat history content
+    const bubbleContent = document.createElement('div');
+    bubbleContent.className = 'bubble-content';
+    bubbleContent.textContent = content;
+    div.appendChild(bubbleContent);
     return div;
 }
 
@@ -1575,57 +1604,88 @@ window.openJobDetails = function(jobId) {
 
     if (currentEventSource) {
         currentEventSource.close();
+        currentEventSource = null;
     }
 
-    // Connect to SSE
-    currentEventSource = new EventSource(`${API_BASE}/jobs/${jobId}/stream`);
-    
-    currentEventSource.onmessage = function(event) {
+    // C-9: ZH: 使用 fetch + ReadableStream 取代 EventSource，使能攜帶 Authorization header
+    // EN: Replace EventSource with fetch + ReadableStream to support Authorization header
+    //     (native EventSource cannot send custom headers, causing 401 on every request)
+    (async () => {
+        const abortCtrl = new AbortController();
+        // ZH: 建立相容舊有 .close() 呼叫的包裝器 | EN: Wrap AbortController to keep .close() API
+        currentEventSource = { close: () => abortCtrl.abort() };
+
         try {
-            const data = JSON.parse(event.data);
-            
-            // Append Logs
-            if (data.logs !== undefined) { // Initial load
-                jobLogsContainer.textContent = data.logs;
-            } else if (data.new_logs) { // Updates
-                jobLogsContainer.textContent += data.new_logs;
-            }
-            
-            // Auto Scroll
-            if (autoScrollCheckbox && autoScrollCheckbox.checked) {
-                jobLogsContainer.scrollTop = jobLogsContainer.scrollHeight;
+            const resp = await fetch(`${API_BASE}/jobs/${jobId}/stream`, {
+                headers: { 'Authorization': `Bearer ${authToken}` },
+                signal: abortCtrl.signal,
+            });
+
+            if (!resp.ok) {
+                jobLogsContainer.textContent += `\n[System] Failed to connect to log stream (HTTP ${resp.status}).\n`;
+                return;
             }
 
-            // Append Metrics
-            let metricsToAdd = [];
-            if (data.metrics) metricsToAdd = data.metrics; // Initial load
-            if (data.new_metrics) metricsToAdd = data.new_metrics; // Updates
-            
-            if (metricsToAdd.length > 0 && lossChart) {
-                metricsToAdd.forEach(m => {
-                    lossChart.data.labels.push(m.epoch);
-                    lossChart.data.datasets[0].data.push(m.loss);
-                });
-                lossChart.update();
-            }
+            const reader = resp.body.getReader();
+            const decoder = new TextDecoder();
+            let buf = '';
 
-            // Check if finished
-            if (['completed', 'failed', 'cancelled'].includes(data.status)) {
-                currentEventSource.close();
-                jobLogsContainer.textContent += `\n[System] Job finished with status: ${data.status}\n`;
-                if (autoScrollCheckbox && autoScrollCheckbox.checked) {
-                    jobLogsContainer.scrollTop = jobLogsContainer.scrollHeight;
+            while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+                buf += decoder.decode(value, { stream: true });
+
+                // ZH: SSE 訊息以 "\n\n" 分隔 | EN: SSE messages separated by double newline
+                const parts = buf.split('\n\n');
+                buf = parts.pop(); // ZH: 保留不完整的尾段 | EN: Keep incomplete trailing chunk
+
+                for (const part of parts) {
+                    const dataLine = part.split('\n').find(l => l.startsWith('data: '));
+                    if (!dataLine) continue;
+                    try {
+                        const data = JSON.parse(dataLine.slice(6));
+
+                        // Append Logs
+                        if (data.logs !== undefined) {
+                            jobLogsContainer.textContent = data.logs;
+                        } else if (data.new_logs) {
+                            jobLogsContainer.textContent += data.new_logs;
+                        }
+
+                        // Auto Scroll
+                        if (autoScrollCheckbox && autoScrollCheckbox.checked) {
+                            jobLogsContainer.scrollTop = jobLogsContainer.scrollHeight;
+                        }
+
+                        // Append Metrics
+                        const metricsToAdd = data.metrics || data.new_metrics || [];
+                        if (metricsToAdd.length > 0 && lossChart) {
+                            metricsToAdd.forEach(m => {
+                                lossChart.data.labels.push(m.epoch);
+                                lossChart.data.datasets[0].data.push(m.loss);
+                            });
+                            lossChart.update();
+                        }
+
+                        // Check if finished
+                        if (['completed', 'failed', 'cancelled'].includes(data.status)) {
+                            abortCtrl.abort();
+                            jobLogsContainer.textContent += `\n[System] Job finished with status: ${data.status}\n`;
+                            if (autoScrollCheckbox && autoScrollCheckbox.checked) {
+                                jobLogsContainer.scrollTop = jobLogsContainer.scrollHeight;
+                            }
+                            return;
+                        }
+                    } catch (e) {
+                        console.error('SSE parse error', e);
+                    }
                 }
             }
-            
-        } catch(e) {
-            console.error("Error parsing SSE data", e);
+        } catch (e) {
+            if (e.name !== 'AbortError') {
+                console.error('SSE stream error:', e);
+                jobLogsContainer.textContent += '\n[System] Disconnected from log stream.\n';
+            }
         }
-    };
-    
-    currentEventSource.onerror = function(err) {
-        console.error("EventSource failed:", err);
-        currentEventSource.close();
-        jobLogsContainer.textContent += `\n[System] Disconnected from log stream.\n`;
-    };
+    })();
 };

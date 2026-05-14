@@ -12,11 +12,8 @@ mock:
       name: "陳靜水"
       email: "T1090002@school.edu.tw"
       role: "student"
-    - student_id: "admin"
-      password: "admin"
-      name: "系統管理員"
-      email: "admin@school.edu.tw"
-      role: "admin"
+    # C-6: ZH: 已移除 admin/admin 硬編碼憑證，管理員帳號請透過資料庫建立
+    # EN: Hardcoded admin/admin removed — create admin accounts via DB provisioning instead
 
 cas:
   server_url: "https://cas.school.edu.tw/cas"
