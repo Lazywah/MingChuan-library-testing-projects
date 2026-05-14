@@ -31,6 +31,7 @@ ZH: 端點清單：
 from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, Query
 from sqlalchemy.orm import Session
 from sqlalchemy import func
+from datetime import datetime, timezone
 from typing import Any, Optional
 import logging
 
@@ -116,18 +117,29 @@ def batch_update_tokens(
     if payload.action not in ("reset_usage", "set_limit"):
         raise HTTPException(status_code=400, detail="action must be 'reset_usage' or 'set_limit'")
 
-    updated = 0
-    for uid in payload.user_ids:
-        usage = db.query(models.TokenUsage).filter(models.TokenUsage.user_id == uid).first()
-        if not usage:
-            continue
-        if payload.action == "reset_usage":
-            usage.tokens_used = 0
-        else:
-            usage.tokens_limit = payload.value
-        updated += 1
+    now = datetime.now(timezone.utc)
+
+    if payload.action == "reset_usage":
+        updated = (
+            db.query(models.TokenUsage)
+            .filter(models.TokenUsage.user_id.in_(payload.user_ids))
+            .update(
+                {models.TokenUsage.tokens_used: 0, models.TokenUsage.last_updated: now},
+                synchronize_session=False,
+            )
+        )
+    else:  # set_limit
+        updated = (
+            db.query(models.TokenUsage)
+            .filter(models.TokenUsage.user_id.in_(payload.user_ids))
+            .update(
+                {models.TokenUsage.tokens_limit: payload.value, models.TokenUsage.last_updated: now},
+                synchronize_session=False,
+            )
+        )
 
     db.commit()
+    logger.info("batch_update_tokens: action=%s value=%s updated=%d", payload.action, payload.value, updated)
     return {"updated_count": updated, "action": payload.action, "value": payload.value}
 
 
