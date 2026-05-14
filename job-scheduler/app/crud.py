@@ -27,9 +27,12 @@ from passlib.context import CryptContext
 from datetime import datetime, timedelta, timezone
 from typing import Optional, List
 import json
+import logging
 
 from . import models, schemas
 from .config import settings
+
+logger = logging.getLogger(__name__)
 
 # ==============================================================================
 # ZH: 密碼雜湊工具 | EN: Password hashing utility
@@ -370,8 +373,8 @@ def append_job_metric(db: Session, job_id: str, metric: dict) -> Optional[models
         if job.metrics:
             try:
                 current_metrics = json.loads(job.metrics)
-            except:
-                pass
+            except (json.JSONDecodeError, ValueError) as e:
+                logger.warning("append_job_metric: failed to parse metrics JSON for job=%s: %s", job_id, e)
         current_metrics.append(metric)
         job.metrics = json.dumps(current_metrics)
         db.commit()
