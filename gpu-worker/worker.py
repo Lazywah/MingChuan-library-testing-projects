@@ -21,7 +21,9 @@ HEARTBEAT_INTERVAL = int(os.environ.get("HEARTBEAT_INTERVAL", "30"))
 HEADERS = {"Authorization": f"Bearer {API_TOKEN}"}
 
 # ZH: 預設使用的訓練 Image | EN: Default training image
-DEFAULT_IMAGE = "pytorch/pytorch:2.6.0-cuda12.4-cudnn9-runtime"
+# ZH: RTX 5090 (Blackwell sm_120) 需要 CUDA ≥ 12.8；PyTorch 2.7+ 才有官方 cu128 映像檔
+# EN: RTX 5090 (Blackwell sm_120) requires CUDA ≥ 12.8; PyTorch 2.7+ has official cu128 images
+DEFAULT_IMAGE = "pytorch/pytorch:2.7.0-cuda12.8-cudnn9-runtime"
 
 def get_available_gpus():
     """
@@ -91,12 +93,31 @@ def send_heartbeat(available_gpus: list) -> None:
         logger.warning("Heartbeat failed (service unreachable?): %s", e)
 
 
-def report_update(job_id, payload):
+def report_update(job_id, payload, *, retries: int = 3, backoff: float = 2.0) -> None:
+    """
+    ZH: 向服務層回報任務狀態，失敗時最多重試 retries 次（指數退避）。
+    EN: Report job status to service layer; retries up to `retries` times with backoff on failure.
+    """
     url = f"{SERVICE_LAYER_URL}/api/v1/worker/jobs/{job_id}/update"
-    try:
-        requests.post(url, json=payload, headers=HEADERS, timeout=5)
-    except Exception as e:
-        logger.error(f"Failed to report update for job {job_id}: {e}")
+    for attempt in range(1, retries + 1):
+        try:
+            resp = requests.post(url, json=payload, headers=HEADERS, timeout=5)
+            if resp.status_code < 500:
+                # ZH: 2xx / 4xx 不重試（4xx 代表服務端已拒絕，重試無效）
+                # EN: 2xx / 4xx — don't retry (4xx means server rejected, retrying won't help)
+                return
+            logger.warning(
+                "report_update HTTP %d for job %s (attempt %d/%d)",
+                resp.status_code, job_id, attempt, retries,
+            )
+        except Exception as e:
+            logger.warning(
+                "report_update failed for job %s (attempt %d/%d): %s",
+                job_id, attempt, retries, e,
+            )
+        if attempt < retries:
+            time.sleep(backoff * attempt)  # ZH: 線性退避 | EN: linear backoff
+    logger.error("report_update gave up after %d attempts for job %s", retries, job_id)
 
 def parse_progress(log_line):
     """
@@ -128,7 +149,7 @@ def execute_job(job):
     # ZH: 注意！這裡啟動的是兄弟容器 (Sibling container)
     cmd = [
         "docker", "run", "--rm",
-        "--gpus", f'"device={gpu_id}"',
+        "--gpus", f"device={gpu_id}",
         "-v", f"{STORAGE_MOUNT_PATH}:/workspace",
         DEFAULT_IMAGE,
         "python", "-u", script
