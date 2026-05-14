@@ -37,3 +37,6 @@ Thumbs.db
 
 # ZH: 備份檔案 | EN: Backup files
 backups/
+
+# ZH: setup_env.py 自動備份的舊版 .env | EN: .env backups created by setup_env.py
+*.env.bak_*
