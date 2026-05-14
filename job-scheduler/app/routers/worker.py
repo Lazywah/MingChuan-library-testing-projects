@@ -102,6 +102,15 @@ def take_job(
     # H-6: ZH: 若第一筆任務已被其他節點搶佔，依序嘗試下一筆，直到搶佔成功或清單用盡
     # EN: If top job was already claimed, walk the list until one succeeds or all are taken
     for job in pending_jobs:
+        # ZH: 若任務指定偏好節點且與當前節點不符則跳過（讓對應節點來領）
+        # EN: If job has a preferred_node and it doesn't match this node, skip it
+        if job.preferred_node and job.preferred_node != req.node_id:
+            logger.debug(
+                "Job %s prefers node %s, skipping node %s",
+                job.id[:8], job.preferred_node, req.node_id
+            )
+            continue
+
         result = db.execute(
             update(models.TrainingJob)
             .where(models.TrainingJob.id == job.id)
@@ -128,14 +137,25 @@ def take_job(
             except json.JSONDecodeError:
                 logger.warning(f"Failed to parse config for job {job.id[:8]}")
 
+        entry_args = None
+        if job.entry_args:
+            try:
+                entry_args = json.loads(job.entry_args)
+            except json.JSONDecodeError:
+                logger.warning(f"Failed to parse entry_args for job {job.id[:8]}")
+
         logger.info(f"Worker {req.node_id} claimed job {job.id[:8]} on GPU {gpu_id_str}")
         return {
             "job": {
-                "job_id": job.id,
-                "script_path": job.script_path or "/workspace/train.py",
+                "job_id":       job.id,
+                "script_path":  job.script_path or "/workspace/train.py",
                 "dataset_path": job.dataset_path,
-                "config": config,
-                "gpu_id": gpu_id_str,  # ZH: 字串格式，供 Worker 執行 docker --gpus | EN: String for worker's docker --gpus
+                "config":       config,
+                "gpu_id":       gpu_id_str,       # ZH: 字串格式，供 Worker 執行 docker --gpus | EN: String for worker's docker --gpus
+                # ZH: Notebook 欄位 | EN: Notebook fields
+                "docker_image": job.docker_image,  # ZH: 自訂 Image，None 代表使用預設 | EN: Custom image, None = use default
+                "inline_code":  job.inline_code,   # ZH: 前端合併的 shell script | EN: Compiled shell script from frontend
+                "entry_args":   entry_args,        # ZH: 非 Python 工具的入口指令 | EN: Entry command for non-Python tools
             }
         }
 
