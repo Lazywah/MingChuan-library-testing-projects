@@ -7,9 +7,9 @@
 .env
 
 # ZH: SQLite 資料庫檔案 | EN: SQLite database files
-data/*.db
-data/*.db-wal
-data/*.db-shm
+**/data/*.db
+**/data/*.db-wal
+**/data/*.db-shm
 
 # ZH: Python 快取 | EN: Python cache
 __pycache__/
