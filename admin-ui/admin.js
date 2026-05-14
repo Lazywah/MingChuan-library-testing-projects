@@ -116,7 +116,72 @@ const TRANSLATIONS = {
         ua_started_at: "開始時間",
         ua_messages: "訊息數",
         ua_tokens: "Tokens",
-        toast_analytics_failed: "載入分析資料失敗"
+        toast_analytics_failed: "載入分析資料失敗",
+        // Analytics tab headers & stat cards
+        analytics_overview: "數據總覽",
+        stat_total_users: "總帳號數",
+        stat_total_logins: "總登入次數",
+        stat_total_tokens: "總消耗 Tokens",
+        chart_dept_usage: "各系所 Token 用量",
+        chart_tool_usage: "工具使用佔比",
+        btn_export_chart: "匯出圖表",
+        filter_dept: "學系",
+        opt_dept_all: "全校",
+        // Config tab
+        config_coming_soon: "系統設定介面正在重新設計中",
+        config_coming_soon_desc: "後續將以個別輸入框方式對各設定值進行受控修改，取代直接編輯原始設定檔。",
+        // Status & Role badges
+        label_online: "線上",
+        label_offline: "離線",
+        role_admin: "管理員",
+        role_teacher: "教師",
+        role_student: "學生",
+        status_public: "公開",
+        status_private: "私有",
+        label_auto_refresh: "自動重新整理",
+        // Model select options
+        opt_model_api: "API 模型（雲端）",
+        opt_model_local: "本地模型",
+        opt_provider_openai: "OpenAI",
+        opt_provider_anthropic: "Anthropic (Claude)",
+        opt_provider_google: "Google (Gemini)",
+        opt_provider_ollama: "Ollama（本地 API）",
+        opt_provider_other: "其他",
+        opt_visibility_private: "私有",
+        opt_visibility_public: "公開",
+        // Placeholders
+        placeholder_search_users: "搜尋使用者...（密碼已加密）",
+        placeholder_batch_token: "例如 5000000",
+        placeholder_model_name: "模型名稱",
+        placeholder_model_desc: "描述",
+        placeholder_model_endpoint: "API Endpoint（例如 https://api.openai.com/v1）",
+        placeholder_model_id: "上游模型 ID（例如 gpt-4o, claude-3.5-sonnet）",
+        placeholder_model_framework: "框架（例如 PyTorch, TensorFlow, ONNX）",
+        placeholder_model_storage: "儲存路徑",
+        placeholder_dept: "學系（選填）",
+        add_test_custom_password: "密碼（留空自動產生）",
+        // Modals
+        view_user_title: "檢視使用者",
+        // Empty states
+        msg_no_jobs: "無任務",
+        msg_no_api_models: "無 API 模型",
+        msg_no_local_models: "無本地模型",
+        // Cluster
+        cluster_label_temp: "溫度",
+        cluster_label_util: "使用率",
+        cluster_label_memory: "記憶體",
+        // Chart labels
+        chart_label_total_tokens: "Tokens 用量",
+        chart_label_tokens: "Tokens",
+        // Tool type display names
+        tool_chat: "對話",
+        tool_video_gen: "影片生成",
+        tool_writing: "文字生成",
+        // Toast / error messages
+        toast_edit_unlocked: "編輯模式已解鎖",
+        error_loading_analytics: "載入分析資料出錯",
+        error_priority_range: "優先級必須為 0~5",
+        error_session_expired: "工作階段已過期，請重新登入"
     },
     en: {
         btn_back_hub: "Back to Hub",
@@ -232,7 +297,72 @@ const TRANSLATIONS = {
         ua_started_at: "Started At",
         ua_messages: "Messages",
         ua_tokens: "Tokens",
-        toast_analytics_failed: "Failed to load analytics"
+        toast_analytics_failed: "Failed to load analytics",
+        // Analytics tab headers & stat cards
+        analytics_overview: "Data Overview",
+        stat_total_users: "Total Accounts",
+        stat_total_logins: "Total Logins",
+        stat_total_tokens: "Total Tokens Used",
+        chart_dept_usage: "Token Usage by Department",
+        chart_tool_usage: "Tool Usage Distribution",
+        btn_export_chart: "Export Charts",
+        filter_dept: "Department",
+        opt_dept_all: "All Schools",
+        // Config tab
+        config_coming_soon: "System settings UI is being redesigned",
+        config_coming_soon_desc: "Settings will be configurable via typed inputs instead of direct file editing.",
+        // Status & Role badges
+        label_online: "Online",
+        label_offline: "Offline",
+        role_admin: "Admin",
+        role_teacher: "Teacher",
+        role_student: "Student",
+        status_public: "Public",
+        status_private: "Private",
+        label_auto_refresh: "Auto Refresh",
+        // Model select options
+        opt_model_api: "API Model (Cloud)",
+        opt_model_local: "Local Model",
+        opt_provider_openai: "OpenAI",
+        opt_provider_anthropic: "Anthropic (Claude)",
+        opt_provider_google: "Google (Gemini)",
+        opt_provider_ollama: "Ollama (Local API)",
+        opt_provider_other: "Other",
+        opt_visibility_private: "Private",
+        opt_visibility_public: "Public",
+        // Placeholders
+        placeholder_search_users: "Search users... (Passwords are encrypted)",
+        placeholder_batch_token: "e.g. 5000000",
+        placeholder_model_name: "Model Name",
+        placeholder_model_desc: "Description",
+        placeholder_model_endpoint: "API Endpoint (e.g. https://api.openai.com/v1)",
+        placeholder_model_id: "Model ID (e.g. gpt-4o, claude-3.5-sonnet)",
+        placeholder_model_framework: "Framework (e.g. PyTorch, TensorFlow, ONNX)",
+        placeholder_model_storage: "Storage Path",
+        placeholder_dept: "Department (Optional)",
+        add_test_custom_password: "Password (Leave blank to auto-generate)",
+        // Modals
+        view_user_title: "View User",
+        // Empty states
+        msg_no_jobs: "No jobs",
+        msg_no_api_models: "No API models",
+        msg_no_local_models: "No local models",
+        // Cluster
+        cluster_label_temp: "Temperature",
+        cluster_label_util: "Utilization",
+        cluster_label_memory: "Memory",
+        // Chart labels
+        chart_label_total_tokens: "Token Usage",
+        chart_label_tokens: "Tokens",
+        // Tool type display names
+        tool_chat: "Chat",
+        tool_video_gen: "Video Gen",
+        tool_writing: "Writing",
+        // Toast / error messages
+        toast_edit_unlocked: "Edit mode unlocked",
+        error_loading_analytics: "Error loading analytics data",
+        error_priority_range: "Priority must be 0~5",
+        error_session_expired: "Session expired. Please log in again."
     }
 };
 
@@ -240,16 +370,23 @@ let currentLang = localStorage.getItem('ai_hud_lang') || 'zh';
 let currentTheme = localStorage.getItem('ai_hud_theme') || 'dark';
 
 function applyTranslations() {
-    const els = document.querySelectorAll('[data-i18n]');
-    els.forEach(el => {
-        const key = el.getAttribute('data-i18n');
-        if (TRANSLATIONS[currentLang] && TRANSLATIONS[currentLang][key]) {
-            if (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA') {
-                el.placeholder = TRANSLATIONS[currentLang][key];
-            } else {
-                el.textContent = TRANSLATIONS[currentLang][key];
-            }
+    const t = TRANSLATIONS[currentLang] || {};
+
+    // data-i18n: sets textContent on non-inputs, placeholder on inputs/textareas
+    document.querySelectorAll('[data-i18n]').forEach(el => {
+        const text = t[el.getAttribute('data-i18n')];
+        if (!text) return;
+        if (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA') {
+            el.placeholder = text;
+        } else {
+            el.textContent = text;
         }
+    });
+
+    // data-i18n-placeholder: sets only the placeholder (for inputs that carry data-i18n for other purposes)
+    document.querySelectorAll('[data-i18n-placeholder]').forEach(el => {
+        const text = t[el.getAttribute('data-i18n-placeholder')];
+        if (text) el.placeholder = text;
     });
 }
 
@@ -279,7 +416,7 @@ function handleAuthError() {
     localStorage.removeItem('admin_hud_token');
     document.getElementById('admin-main-layout').style.display = 'none';
     document.getElementById('admin-login-modal').style.display = 'flex';
-    showToast(TRANSLATIONS[currentLang]?.toast_login_failed || 'Session expired. Please log in again.', true);
+    showToast(TRANSLATIONS[currentLang]?.error_session_expired || 'Session expired. Please log in again.', true);
 }
 
 // ==========================================
@@ -324,7 +461,7 @@ async function fetchAnalyticsData() {
         renderAnalyticsUI(data);
     } catch (e) {
         console.error(e);
-        showToast("Error loading analytics data", false);
+        showToast(TRANSLATIONS[currentLang]?.error_loading_analytics || 'Error loading analytics data', true);
     }
 }
 
@@ -369,7 +506,7 @@ function renderAnalyticsUI(data) {
         data: {
             labels: deptLabels,
             datasets: [{
-                label: 'Total Tokens Used',
+                label: TRANSLATIONS[currentLang]?.chart_label_total_tokens || 'Token Usage',
                 data: deptTokens,
                 backgroundColor: 'rgba(56, 189, 248, 0.7)',
                 borderColor: 'rgba(56, 189, 248, 1)',
@@ -393,7 +530,11 @@ function renderAnalyticsUI(data) {
     // 3. Render Tool Usage Chart (Pie)
     const toolLabels = data.tools_breakdown.map(t => {
         const tr = t.tool_type;
-        return tr === 'chat' ? 'Chat' : tr === 'video_gen' ? 'Video Gen' : tr === 'writing' ? 'Writing' : tr;
+        const tl = TRANSLATIONS[currentLang] || {};
+        return tr === 'chat' ? (tl.tool_chat || 'Chat')
+             : tr === 'video_gen' ? (tl.tool_video_gen || 'Video Gen')
+             : tr === 'writing' ? (tl.tool_writing || 'Writing')
+             : tr;
     });
     const toolCounts = data.tools_breakdown.map(t => t.usage_count);
     const toolCtx = document.getElementById('toolUsageChart').getContext('2d');
@@ -449,6 +590,9 @@ function exportAnalyticsCharts() {
 // ZH: 個人數據分析 Modal | EN: Per-user Analytics Modal
 // ==========================================
 let _uaChartInstance = null;
+// ZH: 快取最後一次載入的數據，供語言切換時重繪圖表使用
+// EN: Cache last-loaded data so charts can be re-rendered on language toggle
+let _lastUaData = null;
 
 async function openUserAnalytics(userId) {
     const modal = document.getElementById('user-analytics-modal');
@@ -487,9 +631,11 @@ async function openUserAnalytics(userId) {
 function closeUserAnalytics() {
     document.getElementById('user-analytics-modal').classList.add('hidden');
     if (_uaChartInstance) { _uaChartInstance.destroy(); _uaChartInstance = null; }
+    _lastUaData = null;
 }
 
 function renderUserAnalyticsModal(data) {
+    _lastUaData = data; // ZH: 快取資料供語言切換時重繪 | EN: cache for language-toggle re-render
     const u   = data.user        || {};
     const q   = data.token_quota || {};
 
@@ -532,7 +678,7 @@ function renderUserAnalyticsModal(data) {
             data: {
                 labels: toolLabels,
                 datasets: [{
-                    label: 'Tokens',
+                    label: TRANSLATIONS[currentLang]?.chart_label_tokens || 'Tokens',
                     data: toolTokens,
                     backgroundColor: 'rgba(56, 189, 248, 0.7)',
                     borderColor:     'rgba(56, 189, 248, 1)',
@@ -704,6 +850,11 @@ function renderClusterStats(stats) {
 
         const card = document.createElement('div');
         card.className = 'stat-card';
+        const tl = TRANSLATIONS[currentLang] || {};
+        const lTemp   = tl.cluster_label_temp   || 'Temperature';
+        const lUtil   = tl.cluster_label_util   || 'Utilization';
+        const lMemory = tl.cluster_label_memory || 'Memory';
+
         card.innerHTML = `
             <h4>
                 <span style="display:flex; align-items:center; gap:8px;">
@@ -711,19 +862,19 @@ function renderClusterStats(stats) {
                 </span>
                 <span style="font-size: 0.8em; color: rgba(255,255,255,0.5); font-weight:normal;">ID: ${gpu.gpu_id} | Node: ${gpu.node_id}</span>
             </h4>
-            
+
             <div>
-                <div class="stat-row"><span>溫度 (Temp)</span><span>${gpu.temperature} °C</span></div>
+                <div class="stat-row"><span>${lTemp}</span><span>${gpu.temperature} °C</span></div>
                 <div class="progress-bar-bg"><div class="progress-bar-fill ${tempClass}" style="width: ${Math.min(gpu.temperature, 100)}%;"></div></div>
             </div>
-            
+
             <div>
-                <div class="stat-row"><span>使用率 (Utilization)</span><span>${gpu.utilization} %</span></div>
+                <div class="stat-row"><span>${lUtil}</span><span>${gpu.utilization} %</span></div>
                 <div class="progress-bar-bg"><div class="progress-bar-fill ${utilClass}" style="width: ${gpu.utilization}%;"></div></div>
             </div>
 
             <div>
-                <div class="stat-row"><span>記憶體 (Memory)</span><span>${gpu.memory_used} / ${gpu.memory_total} MB</span></div>
+                <div class="stat-row"><span>${lMemory}</span><span>${gpu.memory_used} / ${gpu.memory_total} MB</span></div>
                 <div class="progress-bar-bg"><div class="progress-bar-fill ${memClass}" style="width: ${memPercent}%;"></div></div>
             </div>
         `;
@@ -772,19 +923,30 @@ function renderAdminUsers(users) {
         tbody.innerHTML = '';
         filteredUsers.forEach(u => {
             const tr = document.createElement('tr');
+            const tl = TRANSLATIONS[currentLang] || {};
             const loginStr = u.last_login_time ? new Date(u.last_login_time).toLocaleString() : 'N/A';
             const createdStr = u.created_at ? new Date(u.created_at).toLocaleString() : 'N/A';
-            const roleStr = u.role === 'admin' ? '<span class="status-badge running">Admin</span>' : `<span class="status-badge completed">${u.role}</span>`;
-            const statusStr = u.is_active ? '<span style="color:var(--neon-green)">Active</span>' : '<span style="color:var(--neon-pink)">Disabled</span>';
-            
+            const roleLabel = tl[`role_${u.role}`] || u.role;
+            const roleStr = u.role === 'admin'
+                ? `<span class="status-badge running">${roleLabel}</span>`
+                : `<span class="status-badge completed">${roleLabel}</span>`;
+            const activeLabel   = tl.status_active   || 'Active';
+            const disabledLabel = tl.status_disabled  || 'Disabled';
+            const statusStr = u.is_active
+                ? `<span style="color:var(--neon-green)">${activeLabel}</span>`
+                : `<span style="color:var(--neon-pink)">${disabledLabel}</span>`;
+
             // Online status indicator: red=disabled, green=online, gray=offline
+            const lblOnline   = tl.label_online   || 'Online';
+            const lblOffline  = tl.label_offline  || 'Offline';
+            const lblDisabled = tl.status_disabled || 'Disabled';
             let onlineDot;
             if (!u.is_active) {
-                onlineDot = '<span style="display:inline-block; width:8px; height:8px; border-radius:50%; background:#ef4444; margin-right:6px; box-shadow:0 0 5px #ef4444;" title="Disabled"></span>';
+                onlineDot = `<span style="display:inline-block; width:8px; height:8px; border-radius:50%; background:#ef4444; margin-right:6px; box-shadow:0 0 5px #ef4444;" title="${lblDisabled}"></span>`;
             } else if (u.online_status === 1) {
-                onlineDot = '<span style="display:inline-block; width:8px; height:8px; border-radius:50%; background:#10b981; margin-right:6px; box-shadow:0 0 5px #10b981;" title="Online"></span>';
+                onlineDot = `<span style="display:inline-block; width:8px; height:8px; border-radius:50%; background:#10b981; margin-right:6px; box-shadow:0 0 5px #10b981;" title="${lblOnline}"></span>`;
             } else {
-                onlineDot = '<span style="display:inline-block; width:8px; height:8px; border-radius:50%; background:#6b7280; margin-right:6px;" title="Offline"></span>';
+                onlineDot = `<span style="display:inline-block; width:8px; height:8px; border-radius:50%; background:#6b7280; margin-right:6px;" title="${lblOffline}"></span>`;
             }
             
             // Token display
@@ -887,19 +1049,28 @@ function _renderJobTable(tbodyId, jobs) {
     const tbody = document.getElementById(tbodyId);
     if (!tbody) return;
     tbody.innerHTML = '';
+    const tl = TRANSLATIONS[currentLang] || {};
     if (jobs.length === 0) {
         const tr = document.createElement('tr');
-        tr.innerHTML = `<td colspan="6" style="text-align:center; color:var(--text-muted); padding:20px;">No jobs</td>`;
+        tr.innerHTML = `<td colspan="6" style="text-align:center; color:var(--text-muted); padding:20px;">${tl.msg_no_jobs || 'No jobs'}</td>`;
         tbody.appendChild(tr);
         return;
     }
+    const statusLabels = {
+        pending:   tl.filter_pending   || 'Pending',
+        running:   tl.filter_running   || 'Running',
+        completed: tl.filter_completed || 'Completed',
+        failed:    tl.filter_failed    || 'Failed',
+        cancelled: tl.filter_cancelled || 'Cancelled',
+    };
     jobs.forEach(j => {
         const tr = document.createElement('tr');
-        let statusBadge = `<span class="status-badge pending">${j.status}</span>`;
-        if (j.status === 'running') statusBadge = `<span class="status-badge running">${j.status}</span>`;
-        if (j.status === 'completed') statusBadge = `<span class="status-badge completed">${j.status}</span>`;
-        if (j.status === 'failed') statusBadge = `<span class="status-badge failed">${j.status}</span>`;
-        if (j.status === 'cancelled') statusBadge = `<span class="status-badge" style="border-color:#6b7280; color:#6b7280;">${j.status}</span>`;
+        const sLabel = statusLabels[j.status] || j.status;
+        let statusBadge = `<span class="status-badge pending">${sLabel}</span>`;
+        if (j.status === 'running')   statusBadge = `<span class="status-badge running">${sLabel}</span>`;
+        if (j.status === 'completed') statusBadge = `<span class="status-badge completed">${sLabel}</span>`;
+        if (j.status === 'failed')    statusBadge = `<span class="status-badge failed">${sLabel}</span>`;
+        if (j.status === 'cancelled') statusBadge = `<span class="status-badge" style="border-color:#6b7280; color:#6b7280;">${sLabel}</span>`;
 
         const progress = j.progress || 0;
         const progressBar = `<div class="job-progress-bar"><div class="job-progress-bar-fill" style="width:${progress}%;"></div></div><small style="color:var(--text-muted);">${Math.round(progress)}%</small>`;
@@ -975,7 +1146,7 @@ async function reprioritizeJob(jobId, jobName) {
     if (input === null) return;
     const newPriority = parseInt(input);
     if (isNaN(newPriority) || newPriority < 0 || newPriority > 5) {
-        showToast('Priority must be 0~5', true);
+        showToast(TRANSLATIONS[currentLang]?.error_priority_range || 'Priority must be 0~5', true);
         return;
     }
 
@@ -1031,15 +1202,20 @@ function _renderApiModelTable(tbodyId, models) {
     const tbody = document.getElementById(tbodyId);
     if (!tbody) return;
     tbody.innerHTML = '';
+    const tl = TRANSLATIONS[currentLang] || {};
     if (models.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="6" style="text-align:center; color:var(--text-muted); padding:20px;">No API models</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="6" style="text-align:center; color:var(--text-muted); padding:20px;">${tl.msg_no_api_models || 'No API models'}</td></tr>`;
         return;
     }
-    const editLabel = TRANSLATIONS[currentLang]?.btn_edit_model || 'Edit';
-    const deleteLabel = TRANSLATIONS[currentLang]?.btn_delete_model || 'Delete';
+    const editLabel   = tl.btn_edit_model   || 'Edit';
+    const deleteLabel = tl.btn_delete_model || 'Delete';
+    const lblPublic   = tl.status_public    || 'Public';
+    const lblPrivate  = tl.status_private   || 'Private';
     models.forEach(m => {
         const tr = document.createElement('tr');
-        const publicBadge = m.is_public ? '<span class="status-badge completed">Public</span>' : '<span class="status-badge pending">Private</span>';
+        const publicBadge = m.is_public
+            ? `<span class="status-badge completed">${lblPublic}</span>`
+            : `<span class="status-badge pending">${lblPrivate}</span>`;
         const providerBadge = `<span class="status-badge running">${m.api_provider || 'N/A'}</span>`;
         tr.innerHTML = `
             <td><strong>${m.name}</strong><br><small style="color:var(--text-muted)">${m.id ? m.id.substring(0, 8) : ''}</small></td>
@@ -1062,15 +1238,20 @@ function _renderLocalModelTable(tbodyId, models) {
     const tbody = document.getElementById(tbodyId);
     if (!tbody) return;
     tbody.innerHTML = '';
+    const tl = TRANSLATIONS[currentLang] || {};
     if (models.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="6" style="text-align:center; color:var(--text-muted); padding:20px;">No local models</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="6" style="text-align:center; color:var(--text-muted); padding:20px;">${tl.msg_no_local_models || 'No local models'}</td></tr>`;
         return;
     }
-    const editLabel = TRANSLATIONS[currentLang]?.btn_edit_model || 'Edit';
-    const deleteLabel = TRANSLATIONS[currentLang]?.btn_delete_model || 'Delete';
+    const editLabel   = tl.btn_edit_model   || 'Edit';
+    const deleteLabel = tl.btn_delete_model || 'Delete';
+    const lblPublic   = tl.status_public    || 'Public';
+    const lblPrivate  = tl.status_private   || 'Private';
     models.forEach(m => {
         const tr = document.createElement('tr');
-        const publicBadge = m.is_public ? '<span class="status-badge completed">Public</span>' : '<span class="status-badge pending">Private</span>';
+        const publicBadge = m.is_public
+            ? `<span class="status-badge completed">${lblPublic}</span>`
+            : `<span class="status-badge pending">${lblPrivate}</span>`;
         tr.innerHTML = `
             <td><strong>${m.name}</strong><br><small style="color:var(--text-muted)">${m.id ? m.id.substring(0, 8) : ''}</small></td>
             <td>${m.framework || 'N/A'}</td>
@@ -1690,6 +1871,12 @@ document.addEventListener('DOMContentLoaded', () => {
             currentLang = currentLang === 'zh' ? 'en' : 'zh';
             localStorage.setItem('ai_hud_lang', currentLang);
             applyTranslations();
+            // ZH: 若個人分析 Modal 正在顯示，重繪圖表使標籤套用新語系
+            // EN: If the per-user analytics modal is open, re-render charts with updated labels
+            const uaModal = document.getElementById('user-analytics-modal');
+            if (_lastUaData && uaModal && !uaModal.classList.contains('hidden')) {
+                renderUserAnalyticsModal(_lastUaData);
+            }
         });
     });
 
