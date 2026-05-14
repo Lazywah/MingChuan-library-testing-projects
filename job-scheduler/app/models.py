@@ -119,6 +119,12 @@ class TrainingJob(Base):
     script_path = Column(String)                                              # ZH: 訓練腳本路徑 | EN: Script path
     dataset_path = Column(String)                                             # ZH: 資料集路徑 | EN: Dataset path
 
+    # ZH: Notebook 執行欄位 | EN: Notebook execution fields
+    docker_image = Column(String, nullable=True)                              # ZH: 覆寫預設 Docker Image | EN: Override default Docker image
+    inline_code  = Column(Text,   nullable=True)                              # ZH: 前端合併的完整 shell script | EN: Compiled shell script from notebook cells
+    entry_args   = Column(Text,   nullable=True)                              # ZH: 容器入口指令 JSON 陣列 | EN: Container entry command (JSON array)
+    preferred_node = Column(String, nullable=True)                            # ZH: 偏好的 GPU Worker 節點 | EN: Preferred GPU worker node
+
     # ZH: 進度追蹤 | EN: Progress tracking
     progress = Column(Float, default=0.0)                                     # ZH: 完成百分比 | EN: Completion %
     logs = Column(Text)                                                       # ZH: 執行日誌 | EN: Execution logs
@@ -203,3 +209,22 @@ class WorkerHeartbeat(Base):
     gpu_utilization = Column(Float, default=0.0)                              # ZH: GPU 使用率 % | EN: GPU utilization %
     last_seen = Column(DateTime, default=lambda: datetime.now(timezone.utc))  # ZH: 最後心跳時間 | EN: Last heartbeat time
     is_online = Column(Integer, default=1)                                    # ZH: 是否在線 | EN: Online status
+
+
+# ==============================================================================
+# ZH: 表 8: Notebook - 使用者 Notebook 草稿（每人一份，持久化）
+# EN: Table 8: Notebook - Per-user notebook draft (one per user, persistent)
+# ZH: 儲存格子清單（JSON）與環境設定，前端 auto-save（debounce 2s）時寫入
+# EN: Stores cells (JSON) and environment config; written by frontend auto-save
+# ==============================================================================
+class Notebook(Base):
+    __tablename__ = "notebooks"
+
+    id         = Column(String, primary_key=True, default=generate_uuid)
+    user_id    = Column(String, ForeignKey("users.id", ondelete="CASCADE"),
+                        unique=True, index=True, nullable=False)              # ZH: 每人僅一份 | EN: One per user
+    cells      = Column(Text, default="[]")                                   # ZH: 格子清單 JSON [{id,type,content}] | EN: Cell list JSON
+    environment = Column(Text, default="{}")                                  # ZH: 環境設定 JSON {framework,mode,preferred_node,...} | EN: Environment JSON
+    updated_at = Column(DateTime,
+                        default=lambda: datetime.now(timezone.utc),
+                        onupdate=lambda: datetime.now(timezone.utc))         # ZH: 最後儲存時間 | EN: Last saved time
