@@ -158,7 +158,32 @@ const TRANSLATIONS = {
         doc_solutions_desc: "常見問題的解決方案與除錯技巧。",
         doc_tutorial_title: "模型製作教學",
         doc_tutorial_desc: "從零開始學習如何訓練與部署 AI 模型。",
-        doc_coming_soon: "內容建置中，敬請期待..."
+        doc_coming_soon: "內容建置中，敬請期待...",
+        // 工具提示
+        tooltip_toggle_lang: "切換語言",
+        tooltip_toggle_theme: "切換主題",
+        // 資料集上傳
+        msg_uploading: "上傳中...",
+        toast_upload_ok: "檔案已上傳並推薦參數",
+        toast_upload_failed: "上傳失敗",
+        // 忘記密碼
+        msg_pwd_emailed: "臨時密碼已寄至您的信箱，請查收後盡快登入並修改。",
+        // AI 聊天串流
+        prefix_system_reject: "[系統拒絕]",
+        error_quota_exceeded: "您的 Token 額度已用盡，請聯繫管理員擴充額度。",
+        prefix_system_notice: "[系統提示]",
+        error_stream_interrupted: "連線意外中斷或發生錯誤",
+        // 任務日誌
+        error_stream_failed: "無法連線至日誌串流",
+        msg_job_status: "任務完成，狀態",
+        error_stream_disconnected: "已從日誌串流中斷開",
+        // 收斂曲線圖
+        chart_label_training_loss: "訓練損失",
+        chart_label_epoch: "訓練週期",
+        chart_label_loss: "損失值",
+        // Session 操作
+        confirm_delete_session: "確定要刪除此對話？",
+        prompt_rename_session: "請輸入新名稱："
     },
     en: {
         login_title: "System Login",
@@ -306,7 +331,32 @@ const TRANSLATIONS = {
         doc_solutions_desc: "Common solutions and debugging tips.",
         doc_tutorial_title: "Model Training Tutorial",
         doc_tutorial_desc: "Learn to train and deploy AI models from scratch.",
-        doc_coming_soon: "Content under construction, stay tuned..."
+        doc_coming_soon: "Content under construction, stay tuned...",
+        // Tooltips
+        tooltip_toggle_lang: "Switch Language",
+        tooltip_toggle_theme: "Switch Theme",
+        // Dataset upload
+        msg_uploading: "Uploading...",
+        toast_upload_ok: "File uploaded & parameters suggested",
+        toast_upload_failed: "Upload failed",
+        // Forgot password
+        msg_pwd_emailed: "A temporary password has been sent to your email. Please log in and change it as soon as possible.",
+        // AI chat stream
+        prefix_system_reject: "[System Rejected]",
+        error_quota_exceeded: "Your token quota has been exhausted. Please contact your administrator to increase your limit.",
+        prefix_system_notice: "[System Notice]",
+        error_stream_interrupted: "Connection unexpectedly interrupted or an error occurred",
+        // Job logs
+        error_stream_failed: "Failed to connect to log stream",
+        msg_job_status: "Job finished with status",
+        error_stream_disconnected: "Disconnected from log stream",
+        // Loss chart
+        chart_label_training_loss: "Training Loss",
+        chart_label_epoch: "Epoch",
+        chart_label_loss: "Loss",
+        // Session actions
+        confirm_delete_session: "Delete this session?",
+        prompt_rename_session: "Enter new name:"
     }
 };
 
@@ -628,13 +678,13 @@ document.addEventListener('DOMContentLoaded', () => {
                     pwdDisplay.textContent = data.temp_password;
                     pwdDisplay.style.display = '';
                     pwdResult.querySelector('[data-i18n="temp_pwd_desc"]').textContent =
-                        'Your temporary password is:';
+                        t('temp_pwd_desc');
                 } else {
                     // ZH: 密碼已寄出，不顯示 | EN: Password emailed — hide the code block
                     pwdDisplay.textContent = '';
                     pwdDisplay.style.display = 'none';
                     pwdResult.querySelector('[data-i18n="temp_pwd_desc"]').textContent =
-                        '臨時密碼已寄至您的信箱，請查收後盡快登入並修改。';
+                        t('msg_pwd_emailed');
                 }
                 pwdResult.classList.remove('hidden');
                 showToast('toast_auth_ok');
@@ -727,7 +777,7 @@ function createNewSession() {
 
 function renameSession(e, id) {
     e.stopPropagation();
-    const newName = prompt('Enter new name:', sessions.find(s => s.id === id).name);
+    const newName = prompt(t('prompt_rename_session'), sessions.find(s => s.id === id).name);
     if (newName) {
         sessions.find(s => s.id === id).name = newName;
         saveSessions();
@@ -737,14 +787,14 @@ function renameSession(e, id) {
 
 function deleteSession(e, id) {
     e.stopPropagation();
-    if (!confirm('Delete this session?')) return;
+    if (!confirm(t('confirm_delete_session'))) return;
 
     sessions = sessions.filter(s => s.id !== id);
 
     // If no sessions left, create a new one automatically
     if (sessions.length === 0) {
         const newId = 'sess_' + Date.now();
-        sessions.unshift({ id: newId, name: 'New Chat', messages: [] });
+        sessions.unshift({ id: newId, name: t('new_session_name'), messages: [] });
         activeSessionId = newId;
     } else if (activeSessionId === id) {
         activeSessionId = sessions[0].id;
@@ -800,6 +850,10 @@ function applyLanguage(lang) {
     document.querySelectorAll('[data-i18n-aria]').forEach(el => {
         const key = el.getAttribute('data-i18n-aria');
         if (dict[key]) el.setAttribute('aria-label', dict[key]);
+    });
+    document.querySelectorAll('[data-i18n-title]').forEach(el => {
+        const key = el.getAttribute('data-i18n-title');
+        if (dict[key]) el.setAttribute('title', dict[key]);
     });
 }
 
@@ -1200,7 +1254,7 @@ async function handleDatasetUpload(e, type) {
     const suffix = type === 'high' ? '-high' : '-midlow';
     const btn = document.querySelector(`#job-form-${type} button[type="submit"]`);
     const originalText = btn.innerHTML;
-    btn.innerHTML = `<span class="spinner" style="margin-right:5px"></span><span>Uploading...</span>`;
+    btn.innerHTML = `<span class="spinner" style="margin-right:5px"></span><span>${t('msg_uploading')}</span>`;
     btn.disabled = true;
 
     try {
@@ -1241,10 +1295,10 @@ async function handleDatasetUpload(e, type) {
             }, 2000);
         }
         
-        showToast('File uploaded & parameters suggested');
+        showToast('toast_upload_ok');
     } catch (err) {
         console.error(err);
-        showToast('Upload failed', true);
+        showToast('toast_upload_failed', true);
         e.target.value = '';
     } finally {
         btn.innerHTML = originalText;
@@ -1356,7 +1410,10 @@ if (chatForm) {
 
                             // 判斷是否為伺服器錯誤訊息 (例如 Token 用盡)
                             if (json.error) {
-                                aiFullText = `[系統拒絕]: ${json.error === 'Token quota exceeded' ? '您的 Token 額度已用盡，請聯繫管理員擴充額度。' : json.error}`;
+                                const errMsg = json.error === 'Token quota exceeded'
+                                    ? t('error_quota_exceeded')
+                                    : json.error;
+                                aiFullText = `${t('prefix_system_reject')}: ${errMsg}`;
                                 contentEl.innerHTML = `<span style="color: #ff4d4f; font-weight: bold;">${aiFullText}</span>`;
                                 chatHistoryEl.scrollTop = chatHistoryEl.scrollHeight;
                                 break;
@@ -1378,7 +1435,7 @@ if (chatForm) {
             trackTokenUsage(aiFullText, false);
         } catch (err) {
             // 保留已生成的文字，在末端追加紅色警告提示
-            const errorHint = `<br><br><span style="color: #ff4d4f; font-size: 13px; font-weight: bold;">[系統提示]: 連線意外中斷或發生錯誤 (${err.message})</span>`;
+            const errorHint = `<br><br><span style="color: #ff4d4f; font-size: 13px; font-weight: bold;">${t('prefix_system_notice')}: ${t('error_stream_interrupted')} (${err.message})</span>`;
             contentEl.innerHTML = (aiFullText ? aiFullText : contentEl.textContent) + errorHint;
         }
     });
@@ -1550,7 +1607,7 @@ function initChart() {
         data: {
             labels: [],
             datasets: [{
-                label: 'Training Loss',
+                label: t('chart_label_training_loss'),
                 data: [],
                 borderColor: '#10b981',
                 backgroundColor: 'rgba(16, 185, 129, 0.1)',
@@ -1566,12 +1623,12 @@ function initChart() {
             color: '#fff',
             scales: {
                 x: {
-                    title: { display: true, text: 'Epoch', color: 'rgba(255,255,255,0.7)' },
+                    title: { display: true, text: t('chart_label_epoch'), color: 'rgba(255,255,255,0.7)' },
                     grid: { color: 'rgba(255,255,255,0.1)' },
                     ticks: { color: 'rgba(255,255,255,0.7)' }
                 },
                 y: {
-                    title: { display: true, text: 'Loss', color: 'rgba(255,255,255,0.7)' },
+                    title: { display: true, text: t('chart_label_loss'), color: 'rgba(255,255,255,0.7)' },
                     grid: { color: 'rgba(255,255,255,0.1)' },
                     ticks: { color: 'rgba(255,255,255,0.7)' }
                 }
@@ -1622,7 +1679,7 @@ window.openJobDetails = function(jobId) {
             });
 
             if (!resp.ok) {
-                jobLogsContainer.textContent += `\n[System] Failed to connect to log stream (HTTP ${resp.status}).\n`;
+                jobLogsContainer.textContent += `\n[${t('error_stream_failed')}] (HTTP ${resp.status})\n`;
                 return;
             }
 
@@ -1670,7 +1727,7 @@ window.openJobDetails = function(jobId) {
                         // Check if finished
                         if (['completed', 'failed', 'cancelled'].includes(data.status)) {
                             abortCtrl.abort();
-                            jobLogsContainer.textContent += `\n[System] Job finished with status: ${data.status}\n`;
+                            jobLogsContainer.textContent += `\n[${t('msg_job_status')}: ${data.status}]\n`;
                             if (autoScrollCheckbox && autoScrollCheckbox.checked) {
                                 jobLogsContainer.scrollTop = jobLogsContainer.scrollHeight;
                             }
@@ -1684,7 +1741,7 @@ window.openJobDetails = function(jobId) {
         } catch (e) {
             if (e.name !== 'AbortError') {
                 console.error('SSE stream error:', e);
-                jobLogsContainer.textContent += '\n[System] Disconnected from log stream.\n';
+                jobLogsContainer.textContent += `\n[${t('error_stream_disconnected')}]\n`;
             }
         }
     })();
