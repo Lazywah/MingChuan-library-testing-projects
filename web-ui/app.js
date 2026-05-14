@@ -183,7 +183,33 @@ const TRANSLATIONS = {
         chart_label_loss: "損失值",
         // Session 操作
         confirm_delete_session: "確定要刪除此對話？",
-        prompt_rename_session: "請輸入新名稱："
+        prompt_rename_session: "請輸入新名稱：",
+        // Notebook
+        compute_notebook: "Notebook",
+        nb_mode_train: "訓練 Training",
+        nb_mode_finetune: "微調 Fine-tuning",
+        nb_mode_infer: "推論 Inference",
+        nb_mode_preprocess: "資料前處理 Preprocess",
+        nb_gpu_auto: "自動 Auto",
+        nb_saved: "已儲存",
+        nb_saving: "儲存中...",
+        nb_unsaved: "未儲存",
+        nb_run_all: "Run All",
+        nb_stop: "Stop",
+        nb_dataset_label: "資料集 Dataset：",
+        nb_dataset_none: "（未選擇）",
+        nb_upload: "上傳",
+        nb_add_code: "+ Code",
+        nb_add_shell: "+ Shell",
+        nb_add_md: "+ Markdown",
+        nb_output_title: "執行輸出 Output",
+        nb_job_name_default: "Notebook 任務",
+        nb_submit_running: "任務已提交，排隊中...",
+        nb_submit_failed: "任務提交失敗",
+        nb_no_code: "請先新增並填寫程式格",
+        nb_dataset_uploading: "資料集上傳中...",
+        nb_dataset_ok: "資料集上傳成功",
+        nb_dataset_fail: "資料集上傳失敗"
     },
     en: {
         login_title: "System Login",
@@ -356,7 +382,33 @@ const TRANSLATIONS = {
         chart_label_loss: "Loss",
         // Session actions
         confirm_delete_session: "Delete this session?",
-        prompt_rename_session: "Enter new name:"
+        prompt_rename_session: "Enter new name:",
+        // Notebook
+        compute_notebook: "Notebook",
+        nb_mode_train: "Training",
+        nb_mode_finetune: "Fine-tuning",
+        nb_mode_infer: "Inference",
+        nb_mode_preprocess: "Preprocess",
+        nb_gpu_auto: "Auto",
+        nb_saved: "Saved",
+        nb_saving: "Saving...",
+        nb_unsaved: "Unsaved",
+        nb_run_all: "Run All",
+        nb_stop: "Stop",
+        nb_dataset_label: "Dataset:",
+        nb_dataset_none: "(none selected)",
+        nb_upload: "Upload",
+        nb_add_code: "+ Code",
+        nb_add_shell: "+ Shell",
+        nb_add_md: "+ Markdown",
+        nb_output_title: "Output",
+        nb_job_name_default: "Notebook Job",
+        nb_submit_running: "Job submitted, queued...",
+        nb_submit_failed: "Job submission failed",
+        nb_no_code: "Please add and fill at least one code cell",
+        nb_dataset_uploading: "Uploading dataset...",
+        nb_dataset_ok: "Dataset uploaded successfully",
+        nb_dataset_fail: "Dataset upload failed"
     }
 };
 
@@ -1746,3 +1798,678 @@ window.openJobDetails = function(jobId) {
         }
     })();
 };
+
+
+// ==============================================================================
+// NOTEBOOK MODULE
+// ==============================================================================
+
+const NB = (() => {
+    // ── 狀態 ──────────────────────────────────────────────────────────────────
+    let _cells       = [];          // [{id, type, content, _editor}]
+    let _env         = { framework: 'pytorch', mode: 'training', preferred_node: 'auto', docker_image: null };
+    let _saveTimer   = null;        // debounce timer
+    let _datasetPath = null;        // 已上傳資料集路徑
+    let _runJobId    = null;        // 正在執行的任務 ID
+    let _sseAbort    = null;        // AbortController for SSE
+    let _monacoReady = false;
+    let _pendingInit = false;
+
+    // ── 框架 → Docker Image 對照 ───────────────────────────────────────────────
+    const FRAMEWORK_IMAGES = {
+        pytorch:      'pytorch/pytorch:2.7.0-cuda12.8-cudnn9-runtime',
+        tensorflow:   'tensorflow/tensorflow:2.15.0-gpu',
+        transformers: 'huggingface/transformers-pytorch-gpu:latest',
+        'llama.cpp':  'ghcr.io/ggerganov/llama.cpp:full-cuda',
+        vllm:         'vllm/vllm-openai:latest',
+        custom:       null
+    };
+
+    // ── 框架 + 模式 → Starter 程式碼 ──────────────────────────────────────────
+    const TEMPLATES = {
+        'pytorch-training': `import torch
+import torch.nn as nn
+from torch.utils.data import DataLoader, TensorDataset
+
+# ZH: 載入資料集 | EN: Load dataset
+# dataset_path = "/workspace/your_dataset.csv"
+
+# ZH: 定義模型 | EN: Define model
+class SimpleNet(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.fc = nn.Linear(10, 1)
+    def forward(self, x):
+        return self.fc(x)
+
+model = SimpleNet().cuda()
+optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
+criterion = nn.MSELoss()
+
+# ZH: 訓練迴圈 | EN: Training loop
+EPOCHS = 10
+for epoch in range(1, EPOCHS + 1):
+    # TODO: replace with real data
+    x = torch.randn(64, 10).cuda()
+    y = torch.randn(64, 1).cuda()
+    loss = criterion(model(x), y)
+    optimizer.zero_grad()
+    loss.backward()
+    optimizer.step()
+    print(f"Epoch {epoch}/{EPOCHS}  loss={loss.item():.4f}")
+
+torch.save(model.state_dict(), f"/workspace/outputs/model.pt")
+print("Training complete!")`,
+
+        'pytorch-finetuning': `from transformers import AutoModelForSequenceClassification, AutoTokenizer, Trainer, TrainingArguments
+import torch
+
+MODEL_NAME = "bert-base-uncased"
+tokenizer  = AutoTokenizer.from_pretrained(MODEL_NAME)
+model      = AutoModelForSequenceClassification.from_pretrained(MODEL_NAME, num_labels=2)
+
+# ZH: 替換為你的資料集 | EN: Replace with your dataset
+# from datasets import load_from_disk
+# dataset = load_from_disk("/workspace/my_dataset")
+
+training_args = TrainingArguments(
+    output_dir="/workspace/outputs/finetuned",
+    num_train_epochs=3,
+    per_device_train_batch_size=16,
+    logging_steps=50,
+    save_strategy="epoch",
+)
+# trainer = Trainer(model=model, args=training_args, train_dataset=dataset["train"])
+# trainer.train()
+print("Fine-tuning template ready — replace dataset and uncomment trainer.train()")`,
+
+        'pytorch-inference': `import torch
+
+# ZH: 載入模型 | EN: Load model
+model_path = "/workspace/outputs/model.pt"
+# model = YourModel()
+# model.load_state_dict(torch.load(model_path))
+# model.eval()
+
+# ZH: 執行推論 | EN: Run inference
+# with torch.no_grad():
+#     output = model(input_tensor)
+#     print(output)
+print("Inference template ready — replace with your model loading code")`,
+
+        'llama.cpp-inference': `#!/bin/bash
+# ZH: llama.cpp 推論範本 | EN: llama.cpp inference template
+MODEL="/workspace/models/your-model.gguf"
+PROMPT="Hello, who are you?"
+
+./llama-cli \\
+    -m "$MODEL" \\
+    -p "$PROMPT" \\
+    --n-predict 256 \\
+    -ngl 99 \\
+    --color`,
+
+        'vllm-inference': `from vllm import LLM, SamplingParams
+
+llm = LLM(model="/workspace/models/your-model", gpu_memory_utilization=0.9)
+sampling_params = SamplingParams(temperature=0.8, top_p=0.95, max_tokens=512)
+
+prompts = ["Hello, tell me about AI training platforms."]
+outputs = llm.generate(prompts, sampling_params)
+
+for output in outputs:
+    print(output.outputs[0].text)`,
+
+        'generic-preprocess': `import json, csv, pathlib
+
+# ZH: 資料前處理範本 | EN: Data preprocessing template
+INPUT_FILE  = "/workspace/raw_data.csv"
+OUTPUT_FILE = "/workspace/processed_data.jsonl"
+
+with open(INPUT_FILE) as fin, open(OUTPUT_FILE, "w") as fout:
+    reader = csv.DictReader(fin)
+    for row in reader:
+        # ZH: 清洗邏輯 | EN: Cleaning logic
+        record = {"text": row.get("text", "").strip(), "label": int(row.get("label", 0))}
+        fout.write(json.dumps(record, ensure_ascii=False) + "\\n")
+
+print(f"Preprocessing done → {OUTPUT_FILE}")
+print(f"Records: {sum(1 for _ in open(OUTPUT_FILE))}")`
+    };
+
+    function _getTemplate(fw, mode) {
+        return TEMPLATES[`${fw}-${mode}`] || TEMPLATES['generic-preprocess'];
+    }
+
+    // ── Monaco 初始化 ──────────────────────────────────────────────────────────
+    function _initMonaco(cb) {
+        if (typeof require === 'undefined' || !window.monaco) {
+            // Monaco loader not ready yet — wait
+            require.config({ paths: { vs: 'https://cdn.jsdelivr.net/npm/monaco-editor@0.44.0/min/vs' } });
+            require(['vs/editor/editor.main'], () => {
+                _monacoReady = true;
+                if (cb) cb();
+            });
+        } else {
+            _monacoReady = true;
+            if (cb) cb();
+        }
+    }
+
+    // ── 格子 DOM 建構 ──────────────────────────────────────────────────────────
+    function _buildCellDOM(cell) {
+        const wrap = document.createElement('div');
+        wrap.className = `nb-cell nb-cell-${cell.type}`;
+        wrap.dataset.id = cell.id;
+
+        // 左側色條
+        const accent = document.createElement('div');
+        accent.className = 'nb-cell-accent';
+        wrap.appendChild(accent);
+
+        // 控制列
+        const ctrl = document.createElement('div');
+        ctrl.className = 'nb-cell-ctrl';
+        ctrl.innerHTML = `
+            <span class="nb-cell-type-badge">${cell.type}</span>
+            <div class="nb-cell-ctrl-btns">
+                <button class="nb-btn-icon nb-move-up"   title="Move up">   <ion-icon name="chevron-up-outline"></ion-icon></button>
+                <button class="nb-btn-icon nb-move-down" title="Move down"> <ion-icon name="chevron-down-outline"></ion-icon></button>
+                <button class="nb-btn-icon nb-del-cell"  title="Delete">    <ion-icon name="trash-outline"></ion-icon></button>
+            </div>`;
+        wrap.appendChild(ctrl);
+
+        // 內容區
+        const body = document.createElement('div');
+        body.className = 'nb-cell-body';
+
+        if (cell.type === 'markdown') {
+            const rendered = document.createElement('div');
+            rendered.className = 'nb-cell-md-rendered';
+            rendered.innerHTML = _mdToHtml(cell.content);
+            const edit = document.createElement('textarea');
+            edit.className = 'nb-cell-md-edit hidden';
+            edit.value = cell.content;
+            edit.addEventListener('input', () => {
+                cell.content = edit.value;
+                rendered.innerHTML = _mdToHtml(cell.content);
+                _scheduleSave();
+            });
+            rendered.addEventListener('dblclick', () => {
+                rendered.classList.add('hidden');
+                edit.classList.remove('hidden');
+                edit.focus();
+            });
+            edit.addEventListener('blur', () => {
+                edit.classList.add('hidden');
+                rendered.classList.remove('hidden');
+            });
+            body.appendChild(rendered);
+            body.appendChild(edit);
+        } else {
+            const editorHost = document.createElement('div');
+            editorHost.className = 'nb-cell-editor-host';
+            body.appendChild(editorHost);
+            // Monaco editor is created after DOM append in _attachMonaco
+            cell._editorHost = editorHost;
+        }
+
+        wrap.appendChild(body);
+
+        // 事件
+        ctrl.querySelector('.nb-move-up').addEventListener('click',   () => _moveCell(cell.id, -1));
+        ctrl.querySelector('.nb-move-down').addEventListener('click', () => _moveCell(cell.id, +1));
+        ctrl.querySelector('.nb-del-cell').addEventListener('click',  () => _deleteCell(cell.id));
+
+        return wrap;
+    }
+
+    function _attachMonaco(cell) {
+        if (!cell._editorHost || cell.type === 'markdown') return;
+        const lang = cell.type === 'shell' ? 'shell' : 'python';
+        const theme = document.documentElement.getAttribute('data-theme') === 'light' ? 'vs' : 'vs-dark';
+        cell._editor = window.monaco.editor.create(cell._editorHost, {
+            value: cell.content,
+            language: lang,
+            theme: theme,
+            fontSize: 13,
+            minimap: { enabled: false },
+            lineNumbers: 'on',
+            scrollBeyondLastLine: false,
+            automaticLayout: true,
+            wordWrap: 'on',
+            padding: { top: 8, bottom: 8 }
+        });
+        cell._editor.onDidChangeModelContent(() => {
+            cell.content = cell._editor.getValue();
+            _scheduleSave();
+        });
+        // Auto-resize height to content
+        const updateHeight = () => {
+            const lineHeight = 19;
+            const lines = Math.max(5, cell._editor.getModel().getLineCount());
+            const height = Math.min(lines * lineHeight + 20, 600);
+            cell._editorHost.style.height = `${height}px`;
+            cell._editor.layout();
+        };
+        cell._editor.onDidChangeModelContent(updateHeight);
+        updateHeight();
+    }
+
+    // ── 簡易 Markdown → HTML ───────────────────────────────────────────────────
+    function _mdToHtml(md) {
+        return md
+            .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+            .replace(/^### (.+)$/gm, '<h3>$1</h3>')
+            .replace(/^## (.+)$/gm,  '<h2>$1</h2>')
+            .replace(/^# (.+)$/gm,   '<h1>$1</h1>')
+            .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+            .replace(/\*(.+?)\*/g,     '<em>$1</em>')
+            .replace(/`(.+?)`/g,       '<code>$1</code>')
+            .replace(/\n/g, '<br>');
+    }
+
+    // ── 格子操作 ───────────────────────────────────────────────────────────────
+    function _addCell(type, content) {
+        const cell = {
+            id:      `cell-${Date.now()}-${Math.random().toString(36).slice(2,6)}`,
+            type:    type,
+            content: content !== undefined ? content : (type === 'markdown' ? '## 說明\n' : '')
+        };
+        _cells.push(cell);
+        const container = document.getElementById('nb-cells');
+        const dom = _buildCellDOM(cell);
+        container.appendChild(dom);
+        if (type !== 'markdown') {
+            _attachMonaco(cell);
+        }
+        _scheduleSave();
+        return cell;
+    }
+
+    function _deleteCell(id) {
+        const idx = _cells.findIndex(c => c.id === id);
+        if (idx === -1) return;
+        if (_cells[idx]._editor) _cells[idx]._editor.dispose();
+        _cells.splice(idx, 1);
+        document.querySelector(`[data-id="${id}"]`)?.remove();
+        _scheduleSave();
+    }
+
+    function _moveCell(id, dir) {
+        const idx = _cells.findIndex(c => c.id === id);
+        if (idx === -1) return;
+        const newIdx = idx + dir;
+        if (newIdx < 0 || newIdx >= _cells.length) return;
+        [_cells[idx], _cells[newIdx]] = [_cells[newIdx], _cells[idx]];
+        _renderAllCells();
+        _scheduleSave();
+    }
+
+    function _renderAllCells() {
+        // Dispose all Monaco editors before clearing DOM
+        _cells.forEach(c => { if (c._editor) { c._editor.dispose(); c._editor = null; } });
+        const container = document.getElementById('nb-cells');
+        container.innerHTML = '';
+        _cells.forEach(cell => {
+            const dom = _buildCellDOM(cell);
+            container.appendChild(dom);
+            if (cell.type !== 'markdown') _attachMonaco(cell);
+        });
+    }
+
+    // ── 編譯 Notebook → shell script ──────────────────────────────────────────
+    function _compile() {
+        const parts = [];
+        parts.push('#!/bin/bash');
+        parts.push('set -eu');
+        parts.push('');
+        _cells.forEach(cell => {
+            if (cell.type === 'code') {
+                // ZH: Python 格子 — 寫入暫存 .py 並執行 | EN: code cell — write temp .py and run
+                parts.push('# --- code cell ---');
+                parts.push(`python3 -u - <<'__PYEOF__'`);
+                parts.push(cell.content);
+                parts.push('__PYEOF__');
+                parts.push('');
+            } else if (cell.type === 'shell') {
+                // ZH: Shell 格子 — 直接展開 | EN: shell cell — expand inline
+                parts.push('# --- shell cell ---');
+                parts.push(cell.content);
+                parts.push('');
+            }
+            // markdown 格子忽略
+        });
+        return parts.join('\n');
+    }
+
+    // ── 儲存 (auto-save debounce 2s) ──────────────────────────────────────────
+    function _scheduleSave() {
+        const el = document.getElementById('nb-save-status');
+        if (el) el.textContent = t('nb_unsaved');
+        clearTimeout(_saveTimer);
+        _saveTimer = setTimeout(_doSave, 2000);
+    }
+
+    async function _doSave() {
+        const el = document.getElementById('nb-save-status');
+        if (el) el.textContent = t('nb_saving');
+        try {
+            const payload = {
+                cells: _cells.map(c => ({ id: c.id, type: c.type, content: c.content })),
+                environment: _env
+            };
+            const res = await apiFetch('/api/v1/notebooks/mine', {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+            if (!res.ok) throw new Error('save failed');
+            if (el) el.textContent = t('nb_saved');
+        } catch (e) {
+            console.error('Notebook save error:', e);
+            if (el) el.textContent = t('nb_unsaved');
+        }
+    }
+
+    // ── 載入使用者 Notebook ────────────────────────────────────────────────────
+    async function _loadNotebook() {
+        try {
+            const res = await apiFetch('/api/v1/notebooks/mine');
+            if (!res.ok) return;
+            const data = await res.json();
+            _env = data.environment || _env;
+            // 同步 UI 環境列
+            const fw   = document.getElementById('nb-framework');
+            const mode = document.getElementById('nb-mode');
+            const gpu  = document.getElementById('nb-gpu-node');
+            if (fw   && _env.framework)       fw.value   = _env.framework;
+            if (mode && _env.mode)             mode.value = _env.mode;
+            if (gpu  && _env.preferred_node)   gpu.value  = _env.preferred_node;
+            _showCustomImageInput();
+            // 清除並重建格子
+            _cells.forEach(c => { if (c._editor) c._editor.dispose(); });
+            _cells = [];
+            document.getElementById('nb-cells').innerHTML = '';
+            (data.cells || []).forEach(c => _addCell(c.type, c.content));
+            document.getElementById('nb-save-status').textContent = t('nb_saved');
+        } catch (e) {
+            console.error('Notebook load error:', e);
+        }
+    }
+
+    // ── 載入 GPU 節點 ──────────────────────────────────────────────────────────
+    async function _loadNodes() {
+        try {
+            const res = await apiFetch('/api/v1/notebooks/nodes');
+            if (!res.ok) return;
+            const data = await res.json();
+            const sel  = document.getElementById('nb-gpu-node');
+            if (!sel) return;
+            // 保留 "auto" option，清除其餘
+            while (sel.options.length > 1) sel.remove(1);
+            (data.nodes || []).forEach(node => {
+                const opt = document.createElement('option');
+                opt.value = node.node_id;
+                opt.textContent = `${node.node_id}  (GPU×${node.available_gpus.length}, ${node.gpu_utilization.toFixed(0)}%)`;
+                sel.appendChild(opt);
+            });
+            if (_env.preferred_node && _env.preferred_node !== 'auto') {
+                sel.value = _env.preferred_node;
+            }
+        } catch (e) {
+            console.warn('Node list load error:', e);
+        }
+    }
+
+    // ── 執行 Notebook ─────────────────────────────────────────────────────────
+    async function _runNotebook() {
+        const codeCells = _cells.filter(c => c.type === 'code' || c.type === 'shell');
+        if (codeCells.length === 0) {
+            showToast('nb_no_code', true);
+            return;
+        }
+
+        const inlineCode = _compile();
+        const framework  = document.getElementById('nb-framework')?.value || 'pytorch';
+        let dockerImage  = framework === 'custom'
+            ? (document.getElementById('nb-custom-image')?.value?.trim() || null)
+            : FRAMEWORK_IMAGES[framework] || null;
+
+        const payload = {
+            job_name:       t('nb_job_name_default'),
+            model_name:     framework,
+            gpu_required:   1,
+            inline_code:    inlineCode,
+            docker_image:   dockerImage,
+            preferred_node: _env.preferred_node !== 'auto' ? _env.preferred_node : null,
+            dataset_path:   _datasetPath || null,
+            config:         { mode: _env.mode }
+        };
+
+        // UI 切換
+        document.getElementById('nb-run-btn').classList.add('hidden');
+        document.getElementById('nb-stop-btn').classList.remove('hidden');
+        const outputPanel = document.getElementById('nb-output-panel');
+        outputPanel.classList.remove('hidden');
+        const logEl = document.getElementById('nb-output-log');
+        logEl.textContent = '';
+        document.getElementById('nb-progress-wrap').classList.add('hidden');
+        document.getElementById('nb-job-status').textContent = t('nb_submit_running');
+
+        try {
+            const res = await apiFetch('/api/v1/jobs', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+            if (!res.ok) throw new Error(await res.text());
+            const data = await res.json();
+            _runJobId = data.job_id;
+            _streamOutput(_runJobId);
+        } catch (e) {
+            console.error('Submit notebook job error:', e);
+            showToast('nb_submit_failed', true);
+            _resetRunUI();
+        }
+    }
+
+    // ── SSE 輸出串流 ───────────────────────────────────────────────────────────
+    function _streamOutput(jobId) {
+        if (_sseAbort) _sseAbort.abort();
+        _sseAbort = new AbortController();
+        const logEl        = document.getElementById('nb-output-log');
+        const progressBar  = document.getElementById('nb-progress-bar');
+        const progressText = document.getElementById('nb-progress-text');
+        const progressWrap = document.getElementById('nb-progress-wrap');
+        const statusEl     = document.getElementById('nb-job-status');
+
+        (async () => {
+            try {
+                const token = localStorage.getItem('ai_hud_token');
+                const response = await fetch(`/api/v1/jobs/${jobId}/stream`, {
+                    headers: { Authorization: `Bearer ${token}` },
+                    signal: _sseAbort.signal
+                });
+                if (!response.ok) throw new Error('stream connect failed');
+                const reader = response.body.getReader();
+                const dec    = new TextDecoder();
+                let   buf    = '';
+
+                while (true) {
+                    const { done, value } = await reader.read();
+                    if (done) break;
+                    buf += dec.decode(value, { stream: true });
+                    const parts = buf.split('\n\n');
+                    buf = parts.pop();
+                    for (const part of parts) {
+                        if (!part.startsWith('data:')) continue;
+                        try {
+                            const ev = JSON.parse(part.slice(5).trim());
+                            if (ev.logs) {
+                                logEl.textContent = ev.logs;
+                                logEl.scrollTop   = logEl.scrollHeight;
+                            }
+                            if (ev.new_logs) {
+                                logEl.textContent += ev.new_logs;
+                                logEl.scrollTop    = logEl.scrollHeight;
+                            }
+                            if (ev.progress !== undefined && ev.progress > 0) {
+                                progressWrap.classList.remove('hidden');
+                                const pct = Math.min(100, Math.round(ev.progress));
+                                progressBar.style.width  = `${pct}%`;
+                                progressText.textContent = `${pct}%`;
+                            }
+                            if (ev.status) {
+                                statusEl.textContent = ev.status;
+                                statusEl.className   = `nb-job-status nb-status-${ev.status}`;
+                            }
+                            if (['completed','failed','cancelled'].includes(ev.status)) {
+                                _resetRunUI();
+                                return;
+                            }
+                        } catch (_) {}
+                    }
+                }
+            } catch (e) {
+                if (e.name !== 'AbortError') {
+                    logEl.textContent += `\n[${t('error_stream_disconnected')}]\n`;
+                }
+                _resetRunUI();
+            }
+        })();
+    }
+
+    function _resetRunUI() {
+        document.getElementById('nb-run-btn')?.classList.remove('hidden');
+        document.getElementById('nb-stop-btn')?.classList.add('hidden');
+        _runJobId = null;
+    }
+
+    function _stopNotebook() {
+        if (_sseAbort) { _sseAbort.abort(); _sseAbort = null; }
+        _resetRunUI();
+    }
+
+    // ── 自訂 Image 輸入框顯示控制 ─────────────────────────────────────────────
+    function _showCustomImageInput() {
+        const fw  = document.getElementById('nb-framework')?.value;
+        const inp = document.getElementById('nb-custom-image');
+        if (!inp) return;
+        if (fw === 'custom') inp.classList.remove('hidden');
+        else                 inp.classList.add('hidden');
+    }
+
+    // ── 資料集上傳 ─────────────────────────────────────────────────────────────
+    async function _uploadDataset(file) {
+        document.getElementById('nb-dataset-name').textContent = t('nb_dataset_uploading');
+        const form = new FormData();
+        form.append('file', file);
+        try {
+            const res = await apiFetch('/api/v1/datasets/upload', { method: 'POST', body: form });
+            if (!res.ok) throw new Error();
+            const data = await res.json();
+            _datasetPath = data.file_path;
+            document.getElementById('nb-dataset-name').textContent = file.name;
+            showToast('nb_dataset_ok');
+        } catch (e) {
+            document.getElementById('nb-dataset-name').textContent = t('nb_dataset_none');
+            showToast('nb_dataset_fail', true);
+        }
+    }
+
+    // ── 套用框架範本 ───────────────────────────────────────────────────────────
+    function _applyTemplate() {
+        const fw   = document.getElementById('nb-framework')?.value || 'pytorch';
+        const mode = document.getElementById('nb-mode')?.value || 'training';
+        const tpl  = _getTemplate(fw, mode);
+        // ZH: 找第一個 code/shell 格子，替換為範本 | EN: Replace first code/shell cell with template
+        const first = _cells.find(c => c.type === 'code' || c.type === 'shell');
+        if (first && first._editor) {
+            first._editor.setValue(tpl);
+            first.content = tpl;
+            _scheduleSave();
+        }
+    }
+
+    // ── 公開 init ──────────────────────────────────────────────────────────────
+    function init() {
+        if (!document.getElementById('nb-cells')) return; // 面板未在 DOM
+
+        // 初始化 Monaco
+        _initMonaco(async () => {
+            // 如果還沒有格子，先加一個預設 code 格
+            if (_cells.length === 0) {
+                const fw   = document.getElementById('nb-framework')?.value || 'pytorch';
+                const mode = document.getElementById('nb-mode')?.value || 'training';
+                _addCell('code', _getTemplate(fw, mode));
+            }
+        });
+
+        // 載入 Notebook 與節點
+        _loadNotebook();
+        _loadNodes();
+
+        // 按鈕事件
+        document.getElementById('nb-run-btn')?.addEventListener('click', _runNotebook);
+        document.getElementById('nb-stop-btn')?.addEventListener('click', _stopNotebook);
+        document.getElementById('nb-clear-output')?.addEventListener('click', () => {
+            document.getElementById('nb-output-log').textContent = '';
+            document.getElementById('nb-progress-wrap').classList.add('hidden');
+        });
+
+        // 新增格子按鈕
+        document.getElementById('nb-add-code')?.addEventListener('click',  () => { _addCell('code');     });
+        document.getElementById('nb-add-shell')?.addEventListener('click', () => { _addCell('shell');    });
+        document.getElementById('nb-add-md')?.addEventListener('click',   () => { _addCell('markdown'); });
+
+        // 環境選擇器
+        document.getElementById('nb-framework')?.addEventListener('change', () => {
+            _env.framework = document.getElementById('nb-framework').value;
+            _showCustomImageInput();
+            _applyTemplate();
+            _scheduleSave();
+        });
+        document.getElementById('nb-mode')?.addEventListener('change', () => {
+            _env.mode = document.getElementById('nb-mode').value;
+            _applyTemplate();
+            _scheduleSave();
+        });
+        document.getElementById('nb-gpu-node')?.addEventListener('change', () => {
+            _env.preferred_node = document.getElementById('nb-gpu-node').value;
+            _scheduleSave();
+        });
+        document.getElementById('nb-custom-image')?.addEventListener('input', () => {
+            _env.docker_image = document.getElementById('nb-custom-image').value.trim() || null;
+            _scheduleSave();
+        });
+
+        // 資料集上傳
+        document.getElementById('nb-dataset-input')?.addEventListener('change', e => {
+            if (e.target.files[0]) _uploadDataset(e.target.files[0]);
+        });
+    }
+
+    return { init, addCell: _addCell };
+})();
+
+
+// ==============================================================================
+// 整合：切換到 Notebook 頁籤時初始化
+// ==============================================================================
+(function _patchSubTabForNotebook() {
+    const origHandler = window._handleSubTabClick;
+    document.addEventListener('click', e => {
+        const btn = e.target.closest('.sub-tab-btn');
+        if (!btn) return;
+        if (btn.dataset.subtab === 'compute-notebook') {
+            // 顯示 Notebook 面板
+            document.querySelectorAll('.sub-page-view').forEach(p => p.classList.remove('active'));
+            document.getElementById('compute-notebook-page')?.classList.add('active');
+            document.querySelectorAll('.sub-tab-btn').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            // 首次切入時初始化
+            NB.init();
+        }
+    }, true);
+})();
