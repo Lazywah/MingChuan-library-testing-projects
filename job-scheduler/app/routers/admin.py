@@ -248,18 +248,25 @@ def provision_user(
     db_user.is_test_account = 0
     db.commit()
 
-    if db_user.email:
+    email_queued = bool(db_user.email)
+    if email_queued:
         background_tasks.add_task(
             email_service.send_temp_password,
             db_user.email, db_user.username, temp_password, True,
         )
 
+    # ZH: 僅在無法發送 Email 時才在回應中回傳明文密碼，避免密碼出現在瀏覽器記錄中
+    # EN: Only return plaintext password when email cannot be sent (avoids it appearing in browser logs)
+    logger.info(
+        "provision_user: created %s (email_queued=%s)", db_user.username, email_queued
+    )
     return {
         "id": db_user.id,
         "username": db_user.username,
         "email": db_user.email,
         "role": db_user.role,
-        "temp_password": temp_password,
+        "temp_password": temp_password if not email_queued else "[已寄送至 Email | sent via email]",
+        "email_sent": email_queued,
     }
 
 
@@ -285,16 +292,21 @@ def reset_user_account(
 
     db.commit()
 
-    if db_user.email:
+    email_queued = bool(db_user.email)
+    if email_queued:
         background_tasks.add_task(
             email_service.send_temp_password,
             db_user.email, db_user.username, temp_password, False,
         )
 
-    logger.info(f"Account {db_user.username} reset by admin {current_user.username}")
+    logger.info(
+        "reset_user_account: %s reset by admin %s (email_queued=%s)",
+        db_user.username, current_user.username, email_queued,
+    )
     return {
         "username": db_user.username,
-        "temp_password": temp_password,
+        "temp_password": temp_password if not email_queued else "[已寄送至 Email | sent via email]",
+        "email_sent": email_queued,
         "message": f"Account {db_user.username} has been initialized",
     }
 
@@ -514,6 +526,101 @@ def get_cluster_stats(
 # ==============================================================================
 # ZH: 數據分析 | EN: Analytics
 # ==============================================================================
+
+@router.get("/users/{user_id}/analytics")
+def get_user_analytics(
+    user_id: str,
+    db: Session = Depends(get_db),
+    _: models.User = Depends(require_admin),
+) -> Any:
+    """
+    ZH: 取得指定使用者的細粒度數據分析（Token、Sessions、工具分布）
+    EN: Detailed per-user analytics — token quota, sessions, tool breakdown
+    """
+    user = db.query(models.User).filter(models.User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    usage = crud.get_token_usage(db, user_id)
+
+    # ZH: 依工具類型彙總訊息數與 Token 消耗 | EN: Aggregate by tool_type
+    tool_rows = (
+        db.query(
+            models.ChatHistory.tool_type,
+            func.count(models.ChatHistory.id).label("message_count"),
+            func.sum(models.ChatHistory.tokens_used).label("tokens_sum"),
+        )
+        .filter(models.ChatHistory.user_id == user_id)
+        .group_by(models.ChatHistory.tool_type)
+        .all()
+    )
+
+    # ZH: Top-10 Sessions（依 Token 消耗降冪）| EN: Top-10 sessions by token cost
+    session_rows = (
+        db.query(
+            models.ChatHistory.session_id,
+            func.min(models.ChatHistory.created_at).label("started_at"),
+            func.count(models.ChatHistory.id).label("message_count"),
+            func.sum(models.ChatHistory.tokens_used).label("tokens_sum"),
+        )
+        .filter(models.ChatHistory.user_id == user_id)
+        .group_by(models.ChatHistory.session_id)
+        .order_by(func.sum(models.ChatHistory.tokens_used).desc())
+        .limit(10)
+        .all()
+    )
+
+    # ZH: 對話 Session 總數 | EN: Total distinct sessions
+    total_sessions = (
+        db.query(func.count(func.distinct(models.ChatHistory.session_id)))
+        .filter(models.ChatHistory.user_id == user_id)
+        .scalar()
+    ) or 0
+
+    tokens_used  = usage.tokens_used  if usage else 0
+    tokens_limit = usage.tokens_limit if usage else 0
+    usage_pct    = round(tokens_used / tokens_limit * 100, 1) if tokens_limit > 0 else 0.0
+
+    return {
+        "user": {
+            "id":                   user.id,
+            "username":             user.username,
+            "email":                user.email,
+            "role":                 user.role,
+            "department":           user.department,
+            "is_active":            user.is_active,
+            "login_count":          user.login_count,
+            "lifetime_tokens_used": user.lifetime_tokens_used,
+            "last_login_time":      user.last_login_time,
+            "last_login_ip":        user.last_login_ip,
+            "created_at":           user.created_at,
+        },
+        "token_quota": {
+            "tokens_used":  tokens_used,
+            "tokens_limit": tokens_limit,
+            "usage_pct":    usage_pct,
+            "reset_date":   usage.reset_date if usage else None,
+        },
+        "total_sessions": total_sessions,
+        "tool_breakdown": [
+            {
+                "tool_type":     r.tool_type or "chat",
+                "message_count": r.message_count,
+                "tokens_sum":    int(r.tokens_sum or 0),
+            }
+            for r in tool_rows
+        ],
+        "top_sessions": [
+            {
+                "session_id":    r.session_id,
+                "started_at":    r.started_at,
+                "message_count": r.message_count,
+                "tokens_sum":    int(r.tokens_sum or 0),
+            }
+            for r in session_rows
+        ],
+    }
+
 
 @router.get("/analytics")
 def get_analytics(

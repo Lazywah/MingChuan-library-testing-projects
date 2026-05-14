@@ -21,6 +21,7 @@ EN: Features:
 from fastapi import APIRouter, Depends
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
+from sqlalchemy import update as _sa_update
 import httpx
 import json
 import logging
@@ -151,26 +152,40 @@ async def chat_completions(
         if not full_text:
             return
         try:
+            # ZH: 優先使用上游回傳的精確用量，備用字數/3 粗估
+            # EN: Prefer upstream actual usage; fallback to char/3 estimate
+            prompt_text = "".join(m.content for m in request.messages)
+            estimated = total_tokens or max(1, (len(prompt_text) + len(full_text)) // 3)
+
+            # H-8: ZH: 先算 estimated 再寫入，讓 assistant 行帶上本次往返真實 Token 消耗
+            # EN: Compute estimated first so the assistant row carries actual round-trip cost
             db.add(models.ChatHistory(
                 user_id=current_user.id, session_id=session_id,
                 role="user", content=last_message,
                 tool_type=request.tool_type or "chat",
+                tokens_used=0,          # ZH: prompt 成本計入下方 assistant 行 | EN: prompt cost counted in assistant row
             ))
             db.add(models.ChatHistory(
                 user_id=current_user.id, session_id=session_id,
                 role="assistant", content=full_text,
                 tool_type=request.tool_type or "chat",
+                tokens_used=estimated,  # H-8: ZH: 本次完整往返的 Token 消耗 | EN: total round-trip token cost
             ))
-            # ZH: 優先使用上游回傳的精確用量，備用字數/3 粗估
-            # EN: Prefer upstream actual usage; fallback to char/3 estimate
-            prompt_text = "".join(m.content for m in request.messages)
-            estimated = total_tokens or max(1, (len(prompt_text) + len(full_text)) // 3)
-            usage = crud.get_token_usage(db, current_user.id)
-            if usage:
-                usage.tokens_used += estimated
-                user = crud.get_user_by_id(db, current_user.id)
-                if user:
-                    user.lifetime_tokens_used += estimated
+
+            # ZH: 以 SQL UPDATE 直接做加法，避免 read-modify-write 競爭條件
+            # EN: Use SQL UPDATE for arithmetic to avoid read-modify-write race
+            db.execute(
+                _sa_update(models.TokenUsage)
+                .where(models.TokenUsage.user_id == current_user.id)
+                .values(tokens_used=models.TokenUsage.tokens_used + estimated)
+                .execution_options(synchronize_session=False)
+            )
+            db.execute(
+                _sa_update(models.User)
+                .where(models.User.id == current_user.id)
+                .values(lifetime_tokens_used=models.User.lifetime_tokens_used + estimated)
+                .execution_options(synchronize_session=False)
+            )
             db.commit()
         except Exception as e:
             logger.error(f"Failed to save chat history: {e}", exc_info=True)

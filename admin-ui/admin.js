@@ -102,7 +102,21 @@ const TRANSLATIONS = {
         btn_cancel: "取消",
         toast_delete_pwd_required: "請輸入管理員密碼",
         confirm_delete_user: "確定要永久刪除此帳號嗎？",
-        toast_user_deleted: "帳號已刪除"
+        toast_user_deleted: "帳號已刪除",
+        th_department: "學系",
+        btn_analytics: "分析",
+        analytics_title: "使用者數據分析",
+        ua_monthly_tokens: "本月 Tokens",
+        ua_lifetime_tokens: "累計 Tokens",
+        ua_login_count: "登入次數",
+        ua_sessions: "對話數",
+        ua_tool_breakdown: "工具使用分布",
+        ua_top_sessions: "前 10 對話（依 Token 用量排序）",
+        ua_session_id: "對話 ID",
+        ua_started_at: "開始時間",
+        ua_messages: "訊息數",
+        ua_tokens: "Tokens",
+        toast_analytics_failed: "載入分析資料失敗"
     },
     en: {
         btn_back_hub: "Back to Hub",
@@ -204,7 +218,21 @@ const TRANSLATIONS = {
         btn_cancel: "Cancel",
         toast_delete_pwd_required: "Admin password required",
         confirm_delete_user: "Are you sure you want to permanently delete this account?",
-        toast_user_deleted: "Account deleted"
+        toast_user_deleted: "Account deleted",
+        th_department: "Department",
+        btn_analytics: "Analytics",
+        analytics_title: "User Analytics",
+        ua_monthly_tokens: "Monthly Tokens",
+        ua_lifetime_tokens: "Lifetime Tokens",
+        ua_login_count: "Total Logins",
+        ua_sessions: "Chat Sessions",
+        ua_tool_breakdown: "Tool Breakdown",
+        ua_top_sessions: "Top 10 Sessions (by Token Cost)",
+        ua_session_id: "Session ID",
+        ua_started_at: "Started At",
+        ua_messages: "Messages",
+        ua_tokens: "Tokens",
+        toast_analytics_failed: "Failed to load analytics"
     }
 };
 
@@ -241,6 +269,17 @@ function showToast(msg, isError = false) {
     iconEl.innerHTML = isError ? '<ion-icon name="alert-circle-outline"></ion-icon>' : '<ion-icon name="checkmark-circle-outline"></ion-icon>';
     toast.className = `toast ${isError ? 'error' : ''} show`;
     setTimeout(() => { toast.classList.add('hidden'); }, 3000);
+}
+
+// ==========================================
+// ZH: 認證錯誤處理 | EN: Auth error handler
+// ==========================================
+function handleAuthError() {
+    authToken = null;
+    localStorage.removeItem('admin_hud_token');
+    document.getElementById('admin-main-layout').style.display = 'none';
+    document.getElementById('admin-login-modal').style.display = 'flex';
+    showToast(TRANSLATIONS[currentLang]?.toast_login_failed || 'Session expired. Please log in again.', true);
 }
 
 // ==========================================
@@ -404,6 +443,159 @@ function exportAnalyticsCharts() {
     setTimeout(() => {
         downloadCanvas(toolChartInstance, 'tool_usage.png');
     }, 500);
+}
+
+// ==========================================
+// ZH: 個人數據分析 Modal | EN: Per-user Analytics Modal
+// ==========================================
+let _uaChartInstance = null;
+
+async function openUserAnalytics(userId) {
+    const modal = document.getElementById('user-analytics-modal');
+    modal.classList.remove('hidden');
+
+    // ZH: 清空舊資料，顯示載入中 | EN: Reset stale data, show loading state
+    ['ua-username', 'ua-email', 'ua-role', 'ua-department',
+     'ua-tokens-pct', 'ua-tokens-detail', 'ua-lifetime-tokens',
+     'ua-login-count', 'ua-sessions-count'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.textContent = '…';
+    });
+    const bar = document.getElementById('ua-tokens-bar');
+    if (bar) { bar.style.width = '0%'; bar.className = 'progress-bar-fill'; }
+    const sessBody = document.getElementById('ua-sessions-body');
+    if (sessBody) sessBody.innerHTML = '';
+
+    if (_uaChartInstance) { _uaChartInstance.destroy(); _uaChartInstance = null; }
+
+    try {
+        const res = await fetch(`${API_BASE}/admin/users/${userId}/analytics`, {
+            headers: { 'Authorization': `Bearer ${authToken}` }
+        });
+        if (res.status === 401) { handleAuthError(); return; }
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = await res.json();
+        renderUserAnalyticsModal(data);
+        applyTranslations();
+    } catch (err) {
+        console.error('openUserAnalytics:', err);
+        showToast(TRANSLATIONS[currentLang]?.toast_analytics_failed || 'Failed to load analytics', true);
+        closeUserAnalytics();
+    }
+}
+
+function closeUserAnalytics() {
+    document.getElementById('user-analytics-modal').classList.add('hidden');
+    if (_uaChartInstance) { _uaChartInstance.destroy(); _uaChartInstance = null; }
+}
+
+function renderUserAnalyticsModal(data) {
+    const u   = data.user        || {};
+    const q   = data.token_quota || {};
+
+    // ZH: 基本資訊（XSS 安全：使用 textContent）| EN: Basic info (XSS-safe via textContent)
+    document.getElementById('ua-username').textContent   = u.username   || '—';
+    document.getElementById('ua-email').textContent      = u.email      || '—';
+    document.getElementById('ua-role').textContent       = u.role       || '—';
+    document.getElementById('ua-department').textContent = u.department || '—';
+
+    // ZH: 本月 Token 配額 | EN: Monthly token quota
+    const pct = q.usage_pct || 0;
+    const fillClass = pct >= 90 ? 'fill-danger' : pct >= 70 ? 'fill-warning' : '';
+    document.getElementById('ua-tokens-pct').textContent    = pct + '%';
+    document.getElementById('ua-tokens-detail').textContent =
+        `${(q.tokens_used || 0).toLocaleString()} / ${(q.tokens_limit || 0).toLocaleString()}`;
+    const bar = document.getElementById('ua-tokens-bar');
+    bar.className  = `progress-bar-fill${fillClass ? ' ' + fillClass : ''}`;
+    bar.style.width = Math.min(pct, 100) + '%';
+
+    // ZH: 其餘統計數字 | EN: Other stat numbers
+    document.getElementById('ua-lifetime-tokens').textContent =
+        (u.lifetime_tokens_used || 0).toLocaleString();
+    document.getElementById('ua-login-count').textContent =
+        (u.login_count || 0).toLocaleString();
+    document.getElementById('ua-sessions-count').textContent =
+        (data.total_sessions || 0).toLocaleString();
+
+    // ZH: 工具使用分布長條圖 | EN: Tool breakdown bar chart
+    const breakdown = data.tool_breakdown || [];
+    const toolLabels = breakdown.map(t => t.tool_type || 'unknown');
+    const toolTokens = breakdown.map(t => t.tokens_sum || 0);
+
+    if (_uaChartInstance) { _uaChartInstance.destroy(); _uaChartInstance = null; }
+    const textColor = getComputedStyle(document.documentElement)
+        .getPropertyValue('--text-primary').trim() || '#ccc';
+    _uaChartInstance = new Chart(
+        document.getElementById('ua-tool-chart').getContext('2d'),
+        {
+            type: 'bar',
+            data: {
+                labels: toolLabels,
+                datasets: [{
+                    label: 'Tokens',
+                    data: toolTokens,
+                    backgroundColor: 'rgba(56, 189, 248, 0.7)',
+                    borderColor:     'rgba(56, 189, 248, 1)',
+                    borderWidth: 1,
+                    borderRadius: 4,
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { display: false }
+                },
+                scales: {
+                    x: { ticks: { color: textColor }, grid: { color: 'rgba(128,128,128,0.2)' } },
+                    y: { ticks: { color: textColor }, grid: { color: 'rgba(128,128,128,0.2)' }, beginAtZero: true }
+                }
+            }
+        }
+    );
+
+    // ZH: Top-10 Sessions 表格（XSS 安全：使用 textContent）
+    // EN: Top-10 sessions table (XSS-safe via textContent)
+    const tbody = document.getElementById('ua-sessions-body');
+    tbody.innerHTML = '';
+    const sessions = data.top_sessions || [];
+    if (sessions.length === 0) {
+        const tr = document.createElement('tr');
+        const td = document.createElement('td');
+        td.colSpan = 4;
+        td.style.textAlign = 'center';
+        td.style.color = 'var(--text-muted)';
+        td.style.padding = '20px';
+        td.textContent = '—';
+        tr.appendChild(td);
+        tbody.appendChild(tr);
+        return;
+    }
+    sessions.forEach(s => {
+        const tr = document.createElement('tr');
+
+        const sidTd = document.createElement('td');
+        sidTd.style.fontFamily = 'monospace';
+        sidTd.style.fontSize   = '12px';
+        sidTd.textContent = (s.session_id || '').substring(0, 8);
+
+        const timeTd = document.createElement('td');
+        timeTd.textContent = s.started_at
+            ? new Date(s.started_at).toLocaleString()
+            : 'N/A';
+
+        const msgTd = document.createElement('td');
+        msgTd.textContent = s.message_count || 0;
+
+        const tokTd = document.createElement('td');
+        tokTd.textContent = (s.tokens_sum || 0).toLocaleString();
+
+        tr.appendChild(sidTd);
+        tr.appendChild(timeTd);
+        tr.appendChild(msgTd);
+        tr.appendChild(tokTd);
+        tbody.appendChild(tr);
+    });
 }
 
 // 獨立的 Admin Login 流程
@@ -617,8 +809,9 @@ function renderAdminUsers(users) {
                 <td>${createdStr}</td>
                 <td>${tokensStr}</td>
                 <td>
-                        <div style="display:flex; gap:4px;">
+                        <div style="display:flex; gap:4px; flex-wrap:wrap;">
                             <button class="ready-btn" style="width:auto; padding:4px 12px; margin:0; font-size:12px; min-width:auto;" onclick="openEditUser('${u.id}')" data-i18n="btn_edit">${TRANSLATIONS[currentLang]?.btn_edit || 'Edit'}</button>
+                            <button class="ready-btn" style="width:auto; padding:4px 12px; margin:0; font-size:12px; min-width:auto; border-color:#a78bfa; color:#a78bfa; background:rgba(167,139,250,0.08);" onclick="openUserAnalytics('${u.id}')" data-i18n="btn_analytics">${TRANSLATIONS[currentLang]?.btn_analytics || 'Analytics'}</button>
                             <button class="ready-btn" style="width:auto; padding:4px 12px; margin:0; font-size:12px; min-width:auto; border-color:#f59e0b; color:#f59e0b;" onclick="resetUser('${u.id}', '${u.username}')" data-i18n="btn_reset">${TRANSLATIONS[currentLang]?.btn_reset || 'Initialize'}</button>
                         </div>
                     </td>
@@ -1033,66 +1226,6 @@ async function deleteModel(modelId, modelName) {
 }
 
 // -------------------------
-// System Config Management
-// -------------------------
-async function fetchConfigList() {
-    try {
-        const res = await fetch(`${API_BASE}/system/files`, { headers: { 'Authorization': `Bearer ${authToken}` } });
-        if (res.ok) {
-            const data = await res.json();
-            const select = document.getElementById('config-file-select');
-            select.innerHTML = `<option value="" data-i18n="select_config">${TRANSLATIONS[currentLang]?.select_config || 'Select config file'}</option>`;
-            data.files.forEach(f => {
-                const opt = document.createElement('option');
-                opt.value = f;
-                opt.textContent = f;
-                select.appendChild(opt);
-            });
-        }
-    } catch (e) {
-        console.error("Failed to fetch config list:", e);
-    }
-}
-
-async function loadConfig() {
-    const filename = document.getElementById('config-file-select').value;
-    if (!filename) return showToast("請先選擇設定檔", true);
-    
-    try {
-        const res = await fetch(`${API_BASE}/system/files/${filename}`, { headers: { 'Authorization': `Bearer ${authToken}` } });
-        if (!res.ok) throw new Error("Load failed");
-        const data = await res.json();
-        document.getElementById('config-editor').value = data.content;
-        showToast(`已載入 ${filename}`);
-    } catch (e) {
-        showToast("載入失敗", true);
-        console.error(e);
-    }
-}
-
-async function saveConfig() {
-    const filename = document.getElementById('config-file-select').value;
-    const content = document.getElementById('config-editor').value;
-    if (!filename) return showToast("請先選擇設定檔", true);
-    
-    try {
-        const res = await fetch(`${API_BASE}/system/files/${filename}`, {
-            method: 'PUT',
-            headers: { 
-                'Authorization': `Bearer ${authToken}`,
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({ content })
-        });
-        if (!res.ok) throw new Error("Save failed");
-        showToast(`已儲存 ${filename}`);
-    } catch (e) {
-        showToast("儲存失敗", true);
-        console.error(e);
-    }
-}
-
-// -------------------------
 // Initialization
 // -------------------------
 let _adminRefreshInterval = null;
@@ -1100,7 +1233,6 @@ let _adminRefreshInterval = null;
 function initAdminDashboard() {
     fetchClusterStats();
     fetchAdminData();
-    fetchConfigList();
     applyTranslations();
 
     // Auto refresh logic
@@ -1113,20 +1245,6 @@ function initAdminDashboard() {
         }
     }, 5000);
 
-    // Setup Config Buttons
-    const btnLoad = document.getElementById('btn-load-config');
-    if (btnLoad) {
-        const newBtnLoad = btnLoad.cloneNode(true);
-        btnLoad.parentNode.replaceChild(newBtnLoad, btnLoad);
-        newBtnLoad.addEventListener('click', loadConfig);
-    }
-    
-    const btnSave = document.getElementById('btn-save-config');
-    if (btnSave) {
-        const newBtnSave = btnSave.cloneNode(true);
-        btnSave.parentNode.replaceChild(newBtnSave, btnSave);
-        newBtnSave.addEventListener('click', saveConfig);
-    }
     const refreshBtn = document.getElementById('refresh-admin-btn');
     if (refreshBtn) {
         // 防止重複綁定
@@ -1529,6 +1647,12 @@ document.addEventListener('DOMContentLoaded', () => {
     // Model Modal Bindings
     const modelBackdrop = document.getElementById('model-modal-backdrop');
     if (modelBackdrop) modelBackdrop.addEventListener('click', closeModelModal);
+
+    // User Analytics Modal Bindings
+    const uaCloseBtn = document.getElementById('ua-close-btn');
+    if (uaCloseBtn) uaCloseBtn.addEventListener('click', closeUserAnalytics);
+    const uaBackdrop = document.getElementById('ua-backdrop');
+    if (uaBackdrop) uaBackdrop.addEventListener('click', closeUserAnalytics);
 
     // Refresh Button Binding
     const refreshBtn = document.getElementById('refresh-admin-btn');
