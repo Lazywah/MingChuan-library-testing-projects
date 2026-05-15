@@ -8,6 +8,7 @@
 - [系統 API \| System API](#系統-api--system-api)
 - [管理員 API \| Admin API](#管理員-api--admin-api)（使用者管理、任務管理、模型管理、分析）
 - [Worker API \| Worker Heartbeat API](#post-apiv1workerheartbeat--worker-節點心跳上報)
+- [Notebook API \| Notebook API](#notebook-api--notebook-api)
 - [錯誤碼 \| Error Codes](#錯誤碼--error-codes)
 
 ---
@@ -530,6 +531,129 @@ curl "http://localhost:8002/api/v1/admin/analytics?department=資訊工程學系
 ```
 
 回應包含：各學系 Token 用量、工具使用佔比、總登入次數等統計數據。
+
+---
+
+## Notebook API | Notebook API
+
+> **2026-05 新增**：Colab 風格 Notebook 的儲存與 GPU 節點查詢端點。所有端點使用使用者 JWT 認證。
+
+### GET `/api/v1/notebooks/mine` — 載入使用者 Notebook
+
+回傳目前使用者的 Notebook（格子清單 + 環境設定）。若該使用者尚未建立 Notebook，自動回傳含一個 PyTorch 訓練預設格子的初始 Notebook。
+
+```bash
+curl http://localhost:8002/api/v1/notebooks/mine \
+  -H "Authorization: Bearer YOUR_TOKEN"
+```
+
+回應 (200):
+```json
+{
+  "cells": [
+    {
+      "id": "cell-abc123",
+      "type": "code",
+      "content": "import torch\nprint(torch.__version__)"
+    }
+  ],
+  "environment": {
+    "framework": "pytorch",
+    "mode": "training",
+    "preferred_node": "auto",
+    "docker_image": null
+  },
+  "updated_at": "2026-05-15T10:00:00"
+}
+```
+
+**格子類型 (cell type)**：
+| 值 | 說明 | 執行方式 |
+|----|------|----------|
+| `code` | Python 程式格 | `python3 -u - <<'__PYEOF__' ... __PYEOF__` |
+| `shell` | Shell 指令格（bash/CUDA/C++） | 直接 inline 於 bash script |
+| `markdown` | 說明文字格 | 僅前端渲染，不執行 |
+
+---
+
+### PUT `/api/v1/notebooks/mine` — 儲存 / 更新 Notebook
+
+儲存使用者 Notebook（Upsert，自動建立或覆寫）。前端以 2 秒 debounce 自動觸發。
+
+```bash
+curl -X PUT http://localhost:8002/api/v1/notebooks/mine \
+  -H "Authorization: Bearer YOUR_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "cells": [
+      {"id": "cell-1", "type": "code", "content": "print(\"hello\")"},
+      {"id": "cell-2", "type": "shell", "content": "nvidia-smi"}
+    ],
+    "environment": {
+      "framework": "pytorch",
+      "mode": "training",
+      "preferred_node": "gpu-node-01",
+      "docker_image": null
+    }
+  }'
+```
+
+回應 (200):
+```json
+{"status": "ok", "updated_at": "2026-05-15T10:05:00"}
+```
+
+---
+
+### GET `/api/v1/notebooks/nodes` — 列出線上 GPU 節點
+
+回傳最近 90 秒內有心跳的 Worker 節點，供前端「GPU 節點」下拉選單使用。
+
+```bash
+curl http://localhost:8002/api/v1/notebooks/nodes \
+  -H "Authorization: Bearer YOUR_TOKEN"
+```
+
+回應 (200):
+```json
+[
+  {
+    "node_id": "gpu-node-01",
+    "available_gpus": ["0", "1"],
+    "gpu_utilization": 12.5,
+    "last_seen": "2026-05-15T10:04:45Z"
+  }
+]
+```
+
+> **注意**：節點須先執行 `gpu-worker/worker.py` 並回報心跳後，此端點才有資料。
+
+---
+
+### 提交 Notebook 任務 (POST `/api/v1/jobs`)
+
+Notebook 的「Run All」按鈕會將所有格子編譯成一份 shell script 後，呼叫標準 Job 提交 API：
+
+```bash
+curl -X POST http://localhost:8002/api/v1/jobs \
+  -H "Authorization: Bearer YOUR_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "job_name": "My Notebook Run",
+    "gpu_required": 1,
+    "docker_image": "pytorch/pytorch:2.7.0-cuda12.8-cudnn9-runtime",
+    "inline_code": "#!/bin/bash\nset -eu\npython3 -u - <<'"'"'__PYEOF__'"'"'\nimport torch\nprint(torch.__version__)\n__PYEOF__\n",
+    "preferred_node": "gpu-node-01"
+  }'
+```
+
+**新增欄位說明**：
+| 欄位 | 說明 |
+|------|------|
+| `docker_image` | 覆寫預設 image（`null` 表示使用 PyTorch 預設） |
+| `inline_code` | 編譯後的完整 shell script（`bash -eu` 執行） |
+| `entry_args` | 非 Python 工具的入口指令陣列（如 `["./llama-cli", "-m", ...]`） |
+| `preferred_node` | 指定 GPU 節點 ID，或 `"auto"` / `null` 表示自動排程 |
 
 ---
 
