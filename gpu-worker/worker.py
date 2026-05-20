@@ -11,6 +11,28 @@ import shutil
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger(__name__)
 
+# ZH: M3 修復 — 追蹤本機已派發但容器尚未起跑（util 仍 < 10%）的 GPU，
+#     避免下一輪 poll 把同一張 GPU 又領一個任務塞進去（雙重派發）。
+# EN: M3 fix — track GPUs dispatched but not yet under load so the next poll
+#     won't re-grab them as idle and double-dispatch a job to the same card.
+_busy_gpus_lock = threading.Lock()
+_busy_gpus: set = set()
+
+
+def _mark_gpu_busy(gpu_id: str) -> None:
+    with _busy_gpus_lock:
+        _busy_gpus.add(str(gpu_id))
+
+
+def _mark_gpu_free(gpu_id: str) -> None:
+    with _busy_gpus_lock:
+        _busy_gpus.discard(str(gpu_id))
+
+
+def _busy_gpu_snapshot() -> set:
+    with _busy_gpus_lock:
+        return set(_busy_gpus)
+
 SERVICE_LAYER_URL = os.environ.get("SERVICE_LAYER_URL", "http://192.168.1.50:8002")
 API_TOKEN = os.environ.get("API_TOKEN", "mcu-secret-token")
 NODE_ID = os.environ.get("NODE_ID", "gpu-node-01")
@@ -28,8 +50,8 @@ DEFAULT_IMAGE = "pytorch/pytorch:2.7.0-cuda12.8-cudnn9-runtime"
 
 def get_available_gpus():
     """
-    ZH: 透過 nvidia-smi 查詢空閒 GPU
-    EN: Query idle GPUs via nvidia-smi
+    ZH: 透過 nvidia-smi 查詢空閒 GPU，並排除本機已派發但容器尚未起跑的 GPU
+    EN: Query idle GPUs via nvidia-smi, excluding GPUs already dispatched locally
     """
     try:
         result = subprocess.run(
@@ -39,13 +61,16 @@ def get_available_gpus():
             text=True,
             check=True
         )
+        busy = _busy_gpu_snapshot()
         available = []
         for line in result.stdout.strip().split('\n'):
             if line:
                 idx, util = line.split(',')
                 idx = idx.strip()
                 util = int(util.strip())
-                if util < 10:  # ZH: 使用率低於 10% 視為空閒 | EN: Util < 10% is idle
+                if util < 10 and idx not in busy:
+                    # ZH: 使用率低於 10% 且未在本機 busy-set，才視為空閒
+                    # EN: Idle only if util < 10% AND not in local busy-set
                     available.append(idx)
         return available
     except Exception as e:
@@ -170,6 +195,13 @@ def execute_job(job):
 
     logger.info(f"Starting job {job_id} on GPU {gpu_id} | image={image}")
 
+    # ZH: M3 修復 — 立即將此 GPU 標記為 busy；docker pull / 容器初始化期間
+    #     nvidia-smi 仍會回報 util < 10%，若不標記則下一次 poll 會把同張卡再派一個任務。
+    # EN: M3 fix — mark this GPU busy immediately. While docker pulls / initializes,
+    #     nvidia-smi still reports util < 10%, so without this flag the next poll
+    #     would double-dispatch onto the same card.
+    _mark_gpu_busy(gpu_id)
+
     # ZH: 通知服務層任務已開始 | EN: Notify service layer job started
     report_update(job_id, {"status": "running"})
 
@@ -259,6 +291,9 @@ def execute_job(job):
         if code_dir and os.path.exists(code_dir):
             shutil.rmtree(code_dir, ignore_errors=True)
             logger.debug(f"Cleaned up temp dir: {code_dir}")
+        # ZH: M3 修復 — 任務結束（成功 / 失敗 / 例外）一律釋放 GPU 標記
+        # EN: M3 fix — always free the GPU flag when the job finishes, no matter how
+        _mark_gpu_free(gpu_id)
 
 def poll_loop():
     logger.info("Worker node %s started. Polling %s every %ds, heartbeat every %ds.",

@@ -26,6 +26,7 @@ EN: Modular design:
 
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from fastapi.responses import StreamingResponse
+from fastapi.concurrency import run_in_threadpool
 from sqlalchemy.orm import Session
 from typing import Optional
 import asyncio
@@ -355,14 +356,17 @@ async def stream_job_logs(
         last_metrics_len = len(history_data["metrics"])
         
         while True:
-            # Re-fetch from DB
-            db.refresh(job)
-            
+            # ZH: M4 修復 — sync db.refresh 在 async generator 內會阻塞事件迴圈，
+            #     多人同時看 stream 時會排隊。改丟給 threadpool 執行。
+            # EN: M4 fix — sync db.refresh blocks the async event loop. Offload to
+            #     threadpool so concurrent SSE streams don't queue on a single worker.
+            await run_in_threadpool(db.refresh, job)
+
             new_logs = ""
             if job.logs and len(job.logs) > last_log_len:
                 new_logs = job.logs[last_log_len:]
                 last_log_len = len(job.logs)
-                
+
             current_metrics = []
             if job.metrics:
                 try:
@@ -370,8 +374,10 @@ async def stream_job_logs(
                     if len(all_metrics) > last_metrics_len:
                         current_metrics = all_metrics[last_metrics_len:]
                         last_metrics_len = len(all_metrics)
-                except:
-                    pass
+                except (json.JSONDecodeError, ValueError) as e:
+                    # ZH: m3 修復 — 不再用 bare except 掩蓋錯誤
+                    # EN: m3 fix — no bare except hiding real errors
+                    logger.warning("Failed to parse metrics for job %s: %s", job_id, e)
 
             # Only yield if there's an update or job finished
             if new_logs or current_metrics or job.status in ("completed", "failed", "cancelled"):

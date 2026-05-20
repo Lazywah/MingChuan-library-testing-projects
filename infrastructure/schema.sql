@@ -1,8 +1,28 @@
 -- ==============================================================================
--- ZH: AI 訓練平台 - SQLite 資料庫結構定義
--- EN: AI Training Platform - SQLite Database Schema Definition
--- ZH: 此檔案定義所有資料表、索引及預設值
--- EN: This file defines all tables, indexes, and default values
+-- ⚠️ DEPRECATED — DO NOT USE FOR PRODUCTION SCHEMA REFERENCE
+-- ==============================================================================
+-- ZH: 此檔案僅作為「初始啟動」的參考骨架。實際 schema 由 SQLAlchemy
+--     於 job-scheduler/app/database.py:init_db() 中以 ORM 自動建立並
+--     做欄位增補（ALTER TABLE）。下列欄位於 models.py 已新增但此檔尚未同步：
+--     - users: last_login_time / last_login_ip / department / login_count /
+--              tutorial_dismissed / is_test_account / online_status /
+--              lifetime_tokens_used
+--     - models: api_provider / api_endpoint / api_model_id / is_public 等
+--     - chat_history: tool_type / session_id
+--     - worker_heartbeats（整張表）
+--     - notebooks（整張表，2026-05）
+--     - training_jobs: docker_image / inline_code / entry_args / preferred_node（2026-05）
+--
+--     新部署請以 models.py 為單一事實來源；本檔保留僅供初版資料庫的
+--     人類可讀文件用途。導入 Alembic 後本檔將會刪除。
+-- EN: This file is a historical reference only. The authoritative schema lives
+--     in job-scheduler/app/models.py and is materialized by SQLAlchemy's
+--     init_db(). Many columns and tables above have been added since but are
+--     NOT reflected here. New deployments must rely on models.py. This file
+--     will be deleted once Alembic migrations are introduced.
+-- ==============================================================================
+-- ZH: AI 訓練平台 - SQLite 資料庫結構定義 (legacy)
+-- EN: AI Training Platform - SQLite Database Schema Definition (legacy)
 -- ==============================================================================
 
 -- ZH: 啟用 WAL 模式 (提升並發讀寫效能) | EN: Enable WAL mode (better concurrency)
