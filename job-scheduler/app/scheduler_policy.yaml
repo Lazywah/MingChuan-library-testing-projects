@@ -26,3 +26,70 @@ scheduling:
 # ZH: 本地開發與除錯模式開關 | EN: Local mock mode toggle
 mock_mode: true
 
+# ==============================================================================
+# ZH: v2.0 Lab 模組 — GPU 節點池分層
+# EN: v2.0 Lab module — GPU pool partitioning
+# ==============================================================================
+# ZH: 兩個池對應不同使用模式
+#   - batch: 批次訓練池（高階 GPU 伺服器，容器跑完即關）
+#   - interactive: 互動式 GPU 池（服務層 RTX 5090，v2.1 才啟用給 Jupyter Kernel 用）
+# EN: Two pools for different usage patterns
+#   - batch: Batch training (high-end GPU servers, --rm containers)
+#   - interactive: Interactive GPU (service-layer RTX 5090, v2.1 only)
+pools:
+  batch:
+    description: "批次訓練池（高階 GPU 伺服器）"
+    enabled: true
+    container_lifecycle: ephemeral    # --rm，跑完即關
+  interactive:
+    description: "互動式 GPU 池（服務層 5090，v2.1 啟用）"
+    enabled: false                    # v2.0 預留，v2.1 才開放
+    container_lifecycle: persistent   # 長駐，idle timeout 關閉
+
+# ==============================================================================
+# ZH: v2.0 Lab 模組 — Session 時間管理
+# EN: v2.0 Lab module — Session time management
+# ==============================================================================
+# 所有時長以分鐘為單位；null = 不限制
+# All durations in minutes; null = unlimited
+session_limits:
+  student:
+    idle_timeout_min: 30              # 30 分鐘無互動自動關
+    hard_limit_min: 90                # 從啟動算起 1.5 小時強制關閉
+    daily_limit_min: 360              # 每日累積 6 小時上限
+  teacher:
+    idle_timeout_min: 120
+    hard_limit_min: null
+    daily_limit_min: null
+  admin:
+    idle_timeout_min: null
+    hard_limit_min: null
+    daily_limit_min: null
+
+# ==============================================================================
+# ZH: v2.0 Lab 模組 — 預設配額（GB）
+# EN: v2.0 Lab module — Default disk quotas (GB)
+# ==============================================================================
+default_disk_quota_gb:
+  student: 10
+  teacher: 50
+  admin: 100
+
+# ==============================================================================
+# ZH: v2.0 Lab 模組 — code-server 容器資源
+# EN: v2.0 Lab module — code-server container resources
+# ==============================================================================
+codeserver_resources:
+  cpu_quota: 0.5                      # 每個容器 0.5 CPU cores
+  mem_quota_mb: 2048                  # 2 GB RAM
+  default_image: "aibase/pytorch:2026-spring"
+
+# ==============================================================================
+# ZH: 學期日曆（保護學生資料不在學期中被歸檔/刪除）
+# EN: Academic calendar (protects student data during semesters)
+# ==============================================================================
+academic_calendar:
+  # 學期月份（1-12）；不在此清單內的月份才會執行 archive / pending_delete 轉換
+  semester_months: [9, 10, 11, 12, 1, 2, 3, 4, 5, 6]
+  # 暑假月份才執行完整 storage lifecycle 轉換
+  archival_months: [7, 8]

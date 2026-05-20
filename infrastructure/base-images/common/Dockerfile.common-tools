@@ -1,0 +1,80 @@
+# ==============================================================================
+# ZH: AI Base 共用工具層 — 給所有訓練 image 繼承（含 miniconda + dataset CLIs）
+# EN: AI Base common tools layer — inherited by all training images
+# ==============================================================================
+# 用法 / Usage:
+#   docker build -f common/Dockerfile.common-tools -t aibase/common-tools:2026-spring .
+#   FROM aibase/common-tools:2026-spring AS base  (in other Dockerfiles)
+# ==============================================================================
+
+ARG BASE_IMAGE=nvidia/cuda:12.8.0-cudnn-runtime-ubuntu22.04
+FROM ${BASE_IMAGE}
+
+ENV DEBIAN_FRONTEND=noninteractive \
+    PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    LANG=C.UTF-8 \
+    LC_ALL=C.UTF-8 \
+    PATH="/opt/conda/bin:${PATH}"
+
+# ZH: 系統基本工具 + 資料集下載 CLI
+# EN: System tools + dataset CLI tools
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        ca-certificates curl wget git unzip zip tar bzip2 xz-utils \
+        vim nano htop tmux less procps net-tools iputils-ping \
+        build-essential pkg-config \
+        software-properties-common gnupg \
+        aria2 \
+    && curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg \
+       | dd of=/usr/share/keyrings/githubcli-archive-keyring.gpg \
+    && chmod go+r /usr/share/keyrings/githubcli-archive-keyring.gpg \
+    && echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" \
+       > /etc/apt/sources.list.d/github-cli.list \
+    && apt-get update && apt-get install -y --no-install-recommends gh \
+    && apt-get clean && rm -rf /var/lib/apt/lists/*
+
+# ZH: 安裝 Miniconda3 (Python 3.11)
+# EN: Install Miniconda3 with Python 3.11
+RUN curl -fsSL https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh -o /tmp/miniconda.sh \
+    && bash /tmp/miniconda.sh -b -p /opt/conda \
+    && rm /tmp/miniconda.sh \
+    && /opt/conda/bin/conda config --system --set auto_update_conda false \
+    && /opt/conda/bin/conda config --system --set show_channel_urls true \
+    && /opt/conda/bin/conda config --system --add channels conda-forge \
+    && /opt/conda/bin/conda clean -afy
+
+# ZH: 安裝 Python 資料集 CLI 工具（pip-only，所有 image 都要有）
+# EN: Python-side dataset CLI tools
+RUN pip install --no-cache-dir \
+        kaggle \
+        "huggingface_hub[cli]" \
+        jupyter_client \
+        ipykernel
+
+# ZH: HF_HOME 多路徑：先查共享 read-only cache，再 fallback 到使用者私人 cache
+# EN: HF_HOME multi-path: shared cache first, fallback to user cache
+ENV HF_HOME=/opt/models:/home/coder/.cache/huggingface \
+    TRANSFORMERS_CACHE=/opt/models:/home/coder/.cache/huggingface \
+    HF_DATASETS_CACHE=/opt/models:/home/coder/.cache/huggingface/datasets \
+    PIP_NO_CACHE_DIR=1
+
+# ZH: 建立 coder 使用者（避免容器內以 root 跑訓練）
+# EN: Create coder user (avoid running training as root)
+RUN useradd -m -s /bin/bash -u 1000 coder \
+    && mkdir -p /home/coder/projects /home/coder/outputs /home/coder/logs \
+    && mkdir -p /opt/models \
+    && chown -R coder:coder /home/coder \
+    && chmod 755 /opt/models
+
+# ZH: 預設工作目錄與使用者
+# EN: Default workdir and user
+WORKDIR /home/coder
+USER coder
+
+# ZH: bashrc 加入常用 alias 與環境變數
+# EN: Add aliases and env vars to bashrc
+RUN echo 'export PATH="/opt/conda/bin:$HOME/.local/bin:$PATH"' >> ~/.bashrc \
+    && echo 'export HF_HOME="/opt/models:$HOME/.cache/huggingface"' >> ~/.bashrc \
+    && echo 'alias ll="ls -alh"' >> ~/.bashrc
+
+CMD ["/bin/bash"]
