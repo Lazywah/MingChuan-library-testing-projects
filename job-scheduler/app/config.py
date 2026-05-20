@@ -17,8 +17,23 @@ EN: Flow:
 """
 
 import os
+import logging
 import yaml
 from pydantic_settings import BaseSettings
+from pydantic import field_validator
+
+logger = logging.getLogger(__name__)
+
+# ZH: C3 修復：弱秘鑰黑名單，啟動時若 .env 仍用這些值會 fail-fast
+# EN: C3 fix: weak-secret blacklist — fail-fast on container start
+_INSECURE_SECRETS = {
+    "default-insecure-secret-key",
+    "dev-jwt-secret-key-change-in-production",
+    "mcu-secret-token-change-in-production",
+    "changeme",
+    "secret",
+    "",
+}
 
 # ==============================================================================
 # ZH: 讀取排程政策與資源層硬體 YAML
@@ -32,7 +47,7 @@ except Exception as e:
     # ZH: 若無檔案則給予預設空值防崩潰
     # EN: Default empty object on failure to prevent crash
     SCHEDULER_POLICY = {"scheduling": {}, "mock_mode": True, "nodes": []}
-    print(f"[Warning] Failed to load scheduler_policy.yaml: {e}")
+    logger.warning("Failed to load scheduler_policy.yaml: %s", e)
 
 # 讀取 SSO 政策
 SSO_POLICY_PATH = os.path.join(os.path.dirname(__file__), "sso_policy.yaml")
@@ -41,7 +56,7 @@ try:
         SSO_POLICY = yaml.safe_load(f)
 except Exception as e:
     SSO_POLICY = {"mock_mode": True, "mock": {"users": []}, "cas": {}}
-    print(f"[Warning] Failed to load sso_policy.yaml: {e}")
+    logger.warning("Failed to load sso_policy.yaml: %s", e)
 
 class Settings(BaseSettings):
     """
@@ -52,7 +67,9 @@ class Settings(BaseSettings):
     # ------------------------------------------------------------------
     # ZH: JWT 認證設定 | EN: JWT Authentication
     # ------------------------------------------------------------------
-    JWT_SECRET_KEY: str = "dev-jwt-secret-key-change-in-production"
+    # ZH: 預設值刻意設為被黑名單拒絕的字串，強制透過 .env 注入
+    # EN: Default deliberately set to a blacklisted value to force .env injection
+    JWT_SECRET_KEY: str = "dev-jwt-secret-key-change-in-production"  # rejected by validator
     JWT_ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 120
 
@@ -103,5 +120,36 @@ class Settings(BaseSettings):
         "case_sensitive": True,
         "extra": "ignore",
     }
+
+    # ZH: C3 修復：啟動時驗證 secrets 強度，拒絕弱值與預設值
+    # EN: C3 fix: validate secret strength at startup; reject weak/default values
+    @field_validator("JWT_SECRET_KEY")
+    @classmethod
+    def _validate_jwt_secret(cls, v: str) -> str:
+        if v in _INSECURE_SECRETS:
+            raise ValueError(
+                "JWT_SECRET_KEY uses an insecure default value. "
+                "Set a strong random string (≥32 chars) in .env."
+            )
+        if len(v) < 32:
+            raise ValueError(
+                f"JWT_SECRET_KEY too short ({len(v)} chars). Minimum 32 chars required."
+            )
+        return v
+
+    @field_validator("WORKER_API_TOKEN")
+    @classmethod
+    def _validate_worker_token(cls, v: str) -> str:
+        if v in _INSECURE_SECRETS:
+            raise ValueError(
+                "WORKER_API_TOKEN uses an insecure default value. "
+                "Set a strong random string in .env (must match gpu-worker API_TOKEN)."
+            )
+        if len(v) < 16:
+            raise ValueError(
+                f"WORKER_API_TOKEN too short ({len(v)} chars). Minimum 16 chars required."
+            )
+        return v
+
 
 settings = Settings()

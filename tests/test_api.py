@@ -199,7 +199,7 @@ class TestJobsEndpoints:
 # Worker Endpoints
 # ══════════════════════════════════════════════════════════════════
 
-WORKER_HEADERS = {"Authorization": "Bearer test-worker-token"}
+WORKER_HEADERS = {"Authorization": "Bearer test-worker-token-16c"}
 
 
 class TestWorkerEndpoints:

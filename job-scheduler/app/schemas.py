@@ -166,7 +166,13 @@ class TokenUsageResponse(BaseModel):
 
 
 class TokenIncrementRequest(BaseModel):
-    """ZH: Token 用量遞增請求 | EN: Token usage increment request"""
+    """
+    ZH: Token 用量遞增請求 | EN: Token usage increment request
+
+    ZH: C2 修復：必須指定 user_id，否則先前會錯扣 admin 自己（呼叫者）
+    EN: C2 fix: must specify user_id; previously deducted from the caller (admin) by mistake
+    """
+    user_id: str                                     # ZH: 目標使用者 UUID | EN: Target user UUID
     tokens: int                                      # ZH: 要增加的 Token 數 | EN: Tokens to add
 
 

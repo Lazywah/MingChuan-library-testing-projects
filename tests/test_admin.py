@@ -5,7 +5,7 @@ EN: Admin API integration tests
 import pytest
 from conftest import make_user, auth_headers
 
-WORKER_HEADERS = {"Authorization": "Bearer test-worker-token"}
+WORKER_HEADERS = {"Authorization": "Bearer test-worker-token-16c"}
 
 
 def _admin_headers(client, db):

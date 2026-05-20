@@ -40,16 +40,20 @@ services:
       DATABASE_PATH: ${DATABASE_PATH:-/data/ai_platform.db}
       
       # ZH: JWT 安全認證 | EN: JWT Security Authentication
-      JWT_SECRET_KEY: ${JWT_SECRET_KEY:-default-insecure-secret-key}
+      # ZH: C3 修復：移除預設值，.env 必須提供，缺漏即 fail-fast
+      # EN: C3 fix: removed default; container fails fast if .env is missing
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY:?JWT_SECRET_KEY must be set in .env (min 32 chars)}
       JWT_ALGORITHM: ${JWT_ALGORITHM:-HS256}
       ACCESS_TOKEN_EXPIRE_MINUTES: ${ACCESS_TOKEN_EXPIRE_MINUTES:-120}
-      
+
       # ZH: 全域額度設定 | EN: Global Quota settings
       DEFAULT_MONTHLY_TOKEN_LIMIT: ${DEFAULT_MONTHLY_TOKEN_LIMIT:-100000}
       TOKEN_RESET_DAY: ${TOKEN_RESET_DAY:-1}
 
       # ZH: Worker 節點驗證 Token | EN: Worker node auth token
-      WORKER_API_TOKEN: ${WORKER_API_TOKEN:-mcu-secret-token-change-in-production}
+      # ZH: C3 修復：移除預設值，.env 必須提供
+      # EN: C3 fix: removed default; must be set in .env
+      WORKER_API_TOKEN: ${WORKER_API_TOKEN:?WORKER_API_TOKEN must be set in .env}
 
       # ZH: CORS 允許來源（逗號分隔，留空允許所有） | EN: CORS origins (comma-sep, empty = allow all)
       CORS_ORIGINS: ${CORS_ORIGINS:-}
@@ -69,8 +73,10 @@ services:
     volumes:
       - ./data:/data:rw
       - ./job-scheduler/app:/app/app:rw
-      - ./.env:/app/.env:rw
-      - ./docker-compose.yml:/app/docker-compose.yml:rw
+      # ZH: C4 修復：.env 與 docker-compose.yml 改為唯讀，避免容器 RCE 後可覆寫主機 secrets
+      # EN: C4 fix: .env and docker-compose.yml are read-only — prevents RCE→secret-rewrite
+      - ./.env:/app/.env:ro
+      - ./docker-compose.yml:/app/docker-compose.yml:ro
     networks:
       - ai-platform-net
     restart: unless-stopped

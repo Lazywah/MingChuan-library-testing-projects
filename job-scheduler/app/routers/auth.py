@@ -327,16 +327,28 @@ def increment_token_usage(
     """
     ZH: 扣減指定使用者 Token 配額（原子 UPDATE），超額回傳 429
     EN: Atomically deduct token quota; returns 429 if limit exceeded
+
+    ZH: C2 修復：扣減目標為 request.user_id（先前誤扣 current_user/admin 自己）
+    EN: C2 fix: deducts from request.user_id (previously deducted from current_user/admin)
     """
+    # ZH: 驗證目標使用者存在 | EN: Verify target user exists
+    target_user = crud.get_user_by_id(db, user_id=request.user_id)
+    if not target_user:
+        raise HTTPException(status_code=404, detail="Target user not found")
+
     # C-3: ZH: 改用原子扣減，防止超額後仍計入 | EN: Atomic deduct — never over-credits then checks
-    success = crud.try_deduct_tokens(db, user_id=current_user.id, tokens=request.tokens)
+    success = crud.try_deduct_tokens(db, user_id=request.user_id, tokens=request.tokens)
     if not success:
-        usage = crud.get_token_usage(db, user_id=current_user.id)
+        usage = crud.get_token_usage(db, user_id=request.user_id)
         remaining = (usage.tokens_limit - usage.tokens_used) if usage else 0
         raise HTTPException(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
             detail=f"ZH: Token 配額不足。剩餘: {remaining}, 需要: {request.tokens} | "
                    f"EN: Insufficient quota. Remaining: {remaining}, Required: {request.tokens}"
         )
-    usage = crud.get_token_usage(db, user_id=current_user.id)
-    return {"status": "success", "tokens_used": usage.tokens_used if usage else 0}
+    usage = crud.get_token_usage(db, user_id=request.user_id)
+    return {
+        "status": "success",
+        "user_id": request.user_id,
+        "tokens_used": usage.tokens_used if usage else 0,
+    }

@@ -19,8 +19,10 @@ from fastapi.testclient import TestClient
 
 # ZH: 設定測試環境變數，覆蓋部份設定
 # EN: Set test env vars to override settings
-os.environ.setdefault("JWT_SECRET_KEY", "test-secret-key")
-os.environ.setdefault("WORKER_API_TOKEN", "test-worker-token")
+# ZH: C3 修復：secrets 須通過 config.py 的長度與黑名單驗證 (JWT ≥32, Worker ≥16)
+# EN: C3 fix: secrets must satisfy config.py length & blacklist (JWT ≥32, Worker ≥16)
+os.environ.setdefault("JWT_SECRET_KEY", "test-secret-key-with-32-chars-padding-aaa")
+os.environ.setdefault("WORKER_API_TOKEN", "test-worker-token-16c")
 os.environ.setdefault("DATABASE_PATH", "/tmp/test_ai_platform.db")
 os.environ.setdefault("PORTKEY_ENABLED", "false")  # ZH: 測試時不呼叫真實 LLM
 os.environ["RATELIMIT_ENABLED"] = "False"  # ZH: 測試時停用速率限制，避免跨測試累積
