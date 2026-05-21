@@ -163,6 +163,23 @@ def init_db():
             try: conn.execute(text("ALTER TABLE chat_history ADD COLUMN tool_type VARCHAR DEFAULT 'chat'"))
             except Exception: pass
 
+            # --- training_jobs 表遷移（v1 Notebook 欄位，先前漏 ALTER）---
+            # --- training_jobs migrations (v1 Notebook columns, missed in v1) ---
+            try: conn.execute(text("ALTER TABLE training_jobs ADD COLUMN docker_image VARCHAR"))
+            except Exception: pass
+            try: conn.execute(text("ALTER TABLE training_jobs ADD COLUMN inline_code TEXT"))
+            except Exception: pass
+            try: conn.execute(text("ALTER TABLE training_jobs ADD COLUMN entry_args TEXT"))
+            except Exception: pass
+            try: conn.execute(text("ALTER TABLE training_jobs ADD COLUMN preferred_node VARCHAR"))
+            except Exception: pass
+
+            # --- v2.0 Lab 模組欄位 | v2.0 Lab module columns ---
+            try: conn.execute(text("ALTER TABLE users ADD COLUMN disk_quota_gb INTEGER DEFAULT 10"))
+            except Exception: pass
+            try: conn.execute(text("ALTER TABLE worker_heartbeats ADD COLUMN pool_type VARCHAR DEFAULT 'batch'"))
+            except Exception: pass
+
     except Exception as e:
         logger.warning(f"Manual DB migration skipped or partially failed: {e}")
 

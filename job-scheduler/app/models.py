@@ -36,7 +36,10 @@ EN: Table list (per AI_PROGRAMMING_SPEC.md Section 4.1):
 ==============================================================================
 """
 
-from sqlalchemy import Column, String, Integer, DateTime, Text, Float, ForeignKey
+from sqlalchemy import (
+    Column, String, Integer, DateTime, Date, Text, Float, ForeignKey,
+    LargeBinary, PrimaryKeyConstraint, UniqueConstraint,
+)
 from sqlalchemy.orm import relationship
 from datetime import datetime, timezone
 import uuid
@@ -72,6 +75,7 @@ class User(Base):
     department = Column(String, nullable=True)                                # ZH: 學系資訊 | EN: Department
     login_count = Column(Integer, default=0)                                  # ZH: 登入次數 | EN: Login count
     lifetime_tokens_used = Column(Integer, default=0)                         # ZH: 歷史累計 Token 數 | EN: Lifetime tokens used
+    disk_quota_gb = Column(Integer, default=10)                               # ZH: 個人磁碟配額 GB (v2.0 Lab) | EN: Personal disk quota GB
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))                    # ZH: 建立時間 | EN: Created at
     updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))  # ZH: 更新時間 | EN: Updated at
 
@@ -209,6 +213,7 @@ class WorkerHeartbeat(Base):
     gpu_utilization = Column(Float, default=0.0)                              # ZH: GPU 使用率 % | EN: GPU utilization %
     last_seen = Column(DateTime, default=lambda: datetime.now(timezone.utc))  # ZH: 最後心跳時間 | EN: Last heartbeat time
     is_online = Column(Integer, default=1)                                    # ZH: 是否在線 | EN: Online status
+    pool_type = Column(String, default="batch")                               # ZH: 節點池類型 batch/interactive (v2.0 Lab) | EN: Pool type batch/interactive
 
 
 # ==============================================================================
@@ -228,3 +233,126 @@ class Notebook(Base):
     updated_at = Column(DateTime,
                         default=lambda: datetime.now(timezone.utc),
                         onupdate=lambda: datetime.now(timezone.utc))         # ZH: 最後儲存時間 | EN: Last saved time
+
+
+# ==============================================================================
+# ZH: v2.0 Lab 模組 — 表 9–14
+# EN: v2.0 Lab module — Tables 9–14
+# ==============================================================================
+
+# ==============================================================================
+# ZH: 表 9: LabSession - code-server 工作階段
+# EN: Table 9: LabSession - code-server session
+# ZH: 複合 PK (user_id, session_name) 預留 v2.1 多 session 並行能力
+#     v2.0 強制 session_name = "default"
+# EN: Composite PK reserves multi-session support for v2.1; v2.0 enforces "default"
+# ==============================================================================
+class LabSession(Base):
+    __tablename__ = "lab_sessions"
+
+    user_id        = Column(String, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    session_name   = Column(String, default="default")                        # ZH: v2.0 強制 "default" | EN: v2.0 = "default"
+    container_id   = Column(String, nullable=True)                            # ZH: Docker 容器 ID | EN: Docker container ID
+    container_name = Column(String, nullable=True)                            # ZH: 容器名稱 cs-{user_id} | EN: Container name
+    status         = Column(String, default="stopped")                        # ZH: stopped / starting / running / stopping
+    volume_name    = Column(String, nullable=False)                           # ZH: 對應 named volume，如 home_alice
+    base_image     = Column(String, nullable=False, default="aibase/pytorch:2026-spring")  # ZH: 目前使用的 image
+    last_activity  = Column(DateTime, default=lambda: datetime.now(timezone.utc))          # ZH: 最後活動時間
+    started_at     = Column(DateTime, nullable=True)                          # ZH: 啟動時間
+    cpu_quota      = Column(Float,   default=0.5)                             # ZH: CPU cores
+    mem_quota_mb   = Column(Integer, default=2048)                            # ZH: RAM MB
+
+    __table_args__ = (
+        PrimaryKeyConstraint("user_id", "session_name"),
+    )
+
+
+# ==============================================================================
+# ZH: 表 10: UserSecret - 使用者 secrets（AES-256-GCM 加密儲存）
+# EN: Table 10: UserSecret - User secrets (AES-256-GCM encrypted)
+# ==============================================================================
+class UserSecret(Base):
+    __tablename__ = "user_secrets"
+
+    id          = Column(String, primary_key=True, default=generate_uuid)
+    user_id     = Column(String, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    name        = Column(String, nullable=False)                              # ZH: 環境變數名稱，如 HF_TOKEN
+    value_enc   = Column(LargeBinary, nullable=False)                         # ZH: AES-256-GCM 加密 (nonce + ciphertext + tag)
+    created_at  = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    updated_at  = Column(DateTime, default=lambda: datetime.now(timezone.utc),
+                         onupdate=lambda: datetime.now(timezone.utc))
+
+    __table_args__ = (
+        UniqueConstraint("user_id", "name", name="uq_user_secret_name"),
+    )
+
+
+# ==============================================================================
+# ZH: 表 11: QuotaGrant - 管理員配額提權紀錄（含審計）
+# EN: Table 11: QuotaGrant - Admin quota grant records (with audit trail)
+# ==============================================================================
+class QuotaGrant(Base):
+    __tablename__ = "quota_grants"
+
+    id              = Column(String, primary_key=True, default=generate_uuid)
+    user_id         = Column(String, ForeignKey("users.id", ondelete="CASCADE"), index=True, nullable=False)
+    extra_quota_gb  = Column(Integer, nullable=False)                         # ZH: 額外配額 GB（base 之上）
+    granted_by      = Column(String, ForeignKey("users.id"), nullable=False)  # ZH: 核准的 admin
+    reason          = Column(Text,   nullable=False)                          # ZH: 提權理由（必填審計用）
+    granted_at      = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    expires_at      = Column(DateTime, nullable=True)                         # ZH: null = 永久
+    revoked_at      = Column(DateTime, nullable=True)                         # ZH: null = 仍生效
+
+
+# ==============================================================================
+# ZH: 表 12: UserStorageState - 儲存生命週期狀態機
+# EN: Table 12: UserStorageState - Storage lifecycle state machine
+# ZH: 狀態：active / frozen / archived / pending_delete
+# EN: States: active / frozen / archived / pending_delete
+# ==============================================================================
+class UserStorageState(Base):
+    __tablename__ = "user_storage_state"
+
+    user_id         = Column(String, ForeignKey("users.id", ondelete="CASCADE"), primary_key=True)
+    state           = Column(String, default="active")                        # ZH: active/frozen/archived/pending_delete
+    state_since     = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    current_size_gb = Column(Float, default=0.0)
+    archive_path    = Column(String, nullable=True)                           # ZH: 歸檔後的 HDD 路徑（archived 狀態時非空）
+    notes           = Column(Text, nullable=True)                             # ZH: admin 註記
+
+
+# ==============================================================================
+# ZH: 表 13: AdminAction - 管理員操作審計 log
+# EN: Table 13: AdminAction - Admin action audit log
+# ZH: 記錄所有 admin 對使用者資源的操作（quota / freeze / inject / delete 等）
+# EN: Records all admin actions on user resources
+# ==============================================================================
+class AdminAction(Base):
+    __tablename__ = "admin_actions"
+
+    id          = Column(String, primary_key=True, default=generate_uuid)
+    admin_id    = Column(String, ForeignKey("users.id"), nullable=False, index=True)
+    target_user = Column(String, ForeignKey("users.id"), nullable=True, index=True)
+    action      = Column(String, nullable=False, index=True)                  # ZH: grant_quota/revoke_quota/freeze/archive/delete/inject_files/...
+    payload     = Column(Text)                                                # ZH: JSON 詳細參數
+    timestamp   = Column(DateTime, default=lambda: datetime.now(timezone.utc), index=True)
+    ip_address  = Column(String, nullable=True)                               # ZH: 執行者當時 IP
+
+
+# ==============================================================================
+# ZH: 表 14: UserSessionUsage - 使用者每日 session 累積時長
+# EN: Table 14: UserSessionUsage - Per-user daily session usage
+# ZH: 複合 PK (user_id, date)，每日一筆，scheduler 自動累加
+# EN: Composite PK (user_id, date); scheduler updates daily
+# ==============================================================================
+class UserSessionUsage(Base):
+    __tablename__ = "user_session_usage"
+
+    user_id        = Column(String, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    date           = Column(Date, nullable=False)
+    total_seconds  = Column(Integer, default=0)                               # ZH: 該日累積秒數
+    session_count  = Column(Integer, default=0)                               # ZH: 該日 session 次數
+
+    __table_args__ = (
+        PrimaryKeyConstraint("user_id", "date"),
+    )
