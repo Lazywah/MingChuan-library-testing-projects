@@ -166,6 +166,7 @@
             <div class="model-tabs" style="display:flex; gap: 16px; background: var(--bg-panel); border: 1px solid var(--border-color); border-radius: 12px; padding: 6px;">
                 <button id="nav-tab-management" class="model-tab active" onclick="switchAdminMainTab('management')" data-i18n="tab_management" style="border-radius: 8px; border: none; padding: 8px 20px;">管理介面</button>
                 <button id="nav-tab-analytics" class="model-tab" onclick="switchAdminMainTab('analytics')" data-i18n="tab_analytics" style="border-radius: 8px; border: none; padding: 8px 20px;">數據分析</button>
+                <button id="nav-tab-lab" class="model-tab" onclick="switchAdminMainTab('lab')" data-i18n="tab_lab_admin" style="border-radius: 8px; border: none; padding: 8px 20px;">Lab 管理</button>
             </div>
             
             <button id="admin-logout-btn" class="ready-btn"
@@ -677,6 +678,122 @@
                 </section>
             </div>
         </div> <!-- End of tab-analytics -->
+
+        <!-- ZH: v2.0 Lab 管理分頁 | EN: v2.0 Lab management tab -->
+        <div id="tab-lab" class="admin-tab-content" style="display: none;">
+            <div class="admin-grid">
+
+                <!-- ZH: Lab Sessions 監控 | EN: Lab Sessions Monitor -->
+                <section class="widget form-box-panel" style="grid-column: 1 / -1;">
+                    <div class="widget-header split">
+                        <h3><ion-icon name="terminal-outline" style="margin-right:6px;"></ion-icon>
+                            <span data-i18n="lab_admin_sessions">code-server Sessions</span></h3>
+                        <ion-icon name="refresh-circle-outline" onclick="adminLab.refreshSessions()" class="refresh-icon" title="Refresh"></ion-icon>
+                    </div>
+                    <div class="admin-table-wrap scrollbar-custom">
+                        <table class="admin-table" id="admin-lab-sessions-table">
+                            <thead><tr>
+                                <th data-i18n="col_user">使用者</th>
+                                <th data-i18n="col_status">狀態</th>
+                                <th data-i18n="col_image">Image</th>
+                                <th data-i18n="col_started">啟動於</th>
+                                <th data-i18n="col_last_activity">最後活動</th>
+                                <th data-i18n="col_cpu_mem">CPU / RAM</th>
+                                <th data-i18n="col_actions">操作</th>
+                            </tr></thead>
+                            <tbody><tr><td colspan="7" style="text-align:center; color:var(--text-muted);">Loading…</td></tr></tbody>
+                        </table>
+                    </div>
+                </section>
+
+                <!-- ZH: 配額提權 | EN: Quota grants -->
+                <section class="widget form-box-panel" style="grid-column: 1 / 2;">
+                    <div class="widget-header split">
+                        <h3><ion-icon name="server-outline" style="margin-right:6px;"></ion-icon>
+                            <span data-i18n="lab_admin_quota">配額管理</span></h3>
+                    </div>
+                    <div style="display:grid; grid-template-columns: 1fr 100px 100px; gap:8px; margin-bottom:12px;">
+                        <input type="text" id="quota-user-id" placeholder="user_id" />
+                        <input type="number" id="quota-extra-gb" placeholder="GB" min="1" />
+                        <button class="ready-btn" onclick="adminLab.lookupQuota()">查看</button>
+                    </div>
+                    <textarea id="quota-reason" placeholder="提權理由（必填，將寫入 audit log）" rows="2" style="width:100%; margin-bottom:8px;"></textarea>
+                    <div style="display:flex; gap:8px;">
+                        <button class="ready-btn" onclick="adminLab.grantQuota()" style="background: rgba(74, 222, 128, 0.15); color:#4ade80;">
+                            <ion-icon name="add-circle-outline"></ion-icon> 提權
+                        </button>
+                        <button class="ready-btn" onclick="adminLab.revokeQuotaSelected()" style="background: rgba(251,113,133,0.1); color:#fb7185;">
+                            <ion-icon name="close-circle-outline"></ion-icon> 撤銷選定
+                        </button>
+                    </div>
+                    <div id="quota-result" class="admin-table-wrap scrollbar-custom" style="margin-top:12px; max-height: 280px; overflow-y:auto;"></div>
+                </section>
+
+                <!-- ZH: 儲存生命週期 | EN: Storage lifecycle -->
+                <section class="widget form-box-panel" style="grid-column: 2 / 3;">
+                    <div class="widget-header split">
+                        <h3><ion-icon name="archive-outline" style="margin-right:6px;"></ion-icon>
+                            <span data-i18n="lab_admin_storage">儲存生命週期</span></h3>
+                        <ion-icon name="refresh-circle-outline" onclick="adminLab.refreshStorage()" class="refresh-icon" title="Refresh"></ion-icon>
+                    </div>
+                    <div style="display:flex; gap:8px; margin-bottom:12px; flex-wrap:wrap;">
+                        <select id="storage-filter" onchange="adminLab.refreshStorage()">
+                            <option value="">全部 All</option>
+                            <option value="active">Active</option>
+                            <option value="frozen">Frozen</option>
+                            <option value="archived">Archived</option>
+                            <option value="pending_delete">Pending Delete</option>
+                        </select>
+                    </div>
+                    <div class="admin-table-wrap scrollbar-custom" style="max-height: 320px; overflow-y:auto;">
+                        <table class="admin-table" id="admin-storage-table">
+                            <thead><tr>
+                                <th>User</th><th>State</th><th>Size</th><th>Since</th><th>Action</th>
+                            </tr></thead>
+                            <tbody><tr><td colspan="5" style="text-align:center; color:var(--text-muted);">Loading…</td></tr></tbody>
+                        </table>
+                    </div>
+                </section>
+
+                <!-- ZH: Audit Log | EN: Audit log -->
+                <section class="widget form-box-panel" style="grid-column: 1 / -1;">
+                    <div class="widget-header split">
+                        <h3><ion-icon name="document-text-outline" style="margin-right:6px;"></ion-icon>
+                            <span data-i18n="lab_admin_audit">Audit Log</span></h3>
+                        <div style="display:flex; gap:8px;">
+                            <input type="text" id="audit-filter-action" placeholder="action filter…" style="padding:4px 8px;"/>
+                            <input type="text" id="audit-filter-user"   placeholder="target user filter…" style="padding:4px 8px;"/>
+                            <button class="ready-btn config-save-btn" onclick="adminLab.refreshAudit()" style="padding:4px 12px; font-size:13px; width:auto;">查詢</button>
+                            <ion-icon name="refresh-circle-outline" onclick="adminLab.refreshAudit()" class="refresh-icon" title="Refresh"></ion-icon>
+                        </div>
+                    </div>
+                    <div class="admin-table-wrap scrollbar-custom" style="max-height: 420px; overflow-y:auto;">
+                        <table class="admin-table sticky-header" id="admin-audit-table">
+                            <thead><tr>
+                                <th>Time</th><th>Admin</th><th>Action</th><th>Target</th><th>Payload</th><th>IP</th>
+                            </tr></thead>
+                            <tbody><tr><td colspan="6" style="text-align:center; color:var(--text-muted);">Click 查詢 to load…</td></tr></tbody>
+                        </table>
+                    </div>
+                </section>
+
+                <!-- ZH: 使用者 Secrets 名稱（不可看 value） | EN: User secrets (names only, never values) -->
+                <section class="widget form-box-panel" style="grid-column: 1 / -1;">
+                    <div class="widget-header split">
+                        <h3><ion-icon name="key-outline" style="margin-right:6px;"></ion-icon>
+                            <span data-i18n="lab_admin_secrets">使用者 Secrets 監控</span>
+                            <span style="font-size:12px; color:var(--text-muted); margin-left:8px;">（管理員可監控與刪除，但不可查看 value）</span>
+                        </h3>
+                        <div style="display:flex; gap:8px;">
+                            <input type="text" id="admin-secret-user" placeholder="user_id" style="padding:4px 8px;"/>
+                            <button class="ready-btn config-save-btn" onclick="adminLab.listUserSecrets()" style="padding:4px 12px; font-size:13px; width:auto;">列出</button>
+                        </div>
+                    </div>
+                    <div id="admin-secrets-result" class="admin-table-wrap scrollbar-custom" style="max-height: 280px; overflow-y:auto;"></div>
+                </section>
+
+            </div>
+        </div> <!-- End of tab-lab -->
     </div> <!-- End of admin-layout -->
 
     <!-- 載入 Ionicons -->

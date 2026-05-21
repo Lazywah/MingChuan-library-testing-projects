@@ -441,6 +441,8 @@ function switchAdminMainTab(tabId) {
         
         if (tabId === 'analytics') {
             fetchAnalyticsData();
+        } else if (tabId === 'lab') {
+            adminLab.init();
         }
     }
 }
@@ -1882,3 +1884,272 @@ document.addEventListener('DOMContentLoaded', () => {
 
     verifyAdmin();
 });
+
+
+// ==============================================================================
+// v2.0 LAB ADMIN MODULE — Lab Sessions / Quota / Storage / Audit / Secrets
+// ==============================================================================
+const adminLab = (() => {
+    function esc(s) {
+        return String(s ?? '').replace(/[&<>"']/g, m => ({
+            '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
+        }[m]));
+    }
+
+    async function api(path, opts = {}) {
+        const resp = await fetch(`${API_BASE}/admin${path}`, {
+            ...opts,
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${authToken}`,
+                ...(opts.headers || {}),
+            },
+        });
+        if (resp.status === 401) { handleAuthError(); throw new Error('auth'); }
+        if (!resp.ok) {
+            const text = await resp.text();
+            throw new Error(`HTTP ${resp.status}: ${text.slice(0, 200)}`);
+        }
+        return resp.status === 204 ? null : resp.json();
+    }
+
+    // ── Lab Sessions ─────────────────────────────────────────────────────────
+    async function refreshSessions() {
+        const tbody = document.querySelector('#admin-lab-sessions-table tbody');
+        if (!tbody) return;
+        tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--text-muted);">Loading…</td></tr>';
+        try {
+            const data = await api('/lab/sessions');
+            const sessions = data.sessions || [];
+            if (sessions.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--text-muted);">No active sessions</td></tr>';
+                return;
+            }
+            tbody.innerHTML = sessions.map(s => `
+                <tr>
+                    <td>${esc(s.username || s.user_id)}</td>
+                    <td><span class="status-badge status-${esc(s.status)}">${esc(s.status)}</span></td>
+                    <td>${esc(s.base_image)}</td>
+                    <td>${esc(s.started_at || '—')}</td>
+                    <td>${esc(s.last_activity || '—')}</td>
+                    <td>${esc(s.cpu_quota || '?')} core · ${esc(s.mem_quota_mb || '?')} MB</td>
+                    <td><button class="ready-btn" style="background:rgba(251,113,133,0.1);color:#fb7185;width:auto;padding:4px 10px;font-size:12px;" onclick="adminLab.forceStop('${esc(s.user_id)}')">強制停止</button></td>
+                </tr>
+            `).join('');
+        } catch (e) {
+            tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;color:#ef4444;">Error: ${esc(e.message)}</td></tr>`;
+        }
+    }
+
+    async function forceStop(userId) {
+        if (!confirm(`強制停止 ${userId} 的 Lab session？`)) return;
+        try {
+            await api(`/lab/sessions/${encodeURIComponent(userId)}/force-stop`, { method: 'POST' });
+            refreshSessions();
+        } catch (e) { alert(`錯誤: ${e.message}`); }
+    }
+
+    // ── Quota Grants ─────────────────────────────────────────────────────────
+    async function lookupQuota() {
+        const userId = document.getElementById('quota-user-id').value.trim();
+        if (!userId) { alert('請輸入 user_id'); return; }
+        const result = document.getElementById('quota-result');
+        result.innerHTML = 'Loading…';
+        try {
+            const data = await api(`/quota/${encodeURIComponent(userId)}`);
+            const grants = (data.grants || []).map(g => `
+                <tr>
+                    <td>${esc(g.id.slice(0,8))}</td>
+                    <td>+${esc(g.extra_quota_gb)} GB</td>
+                    <td>${esc(g.reason)}</td>
+                    <td>${esc(g.granted_at || '—')}</td>
+                    <td>${g.revoked_at ? `<span style="color:var(--text-muted);">revoked</span>` : `<button class="ready-btn" style="background:rgba(251,113,133,0.1);color:#fb7185;width:auto;padding:2px 8px;font-size:11px;" onclick="adminLab.revokeQuota('${esc(g.id)}')">撤銷</button>`}</td>
+                </tr>
+            `).join('') || '<tr><td colspan="5" style="text-align:center;color:var(--text-muted);">無提權紀錄</td></tr>';
+            result.innerHTML = `
+                <div style="padding:8px 0; font-size:14px;">
+                    <strong>${esc(data.user_id)}</strong> · base = ${esc(data.base_quota_gb)} GB · <strong>effective = ${esc(data.effective_quota_gb)} GB</strong>
+                </div>
+                <table class="admin-table"><thead><tr><th>ID</th><th>Extra</th><th>Reason</th><th>Granted</th><th>動作</th></tr></thead><tbody>${grants}</tbody></table>
+            `;
+        } catch (e) { result.innerHTML = `<div style="color:#ef4444;">Error: ${esc(e.message)}</div>`; }
+    }
+
+    async function grantQuota() {
+        const userId = document.getElementById('quota-user-id').value.trim();
+        const extraGb = parseInt(document.getElementById('quota-extra-gb').value, 10);
+        const reason = document.getElementById('quota-reason').value.trim();
+        if (!userId || !extraGb || extraGb <= 0) { alert('user_id 與 extra GB 為必填'); return; }
+        if (reason.length < 5) { alert('reason 至少需 5 字（會寫入 audit log）'); return; }
+        try {
+            await api('/quota/grant', {
+                method: 'POST',
+                body: JSON.stringify({ user_id: userId, extra_quota_gb: extraGb, reason }),
+            });
+            document.getElementById('quota-reason').value = '';
+            document.getElementById('quota-extra-gb').value = '';
+            lookupQuota();
+        } catch (e) { alert(`錯誤: ${e.message}`); }
+    }
+
+    async function revokeQuota(grantId) {
+        if (!confirm(`撤銷此 grant？`)) return;
+        try {
+            await api(`/quota/grant/${encodeURIComponent(grantId)}`, { method: 'DELETE' });
+            lookupQuota();
+        } catch (e) { alert(`錯誤: ${e.message}`); }
+    }
+
+    function revokeQuotaSelected() {
+        alert('請於下方表格點擊每筆 grant 旁的「撤銷」按鈕');
+    }
+
+    // ── Storage Lifecycle ────────────────────────────────────────────────────
+    async function refreshStorage() {
+        const tbody = document.querySelector('#admin-storage-table tbody');
+        if (!tbody) return;
+        const filter = document.getElementById('storage-filter').value;
+        tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:var(--text-muted);">Loading…</td></tr>';
+        try {
+            const data = await api(`/storage/states${filter ? `?state=${encodeURIComponent(filter)}` : ''}`);
+            const rows = data.states || [];
+            if (rows.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:var(--text-muted);">無紀錄</td></tr>';
+                return;
+            }
+            tbody.innerHTML = rows.map(s => `
+                <tr>
+                    <td>${esc(s.user_id)}</td>
+                    <td><span class="status-badge status-${esc(s.state)}">${esc(s.state)}</span></td>
+                    <td>${esc(s.current_size_gb)} GB</td>
+                    <td>${esc(s.state_since || '—')}</td>
+                    <td>
+                        <button class="ready-btn" style="width:auto;padding:2px 8px;font-size:11px;" onclick="adminLab.changeStorageState('${esc(s.user_id)}','freeze')">Freeze</button>
+                        <button class="ready-btn" style="width:auto;padding:2px 8px;font-size:11px;" onclick="adminLab.changeStorageState('${esc(s.user_id)}','archive')">Archive</button>
+                        <button class="ready-btn" style="width:auto;padding:2px 8px;font-size:11px;" onclick="adminLab.changeStorageState('${esc(s.user_id)}','restore')">Restore</button>
+                        <button class="ready-btn" style="background:rgba(251,113,133,0.1);color:#fb7185;width:auto;padding:2px 8px;font-size:11px;" onclick="adminLab.permanentDelete('${esc(s.user_id)}')">⚠ Delete</button>
+                    </td>
+                </tr>
+            `).join('');
+        } catch (e) {
+            tbody.innerHTML = `<tr><td colspan="5" style="text-align:center;color:#ef4444;">Error: ${esc(e.message)}</td></tr>`;
+        }
+    }
+
+    async function changeStorageState(userId, action) {
+        const reason = prompt(`${action} ${userId} — 請輸入理由 (audit log)：`);
+        if (!reason) return;
+        try {
+            await api(`/storage/${action}`, {
+                method: 'POST',
+                body: JSON.stringify({ user_id: userId, reason }),
+            });
+            refreshStorage();
+        } catch (e) { alert(`錯誤: ${e.message}`); }
+    }
+
+    async function permanentDelete(userId) {
+        const reason = prompt(`⚠️ 永久刪除 ${userId} — 請輸入理由 (audit log)：`);
+        if (!reason) return;
+        const adminPwd = prompt('需驗證 admin 密碼：');
+        if (!adminPwd) return;
+        if (!confirm(`再次確認永久刪除 ${userId}？此操作不可復原！`)) return;
+        try {
+            await api('/storage/permanent-delete', {
+                method: 'POST',
+                body: JSON.stringify({ user_id: userId, reason, admin_password: adminPwd }),
+            });
+            refreshStorage();
+        } catch (e) { alert(`錯誤: ${e.message}`); }
+    }
+
+    // ── Audit Log ────────────────────────────────────────────────────────────
+    async function refreshAudit() {
+        const tbody = document.querySelector('#admin-audit-table tbody');
+        if (!tbody) return;
+        const action = document.getElementById('audit-filter-action').value.trim();
+        const user   = document.getElementById('audit-filter-user').value.trim();
+        const params = new URLSearchParams({ limit: '100' });
+        if (action) params.set('action', action);
+        if (user)   params.set('target_user', user);
+        tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--text-muted);">Loading…</td></tr>';
+        try {
+            const data = await api(`/audit?${params}`);
+            const items = data.items || [];
+            if (items.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--text-muted);">無紀錄</td></tr>';
+                return;
+            }
+            tbody.innerHTML = items.map(r => `
+                <tr>
+                    <td style="font-family:monospace;font-size:11px;">${esc(r.timestamp)}</td>
+                    <td>${esc((r.admin_id||'').slice(0,8))}</td>
+                    <td>${esc(r.action)}</td>
+                    <td>${esc((r.target_user||'').slice(0,8))}</td>
+                    <td style="font-family:monospace;font-size:11px;max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${esc(r.payload)}">${esc(r.payload || '')}</td>
+                    <td>${esc(r.ip_address || '—')}</td>
+                </tr>
+            `).join('');
+        } catch (e) {
+            tbody.innerHTML = `<tr><td colspan="6" style="text-align:center;color:#ef4444;">Error: ${esc(e.message)}</td></tr>`;
+        }
+    }
+
+    // ── User Secrets Monitor ─────────────────────────────────────────────────
+    async function listUserSecrets() {
+        const userId = document.getElementById('admin-secret-user').value.trim();
+        if (!userId) { alert('請輸入 user_id'); return; }
+        const result = document.getElementById('admin-secrets-result');
+        result.innerHTML = 'Loading…';
+        try {
+            const data = await api(`/secrets/${encodeURIComponent(userId)}/names`);
+            const items = data.secrets || [];
+            if (items.length === 0) {
+                result.innerHTML = '<div style="color:var(--text-muted);text-align:center;padding:12px;">該使用者尚無 secrets</div>';
+                return;
+            }
+            result.innerHTML = `
+                <table class="admin-table">
+                    <thead><tr><th>Name</th><th>Masked</th><th>Updated</th><th>動作</th></tr></thead>
+                    <tbody>${items.map(s => `
+                        <tr>
+                            <td>${esc(s.name)}</td>
+                            <td style="font-family:monospace;">${esc(s.masked_value || '****')}</td>
+                            <td style="font-size:12px;">${esc(s.updated_at || '—')}</td>
+                            <td><button class="ready-btn" style="background:rgba(251,113,133,0.1);color:#fb7185;width:auto;padding:2px 8px;font-size:11px;" onclick="adminLab.deleteUserSecret('${esc(userId)}','${esc(s.name)}')">刪除</button></td>
+                        </tr>
+                    `).join('')}</tbody>
+                </table>
+            `;
+        } catch (e) { result.innerHTML = `<div style="color:#ef4444;">Error: ${esc(e.message)}</div>`; }
+    }
+
+    async function deleteUserSecret(userId, name) {
+        if (!confirm(`刪除 ${userId} 的 secret "${name}"？管理員無法看到 value，但可以刪除。`)) return;
+        try {
+            await api(`/secrets/${encodeURIComponent(userId)}/${encodeURIComponent(name)}`, { method: 'DELETE' });
+            listUserSecrets();
+        } catch (e) { alert(`錯誤: ${e.message}`); }
+    }
+
+    // ── Init ─────────────────────────────────────────────────────────────────
+    let _initialized = false;
+    function init() {
+        if (_initialized) {
+            refreshSessions();
+            return;
+        }
+        _initialized = true;
+        refreshSessions();
+        refreshStorage();
+    }
+
+    return {
+        init, refreshSessions, forceStop,
+        lookupQuota, grantQuota, revokeQuota, revokeQuotaSelected,
+        refreshStorage, changeStorageState, permanentDelete,
+        refreshAudit,
+        listUserSecrets, deleteUserSecret,
+    };
+})();
+window.adminLab = adminLab;
