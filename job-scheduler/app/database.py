@@ -180,6 +180,14 @@ def init_db():
             try: conn.execute(text("ALTER TABLE worker_heartbeats ADD COLUMN pool_type VARCHAR DEFAULT 'batch'"))
             except Exception: pass
 
+            # --- Phase E 清理 v1 Notebook 表 | Phase E drop v1 notebooks table ---
+            # ZH: 注意 — 不刪除 training_jobs 的 docker_image/inline_code/entry_args/preferred_node 4 欄位
+            #     因為 v2.0 Lab 的「Run on GPU」仍會使用這些欄位
+            # EN: NOTE — keep training_jobs.{docker_image,inline_code,entry_args,preferred_node}
+            #     because v2.0 Lab's "Run on GPU" still uses these columns
+            try: conn.execute(text("DROP TABLE IF EXISTS notebooks"))
+            except Exception: pass
+
     except Exception as e:
         logger.warning(f"Manual DB migration skipped or partially failed: {e}")
 

@@ -559,48 +559,8 @@ def upsert_worker_heartbeat(
     return node
 
 
-# ==============================================================================
-# ZH: Notebook CRUD | EN: Notebook CRUD
-# ==============================================================================
-
-def get_notebook(db: Session, user_id: str) -> Optional[models.Notebook]:
-    """
-    ZH: 取得使用者的 Notebook（每人僅一份）
-    EN: Get user's notebook (one per user)
-    """
-    return db.query(models.Notebook).filter(
-        models.Notebook.user_id == user_id
-    ).first()
-
-
-def save_notebook(
-    db: Session,
-    user_id: str,
-    cells_json: str,
-    env_json: str
-) -> models.Notebook:
-    """
-    ZH: 建立或更新使用者的 Notebook（upsert）
-    EN: Create or update user's notebook (upsert)
-    """
-    notebook = db.query(models.Notebook).filter(
-        models.Notebook.user_id == user_id
-    ).first()
-
-    if notebook:
-        notebook.cells = cells_json
-        notebook.environment = env_json
-    else:
-        notebook = models.Notebook(
-            user_id=user_id,
-            cells=cells_json,
-            environment=env_json,
-        )
-        db.add(notebook)
-
-    db.commit()
-    db.refresh(notebook)
-    return notebook
+# ZH: Notebook CRUD 已於 Phase E 移除 — 被 v2.0 Lab Manager 取代
+# EN: Notebook CRUD removed in Phase E — superseded by v2.0 Lab Manager
 
 
 # ==============================================================================

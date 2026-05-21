@@ -216,23 +216,12 @@ class WorkerHeartbeat(Base):
     pool_type = Column(String, default="batch")                               # ZH: 節點池類型 batch/interactive (v2.0 Lab) | EN: Pool type batch/interactive
 
 
-# ==============================================================================
-# ZH: 表 8: Notebook - 使用者 Notebook 草稿（每人一份，持久化）
-# EN: Table 8: Notebook - Per-user notebook draft (one per user, persistent)
-# ZH: 儲存格子清單（JSON）與環境設定，前端 auto-save（debounce 2s）時寫入
-# EN: Stores cells (JSON) and environment config; written by frontend auto-save
-# ==============================================================================
-class Notebook(Base):
-    __tablename__ = "notebooks"
-
-    id         = Column(String, primary_key=True, default=generate_uuid)
-    user_id    = Column(String, ForeignKey("users.id", ondelete="CASCADE"),
-                        unique=True, index=True, nullable=False)              # ZH: 每人僅一份 | EN: One per user
-    cells      = Column(Text, default="[]")                                   # ZH: 格子清單 JSON [{id,type,content}] | EN: Cell list JSON
-    environment = Column(Text, default="{}")                                  # ZH: 環境設定 JSON {framework,mode,preferred_node,...} | EN: Environment JSON
-    updated_at = Column(DateTime,
-                        default=lambda: datetime.now(timezone.utc),
-                        onupdate=lambda: datetime.now(timezone.utc))         # ZH: 最後儲存時間 | EN: Last saved time
+# ZH: 表 8 (Notebook) 已於 Phase E 移除 — 被 v2.0 Lab (table 9 LabSession) 取代
+# EN: Table 8 (Notebook) removed in Phase E — superseded by v2.0 Lab (table 9 LabSession)
+# ZH: training_jobs 的 docker_image / inline_code / entry_args / preferred_node 4 欄位保留
+#     供 Lab 的「Run on GPU」延續使用，不在此處刪除。
+# EN: training_jobs columns docker_image / inline_code / entry_args / preferred_node are
+#     intentionally kept — v2.0 Lab's "Run on GPU" still uses them.
 
 
 # ==============================================================================
