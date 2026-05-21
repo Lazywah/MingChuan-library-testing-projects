@@ -535,107 +535,73 @@
                     </section>
 
                     <!-- ZH: Notebook 面板 | EN: Notebook Panel -->
+                    <!-- ZH: v2.0 Lab — code-server 啟動面板 | EN: v2.0 Lab — code-server launcher -->
                     <section class="compute-panel sub-page-view" id="compute-notebook-page"
                         style="background: transparent; box-shadow: none; padding: 0; width: 100%;">
 
-                        <!-- ZH: 工具列 | EN: Toolbar -->
-                        <div class="nb-toolbar widget">
-                            <div class="nb-toolbar-left">
-                                <!-- ZH: 框架選擇 | EN: Framework selector -->
-                                <div class="nb-select-group">
-                                    <ion-icon name="cube-outline" class="nb-select-icon"></ion-icon>
-                                    <select id="nb-framework" title="Framework">
-                                        <option value="pytorch">PyTorch</option>
-                                        <option value="tensorflow">TensorFlow</option>
-                                        <option value="transformers">HuggingFace Transformers</option>
-                                        <option value="llama.cpp">llama.cpp</option>
-                                        <option value="vllm">vLLM</option>
-                                        <option value="custom">自訂 Custom</option>
-                                    </select>
+                        <div class="lab-launcher widget">
+                            <div class="lab-launcher-header">
+                                <ion-icon name="rocket-outline" class="lab-launcher-icon"></ion-icon>
+                                <div>
+                                    <h2 data-i18n="lab_title">AI Base Lab</h2>
+                                    <p data-i18n="lab_subtitle" class="lab-launcher-subtitle">
+                                        在瀏覽器內使用完整的 VS Code 環境，含終端機、檔案總管、Notebook 編輯與 Run on GPU。
+                                    </p>
                                 </div>
-                                <!-- ZH: 自訂 Image 輸入框（選 custom 才顯示）| EN: Custom image input -->
-                                <input id="nb-custom-image" class="nb-custom-image hidden"
-                                    type="text" placeholder="docker.io/your/image:tag" />
-                                <!-- ZH: 執行模式 | EN: Execution mode -->
-                                <div class="nb-select-group">
-                                    <ion-icon name="play-circle-outline" class="nb-select-icon"></ion-icon>
-                                    <select id="nb-mode">
-                                        <option value="training"  data-i18n-option="nb_mode_train">訓練 Training</option>
-                                        <option value="finetuning" data-i18n-option="nb_mode_finetune">微調 Fine-tuning</option>
-                                        <option value="inference" data-i18n-option="nb_mode_infer">推論 Inference</option>
-                                        <option value="preprocess" data-i18n-option="nb_mode_preprocess">資料前處理 Preprocess</option>
-                                    </select>
+                            </div>
+
+                            <div class="lab-status-card" id="lab-status-card">
+                                <div class="lab-status-row">
+                                    <span data-i18n="lab_status_label">狀態 Status：</span>
+                                    <span id="lab-status-text" class="lab-status-text" data-i18n="lab_status_loading">載入中…</span>
                                 </div>
-                                <!-- ZH: GPU 節點選擇 | EN: GPU node selector -->
-                                <div class="nb-select-group">
-                                    <ion-icon name="hardware-chip-outline" class="nb-select-icon"></ion-icon>
-                                    <select id="nb-gpu-node">
-                                        <option value="auto" data-i18n-option="nb_gpu_auto">自動 Auto</option>
-                                        <!-- ZH: 動態填充線上節點 | EN: Dynamically populated from /nodes -->
+                                <div class="lab-status-row" id="lab-meta" style="display:none;">
+                                    <span data-i18n="lab_image_label">Image：</span>
+                                    <span id="lab-meta-image" class="lab-meta-value">—</span>
+                                    <span style="margin-left:16px;" data-i18n="lab_quota_label">配額 Quota：</span>
+                                    <span id="lab-meta-quota" class="lab-meta-value">—</span>
+                                    <span style="margin-left:16px;" data-i18n="lab_remaining_label">今日剩餘 Remaining：</span>
+                                    <span id="lab-meta-remaining" class="lab-meta-value">—</span>
+                                </div>
+                            </div>
+
+                            <div class="lab-config widget">
+                                <div class="lab-config-row">
+                                    <label data-i18n="lab_image_select">選擇 Image：</label>
+                                    <select id="lab-image-select" class="lab-select">
+                                        <option value="aibase/pytorch:2026-spring">PyTorch (CUDA 12.8)</option>
+                                        <option value="aibase/pytorch-legacy:2026-spring">PyTorch Legacy (CUDA 11.8)</option>
+                                        <option value="aibase/tensorflow:2026-spring">TensorFlow</option>
+                                        <option value="aibase/huggingface:2026-spring">HuggingFace Transformers</option>
+                                        <option value="aibase/llamacpp:2026-spring">llama.cpp</option>
+                                        <option value="aibase/vllm:2026-spring">vLLM</option>
+                                        <option value="aibase/dev-tools:2026-spring">Dev Tools (Python/C++/CUDA/Java)</option>
                                     </select>
                                 </div>
                             </div>
-                            <div class="nb-toolbar-right">
-                                <span id="nb-save-status" class="nb-save-status" data-i18n="nb_saved">已儲存</span>
-                                <button id="nb-run-btn" class="nb-btn nb-btn-run">
-                                    <ion-icon name="play-outline"></ion-icon>
-                                    <span data-i18n="nb_run_all">Run All</span>
+
+                            <div class="lab-actions">
+                                <button id="lab-open-btn" class="lab-btn lab-btn-primary">
+                                    <ion-icon name="open-outline"></ion-icon>
+                                    <span data-i18n="lab_open">開啟 Notebook</span>
                                 </button>
-                                <button id="nb-stop-btn" class="nb-btn nb-btn-stop hidden">
+                                <button id="lab-stop-btn" class="lab-btn lab-btn-danger hidden">
                                     <ion-icon name="stop-outline"></ion-icon>
-                                    <span data-i18n="nb_stop">Stop</span>
+                                    <span data-i18n="lab_stop">停止 Session</span>
                                 </button>
                             </div>
-                        </div>
 
-                        <!-- ZH: 資料集列 | EN: Dataset bar -->
-                        <div class="nb-dataset-bar widget">
-                            <ion-icon name="folder-open-outline" style="color:var(--accent-glow)"></ion-icon>
-                            <span data-i18n="nb_dataset_label">資料集 Dataset：</span>
-                            <span id="nb-dataset-name" class="nb-dataset-name" data-i18n="nb_dataset_none">（未選擇）</span>
-                            <label class="nb-btn nb-btn-upload" for="nb-dataset-input">
-                                <ion-icon name="cloud-upload-outline"></ion-icon>
-                                <span data-i18n="nb_upload">上傳</span>
-                            </label>
-                            <input id="nb-dataset-input" type="file"
-                                accept=".zip,.csv,.jsonl,.json,.txt,.tar,.gz" style="display:none">
-                        </div>
-
-                        <!-- ZH: 格子容器 | EN: Cells container -->
-                        <div id="nb-cells" class="nb-cells"></div>
-
-                        <!-- ZH: 新增格子列 | EN: Add cell row -->
-                        <div class="nb-add-row">
-                            <button class="nb-add-btn" id="nb-add-code"  data-type="code">
-                                <ion-icon name="add-outline"></ion-icon>
-                                <span data-i18n="nb_add_code">+ Code</span>
-                            </button>
-                            <button class="nb-add-btn" id="nb-add-shell" data-type="shell">
-                                <ion-icon name="terminal-outline"></ion-icon>
-                                <span data-i18n="nb_add_shell">+ Shell</span>
-                            </button>
-                            <button class="nb-add-btn" id="nb-add-md"   data-type="markdown">
-                                <ion-icon name="document-text-outline"></ion-icon>
-                                <span data-i18n="nb_add_md">+ Markdown</span>
-                            </button>
-                        </div>
-
-                        <!-- ZH: 輸出面板 | EN: Output panel -->
-                        <div id="nb-output-panel" class="nb-output-panel widget hidden">
-                            <div class="nb-output-header">
-                                <span data-i18n="nb_output_title">執行輸出 Output</span>
-                                <div class="nb-output-actions">
-                                    <span id="nb-job-status" class="nb-job-status"></span>
-                                    <button id="nb-clear-output" class="nb-btn-icon" title="Clear">
-                                        <ion-icon name="trash-outline"></ion-icon>
-                                    </button>
-                                </div>
+                            <div class="lab-tips">
+                                <p data-i18n="lab_tip_1">
+                                    💡 第一次開啟會約 5–10 秒建立容器；之後 idle 30 分鐘自動關閉，檔案永久保留於個人 volume。
+                                </p>
+                                <p data-i18n="lab_tip_2">
+                                    💡 在 code-server 內寫完程式碼後，右鍵「AI Base: Run on GPU」即可送到 GPU 訓練，輸出會串流回 VS Code Output Panel。
+                                </p>
+                                <p data-i18n="lab_tip_3">
+                                    💡 共用模型快取在 <code>/opt/models</code>（read-only），自己的 pip 套件用 <code>pip install --user</code> 安裝到 <code>~/.local/</code> 永久保留。
+                                </p>
                             </div>
-                            <div class="nb-progress-wrap hidden" id="nb-progress-wrap">
-                                <div class="nb-progress-bar" id="nb-progress-bar"></div>
-                                <span id="nb-progress-text" class="nb-progress-text">0%</span>
-                            </div>
-                            <pre id="nb-output-log" class="nb-output-log scrollbar-custom"></pre>
                         </div>
 
                     </section>
@@ -940,6 +906,27 @@
                             <button class="ready-btn" id="reopen-tutorial-btn"
                                 style="width:auto; min-width:120px;"><ion-icon name="book-outline"></ion-icon> <span
                                     data-i18n="btn_reopen_tutorial">Show Tutorial</span></button>
+                        </div>
+                    </section>
+
+                    <!-- ZH: v2.0 Secrets 管理 | EN: v2.0 Secrets Management -->
+                    <section class="widget form-box-panel" id="secrets-section">
+                        <div class="widget-header">
+                            <h3>
+                                <ion-icon name="key-outline" style="margin-right:6px;"></ion-icon>
+                                <span data-i18n="settings_secrets">Secrets 管理</span>
+                            </h3>
+                        </div>
+                        <p data-i18n="secrets_desc" style="margin: 0 0 12px; color: var(--text-muted); font-size: 13px; line-height: 1.5;">
+                            在這裡新增 API key 等敏感資訊（HF_TOKEN、WANDB_API_KEY 等），提交 GPU 任務時自動注入到容器環境變數。
+                        </p>
+                        <div id="secrets-list" class="secrets-list">
+                            <div class="secret-item" style="justify-content: center; color: var(--text-muted);" data-i18n="secrets_empty">尚未設定任何 secret</div>
+                        </div>
+                        <div class="secret-add-row">
+                            <input type="text" id="secret-name-input" data-i18n-placeholder="secrets_name_placeholder" placeholder="名稱（例：HF_TOKEN）" />
+                            <input type="password" id="secret-value-input" data-i18n-placeholder="secrets_value_placeholder" placeholder="值（vault 加密儲存）" />
+                            <button id="secret-add-btn"><span data-i18n="secrets_add">新增</span></button>
                         </div>
                     </section>
 

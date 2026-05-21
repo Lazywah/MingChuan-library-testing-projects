@@ -1995,7 +1995,260 @@ ion-icon {
 
 
 /* ==============================================================================
-   NOTEBOOK MODULE STYLES
+   v2.0 LAB LAUNCHER STYLES (code-server)
+   ============================================================================== */
+
+.lab-launcher {
+    padding: 32px;
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+    max-width: 880px;
+    margin: 0 auto;
+}
+
+.lab-launcher-header {
+    display: flex;
+    align-items: flex-start;
+    gap: 20px;
+}
+
+.lab-launcher-icon {
+    font-size: 48px;
+    color: var(--accent-glow, #7c3aed);
+    flex-shrink: 0;
+}
+
+.lab-launcher-header h2 {
+    margin: 0 0 6px;
+    font-size: 24px;
+    color: var(--text-color);
+}
+
+.lab-launcher-subtitle {
+    margin: 0;
+    color: var(--text-muted);
+    line-height: 1.5;
+}
+
+.lab-status-card {
+    padding: 16px 20px;
+    border-radius: 8px;
+    background: rgba(124, 58, 237, 0.06);
+    border: 1px solid rgba(124, 58, 237, 0.2);
+}
+
+.lab-status-row {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+    font-size: 14px;
+}
+
+.lab-status-row + .lab-status-row {
+    margin-top: 8px;
+}
+
+.lab-status-text {
+    font-weight: 600;
+}
+
+.lab-status-text[data-kind="ok"]    { color: #10b981; }
+.lab-status-text[data-kind="warn"]  { color: #f59e0b; }
+.lab-status-text[data-kind="error"] { color: #ef4444; }
+.lab-status-text[data-kind="info"]  { color: var(--text-muted); }
+
+.lab-meta-value {
+    color: var(--accent-glow, #7c3aed);
+    font-family: 'Fira Code', monospace;
+    font-size: 13px;
+}
+
+.lab-config {
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.lab-config-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.lab-config-row label {
+    flex-shrink: 0;
+    width: 120px;
+    color: var(--text-muted);
+}
+
+.lab-select {
+    flex: 1;
+    padding: 8px 12px;
+    border-radius: 6px;
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    background: rgba(0, 0, 0, 0.2);
+    color: var(--text-color);
+    font-size: 14px;
+}
+
+.lab-actions {
+    display: flex;
+    gap: 12px;
+    justify-content: center;
+}
+
+.lab-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 12px 24px;
+    border: none;
+    border-radius: 8px;
+    font-size: 15px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.lab-btn:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+.lab-btn-primary {
+    background: var(--accent-glow, #7c3aed);
+    color: #fff;
+}
+
+.lab-btn-primary:hover:not(:disabled) {
+    background: #6d28d9;
+    transform: translateY(-1px);
+}
+
+.lab-btn-danger {
+    background: rgba(239, 68, 68, 0.15);
+    color: #ef4444;
+    border: 1px solid rgba(239, 68, 68, 0.3);
+}
+
+.lab-btn-danger:hover:not(:disabled) {
+    background: rgba(239, 68, 68, 0.25);
+}
+
+.lab-btn ion-icon {
+    font-size: 18px;
+}
+
+.lab-tips {
+    padding: 16px 20px;
+    background: rgba(255, 255, 255, 0.04);
+    border-left: 3px solid var(--accent-glow, #7c3aed);
+    border-radius: 4px;
+}
+
+.lab-tips p {
+    margin: 0;
+    font-size: 13px;
+    color: var(--text-muted);
+    line-height: 1.5;
+}
+
+.lab-tips p + p {
+    margin-top: 8px;
+}
+
+.lab-tips code {
+    background: rgba(0, 0, 0, 0.3);
+    padding: 2px 6px;
+    border-radius: 3px;
+    font-size: 12px;
+    color: var(--accent-glow, #7c3aed);
+}
+
+/* ==============================================================================
+   v2.0 SECRETS SETTINGS STYLES
+   ============================================================================== */
+
+.secrets-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-top: 12px;
+}
+
+.secret-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 14px;
+    background: rgba(255, 255, 255, 0.04);
+    border-radius: 6px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.secret-name {
+    flex: 1;
+    font-family: 'Fira Code', monospace;
+    color: var(--text-color);
+}
+
+.secret-masked-value {
+    color: var(--text-muted);
+    font-family: 'Fira Code', monospace;
+    font-size: 12px;
+}
+
+.secret-delete-btn {
+    background: transparent;
+    border: none;
+    color: #ef4444;
+    cursor: pointer;
+    font-size: 18px;
+    padding: 4px 8px;
+    border-radius: 4px;
+}
+
+.secret-delete-btn:hover {
+    background: rgba(239, 68, 68, 0.1);
+}
+
+.secret-add-row {
+    display: grid;
+    grid-template-columns: 1fr 2fr auto;
+    gap: 8px;
+    margin-top: 12px;
+}
+
+.secret-add-row input {
+    padding: 8px 12px;
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    background: rgba(0, 0, 0, 0.2);
+    color: var(--text-color);
+    border-radius: 6px;
+    font-family: 'Fira Code', monospace;
+    font-size: 13px;
+}
+
+.secret-add-row button {
+    padding: 8px 16px;
+    background: var(--accent-glow, #7c3aed);
+    color: #fff;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    font-weight: 600;
+}
+
+.secret-add-row button:hover {
+    background: #6d28d9;
+}
+
+
+/* ==============================================================================
+   NOTEBOOK MODULE STYLES (v1 — kept for now, removed in Phase E)
    ============================================================================== */
 
 /* ── 工具列 ────────────────────────────────────────────────────────────────── */
