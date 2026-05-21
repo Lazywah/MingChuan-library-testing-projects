@@ -223,7 +223,7 @@ app.include_router(auth.router, prefix="/api/v1/auth")
 app.include_router(jobs.router, prefix="/api/v1/jobs")
 
 # ZH: 新增聊天助理與管理員路由 | EN: Chat assistant and admin routes
-from .routers import chat, admin, datasets, worker, notebooks, sso
+from .routers import chat, admin, datasets, worker, notebooks, sso, lab, secrets
 app.include_router(chat.router,      prefix="/api/v1/chat")
 app.include_router(admin.router,     prefix="/api/v1/admin")
 app.include_router(datasets.router,  prefix="/api/v1/datasets")
@@ -232,6 +232,9 @@ app.include_router(notebooks.router, prefix="/api/v1/notebooks")
 # ZH: SSO 路由 (C1 修復：先前漏掛載導致 Nginx 代理 /api/v1/sso/ 永遠 404)
 # EN: SSO routes (C1 fix: previously unmounted while Nginx still proxied → 404)
 app.include_router(sso.router,       prefix="/api/v1/sso")
+# ZH: v2.0 Lab 模組 | EN: v2.0 Lab module
+app.include_router(lab.router,       prefix="/api/v1/lab")
+app.include_router(secrets.router,   prefix="/api/v1/secrets")
 
 
 # ==============================================================================

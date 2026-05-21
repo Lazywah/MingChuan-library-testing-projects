@@ -80,6 +80,12 @@ class Settings(BaseSettings):
     WORKER_API_TOKEN: str = "mcu-secret-token-change-in-production"
 
     # ------------------------------------------------------------------
+    # ZH: v2.0 Secrets 加密主金鑰 (KEK) — 用 AES-256-GCM 加密使用者 secrets
+    # EN: v2.0 Secrets master key (KEK) — AES-256-GCM encrypts user secrets
+    # ------------------------------------------------------------------
+    SECRETS_MASTER_KEY: str = "dev-secrets-master-key-change-in-production"
+
+    # ------------------------------------------------------------------
     # ZH: 資料庫設定 | EN: Database
     # ------------------------------------------------------------------
     DATABASE_PATH: str = "/data/ai_platform.db"
@@ -148,6 +154,25 @@ class Settings(BaseSettings):
         if len(v) < 16:
             raise ValueError(
                 f"WORKER_API_TOKEN too short ({len(v)} chars). Minimum 16 chars required."
+            )
+        return v
+
+    @field_validator("SECRETS_MASTER_KEY")
+    @classmethod
+    def _validate_secrets_master_key(cls, v: str) -> str:
+        """
+        ZH: v2.0 Secrets KEK — 必須足夠強，加密所有使用者 API keys
+        EN: v2.0 Secrets KEK — must be strong; encrypts all user API keys
+        """
+        if v in _INSECURE_SECRETS or v == "dev-secrets-master-key-change-in-production":
+            raise ValueError(
+                "SECRETS_MASTER_KEY uses an insecure default value. "
+                "Set a strong random string (≥32 chars) in .env. "
+                "WARNING: changing this key after secrets exist will invalidate all stored secrets."
+            )
+        if len(v) < 32:
+            raise ValueError(
+                f"SECRETS_MASTER_KEY too short ({len(v)} chars). Minimum 32 chars required."
             )
         return v
 

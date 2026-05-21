@@ -20,12 +20,17 @@ logger = logging.getLogger(__name__)
 
 _scheduler_running = False
 _scheduler_task = None
+_lab_scan_task = None        # v2.0: 每分鐘掃描 lab session idle/hard-limit
+_storage_scan_task = None    # v2.0: 每日 03:00 執行儲存生命週期掃描
 
 # H-1: ZH: 從 scheduler_policy.yaml 讀取間隔，YAML 未設定則預設 300 秒
 # EN: Read interval from scheduler_policy.yaml; default 300 s if not configured
 CHECK_INTERVAL_SECONDS = SCHEDULER_POLICY.get("scheduling", {}).get(
     "job_check_interval_seconds", 300
 )
+
+# ZH: v2.0 lab session 掃描間隔 (秒) | EN: v2.0 lab session scan interval (sec)
+LAB_SCAN_INTERVAL_SECONDS = 60
 
 
 async def _timeout_cleanup_loop():
@@ -99,24 +104,99 @@ def _cleanup_timed_out_jobs(db=None):
 
 
 # ==============================================================================
+# ZH: v2.0 Lab session 掃描迴圈（每分鐘）
+# EN: v2.0 Lab session scan loop (every minute)
+# ==============================================================================
+
+async def _lab_session_scan_loop():
+    """
+    ZH: 每分鐘呼叫 lab_manager.scan_and_evict() — 處理 idle 30 分鐘 / 8h hard limit
+    EN: Every minute, invoke lab_manager.scan_and_evict() — handles idle/hard limit
+    """
+    logger.info(f"ZH: Lab session 掃描迴圈啟動 (每 {LAB_SCAN_INTERVAL_SECONDS}s)")
+    # ZH: 延遲 import，避免 lab_manager 初始化 docker SDK 影響啟動順序
+    # EN: Lazy import to avoid docker SDK init affecting startup order
+    from .services import lab_manager
+
+    while _scheduler_running:
+        try:
+            db = SessionLocal()
+            try:
+                lab_manager.scan_and_evict(db)
+            finally:
+                db.close()
+        except Exception as e:
+            logger.error(f"ZH: Lab session 掃描錯誤 | EN: Lab scan error: {e}", exc_info=True)
+        await asyncio.sleep(LAB_SCAN_INTERVAL_SECONDS)
+
+    logger.info("ZH: Lab session 掃描迴圈已停止")
+
+
+# ==============================================================================
+# ZH: v2.0 儲存生命週期掃描迴圈（每日 03:00）
+# EN: v2.0 Storage lifecycle scan loop (daily 03:00)
+# ==============================================================================
+
+async def _storage_lifecycle_loop():
+    """
+    ZH: 每日 03:00 執行儲存生命週期掃描 — 90 天 freeze、180 天 archive、365 天 pending_delete
+    EN: Daily 03:00 storage lifecycle scan — 90d freeze, 180d archive, 365d pending_delete
+    """
+    logger.info("ZH: 儲存生命週期迴圈啟動 (每日 03:00)")
+    from .services import storage_lifecycle
+
+    while _scheduler_running:
+        now = datetime.now(timezone.utc)
+        # ZH: 計算下次 03:00 觸發時間 | EN: Compute next 03:00 trigger
+        next_run = now.replace(hour=3, minute=0, second=0, microsecond=0)
+        if next_run <= now:
+            next_run = next_run + timedelta(days=1)
+        sleep_seconds = (next_run - now).total_seconds()
+        logger.info(
+            f"ZH: 下次儲存生命週期掃描於 {next_run.isoformat()} ({int(sleep_seconds)}s 後)"
+        )
+        try:
+            await asyncio.sleep(sleep_seconds)
+        except asyncio.CancelledError:
+            break
+
+        if not _scheduler_running:
+            break
+
+        try:
+            db = SessionLocal()
+            try:
+                storage_lifecycle.run_daily_scan(db)
+            finally:
+                db.close()
+        except Exception as e:
+            logger.error(f"ZH: 儲存生命週期掃描錯誤 | EN: Storage scan error: {e}", exc_info=True)
+
+    logger.info("ZH: 儲存生命週期迴圈已停止")
+
+
+# ==============================================================================
 # ZH: 排程器生命週期控制
 # EN: Scheduler lifecycle control
 # ==============================================================================
 
 async def start_scheduler():
-    global _scheduler_task, _scheduler_running
+    global _scheduler_task, _lab_scan_task, _storage_scan_task, _scheduler_running
     _scheduler_running = True
-    _scheduler_task = asyncio.create_task(_timeout_cleanup_loop())
-    logger.info("ZH: 排程器背景工作已啟動 | EN: Scheduler background task started")
+    _scheduler_task    = asyncio.create_task(_timeout_cleanup_loop())
+    _lab_scan_task     = asyncio.create_task(_lab_session_scan_loop())
+    _storage_scan_task = asyncio.create_task(_storage_lifecycle_loop())
+    logger.info("ZH: 排程器背景工作已啟動 (timeout + lab + storage) | EN: Scheduler started (3 tasks)")
 
 
 async def stop_scheduler():
-    global _scheduler_task, _scheduler_running
+    global _scheduler_task, _lab_scan_task, _storage_scan_task, _scheduler_running
     _scheduler_running = False
-    if _scheduler_task:
-        _scheduler_task.cancel()
-        try:
-            await _scheduler_task
-        except asyncio.CancelledError:
-            pass
+    for task in (_scheduler_task, _lab_scan_task, _storage_scan_task):
+        if task:
+            task.cancel()
+            try:
+                await task
+            except asyncio.CancelledError:
+                pass
     logger.info("ZH: 排程器已停止 | EN: Scheduler stopped")

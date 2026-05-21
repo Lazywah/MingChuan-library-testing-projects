@@ -144,7 +144,37 @@ def take_job(
             except json.JSONDecodeError:
                 logger.warning(f"Failed to parse entry_args for job {job.id[:8]}")
 
-        logger.info(f"Worker {req.node_id} claimed job {job.id[:8]} on GPU {gpu_id_str}")
+        # ZH: v2.0 — 為 GPU 容器注入該使用者的 secrets 與掛載 per-user / shared volumes
+        # EN: v2.0 — inject user's secrets + per-user volume + shared models for GPU container
+        extra_env: dict = {}
+        volume_mounts: list = []
+        try:
+            from ..services import secrets_service
+            extra_env = secrets_service.build_docker_env(db, job.user_id) if job.user_id else {}
+        except Exception as e:
+            logger.warning(f"Failed to build secret env for job {job.id[:8]}: {e}")
+
+        if job.user_id:
+            # ZH: per-user home volume → /home/coder（與 code-server 共用）
+            # EN: per-user home volume → /home/coder (shared with code-server)
+            volume_mounts.append({
+                "name":   f"home_{job.user_id}",
+                "target": "/home/coder",
+                "mode":   "rw",
+            })
+
+        # ZH: 共享模型快取 → /opt/models (read-only)
+        # EN: shared model cache → /opt/models (read-only)
+        volume_mounts.append({
+            "name":   "shared_models",
+            "target": "/opt/models",
+            "mode":   "ro",
+        })
+
+        logger.info(
+            f"Worker {req.node_id} claimed job {job.id[:8]} on GPU {gpu_id_str} "
+            f"| {len(extra_env)} secret(s) | {len(volume_mounts)} mount(s)"
+        )
         return {
             "job": {
                 "job_id":       job.id,
@@ -156,6 +186,9 @@ def take_job(
                 "docker_image": job.docker_image,  # ZH: 自訂 Image，None 代表使用預設 | EN: Custom image, None = use default
                 "inline_code":  job.inline_code,   # ZH: 前端合併的 shell script | EN: Compiled shell script from frontend
                 "entry_args":   entry_args,        # ZH: 非 Python 工具的入口指令 | EN: Entry command for non-Python tools
+                # ZH: v2.0 Lab 欄位 | EN: v2.0 Lab fields
+                "extra_env":     extra_env,        # ZH: 注入容器的環境變數 (含 secrets) | EN: Env vars to inject (with secrets)
+                "volume_mounts": volume_mounts,    # ZH: 額外 docker -v 掛載 | EN: Additional docker -v mounts
             }
         }
 
