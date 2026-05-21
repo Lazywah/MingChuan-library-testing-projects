@@ -55,6 +55,12 @@ services:
       # EN: C3 fix: removed default; must be set in .env
       WORKER_API_TOKEN: ${WORKER_API_TOKEN:?WORKER_API_TOKEN must be set in .env}
 
+      # ZH: v2.0 Secrets 加密主金鑰 (KEK) — AES-256-GCM 加密所有使用者 secrets
+      # EN: v2.0 Secrets master key (KEK) — AES-256-GCM encrypts all user secrets
+      # ZH: WARNING: 變更此 key 會讓所有既存 secrets 失效，必須先全部 re-encrypt
+      # EN: WARNING: changing this key invalidates all existing secrets
+      SECRETS_MASTER_KEY: ${SECRETS_MASTER_KEY:?SECRETS_MASTER_KEY must be set in .env (min 32 chars)}
+
       # ZH: CORS 允許來源（逗號分隔，留空允許所有） | EN: CORS origins (comma-sep, empty = allow all)
       CORS_ORIGINS: ${CORS_ORIGINS:-}
 
@@ -77,6 +83,12 @@ services:
       # EN: C4 fix: .env and docker-compose.yml are read-only — prevents RCE→secret-rewrite
       - ./.env:/app/.env:ro
       - ./docker-compose.yml:/app/docker-compose.yml:ro
+      # ZH: v2.0 Lab — 服務層需要 docker SDK 操作 code-server 容器；建議生產環境改用 TCP socket + TLS
+      # EN: v2.0 Lab — service layer needs docker SDK to manage code-server; consider TCP+TLS in prod
+      - /var/run/docker.sock:/var/run/docker.sock:rw
+      # ZH: v2.0 Lab — 共享模型快取（read-only 掛入，所有使用者共用）
+      # EN: v2.0 Lab — shared model cache (read-only, shared across all users)
+      - shared_models:/opt/models:ro
     networks:
       - ai-platform-net
     restart: unless-stopped
@@ -95,3 +107,18 @@ networks:
   ai-platform-net:
     driver: bridge
     name: ai-platform-net
+
+# ==============================================================================
+# ZH: v2.0 Lab 命名 volume — 共享模型快取與 per-user home (動態建立)
+# EN: v2.0 Lab named volumes — shared model cache and per-user home (created dynamically)
+# ==============================================================================
+volumes:
+  shared_models:
+    name: shared_models
+    # ZH: 由管理員用 preload-models.sh 預下載熱門模型至此 volume
+    # EN: Pre-populated by admin via preload-models.sh
+
+  # ZH: 注意：per-user home volume (home_{user_id}) 由 lab_manager 在使用者首次
+  #     啟動 lab session 時動態建立，不在此宣告
+  # EN: Per-user home volumes (home_{user_id}) are created dynamically by lab_manager
+  #     on first lab session start; not declared here

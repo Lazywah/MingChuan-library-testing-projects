@@ -186,14 +186,28 @@ def parse_progress(log_line):
 
     return None
 
+def _mask_secret(value: str) -> str:
+    """ZH: 將 secret 在 log 中 mask 成 ab****yz | EN: Mask secret as ab****yz for logs"""
+    if not value or len(value) <= 6:
+        return "***"
+    return f"{value[:2]}****{value[-2:]}"
+
+
 def execute_job(job):
     job_id    = job.get("job_id")
     gpu_id    = job.get("gpu_id", "0")
     image     = job.get("docker_image") or DEFAULT_IMAGE
     inline_code = job.get("inline_code")
     entry_args  = job.get("entry_args")   # list[str] or None
+    # ZH: v2.0 Lab — 由服務層注入的環境變數與額外掛載
+    # EN: v2.0 Lab — env vars and extra mounts injected by service layer
+    extra_env: dict     = job.get("extra_env") or {}
+    volume_mounts: list = job.get("volume_mounts") or []
 
     logger.info(f"Starting job {job_id} on GPU {gpu_id} | image={image}")
+    if extra_env:
+        masked = {k: _mask_secret(v) for k, v in extra_env.items()}
+        logger.info(f"  injected env: {masked}")
 
     # ZH: M3 修復 — 立即將此 GPU 標記為 busy；docker pull / 容器初始化期間
     #     nvidia-smi 仍會回報 util < 10%，若不標記則下一次 poll 會把同張卡再派一個任務。
@@ -231,6 +245,22 @@ def execute_job(job):
         script = job.get("script_path", "/workspace/train.py")
         entry = ["python", "-u", script]
 
+    # ZH: v2.0 — 額外環境變數 ( -e KEY=VAL )，secrets 不會被印到 log（已 mask 在上方）
+    # EN: v2.0 — extra env flags ( -e KEY=VAL ); secrets are masked above before logging
+    env_args: list = []
+    for k, v in extra_env.items():
+        env_args.extend(["-e", f"{k}={v}"])
+
+    # ZH: v2.0 — 額外 volume mounts (per-user home + shared models)
+    # EN: v2.0 — extra volume mounts (per-user home + shared models)
+    lab_mount_args: list = []
+    for mount in volume_mounts:
+        name   = mount.get("name")
+        target = mount.get("target")
+        mode   = mount.get("mode", "rw")
+        if name and target:
+            lab_mount_args.extend(["-v", f"{name}:{target}:{mode}"])
+
     # ZH: 組裝 docker run 指令（兄弟容器模式）
     # EN: Build docker run command (sibling container pattern)
     cmd = [
@@ -238,11 +268,29 @@ def execute_job(job):
         "--gpus", f"device={gpu_id}",
         "-v", f"{STORAGE_MOUNT_PATH}:/workspace",
         *extra_mounts,
+        *lab_mount_args,
+        *env_args,
         image,
         *entry
     ]
 
-    logger.info(f"CMD: {' '.join(cmd)}")
+    # ZH: log 時把 -e KEY=value 對的 value 換成 mask，避免 secret 漏在 log
+    # EN: When logging, replace -e KEY=value values with masks to keep secrets out of log
+    safe_cmd = []
+    skip_next = False
+    for i, tok in enumerate(cmd):
+        if skip_next:
+            if "=" in tok:
+                k, _, v = tok.partition("=")
+                safe_cmd.append(f"{k}={_mask_secret(v)}")
+            else:
+                safe_cmd.append(tok)
+            skip_next = False
+            continue
+        safe_cmd.append(tok)
+        if tok == "-e":
+            skip_next = True
+    logger.info(f"CMD: {' '.join(safe_cmd)}")
 
     try:
         process = subprocess.Popen(

@@ -23,6 +23,9 @@ from fastapi.testclient import TestClient
 # EN: C3 fix: secrets must satisfy config.py length & blacklist (JWT ≥32, Worker ≥16)
 os.environ.setdefault("JWT_SECRET_KEY", "test-secret-key-with-32-chars-padding-aaa")
 os.environ.setdefault("WORKER_API_TOKEN", "test-worker-token-16c")
+# ZH: v2.0 — SECRETS_MASTER_KEY 須通過 config.py 驗證 (≥32 chars, 非黑名單)
+# EN: v2.0 — SECRETS_MASTER_KEY must pass config.py validator (≥32 chars, not blacklisted)
+os.environ.setdefault("SECRETS_MASTER_KEY", "test-secrets-master-key-with-32-chars-aaa")
 os.environ.setdefault("DATABASE_PATH", "/tmp/test_ai_platform.db")
 os.environ.setdefault("PORTKEY_ENABLED", "false")  # ZH: 測試時不呼叫真實 LLM
 os.environ["RATELIMIT_ENABLED"] = "False"  # ZH: 測試時停用速率限制，避免跨測試累積
