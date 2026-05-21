@@ -669,3 +669,248 @@ def get_analytics(
             for s in tool_stats
         ],
     }
+
+
+# ==============================================================================
+# ZH: v2.0 Lab 模組 — 13 個 admin endpoints
+# EN: v2.0 Lab module — 13 admin endpoints
+# ==============================================================================
+
+from pydantic import BaseModel, Field
+from ..services import quota_service, storage_lifecycle, lab_manager, secrets_service
+
+
+# ---- pydantic 請求 / 回應模型 ----
+
+class QuotaGrantRequest(BaseModel):
+    user_id: str
+    extra_quota_gb: int = Field(..., gt=0)
+    reason: str = Field(..., min_length=5)
+    expires_at: Optional[datetime] = None
+
+
+class StorageStateActionRequest(BaseModel):
+    user_id: str
+    reason: Optional[str] = None
+    admin_password: Optional[str] = None  # 永久刪除需驗證
+
+
+# ---- 配額提權 ----
+
+@router.post("/quota/grant")
+def grant_quota(
+    payload: QuotaGrantRequest,
+    db: Session = Depends(get_db),
+    admin: models.User = Depends(require_admin),
+) -> Any:
+    """ZH: 為使用者額外提權配額（保留歷史） | EN: Grant extra disk quota to user"""
+    target = db.query(models.User).filter(models.User.id == payload.user_id).first()
+    if not target:
+        raise HTTPException(404, "Target user not found")
+    grant = quota_service.grant(
+        db,
+        user_id=payload.user_id,
+        extra_quota_gb=payload.extra_quota_gb,
+        granted_by=admin.id,
+        reason=payload.reason,
+        expires_at=payload.expires_at,
+    )
+    return {"id": grant.id, "extra_quota_gb": grant.extra_quota_gb, "granted_at": grant.granted_at}
+
+
+@router.delete("/quota/grant/{grant_id}")
+def revoke_quota(
+    grant_id: str,
+    db: Session = Depends(get_db),
+    admin: models.User = Depends(require_admin),
+) -> Any:
+    """ZH: 撤銷一筆配額提權 | EN: Revoke a quota grant"""
+    success = quota_service.revoke(db, grant_id=grant_id, revoked_by=admin.id)
+    if not success:
+        raise HTTPException(404, "Grant not found or already revoked")
+    return {"status": "revoked", "grant_id": grant_id}
+
+
+@router.get("/quota/{user_id}")
+def get_user_quota(
+    user_id: str,
+    db: Session = Depends(get_db),
+    _: models.User = Depends(require_admin),
+) -> Any:
+    """ZH: 查看使用者目前生效配額與所有提權紀錄 | EN: View user effective quota + all grants"""
+    user = db.query(models.User).filter(models.User.id == user_id).first()
+    if not user:
+        raise HTTPException(404, "User not found")
+    grants = quota_service.list_grants(db, user_id=user_id)
+    return {
+        "user_id": user_id,
+        "base_quota_gb": user.disk_quota_gb,
+        "effective_quota_gb": quota_service.get_effective_quota_gb(db, user_id),
+        "grants": [
+            {
+                "id": g.id,
+                "extra_quota_gb": g.extra_quota_gb,
+                "reason": g.reason,
+                "granted_by": g.granted_by,
+                "granted_at": g.granted_at,
+                "expires_at": g.expires_at,
+                "revoked_at": g.revoked_at,
+            }
+            for g in grants
+        ],
+    }
+
+
+# ---- 儲存生命週期 ----
+
+@router.post("/storage/freeze")
+def storage_freeze(
+    payload: StorageStateActionRequest,
+    db: Session = Depends(get_db),
+    admin: models.User = Depends(require_admin),
+    request: Any = None,
+) -> Any:
+    """ZH: 凍結使用者儲存（停用 lab session 但保留檔案） | EN: Freeze storage"""
+    storage_lifecycle.freeze(db, user_id=payload.user_id, admin_id=admin.id, reason=payload.reason)
+    return {"status": "frozen", "user_id": payload.user_id}
+
+
+@router.post("/storage/archive")
+def storage_archive(
+    payload: StorageStateActionRequest,
+    db: Session = Depends(get_db),
+    admin: models.User = Depends(require_admin),
+) -> Any:
+    """ZH: 歸檔到冷儲存（HDD） | EN: Archive to cold storage"""
+    storage_lifecycle.archive(db, user_id=payload.user_id, admin_id=admin.id, reason=payload.reason)
+    return {"status": "archived", "user_id": payload.user_id}
+
+
+@router.post("/storage/restore")
+def storage_restore(
+    payload: StorageStateActionRequest,
+    db: Session = Depends(get_db),
+    admin: models.User = Depends(require_admin),
+) -> Any:
+    """ZH: 從凍結/歸檔還原 | EN: Restore from frozen/archived"""
+    storage_lifecycle.restore(db, user_id=payload.user_id, admin_id=admin.id, reason=payload.reason)
+    return {"status": "active", "user_id": payload.user_id}
+
+
+@router.post("/storage/permanent-delete")
+def storage_permanent_delete(
+    payload: StorageStateActionRequest,
+    db: Session = Depends(get_db),
+    admin: models.User = Depends(require_admin),
+) -> Any:
+    """ZH: 永久刪除（需 admin 密碼驗證） | EN: Permanent delete (requires admin password)"""
+    if not payload.admin_password:
+        raise HTTPException(400, "admin_password required for permanent delete")
+    if not crud.verify_password(payload.admin_password, admin.hashed_password):
+        raise HTTPException(403, "Admin password verification failed")
+    storage_lifecycle.permanent_delete(db, user_id=payload.user_id, admin_id=admin.id, reason=payload.reason)
+    return {"status": "deleted", "user_id": payload.user_id}
+
+
+@router.get("/storage/states")
+def list_storage_states(
+    state: Optional[str] = Query(None, description="active/frozen/archived/pending_delete"),
+    db: Session = Depends(get_db),
+    _: models.User = Depends(require_admin),
+) -> Any:
+    """ZH: 列出所有使用者儲存狀態 | EN: List all storage states"""
+    states = storage_lifecycle.list_states(db, filter_state=state)
+    return {"states": states}
+
+
+# ---- Lab Sessions 監控 ----
+
+@router.get("/lab/sessions")
+def list_lab_sessions(
+    db: Session = Depends(get_db),
+    _: models.User = Depends(require_admin),
+) -> Any:
+    """ZH: 列出當前所有 lab sessions | EN: List all current lab sessions"""
+    sessions = lab_manager.list_all_sessions(db)
+    return {"sessions": sessions}
+
+
+@router.post("/lab/sessions/{user_id}/force-stop")
+def force_stop_session(
+    user_id: str,
+    db: Session = Depends(get_db),
+    admin: models.User = Depends(require_admin),
+) -> Any:
+    """ZH: 強制停止特定使用者 lab session | EN: Force-stop a user's lab session"""
+    success = lab_manager.force_stop(db, user_id=user_id, admin_id=admin.id)
+    if not success:
+        raise HTTPException(404, "Session not found or already stopped")
+    return {"status": "stopped", "user_id": user_id}
+
+
+# ---- Secrets 監控（admin 也不可看 value） ----
+
+@router.get("/secrets/{user_id}/names")
+def list_user_secret_names(
+    user_id: str,
+    db: Session = Depends(get_db),
+    _: models.User = Depends(require_admin),
+) -> Any:
+    """ZH: 列出某使用者的 secret 名稱（不回 value） | EN: List user secret names (no values)"""
+    secrets_meta = secrets_service.list_secrets_masked(db, user_id=user_id)
+    return {"user_id": user_id, "secrets": secrets_meta}
+
+
+@router.delete("/secrets/{user_id}/{name}")
+def admin_delete_user_secret(
+    user_id: str,
+    name: str,
+    db: Session = Depends(get_db),
+    admin: models.User = Depends(require_admin),
+) -> Any:
+    """ZH: 管理員刪除使用者的特定 secret（離校等情境） | EN: Admin delete a user's secret"""
+    success = secrets_service.delete_secret(db, user_id=user_id, name=name, admin_id=admin.id)
+    if not success:
+        raise HTTPException(404, "Secret not found")
+    return {"status": "deleted", "user_id": user_id, "name": name}
+
+
+# ---- Audit log ----
+
+@router.get("/audit")
+def get_audit_log(
+    admin_id: Optional[str] = Query(None),
+    target_user: Optional[str] = Query(None),
+    action: Optional[str] = Query(None),
+    limit: int = Query(100, le=500),
+    offset: int = Query(0, ge=0),
+    db: Session = Depends(get_db),
+    _: models.User = Depends(require_admin),
+) -> Any:
+    """ZH: 查詢 admin 操作審計 log（支援篩選與分頁） | EN: Query admin audit log"""
+    q = db.query(models.AdminAction)
+    if admin_id:
+        q = q.filter(models.AdminAction.admin_id == admin_id)
+    if target_user:
+        q = q.filter(models.AdminAction.target_user == target_user)
+    if action:
+        q = q.filter(models.AdminAction.action == action)
+    total = q.count()
+    rows = q.order_by(models.AdminAction.timestamp.desc()).offset(offset).limit(limit).all()
+    return {
+        "total": total,
+        "limit": limit,
+        "offset": offset,
+        "items": [
+            {
+                "id": r.id,
+                "admin_id": r.admin_id,
+                "target_user": r.target_user,
+                "action": r.action,
+                "payload": r.payload,
+                "timestamp": r.timestamp,
+                "ip_address": r.ip_address,
+            }
+            for r in rows
+        ],
+    }
