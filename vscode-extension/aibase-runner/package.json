@@ -1,0 +1,128 @@
+{
+  "name": "aibase-runner",
+  "displayName": "AI Base Runner",
+  "description": "Submit Python/Notebook cells to AI Base GPU cluster; streams output back to VS Code.",
+  "version": "0.1.0",
+  "publisher": "aibase",
+  "private": true,
+  "license": "UNLICENSED",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Notebooks",
+    "Machine Learning",
+    "Other"
+  ],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "aibase.runOnGpu",
+        "title": "AI Base: Run on GPU",
+        "category": "AI Base"
+      },
+      {
+        "command": "aibase.runSelectionOnGpu",
+        "title": "AI Base: Run Selection on GPU",
+        "category": "AI Base"
+      },
+      {
+        "command": "aibase.runNotebookCellOnGpu",
+        "title": "AI Base: Run Notebook Cell on GPU",
+        "category": "AI Base"
+      },
+      {
+        "command": "aibase.stopCurrentJob",
+        "title": "AI Base: Stop Current Job",
+        "category": "AI Base"
+      },
+      {
+        "command": "aibase.pickGpuNode",
+        "title": "AI Base: Pick GPU Node",
+        "category": "AI Base"
+      },
+      {
+        "command": "aibase.pickFramework",
+        "title": "AI Base: Pick Framework Image",
+        "category": "AI Base"
+      },
+      {
+        "command": "aibase.showOutputPanel",
+        "title": "AI Base: Show Output Panel",
+        "category": "AI Base"
+      }
+    ],
+    "menus": {
+      "editor/context": [
+        {
+          "command": "aibase.runOnGpu",
+          "when": "editorLangId == python || editorLangId == shellscript",
+          "group": "aibase@1"
+        },
+        {
+          "command": "aibase.runSelectionOnGpu",
+          "when": "editorHasSelection && (editorLangId == python || editorLangId == shellscript)",
+          "group": "aibase@2"
+        }
+      ],
+      "notebook/cell/title": [
+        {
+          "command": "aibase.runNotebookCellOnGpu",
+          "when": "notebookType == jupyter-notebook",
+          "group": "inline@1"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "AI Base Runner",
+      "properties": {
+        "aibase.serviceLayerUrl": {
+          "type": "string",
+          "default": "http://job-scheduler:8000",
+          "description": "AI Base service layer URL (defaults to internal Docker DNS; nginx is fine for browser context)."
+        },
+        "aibase.framework": {
+          "type": "string",
+          "default": "aibase/pytorch:2026-spring",
+          "enum": [
+            "aibase/pytorch:2026-spring",
+            "aibase/pytorch-legacy:2026-spring",
+            "aibase/tensorflow:2026-spring",
+            "aibase/huggingface:2026-spring",
+            "aibase/llamacpp:2026-spring",
+            "aibase/vllm:2026-spring",
+            "aibase/dev-tools:2026-spring"
+          ],
+          "description": "Default Docker image to use when submitting GPU jobs."
+        },
+        "aibase.preferredNode": {
+          "type": "string",
+          "default": "auto",
+          "description": "Preferred GPU node ID, or 'auto' to let the scheduler pick."
+        },
+        "aibase.heartbeatIntervalSeconds": {
+          "type": "number",
+          "default": 300,
+          "description": "How often to POST /api/v1/lab/heartbeat (default 5 min)."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./"
+  },
+  "dependencies": {
+    "node-fetch": "^2.7.0"
+  },
+  "devDependencies": {
+    "@types/node": "18.x",
+    "@types/node-fetch": "^2.6.11",
+    "@types/vscode": "^1.85.0",
+    "typescript": "^5.3.3"
+  }
+}
