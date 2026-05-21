@@ -8,7 +8,9 @@
 - [系統 API \| System API](#系統-api--system-api)
 - [管理員 API \| Admin API](#管理員-api--admin-api)（使用者管理、任務管理、模型管理、分析）
 - [Worker API \| Worker Heartbeat API](#post-apiv1workerheartbeat--worker-節點心跳上報)
-- [Notebook API \| Notebook API](#notebook-api--notebook-api)
+- [Lab API \| Lab Module *(v2.0)*](#lab-api--lab-module-v20)
+- [Secrets API \| Secrets Management *(v2.0)*](#secrets-api--secrets-management-v20)
+- [v2.0 Admin Lab Endpoints](#v20-admin-lab-endpoints)
 - [錯誤碼 \| Error Codes](#錯誤碼--error-codes)
 
 ---
@@ -532,128 +534,182 @@ curl "http://localhost:8002/api/v1/admin/analytics?department=資訊工程學系
 
 回應包含：各學系 Token 用量、工具使用佔比、總登入次數等統計數據。
 
----
+## Lab API | Lab Module *(v2.0)*
 
-## Notebook API | Notebook API
+> **v2.0 取代 v1 Notebook**：管理使用者的 code-server (VS Code in browser) session。所有端點需使用者 JWT。
 
-> **2026-05 新增**：Colab 風格 Notebook 的儲存與 GPU 節點查詢端點。所有端點使用使用者 JWT 認證。
+### POST `/api/v1/lab/start` — 啟動 code-server session
 
-### GET `/api/v1/notebooks/mine` — 載入使用者 Notebook
-
-回傳目前使用者的 Notebook（格子清單 + 環境設定）。若該使用者尚未建立 Notebook，自動回傳含一個 PyTorch 訓練預設格子的初始 Notebook。
+啟動或重啟使用者的 CPU 編輯容器。限速 5 次/分鐘。
 
 ```bash
-curl http://localhost:8002/api/v1/notebooks/mine \
-  -H "Authorization: Bearer YOUR_TOKEN"
+curl -X POST http://localhost:8002/api/v1/lab/start \
+  -H "Authorization: Bearer YOUR_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"base_image": "aibase/pytorch:2026-spring"}'
 ```
 
 回應 (200):
 ```json
 {
-  "cells": [
-    {
-      "id": "cell-abc123",
-      "type": "code",
-      "content": "import torch\nprint(torch.__version__)"
-    }
-  ],
-  "environment": {
-    "framework": "pytorch",
-    "mode": "training",
-    "preferred_node": "auto",
-    "docker_image": null
-  },
-  "updated_at": "2026-05-15T10:00:00"
+  "status": "starting",
+  "code_url": "/code/{user_id}/?folder=/home/coder/projects",
+  "session_name": "default",
+  "expires_at": "2026-05-22T03:00:00Z"
 }
 ```
 
-**格子類型 (cell type)**：
-| 值 | 說明 | 執行方式 |
-|----|------|----------|
-| `code` | Python 程式格 | `python3 -u - <<'__PYEOF__' ... __PYEOF__` |
-| `shell` | Shell 指令格（bash/CUDA/C++） | 直接 inline 於 bash script |
-| `markdown` | 說明文字格 | 僅前端渲染，不執行 |
+### POST `/api/v1/lab/stop` — 停止 session
 
----
+容器停止，**volume 內檔案保留**，使用者下次啟動會還原。
 
-### PUT `/api/v1/notebooks/mine` — 儲存 / 更新 Notebook
-
-儲存使用者 Notebook（Upsert，自動建立或覆寫）。前端以 2 秒 debounce 自動觸發。
+### GET `/api/v1/lab/status` — 查詢狀態
 
 ```bash
-curl -X PUT http://localhost:8002/api/v1/notebooks/mine \
-  -H "Authorization: Bearer YOUR_TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "cells": [
-      {"id": "cell-1", "type": "code", "content": "print(\"hello\")"},
-      {"id": "cell-2", "type": "shell", "content": "nvidia-smi"}
-    ],
-    "environment": {
-      "framework": "pytorch",
-      "mode": "training",
-      "preferred_node": "gpu-node-01",
-      "docker_image": null
-    }
-  }'
-```
-
-回應 (200):
-```json
-{"status": "ok", "updated_at": "2026-05-15T10:05:00"}
-```
-
----
-
-### GET `/api/v1/notebooks/nodes` — 列出線上 GPU 節點
-
-回傳最近 90 秒內有心跳的 Worker 節點，供前端「GPU 節點」下拉選單使用。
-
-```bash
-curl http://localhost:8002/api/v1/notebooks/nodes \
+curl http://localhost:8002/api/v1/lab/status \
   -H "Authorization: Bearer YOUR_TOKEN"
 ```
 
-回應 (200):
+回應:
 ```json
-[
-  {
-    "node_id": "gpu-node-01",
-    "available_gpus": ["0", "1"],
-    "gpu_utilization": 12.5,
-    "last_seen": "2026-05-15T10:04:45Z"
-  }
-]
+{
+  "status": "running",
+  "base_image": "aibase/pytorch:2026-spring",
+  "disk_quota_gb": 50,
+  "today_remaining_minutes": 320,
+  "last_activity": "2026-05-21T08:45:00Z",
+  "injected_secrets": [
+    {"name": "HF_TOKEN", "masked_value": "hf_********xy"}
+  ]
+}
 ```
 
-> **注意**：節點須先執行 `gpu-worker/worker.py` 並回報心跳後，此端點才有資料。
+### POST `/api/v1/lab/heartbeat` — 心跳
+
+由 `aibase-runner` VS Code extension 每 5 分鐘呼叫；更新 `last_activity` 防止 idle eviction。
+
+### GET `/api/v1/lab/nodes` — 列出線上 GPU 節點
+
+```bash
+curl "http://localhost:8002/api/v1/lab/nodes?pool_type=batch" \
+  -H "Authorization: Bearer YOUR_TOKEN"
+```
+
+### GET `/api/v1/lab/_authz` — Internal endpoint
+
+nginx `auth_request` 用，驗證使用者 JWT 對 `/code/{user_id}/` 的所有權，不對外公開。
 
 ---
 
-### 提交 Notebook 任務 (POST `/api/v1/jobs`)
+## Secrets API | Secrets Management *(v2.0)*
 
-Notebook 的「Run All」按鈕會將所有格子編譯成一份 shell script 後，呼叫標準 Job 提交 API：
+> **使用者 secrets（API key 等）以 AES-256-GCM 加密存於 DB。提交 GPU job 時自動注入為容器 env 變數。**
+> **管理員也不可查詢 plaintext value**（只能查 name 與 masked value）。
+
+### GET `/api/v1/secrets/` — 列出自己的 secrets
+
+```bash
+curl http://localhost:8002/api/v1/secrets/ \
+  -H "Authorization: Bearer YOUR_TOKEN"
+```
+
+回應:
+```json
+{
+  "secrets": [
+    {"name": "HF_TOKEN", "masked_value": "hf_********xy", "updated_at": "2026-05-21T08:00:00Z"},
+    {"name": "WANDB_API_KEY", "masked_value": "wa********90", "updated_at": "2026-05-20T14:30:00Z"}
+  ]
+}
+```
+
+> ⚠️ 端點永遠**不會**回傳 plaintext value。
+
+### PUT `/api/v1/secrets/{name}` — 新增或更新
+
+`name` 必須符合 `^[A-Za-z_][A-Za-z0-9_]*$`（合法 env var）。
+
+```bash
+curl -X PUT http://localhost:8002/api/v1/secrets/HF_TOKEN \
+  -H "Authorization: Bearer YOUR_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"value": "hf_xxxxxxxxxxxxxxxxxxxxx"}'
+```
+
+### DELETE `/api/v1/secrets/{name}` — 刪除
+
+```bash
+curl -X DELETE http://localhost:8002/api/v1/secrets/HF_TOKEN \
+  -H "Authorization: Bearer YOUR_TOKEN"
+```
+
+---
+
+## v2.0 Admin Lab Endpoints
+
+> **以下 13 個端點屬於 admin 群組**，需 `role: admin`。
+
+### 配額管理
+
+- `POST /api/v1/admin/quota/grant` — 為使用者額外提權配額（`reason` 須 ≥ 5 字，寫入 audit log）
+- `DELETE /api/v1/admin/quota/grant/{grant_id}` — 撤銷 grant
+- `GET /api/v1/admin/quota/{user_id}` — 查看使用者 base + 所有 grants + 有效配額
+
+### 儲存生命週期
+
+- `POST /api/v1/admin/storage/freeze` — 凍結（停 lab session 但保留檔案）
+- `POST /api/v1/admin/storage/archive` — 歸檔到 HDD
+- `POST /api/v1/admin/storage/restore` — 從 frozen/archived 還原
+- `POST /api/v1/admin/storage/permanent-delete` — 永久刪除（需 `admin_password` 二次驗證）
+- `GET /api/v1/admin/storage/states?state=...` — 列出所有狀態
+
+### Lab Sessions
+
+- `GET /api/v1/admin/lab/sessions` — 列出當前所有 lab session
+- `POST /api/v1/admin/lab/sessions/{user_id}/force-stop` — 強制停止
+
+### Secrets 監控（不可看 value）
+
+- `GET /api/v1/admin/secrets/{user_id}/names` — 列出使用者 secret name（masked value 不可看）
+- `DELETE /api/v1/admin/secrets/{user_id}/{name}` — 刪除使用者特定 secret
+
+### Audit Log
+
+```bash
+curl "http://localhost:8002/api/v1/admin/audit?action=grant_quota&limit=50" \
+  -H "Authorization: Bearer ADMIN_TOKEN"
+```
+
+回應含 `admin_id` / `target_user` / `action` / `payload` / `timestamp` / `ip_address`。
+
+---
+
+## 提交 GPU Job 進階參數 (POST `/api/v1/jobs`)
+
+VS Code extension `aibase-runner` 的「Run on GPU」會自動呼叫此端點。手動範例：
 
 ```bash
 curl -X POST http://localhost:8002/api/v1/jobs \
   -H "Authorization: Bearer YOUR_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
-    "job_name": "My Notebook Run",
+    "job_name": "LoRA fine-tune",
     "gpu_required": 1,
-    "docker_image": "pytorch/pytorch:2.7.0-cuda12.8-cudnn9-runtime",
-    "inline_code": "#!/bin/bash\nset -eu\npython3 -u - <<'"'"'__PYEOF__'"'"'\nimport torch\nprint(torch.__version__)\n__PYEOF__\n",
+    "docker_image": "aibase/huggingface:2026-spring",
+    "inline_code": "#!/bin/bash\nset -eu\npython3 -u - <<'"'"'__PYEOF__'"'"'\nimport torch\nprint(torch.cuda.is_available())\n__PYEOF__\n",
     "preferred_node": "gpu-node-01"
   }'
 ```
 
-**新增欄位說明**：
+**進階欄位**：
 | 欄位 | 說明 |
 |------|------|
-| `docker_image` | 覆寫預設 image（`null` 表示使用 PyTorch 預設） |
-| `inline_code` | 編譯後的完整 shell script（`bash -eu` 執行） |
-| `entry_args` | 非 Python 工具的入口指令陣列（如 `["./llama-cli", "-m", ...]`） |
-| `preferred_node` | 指定 GPU 節點 ID，或 `"auto"` / `null` 表示自動排程 |
+| `docker_image` | 7 個 aibase/* 學期鎖定 image，或自訂 |
+| `inline_code` | 編譯後的 shell script（`bash -eu` 執行）|
+| `entry_args` | 非 Python 工具的入口指令陣列 |
+| `preferred_node` | GPU 節點 ID，或 `null`/`"auto"` |
+
+提交時，服務層會**自動注入**該使用者的所有 secrets 為容器 env 變數，並掛載 per-user volume（`/home/coder`）與 shared models cache（`/opt/models`，read-only）。
 
 ---
 
