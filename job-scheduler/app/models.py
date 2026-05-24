@@ -76,6 +76,9 @@ class User(Base):
     login_count = Column(Integer, default=0)                                  # ZH: 登入次數 | EN: Login count
     lifetime_tokens_used = Column(Integer, default=0)                         # ZH: 歷史累計 Token 數 | EN: Lifetime tokens used
     disk_quota_gb = Column(Integer, default=10)                               # ZH: 個人磁碟配額 GB (v2.0 Lab) | EN: Personal disk quota GB
+    # v2.1 SSO OIDC 整合 | v2.1 SSO OIDC integration
+    auth_source = Column(String, default="local", nullable=False)             # ZH: local / sso_mock / sso_cas / sso_oidc | EN: auth source identifier
+    external_id = Column(String, nullable=True, index=True)                   # ZH: OIDC oid (Microsoft 永久 ID), CAS 為 NULL | EN: OIDC oid (Microsoft permanent ID)
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))                    # ZH: 建立時間 | EN: Created at
     updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))  # ZH: 更新時間 | EN: Updated at
 

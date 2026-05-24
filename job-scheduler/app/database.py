@@ -188,6 +188,12 @@ def init_db():
             try: conn.execute(text("DROP TABLE IF EXISTS notebooks"))
             except Exception: pass
 
+            # --- v2.1 SSO OIDC 整合欄位 | v2.1 SSO OIDC integration columns ---
+            try: conn.execute(text("ALTER TABLE users ADD COLUMN auth_source VARCHAR DEFAULT 'local'"))
+            except Exception: pass
+            try: conn.execute(text("ALTER TABLE users ADD COLUMN external_id VARCHAR"))
+            except Exception: pass
+
     except Exception as e:
         logger.warning(f"Manual DB migration skipped or partially failed: {e}")
 
