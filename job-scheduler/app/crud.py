@@ -69,6 +69,19 @@ def get_user_by_id(db: Session, user_id: str) -> Optional[models.User]:
     return db.query(models.User).filter(models.User.id == user_id).first()
 
 
+def get_user_by_external_id(db: Session, external_id: str) -> Optional[models.User]:
+    """
+    ZH: 依 OIDC oid (Microsoft 永久 ID) 查詢使用者
+    EN: Query user by OIDC oid (Microsoft permanent ID)
+
+    ZH: v2.1 — OIDC callback 優先使用 oid 識別（學號改名 / 換 email 都不變）
+    EN: v2.1 — OIDC callback prefers oid (immune to username / email changes)
+    """
+    if not external_id:
+        return None
+    return db.query(models.User).filter(models.User.external_id == external_id).first()
+
+
 def create_user(db: Session, user: schemas.UserCreate) -> models.User:
     """
     ZH: 建立新使用者 + 自動初始化 Token 額度
@@ -109,11 +122,28 @@ def create_user(db: Session, user: schemas.UserCreate) -> models.User:
     return db_user
 
 def update_user(db: Session, db_user: models.User, update_data: schemas.UserUpdate) -> models.User:
-    """ZH: 更新使用者資料 (如果不為空) | EN: Update user data if not None"""
+    """
+    ZH: 更新使用者資料 (如果不為空)
+    EN: Update user data if not None
+
+    ZH: v2.1 — SSO 使用者 (auth_source != "local") 不能透過此處改密碼，
+        因為密碼存在 IdP (Microsoft 等)，本地系統從未拿到密碼。
+        前端會根據 auth_source 隱藏密碼輸入框並改顯示 IdP 連結。
+    EN: v2.1 — SSO users (auth_source != "local") cannot change password here
+        because the password lives at the IdP. Frontend hides the password
+        field and shows an IdP link instead.
+    """
+    # v2.1: SSO 使用者改密碼直接拒絕
+    if update_data.password is not None and update_data.password.strip():
+        if getattr(db_user, "auth_source", "local") != "local":
+            raise ValueError(
+                f"SSO users (auth_source={db_user.auth_source}) cannot change "
+                f"password locally. Use the IdP's password change page."
+            )
+        db_user.hashed_password = get_password_hash(update_data.password)
+
     if update_data.email is not None:
         db_user.email = update_data.email
-    if update_data.password is not None and update_data.password.strip():
-        db_user.hashed_password = get_password_hash(update_data.password)
     if getattr(update_data, "tutorial_dismissed", None) is not None:
         db_user.tutorial_dismissed = update_data.tutorial_dismissed
     if getattr(update_data, "department", None) is not None:
@@ -122,18 +152,37 @@ def update_user(db: Session, db_user: models.User, update_data: schemas.UserUpda
     db.refresh(db_user)
     return db_user
 
-def create_sso_user(db: Session, username: str, email: str, role: str = "student", department: str = None) -> models.User:
-    """SSO 登入時自動建立帳號 (無需讓使用者輸入密碼，系統給予隨機 hash 密碼)"""
-    import secrets
-    random_password = secrets.token_urlsafe(16)
+
+def create_sso_user(
+    db: Session,
+    username: str,
+    email: str,
+    role: str = "student",
+    department: Optional[str] = None,
+    auth_source: str = "sso_mock",       # v2.1: SSO provider 識別
+    external_id: Optional[str] = None,   # v2.1: OIDC oid 等永久 ID
+) -> models.User:
+    """
+    ZH: SSO 登入時自動建立帳號（系統給予隨機 hash 密碼，無人知道實際值）。
+    EN: Auto-create account on SSO login (random hashed password, nobody knows it).
+
+    ZH: v2.1 — 增加 auth_source 與 external_id 參數，由 router callback 傳入。
+        auth_source 由 SSO client 的 validate_ticket() 回傳並傳遞至此。
+    EN: v2.1 — adds auth_source and external_id, populated from SSO client's
+        validate_ticket() return dict.
+    """
+    import secrets as _secrets
+    random_password = _secrets.token_urlsafe(16)
     hashed_password = get_password_hash(random_password)
-    
+
     db_user = models.User(
         username=username,
         email=email,
         hashed_password=hashed_password,
         role=role,
-        department=department
+        department=department,
+        auth_source=auth_source,
+        external_id=external_id,
     )
     db.add(db_user)
     db.commit()
@@ -145,11 +194,36 @@ def create_sso_user(db: Session, username: str, email: str, role: str = "student
         user_id=db_user.id,
         tokens_used=0,
         tokens_limit=settings.DEFAULT_MONTHLY_TOKEN_LIMIT,
-        reset_date=next_month_reset
+        reset_date=next_month_reset,
     )
     db.add(db_usage)
     db.commit()
 
+    return db_user
+
+
+def upgrade_to_sso(
+    db: Session,
+    db_user: models.User,
+    auth_source: str,
+    external_id: Optional[str] = None,
+) -> models.User:
+    """
+    ZH: 既有 local 帳號首次走 SSO 登入時，將其升級為 SSO 帳號。
+        典型情境：admin 用 provision 建好 T1090001@mcu.edu.tw (local)，
+        該學生之後用 OIDC 登入 → 升級為 sso_oidc，並寫入 external_id。
+    EN: Upgrade an existing local account to SSO when it first authenticates via SSO.
+
+    ZH: 安全考量 — 此操作會讓使用者「不能再用本機密碼登入」（update_user 拒絕改密碼），
+        但既有本機密碼 hash 仍保留在 DB（不主動清除，作為緊急救援保險）。
+    EN: Security note — after upgrade, user cannot change password via /me;
+        but existing hashed_password is preserved in DB for emergency fallback.
+    """
+    db_user.auth_source = auth_source
+    if external_id:
+        db_user.external_id = external_id
+    db.commit()
+    db.refresh(db_user)
     return db_user
 
 # ==============================================================================
