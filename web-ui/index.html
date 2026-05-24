@@ -54,32 +54,49 @@
             <span class="close" title="Mock close button">
                 <ion-icon name="close-circle-outline"></ion-icon>
             </span>
+            <!--
+              v2.1 SSO 整合（v1.2 純淨入口設計）：
+              - User UI 只有「使用學校帳號登入」一個按鈕（OIDC 啟用時）
+              - OIDC 未啟用時顯示 fallback 訊息
+              - Admin 走獨立的 admin UI (port 8888) 做本機登入
+              - Mock SSO 不曝光於 UI（dev 環境直接打 /api/v1/sso/login）
+              - 既有 username/password form 已移除（admin 從 port 8888 進）
+            -->
             <form id="login-form">
-                <h1 data-i18n="login_title">Login</h1>
+                <h1 data-i18n="login_title">登入系統</h1>
 
-                <!-- ZH: 帳號輸入框 | EN: Username Input -->
-                <div class="input">
-                    <input type="text" id="username" required autocomplete="username" placeholder=" ">
-                    <label data-i18n="label_username">Username</label>
-                    <ion-icon name="person-outline"></ion-icon>
+                <!-- ZH: OIDC 啟用時顯示 | EN: Shown when OIDC enabled -->
+                <div id="sso-section" style="display: none; flex-direction: column; gap: 15px; width: 100%;">
+                    <button type="button" id="sso-oidc-btn" class="ready-btn"
+                            style="display: flex; align-items: center; justify-content: center; gap: 10px;">
+                        <ion-icon name="school-outline" style="font-size: 22px;"></ion-icon>
+                        <span data-i18n="sso_school_login">使用學校帳號登入</span>
+                    </button>
+                    <p class="sso-hint"
+                       style="text-align: center; color: var(--text-muted); font-size: 0.9em; line-height: 1.5; margin: 0;">
+                        <span data-i18n="sso_hint">學生 / 老師請使用學校 Microsoft 帳號（學號@mcu.edu.tw）</span>
+                    </p>
                 </div>
 
-                <!-- ZH: 密碼輸入框 | EN: Password Input -->
-                <div class="input login-eye">
-                    <input type="password" id="password" required autocomplete="current-password" placeholder=" ">
-                    <label data-i18n="label_password">Password</label>
-                    <span id="eye-toggle">
-                        <ion-icon name="eye-off-outline" class="eye-off"></ion-icon>
-                        <ion-icon name="eye-outline" class="eye-open"></ion-icon>
-                    </span>
-                </div>
-                <div style="text-align: right; margin-bottom: 15px; width: 100%;">
-                    <a href="#" id="forgot-pwd-link" style="color: var(--neon-blue); font-size: 0.9em; text-decoration: none; font-weight: bold; padding: 5px;" data-i18n="forgot_password">Forgot Password?</a>
+                <!-- ZH: OIDC 尚未配置時 fallback | EN: Fallback when OIDC pending -->
+                <div id="sso-pending" style="display: none; flex-direction: column; gap: 12px; width: 100%; text-align: center;">
+                    <ion-icon name="time-outline"
+                              style="font-size: 48px; color: var(--text-muted); margin: 10px auto;"></ion-icon>
+                    <p style="color: var(--text-primary); font-size: 1.05em; font-weight: 600; margin: 0;"
+                       data-i18n="sso_pending_msg">系統登入功能尚在設定中</p>
+                    <p style="color: var(--text-muted); font-size: 0.9em; line-height: 1.5; margin: 0;"
+                       data-i18n="sso_pending_hint">若您是管理員，請透過管理介面登入</p>
                 </div>
 
-                <button type="submit" class="ready-btn" id="login-btn">
-                    <span data-i18n="btn_login">Submit</span>
-                </button>
+                <!-- ZH: 載入中佔位（fetch /providers 期間）| EN: Loading placeholder -->
+                <div id="sso-loading" style="display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 20px 0;">
+                    <div class="spinner"
+                         style="width: 32px; height: 32px; border: 3px solid rgba(255,255,255,0.2); border-top-color: var(--neon-blue); border-radius: 50%; animation: spin 0.8s linear infinite;"></div>
+                    <p style="color: var(--text-muted); font-size: 0.85em; margin: 0;" data-i18n="sso_loading">載入中…</p>
+                </div>
+                <style>
+                    @keyframes spin { to { transform: rotate(360deg); } }
+                </style>
             </form>
         </div>
     </div>
@@ -1003,12 +1020,18 @@
     </div>
 
     <!-- ZH: 密碼變更浮動面板 | EN: Password Change Modal -->
+    <!--
+      v2.1: 依使用者的 auth_source 顯示不同 UI（JS 動態切換 #password-local / #password-sso）：
+      - local 帳號 → 顯示新密碼輸入框（既有 form）
+      - sso_oidc / sso_cas / sso_mock → 顯示 IdP 連結 + 為什麼不能改的說明
+    -->
     <div id="password-modal" class="tutorial-modal hidden">
         <div class="tutorial-backdrop" id="password-backdrop"></div>
-        <div class="tutorial-content form-box-panel" style="max-width: 400px; width: 90%;">
+        <div class="tutorial-content form-box-panel" style="max-width: 460px; width: 90%;">
             <button class="tutorial-close" id="password-close-btn"><ion-icon name="close-outline"></ion-icon></button>
             <h2 style="margin-bottom: 20px;"><ion-icon name="key-outline" style="margin-right:8px;"></ion-icon> <span data-i18n="label_new_password">Change Password</span></h2>
-            
+
+            <!-- ZH: 模式 1 — 本機帳號（既有 form） | EN: Mode 1 — local account -->
             <form id="password-change-form" style="display: flex; flex-direction: column; gap: 15px;">
                 <div class="input login-eye">
                     <input type="password" id="profile-password" placeholder=" " autocomplete="new-password">
@@ -1022,6 +1045,37 @@
                     <ion-icon name="shield-checkmark-outline" style="margin-right:6px;"></ion-icon> <span data-i18n="btn_update_password">Update Password</span>
                 </button>
             </form>
+
+            <!-- ZH: 模式 2 — SSO 帳號（顯示 IdP 連結） | EN: Mode 2 — SSO account -->
+            <div id="password-change-sso" class="hidden" style="display: flex; flex-direction: column; gap: 15px;">
+                <div style="display: flex; gap: 12px; padding: 14px; background: rgba(96, 165, 250, 0.1); border-radius: 8px; border-left: 3px solid var(--neon-blue);">
+                    <ion-icon name="information-circle-outline" style="font-size: 24px; color: var(--neon-blue); flex-shrink: 0;"></ion-icon>
+                    <p id="password-sso-msg" style="margin: 0; color: var(--text-primary); font-size: 14px; line-height: 1.5;" data-i18n="password_sso_msg">
+                        您使用學校 Microsoft 帳號登入,密碼由學校統一管理。
+                    </p>
+                </div>
+
+                <a id="password-sso-link" href="#" target="_blank" rel="noopener" class="ready-btn"
+                   style="display: flex; align-items: center; justify-content: center; gap: 8px; text-decoration: none;">
+                    <ion-icon name="open-outline" style="font-size: 18px;"></ion-icon>
+                    <span data-i18n="password_sso_open">前往 Microsoft 變更密碼(新分頁)</span>
+                </a>
+
+                <a id="password-sso-reset-link" href="#" target="_blank" rel="noopener"
+                   style="text-align: center; color: var(--neon-blue); font-size: 13px; text-decoration: none; padding: 5px;">
+                    <ion-icon name="refresh-outline" style="vertical-align: middle;"></ion-icon>
+                    <span data-i18n="password_sso_forgot">忘記密碼?點此重設</span>
+                </a>
+
+                <details style="margin-top: 5px; padding: 8px; background: rgba(255,255,255,0.03); border-radius: 6px;">
+                    <summary style="cursor: pointer; color: var(--text-muted); font-size: 13px;" data-i18n="password_sso_why">
+                        為什麼不能在這裡改?
+                    </summary>
+                    <p style="margin: 10px 0 0; padding-left: 5px; color: var(--text-muted); font-size: 12px; line-height: 1.6;" data-i18n="password_sso_why_explain">
+                        學校採用單一登入 (SSO) 機制,您的密碼存在學校的 Microsoft 系統,本平台從未拿到您的密碼。這是業界標準的安全設計 (Slack / Notion / Figma 等使用 SSO 的服務都是如此)。
+                    </p>
+                </details>
+            </div>
         </div>
     </div>
 
