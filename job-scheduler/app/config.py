@@ -178,3 +178,41 @@ class Settings(BaseSettings):
 
 
 settings = Settings()
+
+
+# ==============================================================================
+# v2.1 SSO OIDC 啟用旗標 | v2.1 SSO OIDC enable flag
+# ==============================================================================
+# ZH: 啟動時偵測 sso_policy.yaml 內 OIDC 設定是否完整（client_id / client_secret 不是 PENDING）
+# EN: At startup, detect whether OIDC config in sso_policy.yaml is complete
+#     (client_id / client_secret not PENDING)
+#
+# ZH: OIDC_ENABLED=True 時，/api/v1/sso/providers 端點才會回傳 "oidc"
+#     前端依此決定是否顯示「使用學校帳號登入」按鈕
+# EN: When OIDC_ENABLED=True, /api/v1/sso/providers includes "oidc";
+#     frontend uses this to decide whether to show the school-login button
+#
+# ZH: 失敗保險 — IT 還沒給 client_id 時，OIDC_ENABLED=False，前端顯示
+#     fallback 提示「系統登入功能尚在設定中」，本機 admin 登入照常運作。
+# ==============================================================================
+_PENDING_VALUES = {"PENDING", "", None}
+
+_oidc_cfg = SSO_POLICY.get("oidc", {}) if isinstance(SSO_POLICY, dict) else {}
+OIDC_ENABLED = (
+    SSO_POLICY.get("provider") == "oidc"
+    and _oidc_cfg.get("client_id") not in _PENDING_VALUES
+    and _oidc_cfg.get("client_secret") not in _PENDING_VALUES
+    and bool(_oidc_cfg.get("tenant_id"))
+    and bool(_oidc_cfg.get("redirect_uri"))
+)
+
+if SSO_POLICY.get("provider") == "oidc" and not OIDC_ENABLED:
+    logger.warning(
+        "OIDC provider selected but config is incomplete "
+        "(client_id/secret still PENDING or required fields missing). "
+        "OIDC login disabled; the system will fallback to mock for /sso/login. "
+        "Update sso_policy.yaml with IT-provided credentials and restart to enable."
+    )
+elif OIDC_ENABLED:
+    _redirect = _oidc_cfg.get("redirect_uri", "?")
+    logger.info(f"OIDC enabled (redirect_uri={_redirect})")

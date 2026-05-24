@@ -137,6 +137,10 @@ class UserResponse(BaseModel):
     lifetime_tokens_used: int = 0
     last_login_ip: Optional[str] = None
     last_login_time: Optional[datetime] = None
+    # v2.1 SSO 整合 — 給前端判斷密碼變更 UI 該顯示本機表單還是 IdP 連結
+    # v2.1 SSO integration — for frontend to decide password-change UI mode
+    auth_source: str = "local"        # local / sso_mock / sso_cas / sso_oidc
+    external_id: Optional[str] = None # OIDC oid; None for local users
     created_at: datetime
 
 
