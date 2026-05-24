@@ -216,7 +216,20 @@ const TRANSLATIONS = {
         secrets_empty: "尚未設定任何 secret",
         secrets_load_fail: "載入 Secrets 失敗",
         secrets_save_ok: "Secret 已儲存",
-        secrets_delete_confirm: "確認刪除這個 secret？"
+        secrets_delete_confirm: "確認刪除這個 secret？",
+        // v2.1 SSO OIDC 整合
+        login_title: "登入系統",
+        sso_school_login: "使用學校帳號登入",
+        sso_hint: "學生 / 老師請使用學校 Microsoft 帳號（學號@mcu.edu.tw）",
+        sso_loading: "載入中…",
+        sso_pending_msg: "系統登入功能尚在設定中",
+        sso_pending_hint: "若您是管理員，請透過管理介面登入",
+        password_sso_msg: "您使用學校 Microsoft 帳號登入，密碼由學校統一管理。",
+        password_sso_open: "前往 Microsoft 變更密碼（新分頁）",
+        password_sso_forgot: "忘記密碼？點此重設",
+        password_sso_why: "為什麼不能在這裡改？",
+        password_sso_why_explain: "學校採用單一登入 (SSO) 機制，您的密碼存在學校的 Microsoft 系統，本平台從未拿到您的密碼。這是業界標準的安全設計（Slack / Notion / Figma 等使用 SSO 的服務都是如此）。",
+        toast_sso_password_blocked: "SSO 使用者無法在此變更密碼，請至 IdP 系統變更"
     },
     en: {
         login_title: "System Login",
@@ -422,7 +435,20 @@ const TRANSLATIONS = {
         secrets_empty: "No secrets configured yet",
         secrets_load_fail: "Failed to load secrets",
         secrets_save_ok: "Secret saved",
-        secrets_delete_confirm: "Delete this secret?"
+        secrets_delete_confirm: "Delete this secret?",
+        // v2.1 SSO OIDC integration
+        login_title: "Sign in",
+        sso_school_login: "Sign in with school account",
+        sso_hint: "Students / teachers: use your school Microsoft account (studentid@mcu.edu.tw)",
+        sso_loading: "Loading…",
+        sso_pending_msg: "Login system is being configured",
+        sso_pending_hint: "Administrators please use the admin panel to log in",
+        password_sso_msg: "You are signed in with your school Microsoft account; passwords are managed by the school.",
+        password_sso_open: "Open Microsoft password change (new tab)",
+        password_sso_forgot: "Forgot password? Reset here",
+        password_sso_why: "Why can't I change it here?",
+        password_sso_why_explain: "The school uses Single Sign-On (SSO); your password lives at Microsoft and this platform never sees it. This is the industry-standard design (Slack / Notion / Figma all do the same).",
+        toast_sso_password_blocked: "SSO users cannot change password here — please use the IdP"
     }
 };
 
@@ -439,8 +465,8 @@ sessions = JSON.parse(localStorage.getItem('ai_hud_sessions')) || [
 const bodyEl = document.documentElement;
 const loginView = document.getElementById('login-view');
 const dashView = document.getElementById('dashboard-view');
-const loginForm = document.getElementById('login-form');
-const loginBtn = document.getElementById('login-btn');
+const loginForm = document.getElementById('login-form');  // v2.1: form 仍存在但無 submit 行為（已改 SSO 按鈕觸發）
+// v2.1: loginBtn 已移除（user UI 不再有 username/password 提交按鈕；admin 走 port 8888）
 const toastEl = document.getElementById('toast');
 const toastMsg = document.getElementById('toast-msg');
 const toastIcon = document.getElementById('toast-icon');
@@ -638,24 +664,8 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    // ZH: Password Eye Toggle | EN: Password Eye Toggle
-    const eyeToggle = document.getElementById('eye-toggle');
-    if (eyeToggle) {
-        eyeToggle.addEventListener('click', () => {
-            const pwdInput = document.getElementById('password');
-            const eyeOff = eyeToggle.querySelector('.eye-off');
-            const eyeOpen = eyeToggle.querySelector('.eye-open');
-            if (pwdInput.type === 'password') {
-                pwdInput.type = 'text';
-                eyeOff.style.display = 'none';
-                eyeOpen.style.display = 'inline-block';
-            } else {
-                pwdInput.type = 'password';
-                eyeOff.style.display = 'inline-block';
-                eyeOpen.style.display = 'none';
-            }
-        });
-    }
+    // v2.1: Password Eye Toggle 區段已移除（HTML 內 #eye-toggle / #password 已刪）
+    // 原因：user UI 不再有 username/password 輸入框，admin 走 port 8888 admin-ui
 
     // ZH: Compute Sub Tabs Toggle | EN: Compute Sub Tabs Toggle
     document.querySelectorAll('.sub-tab-btn').forEach(btn => {
@@ -695,17 +705,11 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // ZH: 忘記密碼相關綁定 | EN: Forgot password bindings
-    const forgotPwdLink = document.getElementById('forgot-pwd-link');
+    // v2.1: #forgot-pwd-link 已從 user UI 移除（無本機 username/password 入口）
+    //       但 #forgot-pwd-modal HTML 與 form handler 保留供 admin-ui 使用
     const forgotPwdModal = document.getElementById('forgot-pwd-modal');
     const forgotPwdCloseBtn = document.getElementById('forgot-pwd-close-btn');
     const forgotPwdForm = document.getElementById('forgot-pwd-form');
-
-    if (forgotPwdLink && forgotPwdModal) {
-        forgotPwdLink.addEventListener('click', (e) => {
-            e.preventDefault();
-            forgotPwdModal.classList.remove('hidden');
-        });
-    }
 
     if (forgotPwdCloseBtn && forgotPwdModal) {
         forgotPwdCloseBtn.addEventListener('click', () => {
@@ -937,50 +941,11 @@ function showToast(msgKey, isError = false) {
 }
 
 // =========================
-// ZH: 身份驗證 | EN: Authentication
+// ZH: 身份驗證 — v2.1 改走 SSO（user UI 不再有本機 username/password 提交）
+// EN: Authentication — v2.1 SSO-only on user UI
 // =========================
-if (loginForm) {
-    loginForm.addEventListener('submit', async (e) => {
-        e.preventDefault();
-        const userValue = document.getElementById('username').value;
-        const passValue = document.getElementById('password').value;
-        loginBtn.disabled = true;
-
-        try {
-            const formData = new URLSearchParams();
-            formData.set('username', userValue);
-            formData.set('password', passValue);
-
-            const res = await fetch(`${API_BASE}/auth/login`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-                body: formData
-            });
-
-            if (!res.ok) throw new Error('fail');
-            const data = await res.json();
-            authToken = data.access_token;
-            localStorage.setItem('ai_hud_token', authToken);
-            showToast('toast_auth_ok');
-
-            // ZH: 管理員直接導向管理面板 | EN: Redirect admin to admin panel
-            const meRes = await fetch(`${API_BASE}/auth/me`, {
-                headers: { 'Authorization': `Bearer ${authToken}` }
-            });
-            if (meRes.ok) {
-                const meData = await meRes.json();
-                // Admin stays here, can click "Admin Panel" if needed
-            }
-
-            await fetchDashboardData();
-            switchToDashboard();
-        } catch {
-            showToast('toast_auth_fail', true);
-        } finally {
-            loginBtn.disabled = false;
-        }
-    });
-}
+// 既有本機 /api/v1/auth/login POST 邏輯已搬到 admin-ui (port 8888)。
+// User UI 透過 SSO 取得 token，由 setupSSOLogin() 處理（見下方）。
 
 async function checkAuth() {
     try {
@@ -2123,3 +2088,158 @@ window.Lab = Lab;
 
 // ZH: v1 NB IIFE 已於 Phase D 刪除，原本約 670 行（const NB = (() => {...})() + 子頁籤掛勾）
 // EN: v1 NB IIFE removed in Phase D (~670 lines); replaced by Lab launcher above
+
+
+// ==============================================================================
+// v2.1 SSO OIDC 整合模組
+// v2.1 SSO OIDC Integration Module
+// ==============================================================================
+// ZH: 功能：
+//   1. 頁面載入時處理 ?sso_token= URL 參數（OIDC callback 後 302 回來會帶這個）
+//   2. fetch /api/v1/sso/providers 決定登入頁顯示 #sso-section 或 #sso-pending
+//   3. 綁定 #sso-oidc-btn click → 跳轉 /api/v1/sso/oidc/login
+//   4. 密碼變更 modal 依使用者 auth_source 分流（local 顯示 form / SSO 顯示 IdP 連結）
+//   5. Logout 只清本機 localStorage（不主動登出 Microsoft session — v1.1 I10）
+// EN: Handles sso_token URL params, providers fetch, button click, password split, logout.
+// ==============================================================================
+(function setupSSOLogin() {
+    // ── 1. 處理 ?sso_token= URL 參數（OIDC callback 後 302 回來會帶）─────────
+    const params = new URLSearchParams(window.location.search);
+    const ssoToken = params.get('sso_token');
+    if (ssoToken) {
+        localStorage.setItem('ai_hud_token', ssoToken);
+        authToken = ssoToken;
+        // 清掉 URL 參數，避免 token 留在瀏覽歷史
+        window.history.replaceState({}, document.title, window.location.pathname);
+    }
+
+    // ── 2. fetch /providers 決定顯示哪個區塊 ─────────────────────────────
+    // 不認證即可呼叫（無敏感資料），這在 DOMContentLoaded 之前就跑也 OK
+    function applyProvidersUI(providers) {
+        const loading = document.getElementById('sso-loading');
+        const ssoSec  = document.getElementById('sso-section');
+        const pending = document.getElementById('sso-pending');
+        if (!loading || !ssoSec || !pending) return;   // login HTML 還沒渲染
+
+        loading.style.display = 'none';
+        if (providers.includes('oidc')) {
+            ssoSec.style.display = 'flex';
+        } else {
+            pending.style.display = 'flex';
+        }
+    }
+
+    // 延遲到 DOMContentLoaded 後執行，確保 DOM 已有 #sso-loading 等元素
+    document.addEventListener('DOMContentLoaded', () => {
+        // 已登入則完全跳過 SSO UI（loginView 本來就是 hidden）
+        if (authToken) return;
+
+        fetch(`${API_BASE}/sso/providers`)
+            .then(r => r.ok ? r.json() : { providers: [] })
+            .then(({ providers }) => applyProvidersUI(providers || []))
+            .catch(() => applyProvidersUI([]));   // 失敗也顯示 pending fallback
+
+        // ── 3. 綁定 OIDC 按鈕 ─────────────────────────────────────────────
+        const oidcBtn = document.getElementById('sso-oidc-btn');
+        if (oidcBtn) {
+            oidcBtn.addEventListener('click', () => {
+                oidcBtn.disabled = true;
+                window.location.href = `${API_BASE}/sso/oidc/login`;
+            });
+        }
+    });
+})();
+
+
+// ==============================================================================
+// v2.1 密碼變更 modal 分流（依 currentUserData.auth_source）
+// ==============================================================================
+// 開啟 #password-modal 時呼叫：
+//   - local → 顯示 #password-change-form（既有 form）
+//   - sso_* → 顯示 #password-change-sso（IdP 連結 + 為什麼說明）
+async function applyPasswordModalMode() {
+    const localForm = document.getElementById('password-change-form');
+    const ssoBlock  = document.getElementById('password-change-sso');
+    if (!localForm || !ssoBlock) return;
+
+    const authSource = (window.currentUserData && window.currentUserData.auth_source) || 'local';
+
+    if (authSource === 'local') {
+        localForm.style.display = 'flex';
+        ssoBlock.classList.add('hidden');
+        return;
+    }
+
+    // SSO 模式：隱藏本機 form，顯示 IdP 連結區塊
+    localForm.style.display = 'none';
+    ssoBlock.classList.remove('hidden');
+
+    // fetch /sso/password-change-info 拿對應 IdP URL（含 reset_url）
+    try {
+        const res = await fetch(`${API_BASE}/sso/password-change-info`);
+        if (!res.ok) return;
+        const data = await res.json();
+        const info = (data.providers || {})[authSource] || {};
+
+        const linkEl  = document.getElementById('password-sso-link');
+        const resetEl = document.getElementById('password-sso-reset-link');
+        const msgEl   = document.getElementById('password-sso-msg');
+
+        if (info.change_url && linkEl) linkEl.href = info.change_url;
+        if (info.reset_url && resetEl) resetEl.href = info.reset_url;
+        if (info.message && msgEl) msgEl.textContent = info.message;
+
+        // 若 reset_url 不存在，隱藏「忘記密碼」連結
+        if (!info.reset_url && resetEl) resetEl.style.display = 'none';
+    } catch (e) {
+        console.warn('[SSO] fetch password-change-info failed:', e);
+    }
+}
+
+// 攔截「變更密碼」按鈕的 click（在 #nav-password-btn 既有 handler 之外加一層）
+document.addEventListener('DOMContentLoaded', () => {
+    const navPasswordBtn = document.getElementById('nav-password-btn');
+    if (navPasswordBtn) {
+        navPasswordBtn.addEventListener('click', () => {
+            // 既有 handler 已把 modal 顯示出來，這裡只負責切換 mode
+            setTimeout(applyPasswordModalMode, 0);
+        });
+    }
+
+    // 也讓 #password-change-form (modal 內 form) 真正可送出
+    // 過去這個 form 沒 submit handler → 送出後 page reload。修為呼叫 PUT /me
+    const modalForm = document.getElementById('password-change-form');
+    if (modalForm) {
+        modalForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const newPwd = document.getElementById('profile-password').value.trim();
+            if (!newPwd) return;
+            try {
+                const res = await fetch(`${API_BASE}/auth/me`, {
+                    method: 'PUT',
+                    headers: {
+                        'Authorization': `Bearer ${authToken}`,
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ password: newPwd }),
+                });
+                if (!res.ok) {
+                    const err = await res.json().catch(() => ({}));
+                    if (res.status === 400 && /sso/i.test(err.detail || '')) {
+                        // 後端拒絕 SSO 使用者改密碼（v2.1 update_user 防線）
+                        showToast('toast_sso_password_blocked', true);
+                    } else {
+                        throw new Error(err.detail || 'Update failed');
+                    }
+                    return;
+                }
+                showToast('toast_auth_ok');
+                document.getElementById('profile-password').value = '';
+                document.getElementById('password-modal').classList.add('hidden');
+            } catch (err) {
+                console.error(err);
+                showToast('toast_auth_fail', true);
+            }
+        });
+    }
+});
