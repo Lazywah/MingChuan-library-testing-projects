@@ -40,3 +40,7 @@ backups/
 
 # ZH: setup_env.py 自動備份的舊版 .env | EN: .env backups created by setup_env.py
 *.env.bak_*
+
+# ZH: 開發中的紀錄文件 | EN: Log files under development
+commit.txt
+docs/dev
