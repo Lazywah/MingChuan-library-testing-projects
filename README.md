@@ -21,22 +21,37 @@
 ## 🏗️ 架構概覽 | Architecture Overview
 
 ```
-工作站 (Browser)
-    │ HTTP
-    ▼
-Nginx (:80)
-    ├── /train/        → web-ui       (靜態 HTML/CSS/JS)
-    ├── /              → Open WebUI   (備用對話介面)
+工作站 (Browser)                            外部 IdP (v2.1)
+    │ HTTP                                  Microsoft Entra ID
+    ▼                                       login.microsoftonline.com
+Nginx (:80)                                       ▲
+    ├── /train/        → web-ui (純 OIDC 入口)    │ OIDC 302
+    ├── /code/{user_id}/ → cs-{user_id} (v2.0 code-server)
+    ├── /              → Open WebUI (備用)         │
     └── /api/v1/       → job-scheduler (FastAPI :8002)
-                               ├── SQLite     (任務佇列 / 使用者資料)
-                               ├── Redis      (Session / Cache)
-                               └── Portkey (LLM Gateway :8000)
-                                       └── 外部 LLM API (Gemini / OpenAI 等)
+                               ├── /api/v1/sso/oidc/* (v2.1)
+                               ├── /api/v1/lab/* (v2.0 Lab session 管理)
+                               ├── /api/v1/secrets/* (v2.0 AES-256-GCM)
+                               ├── SQLite     (任務佇列 / 使用者資料 / lab_sessions)
+                               ├── Portkey (LLM Gateway :8000)
+                               └── lab_manager → docker.sock (動態建 cs-{user})
 
 GPU Worker Agent (Pull 輪詢 ← /api/v1/worker/take)
-    └── docker run --gpus all  (隔離訓練容器，完成後自動銷毀)
+    └── docker run --gpus all  (隔離訓練容器，含自動注入 secrets + per-user volume)
 
-管理員介面 (Port 8888) ← 獨立於使用者介面，防止暴力破解
+管理員介面 (Port 8888) ← 獨立於使用者介面，緊急救援用 (SSO 故障也能進)
+```
+
+### v2.1 SSO 上線後的登入流程
+
+```
+使用者 → 瀏覽器
+  ├── 學生 / 老師 → port 80 → 點「使用學校帳號登入」
+  │                  → 跳 Microsoft Entra → 認證 → 回 /sso/oidc/callback
+  │                  → 簽 JWT → 進 user UI
+  │
+  └── 管理員 → port 8888 → username + password (本機)
+              → /api/v1/auth/login → 簽 JWT → 進 admin UI
 ```
 
 ## 📸 介面預覽 | UI Preview
@@ -47,12 +62,26 @@ GPU Worker Agent (Pull 輪詢 ← /api/v1/worker/take)
 ---
 
 ## 🌟 特色功能 | Features
-- **AI Hub 四宮格導覽**：直覺切換「AI模型、文書寫作、影音創作、生活翻譯」。
-- **i18n 多國語言**：全系統支援中英文即時切換，包含 Aria 無障礙標籤同步。
-- **高科技 HUD 視覺**：Cyberpunk 風格玻璃擬態 (Glassmorphism) 介面設計。
-- **SSE 異常處理**：穩健的串流攔截機制，確保 Token 用盡時不會遺失對話進度。
-- **自動化參數建議 (Auto-Config)**：上傳資料集時，後端自動解析內容並推薦訓練參數。
-- **SMTP 郵件通知系統**：支援帳號建立、密碼變更與登入狀態的即時 Email 通知。
+
+### v2.1 SSO 整合（2026-05 新增）
+- **Microsoft Entra ID OIDC**：MCU 學生 / 老師用學校 Microsoft 帳號一鍵登入；支援 3 種 provider 切換（Mock / CAS / OIDC）
+- **4 種 auth_source 分流**：`local` / `sso_mock` / `sso_cas` / `sso_oidc`，前後端依此分流密碼變更 UI 與權限
+- **PENDING fail-safe**：IT 還沒給 `client_id` 時系統自動降級成 mock + warning，服務不會崩
+- **Admin 完全分離**：管理員走獨立 port 8888，學生看不到管理頁面入口（v1.2 設計）
+
+### v2.0 Lab 模組（2026-05 新增）
+- **code-server (VS Code in Browser)**：每位使用者一個容器、idle 30 分鐘自動關閉、檔案持久保留
+- **aibase-runner extension**：右鍵 .py / Notebook cell 「Run on GPU」直接送 GPU 叢集
+- **Secrets 管理**：AES-256-GCM 加密，提交 Job 自動注入容器 env（HF_TOKEN / WANDB_API_KEY 等）
+- **Storage 生命週期**：active / frozen / archived / pending_delete 四階段、admin audit log
+
+### 核心功能
+- **AI Hub 四宮格導覽**：直覺切換「AI模型、文書寫作、影音創作、生活翻譯」
+- **i18n 多國語言**：全系統支援中英文即時切換，包含 Aria 無障礙標籤同步
+- **高科技 HUD 視覺**：Cyberpunk 風格玻璃擬態 (Glassmorphism) 介面設計
+- **SSE 異常處理**：穩健的串流攔截機制，確保 Token 用盡時不會遺失對話進度
+- **自動化參數建議 (Auto-Config)**：上傳資料集時，後端自動解析內容並推薦訓練參數
+- **SMTP 郵件通知系統**：支援帳號建立、密碼變更與登入狀態的即時 Email 通知
 
 ---
 
