@@ -473,6 +473,14 @@ ion-icon {
     animation: fadeIn 0.4s ease forwards;
 }
 
+/* ZH: v2.1 P0 安全 — 未登入時強制隱藏需登入頁面，即使被誤加 .active 也擋下 */
+/* EN: v2.1 P0 security — force-hide auth-gated panes even if .active is mistakenly added */
+.page-view.auth-locked,
+.page-view.auth-locked.active {
+    display: none !important;
+    opacity: 0 !important;
+}
+
 #settings-page.active,
 #admin-page.active {
     display: block !important;
@@ -1711,6 +1719,9 @@ ion-icon {
     display: flex;
     justify-content: center;
     align-items: center;
+    /* v2.1: 容納 3 個按鈕（資訊 / 主題 / 語言） */
+    gap: 10px;
+    flex-wrap: wrap;
 }
 
 .drawer-info-btn {

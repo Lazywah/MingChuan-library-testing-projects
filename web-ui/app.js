@@ -224,6 +224,11 @@ const TRANSLATIONS = {
         sso_loading: "載入中…",
         sso_pending_msg: "系統登入功能尚在設定中",
         sso_pending_hint: "若您是管理員，請透過管理介面登入",
+        auth_required_to_use: "請先登入才能使用此功能",
+        lab_tip_secrets: "🔐 <strong>需要 API 金鑰嗎？</strong>到「設定 → Secrets 管理」新增（例：HF_TOKEN、OPENAI_API_KEY），啟動 Lab / 送 GPU 任務時會自動以環境變數注入容器。",
+        lab_tip_secrets_link: "前往設定",
+        secrets_help_summary: "什麼是環境變數？為什麼這樣設計？",
+        secrets_help_body: "環境變數是程式啟動時從作業系統環境讀的「鍵 = 值」對。把金鑰寫死在程式碼會被誤 commit 到 git 外洩，所以業界做法是統一存在 Secrets 機制中、執行時注入。可以類比 Chrome 密碼管理員 — 程式不用知道密碼，只在需要時自動填入。本平台用 AES-256-GCM 加密儲存，僅在 Lab 容器啟動 / GPU 任務執行時解密注入。",
         password_sso_msg: "您使用學校 Microsoft 帳號登入，密碼由學校統一管理。",
         password_sso_open: "前往 Microsoft 變更密碼（新分頁）",
         password_sso_forgot: "忘記密碼？點此重設",
@@ -469,6 +474,11 @@ const TRANSLATIONS = {
         sso_loading: "Loading…",
         sso_pending_msg: "Login system is being configured",
         sso_pending_hint: "Administrators please use the admin panel to log in",
+        auth_required_to_use: "Please sign in to use this feature",
+        lab_tip_secrets: "🔐 <strong>Need an API key?</strong> Add it in Settings → Secrets (e.g. HF_TOKEN, OPENAI_API_KEY). It will be injected as an environment variable into your Lab container and GPU jobs automatically.",
+        lab_tip_secrets_link: "Open settings",
+        secrets_help_summary: "What are environment variables and why this design?",
+        secrets_help_body: "Environment variables are key=value pairs read from the OS environment when a program starts. Hard-coding keys in source code risks committing them to git. The industry pattern is to keep them in a Secrets store and inject at runtime — like Chrome's password manager: programs don't know your password, the system fills it in when needed. This platform uses AES-256-GCM encryption at rest and decrypts only when the Lab container starts or a GPU job runs.",
         password_sso_msg: "You are signed in with your school Microsoft account; passwords are managed by the school.",
         password_sso_open: "Open Microsoft password change (new tab)",
         password_sso_forgot: "Forgot password? Reset here",
@@ -586,7 +596,7 @@ const jobForm = document.getElementById('job-form');
 const jobListHigh = document.getElementById('job-list-high');
 const jobListMidLow = document.getElementById('job-list-midlow');
 const submitJobBtn = document.getElementById('submit-job-btn');
-const profileUpdateForm = document.getElementById('profile-update-form');
+// v2.1: profile-update-form 已從 user UI 移除 — 個人資料變更須由 admin 或學校 SSO 端處理
 
 // =========================
 // ZH: 初始化階段 | EN: Initialization Phase
@@ -700,7 +710,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (jobFormHigh) jobFormHigh.addEventListener('submit', (e) => handleJobSubmit(e, 2, 'job-form-high'));
     if (jobFormMidLow) jobFormMidLow.addEventListener('submit', (e) => handleJobSubmit(e, 1, 'job-form-midlow'));
 
-    if (profileUpdateForm) profileUpdateForm.addEventListener('submit', handleProfileUpdate);
+    // v2.1: profile-update-form 已移除 — 不再綁定 handleProfileUpdate
     const datasetInputHigh = document.getElementById('datasetFile-high');
     const datasetInputMidLow = document.getElementById('datasetFile-midlow');
     if (datasetInputHigh) datasetInputHigh.addEventListener('change', (e) => handleDatasetUpload(e, 'high'));
@@ -715,9 +725,61 @@ document.addEventListener('DOMContentLoaded', () => {
     if (sideDrawerToggle && sideDrawer) {
         sideDrawerToggle.addEventListener('click', (e) => {
             e.preventDefault();
+            // 停止冒泡，避免被下面的「點外面收起」listener 立刻又關掉
+            e.stopPropagation();
             sideDrawer.classList.toggle('closed');
         });
+
+        // v2.1 UX: 點 sidebar 外部 + 目前是展開狀態 → 自動收起
+        document.addEventListener('click', (e) => {
+            // 已收起就不用管
+            if (sideDrawer.classList.contains('closed')) return;
+            // 點在 sidebar 內部 → 略過
+            if (sideDrawer.contains(e.target)) return;
+            // 點在 toggle 按鈕本身（理論上 stopPropagation 已擋下但保險）→ 略過
+            if (sideDrawerToggle.contains(e.target)) return;
+            sideDrawer.classList.add('closed');
+        });
     }
+
+    // v2.1: 從 Lab 卡片快速跳到 Settings → Secrets 區塊
+    const labJumpToSecrets = document.getElementById('lab-jump-to-secrets');
+    if (labJumpToSecrets) {
+        labJumpToSecrets.addEventListener('click', (e) => {
+            e.preventDefault();
+            if (!authToken) {
+                if (typeof showToast === 'function') showToast('auth_required_to_use', 'warning');
+                return;
+            }
+            switchTab('settings');
+            // 等 DOM 渲染完再 scroll，避免 page-view active 切換時還沒佈局好
+            setTimeout(() => {
+                const sec = document.getElementById('secrets-section');
+                if (sec) sec.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }, 80);
+        });
+    }
+
+    // v2.1 UX: 滑鼠滾輪覆蓋全頁面 — 即使滑到 sidebar / header 上滾動也能捲動主內容區
+    // body 是 overflow:hidden，內容靠 .page-view.active 內部捲動；以下將外部 wheel 事件轉發進去
+    document.addEventListener('wheel', (e) => {
+        // 找出當下活躍的主內容區
+        const activePane = document.querySelector('.page-view.active');
+        if (!activePane) return;
+        // 事件起源已經在可捲動容器內 → 讓瀏覽器自己處理，不要重複捲
+        let node = e.target;
+        while (node && node !== document.body) {
+            if (node === activePane) return;            // 起源就在 activePane → 略過
+            // 起源在其他自帶 scroll 的容器（modal / dropdown 等）→ 也略過
+            const style = node.nodeType === 1 ? window.getComputedStyle(node) : null;
+            if (style && /(auto|scroll)/.test(style.overflowY) && node.scrollHeight > node.clientHeight) {
+                return;
+            }
+            node = node.parentNode;
+        }
+        // 起源在 body / sidebar / header → 強制把 deltaY 轉發給 activePane
+        activePane.scrollBy({ top: e.deltaY, behavior: 'auto' });
+    }, { passive: true });
 
     // v2.1: Password Eye Toggle 區段已移除（HTML 內 #eye-toggle / #password 已刪）
     // 原因：user UI 不再有 username/password 輸入框，admin 走 port 8888 admin-ui
@@ -833,7 +895,27 @@ tabBtns.forEach(btn => {
     });
 });
 
+// ZH: v2.1 P0 安全 — 需登入才能進入的 tab 白名單
+// EN: v2.1 P0 security — auth-gated tab whitelist
+const AUTH_GATED_TABS = ['dashboard', 'assistant', 'settings'];
+
 function switchTab(tabId) {
+    // ZH: v2.1 P0 安全 — 未登入時擋下需登入的 tab，避免可從 console 或瀏覽器歷史繞過
+    // EN: v2.1 P0 security — block auth-gated tabs when not logged in
+    if (!authToken && AUTH_GATED_TABS.includes(tabId)) {
+        console.warn(`[auth] Attempted to switch to gated tab "${tabId}" without auth — redirecting to home`);
+        // 給使用者一個明確提示（如果 i18n 有 key 就用，否則退回中文）
+        try {
+            const msg = (typeof t === 'function' ? t('auth_required_to_use') : null) || '請先登入才能使用此功能';
+            if (typeof showToast === 'function') {
+                showToast(msg, 'warning');
+            } else {
+                alert(msg);
+            }
+        } catch (_) { /* 提示失敗不影響 redirect */ }
+        tabId = 'home';
+    }
+
     tabBtns.forEach(b => {
         if (b.getAttribute('data-tab') === tabId) b.classList.add('active');
         else b.classList.remove('active');
@@ -1068,6 +1150,32 @@ function toggleAuthGatedUI(show) {
     // ZH: 教學按鈕 (底部 ⓘ) | EN: Tutorial info button
     const tutorialBtn = document.getElementById('nav-quick-tutorial');
     if (tutorialBtn) tutorialBtn.style.display = show ? 'flex' : 'none';
+
+    // ZH: v2.1 P0 安全 — 隱藏對應的 content pane，避免 hash / 直接 DOM 操作繞過 tab
+    // EN: v2.1 P0 security — hide content panes too, so URL hash / DOM ops can't bypass
+    const authPages = ['dashboard-page', 'assistant-page', 'settings-page'];
+    authPages.forEach(id => {
+        const el = document.getElementById(id);
+        if (!el) return;
+        if (show) {
+            // 登入：移除 force-hidden（active class 由 switchTab 自己管）
+            el.classList.remove('auth-locked');
+        } else {
+            // 未登入：強制隱藏 + 移除 active（即使先前是當前 tab）
+            el.classList.add('auth-locked');
+            el.classList.remove('active');
+        }
+    });
+
+    // ZH: 若目前 active tab 是 auth-gated 而使用者登出 → 強制回 home
+    // EN: If current active tab is auth-gated and user logs out → force back to home
+    if (!show) {
+        const activePage = document.querySelector('.page-view.active');
+        if (!activePage || ['dashboard-page', 'assistant-page', 'settings-page'].includes(activePage.id)) {
+            // 直接呼叫 switchTab('home') 會再過 guard，但這時 !authToken 已成立、本就會跑去 home，無害
+            if (typeof switchTab === 'function') switchTab('home');
+        }
+    }
 }
 
 // =========================
@@ -1392,46 +1500,9 @@ async function handleDatasetUpload(e, type) {
     }
 }
 
-async function handleProfileUpdate(e) {
-    e.preventDefault();
-    const emailVal = document.getElementById('profile-email').value.trim();
-    const deptEl = document.getElementById('profile-department-edit');
-    const deptVal = deptEl ? deptEl.value.trim() : '';
-    const submitBtn = e.target.querySelector('button[type="submit"]');
-
-    const updateData = {};
-    if (emailVal) updateData.email = emailVal;
-    if (deptVal) updateData.department = deptVal;
-    // v2.1: 密碼變更已移至獨立 password-modal，此 form 不再帶 password
-
-    if (Object.keys(updateData).length === 0) {
-        showToast('toast_auth_fail', true);
-        return;
-    }
-
-    submitBtn.disabled = true;
-    try {
-        const res = await fetch(`${API_BASE}/auth/me`, {
-            method: 'PUT',
-            headers: {
-                'Authorization': `Bearer ${authToken}`,
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify(updateData)
-        });
-        if (!res.ok) throw new Error('Update failed');
-        showToast('toast_auth_ok');
-        // 重新拉一次 /me 更新 currentUserData，下次開 modal 顯示新值
-        await refreshCurrentUserData();
-        // 同時刷新顯示
-        renderProfileInfo();
-    } catch (err) {
-        console.error(err);
-        showToast('toast_auth_fail', true);
-    } finally {
-        submitBtn.disabled = false;
-    }
-}
+// v2.1: handleProfileUpdate() 已移除
+// 個人資訊變更須由管理者或學校 SSO 端進行，user UI 不再提供自助修改入口
+// 後端 PUT /api/v1/auth/me 端點保留供 admin UI 使用
 
 // =========================
 // ZH: AI 助手串流邏輯 | EN: AI Assistant Streaming
@@ -2404,11 +2475,7 @@ async function renderProfileInfo() {
     setText('profile-info-login-count', formatNumber(u.login_count));
     setText('profile-info-created-at', formatDateTime(u.created_at));
 
-    // ── 區塊 4: 預填編輯欄位 ──
-    const emailInput = document.getElementById('profile-email');
-    if (emailInput) emailInput.value = u.email || '';
-    const deptInput = document.getElementById('profile-department-edit');
-    if (deptInput) deptInput.value = u.department || '';
+    // ── 區塊 4 (編輯欄位) 已移除 — v2.1: 自助修改下架 ──
 
     // ── 區塊 3: Token 用量（fetch /usage） ──
     try {
