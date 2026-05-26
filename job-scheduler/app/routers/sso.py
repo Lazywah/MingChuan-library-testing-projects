@@ -20,7 +20,8 @@ EN: Endpoints (v2.1 full):
 ==============================================================================
 """
 import logging
-from fastapi import APIRouter, Depends, Query, HTTPException, Form
+from datetime import datetime, timezone
+from fastapi import APIRouter, Depends, Query, HTTPException, Form, Request
 from fastapi.responses import RedirectResponse, HTMLResponse
 from sqlalchemy.orm import Session
 
@@ -54,7 +55,7 @@ oidc_client = build_oidc_client_if_enabled(SSO_POLICY)
 # ==============================================================================
 # 共用：建立 / 升級 user 並簽 JWT 後 302 回前端
 # ==============================================================================
-def _finalize_sso_login(db: Session, user_info: dict) -> RedirectResponse:
+def _finalize_sso_login(db: Session, user_info: dict, request: Request = None) -> RedirectResponse:
     """
     ZH: 共用流程（mock / cas / oidc 三條路徑都會走這裡）
         1. 依 external_id → email → username 順序找既有使用者
@@ -96,6 +97,19 @@ def _finalize_sso_login(db: Session, user_info: dict) -> RedirectResponse:
         )
         upgrade_to_sso(db, user, auth_source=auth_source, external_id=external_id)
 
+    # v2.1 修補：SSO 登入也要寫 last_login_* + last_activity（本機 /login 有寫但 SSO 之前漏寫）
+    try:
+        now = datetime.now(timezone.utc)
+        user.last_login_time = now
+        user.last_activity = now
+        user.login_count = (user.login_count or 0) + 1
+        if request and request.client:
+            user.last_login_ip = request.client.host
+        db.commit()
+    except Exception as e:
+        logger.error(f"SSO 登入時更新 last_login_* 失敗: {e}")
+        db.rollback()
+
     # 簽 JWT 並 302 回前端
     # v2.1 bug fix: 之前 redirect 到 "/" 會跑到 Open WebUI（nginx 把 / 代理給 open-webui），
     # 改為 "/train/" 才會回到本平台的 web-ui SPA，由 setupSSOLogin IIFE 抓 ?sso_token= 進 dashboard
@@ -115,13 +129,14 @@ def sso_login():
 
 @router.get("/callback", summary="SSO 登入回呼網址（CAS / Mock）")
 def sso_callback(
+    request: Request,
     ticket: str = Query(..., description="CAS Server 或 Mock 傳回的 ticket"),
     db: Session = Depends(get_db),
 ):
     """處理 SSO 驗證結果並產生系統的 JWT Token"""
     try:
         user_info = sso_client.validate_ticket(ticket)
-        return _finalize_sso_login(db, user_info)
+        return _finalize_sso_login(db, user_info, request=request)
     except ValueError as e:
         raise HTTPException(status_code=401, detail=str(e))
     except Exception as e:
@@ -196,6 +211,7 @@ def oidc_login():
 
 @router.get("/oidc/callback", summary="v2.1 OIDC callback (Microsoft 回呼)")
 def oidc_callback(
+    request: Request,
     code: str = Query(..., description="Microsoft 回傳的 authorization code"),
     state: str = Query(..., description="登入時簽好的 state，用於防 CSRF"),
     db: Session = Depends(get_db),
@@ -215,7 +231,7 @@ def oidc_callback(
 
     try:
         user_info = oidc_client.validate_ticket(code)
-        return _finalize_sso_login(db, user_info)
+        return _finalize_sso_login(db, user_info, request=request)
     except ValueError as e:
         raise HTTPException(status_code=401, detail=str(e))
     except Exception:

@@ -134,10 +134,12 @@ async def login(
         )
 
     # ZH: 記錄上線狀態與次數 | EN: Record online status and login count
+    # v2.1 在線狀態修正：online_status 已 deprecated（由 admin 端依 last_activity 動態計算）
     try:
-        user.last_login_time = datetime.now(timezone.utc)
+        now = datetime.now(timezone.utc)
+        user.last_login_time = now
         user.last_login_ip = request.client.host if request.client else "Unknown"
-        user.online_status = 1
+        user.last_activity = now  # v2.1: 登入瞬間即活躍
         user.login_count += 1
         db.commit()
     except Exception as e:
@@ -236,9 +238,10 @@ def logout(
     current_user: models.User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """ZH: 登出 - 將在線狀態設為離線 | EN: Logout - Set online status to offline"""
+    """ZH: 登出 - 清空 last_activity 讓使用者立即離線 | EN: Logout - clear last_activity for instant offline"""
+    # v2.1: online_status 已 deprecated；改清 last_activity 讓 admin 立即看到離線
     try:
-        current_user.online_status = 0
+        current_user.last_activity = None
         db.commit()
     except Exception as e:
         logger.error(f"Failed to update logout status: {e}")

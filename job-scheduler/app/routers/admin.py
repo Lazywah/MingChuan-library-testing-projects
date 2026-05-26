@@ -61,6 +61,21 @@ def require_admin(current_user: models.User = Depends(get_current_user)) -> mode
 # ZH: 使用者管理 | EN: User Management
 # ==============================================================================
 
+# v2.1 在線狀態修正：admin 不再讀 DB 內 online_status 欄位（會 stale），
+# 改用 last_activity 動態計算「10 分鐘內活躍 = 在線」
+from datetime import timedelta as _td
+_ONLINE_THRESHOLD = _td(minutes=10)
+
+def _compute_online(user: models.User) -> int:
+    """ZH: 用 last_activity 動態判斷在線 | EN: Compute online from last_activity"""
+    last = getattr(user, "last_activity", None)
+    if not last:
+        return 0
+    if last.tzinfo is None:
+        last = last.replace(tzinfo=timezone.utc)
+    return 1 if (datetime.now(timezone.utc) - last) < _ONLINE_THRESHOLD else 0
+
+
 @router.get("/users", response_model=list[schemas.AdminUserListItem])
 def get_all_users(
     skip: int = Query(0, ge=0, description="ZH: 跳過筆數 | EN: Records to skip"),
@@ -87,7 +102,7 @@ def get_all_users(
             email=u.email,
             role=u.role,
             is_active=u.is_active,
-            online_status=u.online_status,
+            online_status=_compute_online(u),  # v2.1: 動態計算，不再讀 DB 內 stale 欄位
             last_login_time=u.last_login_time,
             last_login_ip=u.last_login_ip,
             department=u.department,

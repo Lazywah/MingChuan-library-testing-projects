@@ -194,6 +194,12 @@ def init_db():
             try: conn.execute(text("ALTER TABLE users ADD COLUMN external_id VARCHAR"))
             except Exception: pass
 
+            # --- v2.1 在線狀態修正 | v2.1 online status fix ---
+            # ZH: 取代既有 online_status 持久化邏輯，改用 last_activity 動態判斷
+            # EN: Replace persistent online_status with dynamic last_activity
+            try: conn.execute(text("ALTER TABLE users ADD COLUMN last_activity DATETIME"))
+            except Exception: pass
+
     except Exception as e:
         logger.warning(f"Manual DB migration skipped or partially failed: {e}")
 

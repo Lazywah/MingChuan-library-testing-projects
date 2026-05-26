@@ -114,6 +114,21 @@ async def get_current_user(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="ZH: 帳號已停用 | EN: Account is disabled"
         )
+
+    # v2.1 在線狀態修正：每次 API 呼叫節流更新 last_activity（避免每 request 都寫 DB）
+    # 規則：last_activity 為 None 或距離現在 > 1 分鐘才寫入
+    try:
+        from datetime import datetime, timezone, timedelta
+        now = datetime.now(timezone.utc)
+        last = user.last_activity
+        if last is not None and last.tzinfo is None:
+            last = last.replace(tzinfo=timezone.utc)
+        if last is None or (now - last) > timedelta(minutes=1):
+            user.last_activity = now
+            db.commit()
+    except Exception:
+        db.rollback()  # 更新失敗不影響本次請求
+
     return user
 
 
