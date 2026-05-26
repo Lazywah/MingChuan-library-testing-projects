@@ -2354,3 +2354,43 @@ ion-icon {
     font-family: 'Fira Code', monospace;
     text-align: right;
 }
+
+
+/* ==============================================================================
+   v2.1 Password Modal 強度提示與確認密碼
+   ============================================================================== */
+
+.password-strength-bar {
+    width: 100%;
+    height: 5px;
+    background: rgba(0, 0, 0, 0.3);
+    border-radius: 3px;
+    overflow: hidden;
+}
+
+.password-strength-fill {
+    height: 100%;
+    background: #ef4444; /* 預設紅（最弱） */
+    transition: width 0.3s ease, background 0.3s ease;
+    border-radius: 3px;
+}
+
+.password-strength-fill.weak     { background: #ef4444; }    /* 紅 */
+.password-strength-fill.medium   { background: #f59e0b; }    /* 黃 */
+.password-strength-fill.strong   { background: #10b981; }    /* 綠 */
+.password-strength-fill.vstrong  { background: #06b6d4; }    /* 青 */
+
+.password-strength-text {
+    display: inline-block;
+    margin-top: 4px;
+    font-size: 11px;
+    color: var(--text-muted);
+    font-family: 'Fira Code', monospace;
+}
+
+.password-strength-text[data-level="weak"]     { color: #ef4444; }
+.password-strength-text[data-level="medium"]   { color: #f59e0b; }
+.password-strength-text[data-level="strong"]   { color: #10b981; }
+.password-strength-text[data-level="vstrong"]  { color: #06b6d4; }
+
+

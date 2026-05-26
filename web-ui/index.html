@@ -1123,15 +1123,39 @@
             <!-- ZH: 模式 1 — 本機帳號（既有 form） | EN: Mode 1 — local account -->
             <form id="password-change-form" style="display: flex; flex-direction: column; gap: 15px;">
                 <div class="input login-eye">
-                    <input type="password" id="profile-password" placeholder=" " autocomplete="new-password">
+                    <input type="password" id="profile-password" placeholder=" " autocomplete="new-password" minlength="8">
                     <label data-i18n="label_new_password">New Password</label>
-                    <span class="eye-toggle-pwd" style="position:absolute; right:15px; top:50%; transform:translateY(-50%); cursor:pointer; color:var(--text-muted);">
+                    <span class="eye-toggle-pwd" data-target="profile-password" style="position:absolute; right:15px; top:50%; transform:translateY(-50%); cursor:pointer; color:var(--text-muted);">
                         <ion-icon name="eye-off-outline"></ion-icon>
                     </span>
                 </div>
-                <div style="color: var(--text-muted); font-size: 13px; line-height: 1.5; margin-bottom: 10px;" data-i18n="password_desc">Enter a new password to secure your account.</div>
-                <button type="submit" class="ready-btn">
-                    <ion-icon name="shield-checkmark-outline" style="margin-right:6px;"></ion-icon> <span data-i18n="btn_update_password">Update Password</span>
+
+                <!-- v2.1: 密碼強度提示條 -->
+                <div id="password-strength-wrap" class="hidden" style="margin-top: -8px;">
+                    <div class="password-strength-bar">
+                        <div id="password-strength-fill" class="password-strength-fill" style="width: 0%;"></div>
+                    </div>
+                    <span id="password-strength-text" class="password-strength-text" data-i18n="password_strength_weak">弱</span>
+                </div>
+
+                <!-- v2.1: 確認新密碼 -->
+                <div class="input login-eye">
+                    <input type="password" id="profile-password-confirm" placeholder=" " autocomplete="new-password" minlength="8">
+                    <label data-i18n="label_confirm_password">確認新密碼</label>
+                    <span class="eye-toggle-pwd" data-target="profile-password-confirm" style="position:absolute; right:15px; top:50%; transform:translateY(-50%); cursor:pointer; color:var(--text-muted);">
+                        <ion-icon name="eye-off-outline"></ion-icon>
+                    </span>
+                </div>
+                <p id="password-mismatch-hint" class="hidden" style="color: #ef4444; font-size: 12px; margin: -8px 0 0;" data-i18n="password_mismatch">
+                    ⚠ 兩次輸入的密碼不一致
+                </p>
+
+                <div style="color: var(--text-muted); font-size: 13px; line-height: 1.5;" data-i18n="password_desc">
+                    請輸入新密碼以保護您的帳號。建議至少 8 字元並混合字母、數字與符號。
+                </div>
+                <button type="submit" class="ready-btn" id="password-submit-btn" disabled>
+                    <ion-icon name="shield-checkmark-outline" style="margin-right:6px;"></ion-icon>
+                    <span data-i18n="btn_update_password">變更密碼</span>
                 </button>
             </form>
 

@@ -246,7 +246,16 @@ const TRANSLATIONS = {
         label_lifetime_tokens: "歷史累計用量",
         label_reset_date: "下次重置",
         btn_update_profile: "儲存變更",
-        profile_desc: "💡 此處變更會即時套用至帳號。要變更密碼請使用上方選單的「變更密碼」。"
+        profile_desc: "💡 此處變更會即時套用至帳號。要變更密碼請使用上方選單的「變更密碼」。",
+        // v2.1 Password Modal 加強
+        label_confirm_password: "確認新密碼",
+        password_mismatch: "⚠ 兩次輸入的密碼不一致",
+        password_too_short: "密碼長度需至少 8 字元",
+        password_mismatch_toast: "兩次輸入的密碼不一致，請重新確認",
+        password_strength_weak: "弱",
+        password_strength_medium: "中",
+        password_strength_strong: "強",
+        password_strength_vstrong: "極強"
     },
     en: {
         login_title: "System Login",
@@ -482,7 +491,16 @@ const TRANSLATIONS = {
         label_lifetime_tokens: "Lifetime Tokens",
         label_reset_date: "Next Reset",
         btn_update_profile: "Save Changes",
-        profile_desc: "💡 Changes apply immediately. To change password, use the 'Change Password' option in the menu."
+        profile_desc: "💡 Changes apply immediately. To change password, use the 'Change Password' option in the menu.",
+        // v2.1 Password Modal enhancements
+        label_confirm_password: "Confirm New Password",
+        password_mismatch: "⚠ Passwords do not match",
+        password_too_short: "Password must be at least 8 characters",
+        password_mismatch_toast: "Passwords do not match, please retype",
+        password_strength_weak: "Weak",
+        password_strength_medium: "Medium",
+        password_strength_strong: "Strong",
+        password_strength_vstrong: "Very Strong"
     }
 };
 
@@ -2247,14 +2265,28 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
+    // v2.1: Password Modal 加強 — 強度提示 + 確認密碼 + eye toggle
+    setupPasswordModalEnhancements();
+
     // 也讓 #password-change-form (modal 內 form) 真正可送出
     // 過去這個 form 沒 submit handler → 送出後 page reload。修為呼叫 PUT /me
     const modalForm = document.getElementById('password-change-form');
     if (modalForm) {
         modalForm.addEventListener('submit', async (e) => {
             e.preventDefault();
-            const newPwd = document.getElementById('profile-password').value.trim();
-            if (!newPwd) return;
+            const newPwd = document.getElementById('profile-password').value;
+            const confirmPwd = document.getElementById('profile-password-confirm').value;
+
+            // v2.1: 前端二次驗證
+            if (newPwd.length < 8) {
+                showToast('password_too_short', true);
+                return;
+            }
+            if (newPwd !== confirmPwd) {
+                showToast('password_mismatch_toast', true);
+                return;
+            }
+
             try {
                 const res = await fetch(`${API_BASE}/auth/me`, {
                     method: 'PUT',
@@ -2267,7 +2299,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (!res.ok) {
                     const err = await res.json().catch(() => ({}));
                     if (res.status === 400 && /sso/i.test(err.detail || '')) {
-                        // 後端拒絕 SSO 使用者改密碼（v2.1 update_user 防線）
                         showToast('toast_sso_password_blocked', true);
                     } else {
                         throw new Error(err.detail || 'Update failed');
@@ -2275,7 +2306,10 @@ document.addEventListener('DOMContentLoaded', () => {
                     return;
                 }
                 showToast('toast_auth_ok');
+                // 清空所有欄位
                 document.getElementById('profile-password').value = '';
+                document.getElementById('profile-password-confirm').value = '';
+                resetPasswordStrength();
                 document.getElementById('password-modal').classList.add('hidden');
             } catch (err) {
                 console.error(err);
@@ -2408,3 +2442,106 @@ async function renderProfileInfo() {
 
 window.refreshCurrentUserData = refreshCurrentUserData;
 window.renderProfileInfo = renderProfileInfo;
+
+
+// ==============================================================================
+// v2.1 Password Modal 加強 — 強度提示 / 確認密碼 / eye-toggle
+// ==============================================================================
+
+/**
+ * 計算密碼強度 (0-4)：
+ *   0 = 空 / < 8 字元
+ *   1 = weak    (基本長度)
+ *   2 = medium  (加字母+數字)
+ *   3 = strong  (加特殊符號)
+ *   4 = vstrong (≥ 12 字元 + 全部類型)
+ */
+function calcPasswordStrength(pwd) {
+    if (!pwd || pwd.length < 8) return 0;
+    let score = 1;
+    const hasLower = /[a-z]/.test(pwd);
+    const hasUpper = /[A-Z]/.test(pwd);
+    const hasDigit = /\d/.test(pwd);
+    const hasSymbol = /[^a-zA-Z0-9]/.test(pwd);
+    const types = [hasLower, hasUpper, hasDigit, hasSymbol].filter(Boolean).length;
+    if (types >= 2) score = 2;
+    if (types >= 3) score = 3;
+    if (types >= 3 && pwd.length >= 12) score = 4;
+    return score;
+}
+
+function resetPasswordStrength() {
+    const wrap = document.getElementById('password-strength-wrap');
+    const fill = document.getElementById('password-strength-fill');
+    const text = document.getElementById('password-strength-text');
+    const mismatch = document.getElementById('password-mismatch-hint');
+    if (wrap) wrap.classList.add('hidden');
+    if (fill) { fill.style.width = '0%'; fill.className = 'password-strength-fill'; }
+    if (text) { text.textContent = ''; text.removeAttribute('data-level'); }
+    if (mismatch) mismatch.classList.add('hidden');
+    const submitBtn = document.getElementById('password-submit-btn');
+    if (submitBtn) submitBtn.disabled = true;
+}
+
+function setupPasswordModalEnhancements() {
+    const newPwd = document.getElementById('profile-password');
+    const confirmPwd = document.getElementById('profile-password-confirm');
+    const wrap = document.getElementById('password-strength-wrap');
+    const fill = document.getElementById('password-strength-fill');
+    const text = document.getElementById('password-strength-text');
+    const mismatch = document.getElementById('password-mismatch-hint');
+    const submitBtn = document.getElementById('password-submit-btn');
+    if (!newPwd || !confirmPwd) return;  // SSO 模式無此欄位
+
+    const STRENGTH_LABEL = {
+        zh: ['', '弱 Weak', '中 Medium', '強 Strong', '極強 Very Strong'],
+        en: ['', 'Weak', 'Medium', 'Strong', 'Very Strong'],
+    };
+    const STRENGTH_CLASS = ['', 'weak', 'medium', 'strong', 'vstrong'];
+
+    function refresh() {
+        const v = newPwd.value;
+        const score = calcPasswordStrength(v);
+        if (v.length === 0) {
+            wrap.classList.add('hidden');
+        } else {
+            wrap.classList.remove('hidden');
+            const lang = currentLang || 'zh';
+            fill.style.width = (score * 25) + '%';
+            fill.className = 'password-strength-fill ' + STRENGTH_CLASS[score];
+            text.textContent = STRENGTH_LABEL[lang][score] || STRENGTH_LABEL.zh[score];
+            text.setAttribute('data-level', STRENGTH_CLASS[score] || 'weak');
+        }
+        // 比對 confirm
+        const matches = confirmPwd.value.length > 0 && newPwd.value === confirmPwd.value;
+        const showMismatch = confirmPwd.value.length > 0 && !matches;
+        if (mismatch) mismatch.classList.toggle('hidden', !showMismatch);
+
+        // 可送出條件: 兩個都填、相符、score ≥ 1
+        if (submitBtn) {
+            submitBtn.disabled = !(score >= 1 && matches);
+        }
+    }
+
+    newPwd.addEventListener('input', refresh);
+    confirmPwd.addEventListener('input', refresh);
+
+    // 眼睛 toggle 顯示/隱藏密碼
+    document.querySelectorAll('.eye-toggle-pwd[data-target]').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const target = document.getElementById(btn.getAttribute('data-target'));
+            if (!target) return;
+            const icon = btn.querySelector('ion-icon');
+            if (target.type === 'password') {
+                target.type = 'text';
+                if (icon) icon.setAttribute('name', 'eye-outline');
+            } else {
+                target.type = 'password';
+                if (icon) icon.setAttribute('name', 'eye-off-outline');
+            }
+        });
+    });
+}
+
+window.calcPasswordStrength = calcPasswordStrength;
+window.resetPasswordStrength = resetPasswordStrength;
