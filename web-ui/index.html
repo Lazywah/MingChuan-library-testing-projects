@@ -206,10 +206,19 @@
                 </ul>
             </div>
         </div>
-        <!-- ZH: 底部資訊按鈕 | EN: Bottom info button -->
+        <!-- ZH: 底部資訊按鈕 + 快速主題/語言切換 (v2.1)
+             EN: Bottom info button + quick theme/lang toggles (v2.1) -->
         <div class="drawer-footer">
             <button class="drawer-info-btn" id="nav-quick-tutorial" title="Quick Tutorial">
                 <ion-icon name="information-circle-outline"></ion-icon>
+            </button>
+            <!-- v2.1: sidebar 底部快速切換主題 -->
+            <button class="drawer-info-btn toggle-theme-btn" data-i18n-title="tooltip_toggle_theme" title="切換主題">
+                <ion-icon name="moon-outline"></ion-icon>
+            </button>
+            <!-- v2.1: sidebar 底部快速切換語言 -->
+            <button class="drawer-info-btn toggle-lang-btn" data-i18n-title="tooltip_toggle_lang" title="切換語言">
+                <ion-icon name="language-outline"></ion-icon>
             </button>
         </div>
     </div>
@@ -620,6 +629,10 @@
                                 <p data-i18n="lab_tip_3">
                                     💡 共用模型快取在 <code>/opt/models</code>（read-only），自己的 pip 套件用 <code>pip install --user</code> 安裝到 <code>~/.local/</code> 永久保留。
                                 </p>
+                                <p data-i18n="lab_tip_secrets">
+                                    🔐 <strong>需要 API 金鑰嗎？</strong>到「設定 → Secrets 管理」新增（例：<code>HF_TOKEN</code>、<code>OPENAI_API_KEY</code>），啟動 Lab / 送 GPU 任務時會自動以環境變數注入容器。
+                                    <a href="#" id="lab-jump-to-secrets" style="color:var(--neon-cyan); text-decoration:underline; margin-left:4px;" data-i18n="lab_tip_secrets_link">前往設定</a>
+                                </p>
                             </div>
                         </div>
 
@@ -937,8 +950,14 @@
                             </h3>
                         </div>
                         <p data-i18n="secrets_desc" style="margin: 0 0 12px; color: var(--text-muted); font-size: 13px; line-height: 1.5;">
-                            在這裡新增 API key 等敏感資訊（HF_TOKEN、WANDB_API_KEY 等），提交 GPU 任務時自動注入到容器環境變數。
+                            在這裡新增 API key 等敏感資訊（HF_TOKEN、WANDB_API_KEY、OPENAI_API_KEY 等），啟動 Lab 或提交 GPU 任務時會自動以「環境變數」注入容器，程式可用 <code>os.environ["KEY_NAME"]</code> 讀取。
                         </p>
+                        <details style="margin: 0 0 12px; color: var(--text-muted); font-size: 12px;">
+                            <summary style="cursor:pointer;" data-i18n="secrets_help_summary">什麼是環境變數？為什麼這樣設計？</summary>
+                            <div style="padding: 8px 12px; background: var(--bg-soft); border-radius: 8px; margin-top: 6px; line-height: 1.6;" data-i18n="secrets_help_body">
+                                環境變數是程式啟動時從作業系統環境讀的「鍵 = 值」對。把金鑰寫死在程式碼會被誤 commit 到 git 外洩，所以業界做法是統一存在 Secrets 機制中、執行時注入。可以類比 Chrome 密碼管理員 — 程式不用知道密碼，只在需要時自動填入。本平台用 AES-256-GCM 加密儲存，僅在 Lab 容器啟動 / GPU 任務執行時解密注入。
+                            </div>
+                        </details>
                         <div id="secrets-list" class="secrets-list">
                             <div class="secret-item" style="justify-content: center; color: var(--text-muted);" data-i18n="secrets_empty">尚未設定任何 secret</div>
                         </div>
@@ -1079,32 +1098,9 @@
                 </dl>
             </section>
 
-            <!-- ── 區塊 4：可變更資訊（form） ── -->
-            <section class="profile-section">
-                <h3 class="profile-section-title">
-                    <ion-icon name="create-outline"></ion-icon>
-                    <span data-i18n="profile_editable">變更個人資訊</span>
-                </h3>
-                <form id="profile-update-form" style="display: flex; flex-direction: column; gap: 15px;">
-                    <div class="input">
-                        <input type="email" id="profile-email" placeholder=" " autocomplete="email">
-                        <label data-i18n="label_email">電子郵件</label>
-                        <ion-icon name="mail-outline"></ion-icon>
-                    </div>
-                    <div class="input">
-                        <input type="text" id="profile-department-edit" placeholder=" ">
-                        <label data-i18n="label_department">學系</label>
-                        <ion-icon name="school-outline"></ion-icon>
-                    </div>
-                    <div style="color: var(--text-muted); font-size: 12px; line-height: 1.5;" data-i18n="profile_desc">
-                        💡 此處變更會即時套用至帳號。要變更密碼請使用上方選單的「變更密碼」。
-                    </div>
-                    <button type="submit" class="ready-btn">
-                        <ion-icon name="save-outline" style="margin-right:6px;"></ion-icon>
-                        <span data-i18n="btn_update_profile">儲存變更</span>
-                    </button>
-                </form>
-            </section>
+            <!-- ZH: v2.1 修正 — 移除「變更個人資訊」區塊
+                 個人資訊應由管理者或學校 SSO 端進行變更，user UI 不提供自助修改入口
+                 EN: v2.1 fix — removed self-edit section; profile changes must go through admin or school SSO -->
         </div>
     </div>
 
