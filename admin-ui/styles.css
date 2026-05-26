@@ -42,12 +42,14 @@
 body {
     background: var(--bg-universe);
     color: var(--text-primary);
-    height: 100vh;
+    /* v2.1 UX: body 改為可滾動以讓「整個頁面」滾輪生效 */
+    min-height: 100vh;
     width: 100vw;
     display: flex;
-    justify-content: center;
-    align-items: center;
-    overflow: hidden;
+    flex-direction: column;
+    align-items: stretch;
+    overflow-y: auto;
+    overflow-x: hidden;
     transition: background 0.6s ease, color 0.6s ease;
 }
 
@@ -1436,6 +1438,41 @@ ion-icon {
     overflow-y: auto;
 }
 
+/* v2.1: 使用者管理依 auth_source 分頁的 tab bar */
+.user-source-tab {
+    background: transparent;
+    border: none;
+    border-bottom: 2px solid transparent;
+    color: var(--text-muted);
+    padding: 8px 14px;
+    font-size: 13px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    transition: color 0.2s, border-color 0.2s;
+}
+.user-source-tab:hover {
+    color: var(--text-primary);
+}
+.user-source-tab.active {
+    color: var(--neon-cyan);
+    border-bottom-color: var(--neon-cyan);
+}
+.user-source-count {
+    display: inline-block;
+    min-width: 20px;
+    padding: 1px 6px;
+    border-radius: 10px;
+    background: rgba(127, 127, 127, 0.15);
+    font-size: 11px;
+    color: var(--text-muted);
+}
+.user-source-tab.active .user-source-count {
+    background: rgba(34, 211, 238, 0.18);
+    color: var(--neon-cyan);
+}
+
 .admin-table {
     width: 100%;
     border-collapse: collapse;
@@ -2220,6 +2257,99 @@ ion-icon {
     background: rgba(255,255,255,0.1);
     color: var(--text-muted);
     margin-left: 4px;
+}
+
+/* ====================================================================
+   v2.1: 統一 RWD 補強 — 任務監控 / 儀表板 / 審計頁的小螢幕擠壓修正
+   ==================================================================== */
+
+/* 表格容器在小螢幕一律改為橫向 scroll，避免硬擠斷版 */
+.admin-table-wrap {
+    overflow-x: auto;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+}
+.admin-table-wrap::-webkit-scrollbar {
+    height: 6px;
+}
+.admin-table {
+    /* 給表格一個下限寬度，配合容器的橫向 scroll */
+    min-width: 720px;
+}
+
+/* 字型用 clamp() 隨寬度微縮，避免在 768px 看起來太大 */
+@media (max-width: 1024px) {
+    .admin-table th,
+    .admin-table td {
+        font-size: clamp(11px, 1.1vw, 13px);
+        padding: 8px 10px;
+    }
+    .admin-table th {
+        white-space: nowrap;
+    }
+    .widget-header h3 {
+        font-size: clamp(14px, 1.6vw, 17px);
+    }
+    .admin-layout {
+        padding: 14px;
+    }
+}
+
+/* 平板/大手機（768px 以下）— layout 改 single-column */
+@media (max-width: 768px) {
+    .admin-layout {
+        padding: 10px;
+        max-width: 100%;
+    }
+    .admin-nav {
+        flex-direction: column;
+        gap: 10px;
+        padding: 12px 14px;
+        position: static;
+    }
+    /* 儀表板 / 任務 / 審計多欄 grid → 改 single column */
+    .widget[style*="grid-column"] {
+        grid-column: 1 / -1 !important;
+    }
+    /* widget header 內元素若太擠，改為換行 */
+    .widget-header.split {
+        flex-wrap: wrap;
+        gap: 8px;
+    }
+    /* batch token / search bar input 在小螢幕佔滿寬度 */
+    .config-select,
+    #admin-user-search,
+    #batch-token-limit {
+        width: 100% !important;
+        min-width: 0 !important;
+    }
+    /* 3-tab bar 在小螢幕字級縮小 */
+    .user-source-tab {
+        font-size: 11px;
+        padding: 6px 10px;
+    }
+    /* 表格內可選擇隱藏次要欄位（保留主要欄位） */
+    .admin-table .col-secondary {
+        display: none;
+    }
+    /* button 群在小螢幕也換行 */
+    .admin-table td:last-child {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 4px;
+    }
+}
+
+/* 超小螢幕（手機直向 480px 以下） */
+@media (max-width: 480px) {
+    .admin-table th,
+    .admin-table td {
+        font-size: 10.5px;
+        padding: 6px 8px;
+    }
+    .admin-nav h2 {
+        font-size: 15px;
+    }
 }
 
 .admin-job-tab.active .tab-count {

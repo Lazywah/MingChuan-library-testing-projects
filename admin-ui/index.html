@@ -203,6 +203,21 @@
                         <ion-icon name="refresh-circle-outline" id="refresh-admin-btn" class="refresh-icon" title="Refresh"></ion-icon>
                     </div>
                 </div>
+                <!-- v2.1: 依 auth_source 分頁的 tab bar -->
+                <div class="admin-user-tabs" style="display:flex; gap:6px; padding: 8px 15px 0; border-bottom: 1px solid var(--border-color);">
+                    <button class="user-source-tab active" data-source="local">
+                        <span data-i18n="auth_tab_local">本機帳號</span>
+                        <span class="user-source-count" id="user-source-count-local">0</span>
+                    </button>
+                    <button class="user-source-tab" data-source="sso_oidc">
+                        <span data-i18n="auth_tab_oidc">學校 SSO</span>
+                        <span class="user-source-count" id="user-source-count-sso_oidc">0</span>
+                    </button>
+                    <button class="user-source-tab" data-source="sso_mock">
+                        <span data-i18n="auth_tab_mock">Mock SSO</span>
+                        <span class="user-source-count" id="user-source-count-sso_mock">0</span>
+                    </button>
+                </div>
                 <div class="admin-table-wrap scrollbar-custom">
                     <table class="admin-table" id="admin-users-table">
                         <thead>

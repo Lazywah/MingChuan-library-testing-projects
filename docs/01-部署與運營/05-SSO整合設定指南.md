@@ -353,6 +353,47 @@ state 預設 10 分鐘有效，超過會自動失敗。
 
 ---
 
+## 常見疑問 FAQ（v2.1 新增）
+
+### Q1：如果我在 `sso_policy.yaml` 改 mock user 資訊，使用者管理頁的資料會跟著變嗎？
+
+**不會直接變更既有使用者資料，只影響「未來」首次 SSO 登入的人**。
+
+詳細邏輯：
+
+1. `sso_policy.yaml` 的 `mock.users` 是「允許用 mock SSO 登入的測試帳號清單」
+2. 當該帳號**第一次**用 mock SSO 登入時，後端會用 yaml 提供的資訊（name/email/role）建一筆 DB 使用者（`auth_source="sso_mock"`）
+3. 該使用者**第二次以後**登入，資料都從 DB 讀，不再看 yaml
+4. 在 yaml 改 name / email / role → 對既有 DB 使用者**沒影響**
+
+### Q2：如果我從 yaml 移除某個 mock user，使用者管理頁還會顯示嗎？
+
+**不會（v2.1 行為）**。
+
+- 管理頁的 `/admin/users` 端點會比對 yaml 內目前還有效的 `student_id` 集合
+- 若 DB 內某 `sso_mock` 使用者已不在 yaml → 從列表隱藏（DB row 仍保留，避免破壞聊天歷史 / 任務 FK）
+- 若想徹底刪除該帳號，請從管理介面用 `刪除` 操作（需驗 admin 密碼）
+
+### Q3：使用者管理頁為什麼分成 3 個 tab？
+
+依登入來源分類：
+
+| Tab | `auth_source` | 包含對象 |
+|-----|---------------|---------|
+| **本機帳號** | `local` | admin + 透過「Provision」手動配發的學生 |
+| **學校 SSO** | `sso_oidc` | 用學校 Microsoft 帳號（OIDC）登入過的學生 / 老師 |
+| **Mock SSO** | `sso_mock` | dev 環境測試用（含 yaml filter） |
+
+切 tab 會 refetch 對應分類，每個 tab 上方顯示該分類的使用者數。
+
+### Q4：admin 為什麼有時候「線上狀態」顯示「—」？
+
+`—` 代表「不適用」，會發生在 **admin 從未登入過 user UI**（`last_login_time` 為 `null`）。
+
+理由：admin 本來就應該走 admin UI（port 8888），如果他從未登入過 user UI，「線上 / 離線」對他來說沒有意義。等他真的用 user UI 登入過（即使後來離線），線上狀態就會正常顯示 `0 / 1`。
+
+---
+
 ## 進階：未來升級項目（v2.2+）
 
 | 項目 | 動機 |

@@ -337,6 +337,8 @@ class AdminUserListItem(BaseModel):
     created_at: Optional[datetime] = None
     tokens_used: int = 0
     tokens_limit: int = 0
+    # v2.1: 給 admin UI 的 3-tab 分頁 (local / sso_oidc / sso_mock) 用
+    auth_source: str = "local"
 
 
 class AdminJobListItem(BaseModel):
