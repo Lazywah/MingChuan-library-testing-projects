@@ -999,23 +999,112 @@
     </div>
 
     <!-- ZH: 個人資訊浮動面板 | EN: Profile Modal -->
+    <!-- v2.1 升級：從單一 email 表單擴充為「我的帳號資訊」豐富版 -->
     <div id="profile-modal" class="tutorial-modal hidden">
         <div class="tutorial-backdrop" id="profile-backdrop"></div>
-        <div class="tutorial-content form-box-panel" style="max-width: 400px; width: 90%;">
+        <div class="tutorial-content form-box-panel" style="max-width: 540px; width: 92%; max-height: 90vh; overflow-y: auto;">
             <button class="tutorial-close" id="profile-close-btn"><ion-icon name="close-outline"></ion-icon></button>
-            <h2 style="margin-bottom: 20px;"><ion-icon name="person-circle-outline" style="margin-right:8px;"></ion-icon> <span data-i18n="settings_profile">User Profile</span></h2>
-            
-            <form id="profile-update-form" style="display: flex; flex-direction: column; gap: 15px;">
-                <div class="input">
-                    <input type="email" id="profile-email" placeholder=" " autocomplete="email">
-                    <label data-i18n="label_email">Email Address</label>
-                    <ion-icon name="mail-outline"></ion-icon>
+            <h2 style="margin-bottom: 20px;">
+                <ion-icon name="person-circle-outline" style="margin-right:8px;"></ion-icon>
+                <span data-i18n="settings_profile">我的帳號資訊</span>
+            </h2>
+
+            <!-- ── 區塊 1：基本資訊（read-only） ── -->
+            <section class="profile-section">
+                <h3 class="profile-section-title">
+                    <ion-icon name="id-card-outline"></ion-icon>
+                    <span data-i18n="profile_basic">基本資訊</span>
+                </h3>
+                <dl class="profile-info-grid">
+                    <dt data-i18n="label_username">使用者名稱</dt>
+                    <dd id="profile-info-username">—</dd>
+
+                    <dt data-i18n="label_email">電子郵件</dt>
+                    <dd id="profile-info-email">—</dd>
+
+                    <dt data-i18n="label_role">角色</dt>
+                    <dd><span id="profile-info-role" class="profile-badge">—</span></dd>
+
+                    <dt data-i18n="label_department">學系</dt>
+                    <dd id="profile-info-department">—</dd>
+                </dl>
+            </section>
+
+            <!-- ── 區塊 2：認證資訊（read-only） ── -->
+            <section class="profile-section">
+                <h3 class="profile-section-title">
+                    <ion-icon name="shield-checkmark-outline"></ion-icon>
+                    <span data-i18n="profile_auth">認證與登入</span>
+                </h3>
+                <dl class="profile-info-grid">
+                    <dt data-i18n="label_auth_source">認證來源</dt>
+                    <dd><span id="profile-info-auth-source" class="profile-badge profile-badge-auth">—</span></dd>
+
+                    <dt data-i18n="label_last_login">最後登入</dt>
+                    <dd id="profile-info-last-login">—</dd>
+
+                    <dt data-i18n="label_last_ip">登入 IP</dt>
+                    <dd id="profile-info-last-ip">—</dd>
+
+                    <dt data-i18n="label_login_count">累計登入次數</dt>
+                    <dd id="profile-info-login-count">—</dd>
+
+                    <dt data-i18n="label_created_at">帳號建立</dt>
+                    <dd id="profile-info-created-at">—</dd>
+                </dl>
+            </section>
+
+            <!-- ── 區塊 3：Token 用量（read-only，從 /api/v1/auth/usage 拿） ── -->
+            <section class="profile-section">
+                <h3 class="profile-section-title">
+                    <ion-icon name="speedometer-outline"></ion-icon>
+                    <span data-i18n="profile_usage">Token 用量</span>
+                </h3>
+                <div class="profile-usage-bar-wrap">
+                    <div class="profile-usage-bar">
+                        <div id="profile-usage-fill" class="profile-usage-fill" style="width: 0%;"></div>
+                    </div>
+                    <div class="profile-usage-text">
+                        <span id="profile-usage-used">0</span> /
+                        <span id="profile-usage-limit">0</span>
+                        <span style="color: var(--text-muted);">(<span id="profile-usage-pct">0%</span>)</span>
+                    </div>
                 </div>
-                <div style="color: var(--text-muted); font-size: 13px; line-height: 1.5; margin-bottom: 10px;" data-i18n="profile_desc">Update your email address here.</div>
-                <button type="submit" class="ready-btn">
-                    <ion-icon name="save-outline" style="margin-right:6px;"></ion-icon> <span data-i18n="btn_update_profile">Update Data</span>
-                </button>
-            </form>
+                <dl class="profile-info-grid">
+                    <dt data-i18n="label_lifetime_tokens">歷史累計用量</dt>
+                    <dd id="profile-info-lifetime">—</dd>
+
+                    <dt data-i18n="label_reset_date">下次重置</dt>
+                    <dd id="profile-info-reset-date">—</dd>
+                </dl>
+            </section>
+
+            <!-- ── 區塊 4：可變更資訊（form） ── -->
+            <section class="profile-section">
+                <h3 class="profile-section-title">
+                    <ion-icon name="create-outline"></ion-icon>
+                    <span data-i18n="profile_editable">變更個人資訊</span>
+                </h3>
+                <form id="profile-update-form" style="display: flex; flex-direction: column; gap: 15px;">
+                    <div class="input">
+                        <input type="email" id="profile-email" placeholder=" " autocomplete="email">
+                        <label data-i18n="label_email">電子郵件</label>
+                        <ion-icon name="mail-outline"></ion-icon>
+                    </div>
+                    <div class="input">
+                        <input type="text" id="profile-department-edit" placeholder=" ">
+                        <label data-i18n="label_department">學系</label>
+                        <ion-icon name="school-outline"></ion-icon>
+                    </div>
+                    <div style="color: var(--text-muted); font-size: 12px; line-height: 1.5;" data-i18n="profile_desc">
+                        💡 此處變更會即時套用至帳號。要變更密碼請使用上方選單的「變更密碼」。
+                    </div>
+                    <button type="submit" class="ready-btn">
+                        <ion-icon name="save-outline" style="margin-right:6px;"></ion-icon>
+                        <span data-i18n="btn_update_profile">儲存變更</span>
+                    </button>
+                </form>
+            </section>
         </div>
     </div>
 

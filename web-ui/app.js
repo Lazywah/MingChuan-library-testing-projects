@@ -229,7 +229,24 @@ const TRANSLATIONS = {
         password_sso_forgot: "忘記密碼？點此重設",
         password_sso_why: "為什麼不能在這裡改？",
         password_sso_why_explain: "學校採用單一登入 (SSO) 機制，您的密碼存在學校的 Microsoft 系統，本平台從未拿到您的密碼。這是業界標準的安全設計（Slack / Notion / Figma 等使用 SSO 的服務都是如此）。",
-        toast_sso_password_blocked: "SSO 使用者無法在此變更密碼，請至 IdP 系統變更"
+        toast_sso_password_blocked: "SSO 使用者無法在此變更密碼，請至 IdP 系統變更",
+        // v2.1 Profile Modal 豐富資訊版
+        settings_profile: "我的帳號資訊",
+        profile_basic: "基本資訊",
+        profile_auth: "認證與登入",
+        profile_usage: "Token 用量",
+        profile_editable: "變更個人資訊",
+        label_role: "角色",
+        label_department: "學系",
+        label_auth_source: "認證來源",
+        label_last_login: "最後登入",
+        label_last_ip: "登入 IP",
+        label_login_count: "累計登入次數",
+        label_created_at: "帳號建立",
+        label_lifetime_tokens: "歷史累計用量",
+        label_reset_date: "下次重置",
+        btn_update_profile: "儲存變更",
+        profile_desc: "💡 此處變更會即時套用至帳號。要變更密碼請使用上方選單的「變更密碼」。"
     },
     en: {
         login_title: "System Login",
@@ -448,7 +465,24 @@ const TRANSLATIONS = {
         password_sso_forgot: "Forgot password? Reset here",
         password_sso_why: "Why can't I change it here?",
         password_sso_why_explain: "The school uses Single Sign-On (SSO); your password lives at Microsoft and this platform never sees it. This is the industry-standard design (Slack / Notion / Figma all do the same).",
-        toast_sso_password_blocked: "SSO users cannot change password here — please use the IdP"
+        toast_sso_password_blocked: "SSO users cannot change password here — please use the IdP",
+        // v2.1 Profile Modal rich info
+        settings_profile: "My Account",
+        profile_basic: "Basic Info",
+        profile_auth: "Authentication",
+        profile_usage: "Token Usage",
+        profile_editable: "Edit Profile",
+        label_role: "Role",
+        label_department: "Department",
+        label_auth_source: "Auth Source",
+        label_last_login: "Last Login",
+        label_last_ip: "Last IP",
+        label_login_count: "Login Count",
+        label_created_at: "Account Created",
+        label_lifetime_tokens: "Lifetime Tokens",
+        label_reset_date: "Next Reset",
+        btn_update_profile: "Save Changes",
+        profile_desc: "💡 Changes apply immediately. To change password, use the 'Change Password' option in the menu."
     }
 };
 
@@ -608,9 +642,12 @@ document.addEventListener('DOMContentLoaded', () => {
     const navProfileBtn = document.getElementById('nav-profile-btn');
     const profileModal = document.getElementById('profile-modal');
     if (navProfileBtn && profileModal) {
-        navProfileBtn.addEventListener('click', () => {
+        navProfileBtn.addEventListener('click', async () => {
             profileModal.classList.remove('hidden');
             if (userDropdownMenu) userDropdownMenu.style.display = 'none';
+            // v2.1: 開啟時 fetch 最新資料並渲染豐富版資訊
+            await refreshCurrentUserData();
+            renderProfileInfo();
         });
         document.getElementById('profile-close-btn').addEventListener('click', () => profileModal.classList.add('hidden'));
         document.getElementById('profile-backdrop').addEventListener('click', () => profileModal.classList.add('hidden'));
@@ -1340,15 +1377,16 @@ async function handleDatasetUpload(e, type) {
 async function handleProfileUpdate(e) {
     e.preventDefault();
     const emailVal = document.getElementById('profile-email').value.trim();
-    const passVal = document.getElementById('profile-password').value.trim();
+    const deptEl = document.getElementById('profile-department-edit');
+    const deptVal = deptEl ? deptEl.value.trim() : '';
     const submitBtn = e.target.querySelector('button[type="submit"]');
 
     const updateData = {};
     if (emailVal) updateData.email = emailVal;
-    if (passVal) updateData.password = passVal;
+    if (deptVal) updateData.department = deptVal;
+    // v2.1: 密碼變更已移至獨立 password-modal，此 form 不再帶 password
 
     if (Object.keys(updateData).length === 0) {
-        // Nothing to update
         showToast('toast_auth_fail', true);
         return;
     }
@@ -1357,7 +1395,7 @@ async function handleProfileUpdate(e) {
     try {
         const res = await fetch(`${API_BASE}/auth/me`, {
             method: 'PUT',
-            headers: { 
+            headers: {
                 'Authorization': `Bearer ${authToken}`,
                 'Content-Type': 'application/json'
             },
@@ -1365,7 +1403,10 @@ async function handleProfileUpdate(e) {
         });
         if (!res.ok) throw new Error('Update failed');
         showToast('toast_auth_ok');
-        document.getElementById('profile-password').value = '';
+        // 重新拉一次 /me 更新 currentUserData，下次開 modal 顯示新值
+        await refreshCurrentUserData();
+        // 同時刷新顯示
+        renderProfileInfo();
     } catch (err) {
         console.error(err);
         showToast('toast_auth_fail', true);
@@ -2243,3 +2284,127 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 });
+
+
+// ==============================================================================
+// v2.1 Profile Modal 豐富資訊版 — refresh + render helpers
+// ==============================================================================
+
+const AUTH_SOURCE_LABEL = {
+    local:    { zh: '本機帳號',           en: 'Local',              hint: '可在本系統變更密碼' },
+    sso_mock: { zh: 'Mock SSO（測試）',   en: 'Mock SSO',           hint: '開發測試帳號' },
+    sso_cas:  { zh: 'CAS（學校 SSO）',     en: 'CAS',                hint: '密碼請至學校 CAS 變更' },
+    sso_oidc: { zh: 'Microsoft Entra ID', en: 'Microsoft Entra ID', hint: '密碼請至 Microsoft 變更' },
+};
+
+const ROLE_LABEL = {
+    student: { zh: '學生',  en: 'Student' },
+    teacher: { zh: '教師',  en: 'Teacher' },
+    admin:   { zh: '管理員', en: 'Admin' },
+};
+
+/** 從 /api/v1/auth/me 重新拉一次當前使用者資料 */
+async function refreshCurrentUserData() {
+    if (!authToken) return;
+    try {
+        const res = await fetch(`${API_BASE}/auth/me`, {
+            headers: { 'Authorization': `Bearer ${authToken}` },
+        });
+        if (res.ok) {
+            window.currentUserData = await res.json();
+        }
+    } catch (e) {
+        console.warn('[Profile] refresh user data failed:', e);
+    }
+}
+
+/** 將時間字串格式化為 "YYYY-MM-DD HH:MM" */
+function formatDateTime(iso) {
+    if (!iso) return '—';
+    try {
+        const d = new Date(iso);
+        const pad = (n) => String(n).padStart(2, '0');
+        return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+    } catch { return iso; }
+}
+
+/** 數字加千分位 */
+function formatNumber(n) {
+    if (n == null || isNaN(n)) return '—';
+    return Number(n).toLocaleString();
+}
+
+/** 渲染 Profile Modal 內容（從 currentUserData + fetch /usage） */
+async function renderProfileInfo() {
+    const u = window.currentUserData;
+    if (!u) return;
+    const lang = currentLang || 'zh';
+
+    // ── 區塊 1: 基本資訊 ──
+    const setText = (id, v) => {
+        const el = document.getElementById(id);
+        if (el) el.textContent = (v == null || v === '') ? '—' : String(v);
+    };
+    setText('profile-info-username', u.username);
+    setText('profile-info-email', u.email);
+    setText('profile-info-department', u.department);
+
+    // Role badge (顯示中/英對應 + data-role 給 CSS 變色)
+    const roleEl = document.getElementById('profile-info-role');
+    if (roleEl) {
+        const r = u.role || 'student';
+        roleEl.textContent = (ROLE_LABEL[r] && ROLE_LABEL[r][lang]) || r;
+        roleEl.setAttribute('data-role', r);
+    }
+
+    // ── 區塊 2: 認證資訊 ──
+    const authEl = document.getElementById('profile-info-auth-source');
+    if (authEl) {
+        const src = u.auth_source || 'local';
+        const meta = AUTH_SOURCE_LABEL[src] || { zh: src, en: src };
+        authEl.textContent = meta[lang] || meta.zh;
+        authEl.title = meta.hint || '';
+    }
+    setText('profile-info-last-login', formatDateTime(u.last_login_time));
+    setText('profile-info-last-ip', u.last_login_ip);
+    setText('profile-info-login-count', formatNumber(u.login_count));
+    setText('profile-info-created-at', formatDateTime(u.created_at));
+
+    // ── 區塊 4: 預填編輯欄位 ──
+    const emailInput = document.getElementById('profile-email');
+    if (emailInput) emailInput.value = u.email || '';
+    const deptInput = document.getElementById('profile-department-edit');
+    if (deptInput) deptInput.value = u.department || '';
+
+    // ── 區塊 3: Token 用量（fetch /usage） ──
+    try {
+        const usageRes = await fetch(`${API_BASE}/auth/usage`, {
+            headers: { 'Authorization': `Bearer ${authToken}` },
+        });
+        if (usageRes.ok) {
+            const usage = await usageRes.json();
+            const used = usage.tokens_used || 0;
+            const limit = usage.tokens_limit || 0;
+            const pct = limit > 0 ? (used / limit * 100) : 0;
+
+            setText('profile-usage-used', formatNumber(used));
+            setText('profile-usage-limit', formatNumber(limit));
+            setText('profile-usage-pct', pct.toFixed(2) + '%');
+            setText('profile-info-lifetime', formatNumber(u.lifetime_tokens_used));
+            setText('profile-info-reset-date', formatDateTime(usage.reset_date));
+
+            const fillEl = document.getElementById('profile-usage-fill');
+            if (fillEl) {
+                fillEl.style.width = Math.min(pct, 100) + '%';
+                fillEl.classList.remove('warning', 'danger');
+                if (pct >= 90) fillEl.classList.add('danger');
+                else if (pct >= 70) fillEl.classList.add('warning');
+            }
+        }
+    } catch (e) {
+        console.warn('[Profile] fetch usage failed:', e);
+    }
+}
+
+window.refreshCurrentUserData = refreshCurrentUserData;
+window.renderProfileInfo = renderProfileInfo;
