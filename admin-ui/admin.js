@@ -7,6 +7,10 @@ const TRANSLATIONS = {
         admin_dashboard: "管理員儀表板",
         admin_cluster_status: "叢集資源即時監控",
         admin_users: "使用者管理",
+        auth_tab_local: "本機帳號",
+        auth_tab_oidc: "學校 SSO",
+        auth_tab_mock: "Mock SSO",
+        label_na: "不適用",
         admin_models: "模型管理",
         btn_add_model: "新增模型",
         btn_edit_model: "編輯",
@@ -188,6 +192,10 @@ const TRANSLATIONS = {
         admin_dashboard: "Admin Dashboard",
         admin_cluster_status: "Cluster Hardware Status",
         admin_users: "User Management",
+        auth_tab_local: "Local Accounts",
+        auth_tab_oidc: "School SSO",
+        auth_tab_mock: "Mock SSO",
+        label_na: "N/A",
         admin_models: "Models",
         btn_add_model: "Add Model",
         btn_edit_model: "Edit",
@@ -887,10 +895,13 @@ function renderClusterStats(stats) {
 // -------------------------
 // Admin Table Fetching
 // -------------------------
+// v2.1: 使用者管理依 auth_source 分 3 個 tab；切 tab 時只 refetch 對應分類
+let _currentAuthSource = 'local';   // 預設顯示本機帳號（admin + provisioned 學生）
+
 async function fetchAdminData() {
     try {
         const [usersRes, jobsRes, modelsRes] = await Promise.all([
-            fetch(`${API_BASE}/admin/users`, { headers: { 'Authorization': `Bearer ${authToken}` } }),
+            fetch(`${API_BASE}/admin/users?auth_source=${encodeURIComponent(_currentAuthSource)}`, { headers: { 'Authorization': `Bearer ${authToken}` } }),
             fetch(`${API_BASE}/admin/jobs`, { headers: { 'Authorization': `Bearer ${authToken}` } }),
             fetch(`${API_BASE}/admin/models`, { headers: { 'Authorization': `Bearer ${authToken}` } })
         ]);
@@ -898,9 +909,28 @@ async function fetchAdminData() {
         if (usersRes.ok) renderAdminUsers(await usersRes.json());
         if (jobsRes.ok) renderAdminJobs(await jobsRes.json());
         if (modelsRes.ok) renderAdminModels(await modelsRes.json());
+
+        // v2.1: 同步更新 3 個 tab 的 badge 計數（額外打 3 個 light request）
+        updateAuthSourceCounts();
     } catch (e) {
         console.error("Failed to fetch admin data", e);
     }
+}
+
+// v2.1: 為 3 個 tab 顯示各自的使用者數
+async function updateAuthSourceCounts() {
+    const sources = ['local', 'sso_oidc', 'sso_mock'];
+    await Promise.all(sources.map(async (src) => {
+        try {
+            const res = await fetch(`${API_BASE}/admin/users?auth_source=${src}&limit=500`, {
+                headers: { 'Authorization': `Bearer ${authToken}` },
+            });
+            if (!res.ok) return;
+            const data = await res.json();
+            const el = document.getElementById(`user-source-count-${src}`);
+            if (el) el.textContent = String((data || []).length);
+        } catch (_) { /* 計數失敗不影響主流程 */ }
+    }));
 }
 
 let _adminUsersCache = [];
@@ -938,13 +968,18 @@ function renderAdminUsers(users) {
                 ? `<span style="color:var(--neon-green)">${activeLabel}</span>`
                 : `<span style="color:var(--neon-pink)">${disabledLabel}</span>`;
 
-            // Online status indicator: red=disabled, green=online, gray=offline
+            // Online status indicator: red=disabled, green=online, gray=offline, dash="N/A"
+            // v2.1 修正：admin 從未登入 user UI → online_status=null → 顯示「—」（不適用）
             const lblOnline   = tl.label_online   || 'Online';
             const lblOffline  = tl.label_offline  || 'Offline';
             const lblDisabled = tl.status_disabled || 'Disabled';
+            const lblNA       = tl.label_na       || 'Not applicable';
             let onlineDot;
             if (!u.is_active) {
                 onlineDot = `<span style="display:inline-block; width:8px; height:8px; border-radius:50%; background:#ef4444; margin-right:6px; box-shadow:0 0 5px #ef4444;" title="${lblDisabled}"></span>`;
+            } else if (u.online_status === null || u.online_status === undefined) {
+                // v2.1: admin 未登入 user UI → 線上狀態不適用
+                onlineDot = `<span style="display:inline-block; width:8px; height:8px; line-height:8px; text-align:center; color:#9ca3af; margin-right:6px; font-size:10px;" title="${lblNA}">—</span>`;
             } else if (u.online_status === 1) {
                 onlineDot = `<span style="display:inline-block; width:8px; height:8px; border-radius:50%; background:#10b981; margin-right:6px; box-shadow:0 0 5px #10b981;" title="${lblOnline}"></span>`;
             } else {
@@ -1853,6 +1888,19 @@ document.addEventListener('DOMContentLoaded', () => {
             renderAdminUsers(); // Re-render with existing cache
         });
     }
+
+    // v2.1: 使用者管理 auth_source tab 切換
+    document.querySelectorAll('.user-source-tab').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const src = btn.getAttribute('data-source');
+            if (!src || src === _currentAuthSource) return;
+            _currentAuthSource = src;
+            // 視覺切換
+            document.querySelectorAll('.user-source-tab').forEach(b => b.classList.toggle('active', b === btn));
+            // 重抓對應分類 + 更新計數
+            fetchAdminData();
+        });
+    });
 
     // Initialize Theme & Lang
     applyTheme(currentTheme);

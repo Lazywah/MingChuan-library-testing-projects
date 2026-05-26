@@ -37,6 +37,7 @@ import logging
 
 from .. import models, schemas, crud
 from ..auth import get_current_user
+from ..config import SSO_POLICY
 from ..database import get_db
 from ..services import email_service
 
@@ -66,8 +67,17 @@ def require_admin(current_user: models.User = Depends(get_current_user)) -> mode
 from datetime import timedelta as _td
 _ONLINE_THRESHOLD = _td(minutes=10)
 
-def _compute_online(user: models.User) -> int:
-    """ZH: 用 last_activity 動態判斷在線 | EN: Compute online from last_activity"""
+def _compute_online(user: models.User) -> Optional[int]:
+    """
+    ZH: 用 last_activity 動態判斷在線
+    EN: Compute online from last_activity
+
+    v2.1 修正：admin 從未登入過 user UI（last_login_time 為 None）→ 回 None，
+    讓 admin UI 顯示「—」而非誤導性的「離線」。
+    admin 一旦登入過 user UI（即使後來離線），仍回 0/1 正常計算。
+    """
+    if user.role == "admin" and user.last_login_time is None:
+        return None
     last = getattr(user, "last_activity", None)
     if not last:
         return 0
@@ -76,42 +86,82 @@ def _compute_online(user: models.User) -> int:
     return 1 if (datetime.now(timezone.utc) - last) < _ONLINE_THRESHOLD else 0
 
 
+def _yaml_mock_usernames() -> set:
+    """
+    ZH: 從 SSO_POLICY 抓出目前 yaml 內所有 mock SSO 帳號的 student_id 集合
+    EN: Set of student_ids currently allowed via mock SSO in yaml
+
+    v2.1: 用於 filter 已從 yaml 移除但 DB 仍有 row 的 sso_mock 使用者
+    (保留 orphan row 不破壞既有聊天歷史 / 任務 FK，僅在列表中隱藏)
+    """
+    try:
+        users = (SSO_POLICY or {}).get("mock", {}).get("users", []) or []
+        return {str(u.get("student_id")) for u in users if u.get("student_id")}
+    except Exception as e:
+        logger.warning(f"_yaml_mock_usernames failed: {e}")
+        return set()
+
+
 @router.get("/users", response_model=list[schemas.AdminUserListItem])
 def get_all_users(
     skip: int = Query(0, ge=0, description="ZH: 跳過筆數 | EN: Records to skip"),
     limit: int = Query(100, ge=1, le=500, description="ZH: 每頁筆數 | EN: Records per page"),
+    auth_source: Optional[str] = Query(
+        None,
+        description=(
+            "ZH: 依登入來源過濾（local / sso_oidc / sso_cas / sso_mock）"
+            " | EN: Filter by auth_source"
+        ),
+    ),
     db: Session = Depends(get_db),
     _: models.User = Depends(require_admin),
 ) -> Any:
     """
     ZH: 列出所有使用者，單次 JOIN 查詢避免 N+1，支援分頁
     EN: List all users with token usage via single JOIN query, supports pagination
+
+    v2.1 擴充：
+    - 可用 ?auth_source=local|sso_oidc|sso_mock 過濾分類
+    - sso_mock 帳號額外做 yaml filter：若 username 已從 sso_policy.yaml 移除則隱藏
     """
-    rows = (
+    query = (
         db.query(models.User, models.TokenUsage)
         .outerjoin(models.TokenUsage, models.TokenUsage.user_id == models.User.id)
-        .order_by(models.User.created_at.desc())
+    )
+    if auth_source:
+        query = query.filter(models.User.auth_source == auth_source)
+    rows = (
+        query.order_by(models.User.created_at.desc())
         .offset(skip)
         .limit(limit)
         .all()
     )
-    return [
-        schemas.AdminUserListItem(
-            id=u.id,
-            username=u.username,
-            email=u.email,
-            role=u.role,
-            is_active=u.is_active,
-            online_status=_compute_online(u),  # v2.1: 動態計算，不再讀 DB 內 stale 欄位
-            last_login_time=u.last_login_time,
-            last_login_ip=u.last_login_ip,
-            department=u.department,
-            created_at=u.created_at,
-            tokens_used=t.tokens_used if t else 0,
-            tokens_limit=t.tokens_limit if t else 0,
+
+    # v2.1 yaml filter: 若使用者已從 yaml 移除，從列表隱藏（DB row 仍保留）
+    yaml_usernames = _yaml_mock_usernames()
+
+    result = []
+    for u, t in rows:
+        if u.auth_source == "sso_mock" and u.username not in yaml_usernames:
+            continue  # yaml 已移除 → 列表隱藏
+        result.append(
+            schemas.AdminUserListItem(
+                id=u.id,
+                username=u.username,
+                email=u.email,
+                role=u.role,
+                is_active=u.is_active,
+                online_status=_compute_online(u),  # v2.1: 動態計算
+                last_login_time=u.last_login_time,
+                last_login_ip=u.last_login_ip,
+                department=u.department,
+                created_at=u.created_at,
+                tokens_used=t.tokens_used if t else 0,
+                tokens_limit=t.tokens_limit if t else 0,
+                auth_source=getattr(u, "auth_source", "local") or "local",  # v2.1: 3-tab 分頁
+            )
         )
-        for u, t in rows
-    ]
+    return result
 
 
 @router.put("/users/batch/tokens")
