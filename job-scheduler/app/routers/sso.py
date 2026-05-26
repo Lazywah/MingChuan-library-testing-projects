@@ -97,8 +97,10 @@ def _finalize_sso_login(db: Session, user_info: dict) -> RedirectResponse:
         upgrade_to_sso(db, user, auth_source=auth_source, external_id=external_id)
 
     # 簽 JWT 並 302 回前端
+    # v2.1 bug fix: 之前 redirect 到 "/" 會跑到 Open WebUI（nginx 把 / 代理給 open-webui），
+    # 改為 "/train/" 才會回到本平台的 web-ui SPA，由 setupSSOLogin IIFE 抓 ?sso_token= 進 dashboard
     access_token = create_access_token(data={"sub": user.username, "role": user.role})
-    return RedirectResponse(url=f"/?sso_token={access_token}")
+    return RedirectResponse(url=f"/train/?sso_token={access_token}")
 
 
 # ==============================================================================
