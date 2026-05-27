@@ -597,6 +597,8 @@
                                 <div class="lab-config-row">
                                     <label data-i18n="lab_image_select">選擇 Image：</label>
                                     <select id="lab-image-select" class="lab-select">
+                                        <!-- v2.1: code-server 是 Lab 編輯容器本體；其他 image 是訓練容器（Run on GPU 用） -->
+                                        <option value="aibase/code-server:2026-spring">Code Editor (VS Code in Browser, CPU)</option>
                                         <option value="aibase/pytorch:2026-spring">PyTorch (CUDA 12.8)</option>
                                         <option value="aibase/pytorch-legacy:2026-spring">PyTorch Legacy (CUDA 11.8)</option>
                                         <option value="aibase/tensorflow:2026-spring">TensorFlow</option>
