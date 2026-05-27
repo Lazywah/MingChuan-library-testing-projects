@@ -8,7 +8,9 @@
 # ==============================================================================
 
 # ============ Stage 1: Build aibase-runner extension ============
-FROM node:18-bullseye AS builder
+# v2.1 修正：Node 18 + 新版 @vscode/vsce (undici) 會出 ReferenceError: File is not defined
+# (File 是 Fetch API 全域，Node 20+ 才有)；升到 Node 20 LTS
+FROM node:20-bullseye AS builder
 
 WORKDIR /build
 
@@ -64,6 +66,7 @@ COPY --from=builder /build/aibase-runner.vsix /tmp/aibase-runner.vsix
 
 # ZH: 安裝 extensions（語法高亮 + aibase-runner）
 # EN: Install extensions (syntax + aibase-runner)
+# v2.1 修正：rm 改用 root 執行 (coder UID 1000 無法刪除 root 拷貝進來的 .vsix)
 USER coder
 RUN code-server --install-extension ms-python.python \
     && code-server --install-extension ms-toolsai.jupyter \
@@ -71,15 +74,19 @@ RUN code-server --install-extension ms-python.python \
     && code-server --install-extension redhat.java \
     && code-server --install-extension golang.go \
     && code-server --install-extension rust-lang.rust-analyzer \
-    && code-server --install-extension /tmp/aibase-runner.vsix \
-    && rm -f /tmp/aibase-runner.vsix
+    && code-server --install-extension /tmp/aibase-runner.vsix
 
 USER root
+RUN rm -f /tmp/aibase-runner.vsix
 
 # ZH: Entrypoint 處理 secrets → CLI config 自動寫入
 # EN: Entrypoint converts secrets to CLI configs at startup
+# v2.1 修正：Windows host build 時 .sh 可能變 CRLF，導致容器啟動報
+# "exec /usr/local/bin/aibase-entrypoint.sh: no such file or directory"
+# (kernel 把 /bin/bash\r 當解譯器)。COPY 後用 sed 強制改 LF
 COPY infrastructure/base-images/code-server/aibase-entrypoint.sh /usr/local/bin/aibase-entrypoint.sh
-RUN chmod +x /usr/local/bin/aibase-entrypoint.sh
+RUN sed -i 's/\r$//' /usr/local/bin/aibase-entrypoint.sh \
+    && chmod +x /usr/local/bin/aibase-entrypoint.sh
 
 # ZH: 預設使用者目錄結構
 # EN: Default user directory structure
@@ -98,4 +105,8 @@ WORKDIR /home/coder
 EXPOSE 8080
 
 ENTRYPOINT ["/usr/local/bin/aibase-entrypoint.sh"]
-CMD ["--bind-addr", "0.0.0.0:8080", "--auth", "password", "/home/coder/projects"]
+# v2.1 修正：auth 從 password 改為 none
+# nginx 已用 auth_request /api/v1/lab/_authz 驗證 JWT 與 user_id 對應，
+# code-server 不需再次密碼驗證。原 password 模式會在通過 nginx 後再彈 login 頁，
+# 但 window.open 不帶密碼 → 死鎖 401。
+CMD ["--bind-addr", "0.0.0.0:8080", "--auth", "none", "/home/coder/projects"]
