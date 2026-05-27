@@ -114,7 +114,17 @@ def _finalize_sso_login(db: Session, user_info: dict, request: Request = None) -
     # v2.1 bug fix: 之前 redirect 到 "/" 會跑到 Open WebUI（nginx 把 / 代理給 open-webui），
     # 改為 "/train/" 才會回到本平台的 web-ui SPA，由 setupSSOLogin IIFE 抓 ?sso_token= 進 dashboard
     access_token = create_access_token(data={"sub": user.username, "role": user.role})
-    return RedirectResponse(url=f"/train/?sso_token={access_token}")
+    response = RedirectResponse(url=f"/train/?sso_token={access_token}")
+    # v2.1: 同步設 cookie，讓瀏覽器直接導航 /code/ 時也帶得到 token (auth_request 用)
+    response.set_cookie(
+        key="ai_hud_token",
+        value=access_token,
+        max_age=7200,           # 2 小時，與 JWT 預設一致
+        httponly=False,          # SPA JS 需要讀取以同步 localStorage
+        samesite="lax",
+        path="/",
+    )
+    return response
 
 
 # ==============================================================================

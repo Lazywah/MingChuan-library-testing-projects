@@ -27,7 +27,7 @@ EN: Modular design:
 
 from datetime import datetime, timedelta, timezone
 from jose import JWTError, jwt
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.orm import Session
 
@@ -44,7 +44,20 @@ logger = logging.getLogger(__name__)
 # ZH: tokenUrl 要與 routers/auth.py 中的 login 路徑一致
 # EN: tokenUrl must match the login path in routers/auth.py
 # ==============================================================================
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login")
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login", auto_error=False)
+
+
+def _extract_token(request: Request, bearer_token: str | None) -> str | None:
+    """
+    ZH: v2.1 — 同時支援 Authorization: Bearer header 與 ai_hud_token cookie
+    EN: v2.1 — accept JWT from either Authorization header or ai_hud_token cookie
+
+    Cookie 路徑用於瀏覽器直接導航的場景 (例：window.open('/code/...'))，
+    這類請求 fetch API 才能塞 header，直接 navigate 無法。
+    """
+    if bearer_token:
+        return bearer_token
+    return request.cookies.get("ai_hud_token")
 
 
 def authenticate_user(db: Session, username: str, password: str):
@@ -83,7 +96,8 @@ def create_access_token(data: dict, expires_delta: timedelta = None) -> str:
 
 
 async def get_current_user(
-    token: str = Depends(oauth2_scheme),
+    request: Request,
+    token: str | None = Depends(oauth2_scheme),
     db: Session = Depends(get_db)
 ) -> models.User:
     """
@@ -92,12 +106,18 @@ async def get_current_user(
 
     ZH: 用法：在路由參數中加入 current_user = Depends(get_current_user)
     EN: Usage: add current_user = Depends(get_current_user) to route params
+
+    v2.1: 同時支援 Authorization: Bearer (fetch/SPA 用) 與 ai_hud_token cookie
+    (瀏覽器直接導航如 window.open('/code/...') 走這條路)
     """
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="ZH: 無法驗證憑證 | EN: Could not validate credentials",
         headers={"WWW-Authenticate": "Bearer"},
     )
+    token = _extract_token(request, token)
+    if not token:
+        raise credentials_exception
     try:
         payload = jwt.decode(token, settings.JWT_SECRET_KEY, algorithms=[settings.JWT_ALGORITHM])
         username: str = payload.get("sub")
