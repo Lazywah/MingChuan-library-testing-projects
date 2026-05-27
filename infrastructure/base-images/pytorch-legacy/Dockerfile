@@ -1,9 +1,16 @@
 # ==============================================================================
-# ZH: aibase/pytorch-legacy:2026-spring — PyTorch 2.0 + CUDA 11.8（舊版相容）
-# EN: aibase/pytorch-legacy:2026-spring — PyTorch 2.0 + CUDA 11.8 (legacy compat)
+# ZH: aibase/pytorch-legacy:2026-spring — PyTorch 2.5 + CUDA 11.8（舊版相容）
+# EN: aibase/pytorch-legacy:2026-spring — PyTorch 2.5 + CUDA 11.8 (legacy compat)
 # ==============================================================================
-# 用途：給仍依賴 PyTorch 2.0 / CUDA 11.8 的舊專案使用
-# Purpose: For projects still on PyTorch 2.0 / CUDA 11.8
+# 用途：給仍依賴 CUDA 11.8（無法升級驅動）的舊環境使用
+# Purpose: For environments stuck on CUDA 11.8 driver
+#
+# 版本歷史：
+#   2.0.1 → 2.5.1 (2026-05)
+#     PyTorch 已從 cu118 wheel 索引下架 < 2.5 系列，
+#     2.5.1 是現存 cu118 最舊穩定版（與 2.7 主版本仍有 API 差異，足以稱 legacy）
+#   PyTorch removed < 2.5 from the cu118 wheel index in 2026.
+#   2.5.1 is now the oldest stable cu118 release — still 2 minor versions behind 2.7.
 # ==============================================================================
 
 # ZH: 使用 CUDA 11.8 base，與其他 image 不同
@@ -36,14 +43,16 @@ RUN curl -fsSL https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_6
     && /opt/conda/bin/conda config --system --set auto_update_conda false \
     && /opt/conda/bin/conda clean -afy
 
-# PyTorch 2.0 + CUDA 11.8
+# PyTorch 2.5.1 + CUDA 11.8
+# accelerate / datasets 不再硬鎖版本（torch 2.5 + accelerate 0.21 在某些 path 上會炸）；
+# 由 pip 自行解析最新相容版本
 RUN pip install --no-cache-dir --index-url https://download.pytorch.org/whl/cu118 \
-        torch==2.0.1 torchvision==0.15.2 torchaudio==2.0.2 \
+        torch==2.5.1 torchvision==0.20.1 torchaudio==2.5.1 \
     && pip install --no-cache-dir \
         numpy pandas matplotlib seaborn scikit-learn \
         tqdm rich \
         jupyter ipython ipykernel \
-        accelerate==0.21.0 datasets==2.14.0 \
+        accelerate datasets \
         Pillow \
         kaggle "huggingface_hub[cli]"
 
@@ -61,11 +70,11 @@ USER coder
 RUN echo 'export PATH="/opt/conda/bin:$HOME/.local/bin:$PATH"' >> ~/.bashrc \
     && echo 'export HF_HOME="/opt/models:$HOME/.cache/huggingface"' >> ~/.bashrc \
     && python -m ipykernel install --user --name aibase-pytorch-legacy \
-                                    --display-name "AI Base PyTorch 2.0 (Legacy)"
+                                    --display-name "AI Base PyTorch 2.5 (Legacy CU118)"
 
 LABEL org.opencontainers.image.title="AI Base PyTorch Legacy" \
       aibase.framework="pytorch" \
-      aibase.framework_version="2.0" \
+      aibase.framework_version="2.5" \
       aibase.cuda="11.8"
 
 CMD ["/bin/bash"]
