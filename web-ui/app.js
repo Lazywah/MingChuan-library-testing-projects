@@ -225,7 +225,7 @@ const TRANSLATIONS = {
         sso_pending_msg: "系統登入功能尚在設定中",
         sso_pending_hint: "若您是管理員，請透過管理介面登入",
         auth_required_to_use: "請先登入才能使用此功能",
-        lab_tip_secrets: "🔐 <strong>需要 API 金鑰嗎？</strong>到「設定 → Secrets 管理」新增（例：HF_TOKEN、OPENAI_API_KEY），啟動 Lab / 送 GPU 任務時會自動以環境變數注入容器。",
+        lab_tip_secrets: "🔐 需要 API 金鑰嗎？到「設定 → Secrets 管理」新增（例：HF_TOKEN、OPENAI_API_KEY），啟動 Lab / 送 GPU 任務時會自動以環境變數注入容器。",
         lab_tip_secrets_link: "前往設定",
         secrets_help_summary: "什麼是環境變數？為什麼這樣設計？",
         secrets_help_body: "環境變數是程式啟動時從作業系統環境讀的「鍵 = 值」對。把金鑰寫死在程式碼會被誤 commit 到 git 外洩，所以業界做法是統一存在 Secrets 機制中、執行時注入。可以類比 Chrome 密碼管理員 — 程式不用知道密碼，只在需要時自動填入。本平台用 AES-256-GCM 加密儲存，僅在 Lab 容器啟動 / GPU 任務執行時解密注入。",
@@ -475,7 +475,7 @@ const TRANSLATIONS = {
         sso_pending_msg: "Login system is being configured",
         sso_pending_hint: "Administrators please use the admin panel to log in",
         auth_required_to_use: "Please sign in to use this feature",
-        lab_tip_secrets: "🔐 <strong>Need an API key?</strong> Add it in Settings → Secrets (e.g. HF_TOKEN, OPENAI_API_KEY). It will be injected as an environment variable into your Lab container and GPU jobs automatically.",
+        lab_tip_secrets: "🔐 Need an API key? Add it in Settings → Secrets (e.g. HF_TOKEN, OPENAI_API_KEY). It will be injected as an environment variable into your Lab container and GPU jobs automatically.",
         lab_tip_secrets_link: "Open settings",
         secrets_help_summary: "What are environment variables and why this design?",
         secrets_help_body: "Environment variables are key=value pairs read from the OS environment when a program starts. Hard-coding keys in source code risks committing them to git. The industry pattern is to keep them in a Secrets store and inject at runtime — like Chrome's password manager: programs don't know your password, the system fills it in when needed. This platform uses AES-256-GCM encryption at rest and decrypts only when the Lab container starts or a GPU job runs.",
@@ -1918,12 +1918,20 @@ const Lab = (() => {
     let _pollTimer = null;
 
     function _t(key, fallback) {
-        const lang = (window.currentLang || 'zh-TW');
-        return (window.translations?.[lang]?.[key]) || fallback;
+        // v2.1 修正：原本用 window.translations / 'zh-TW' 都對不到 (主程式用 TRANSLATIONS / 'zh')
+        // EN fix: original `window.translations` / 'zh-TW' never matched (main app uses TRANSLATIONS / 'zh')
+        try {
+            const lang = (typeof currentLang !== 'undefined' && currentLang) || 'zh';
+            const dict = (typeof TRANSLATIONS !== 'undefined') ? TRANSLATIONS[lang] : null;
+            return (dict && dict[key]) || fallback;
+        } catch (_) {
+            return fallback;
+        }
     }
 
     async function _api(path, opts = {}) {
-        const token = localStorage.getItem('jwt');
+        // v2.1 修正：使用 ai_hud_token (與 app.js 其他地方一致)，舊版誤用 'jwt' 導致永遠 401
+        const token = localStorage.getItem('ai_hud_token');
         if (!token) throw new Error('Not authenticated');
         const resp = await fetch(`/api/v1/lab${path}`, {
             ...opts,
@@ -2089,8 +2097,14 @@ const Secrets = (() => {
     let _loaded = false;
 
     function _t(key, fallback) {
-        const lang = (window.currentLang || 'zh');
-        return (window.TRANSLATIONS?.[lang]?.[key]) || fallback;
+        // v2.1 修正：TRANSLATIONS 是檔內 const，window.TRANSLATIONS 取不到
+        try {
+            const lang = (typeof currentLang !== 'undefined' && currentLang) || 'zh';
+            const dict = (typeof TRANSLATIONS !== 'undefined') ? TRANSLATIONS[lang] : null;
+            return (dict && dict[key]) || fallback;
+        } catch (_) {
+            return fallback;
+        }
     }
 
     async function _api(path, opts = {}) {

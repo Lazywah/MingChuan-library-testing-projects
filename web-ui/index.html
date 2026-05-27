@@ -629,8 +629,8 @@
                                 <p data-i18n="lab_tip_3">
                                     💡 共用模型快取在 <code>/opt/models</code>（read-only），自己的 pip 套件用 <code>pip install --user</code> 安裝到 <code>~/.local/</code> 永久保留。
                                 </p>
-                                <p data-i18n="lab_tip_secrets">
-                                    🔐 <strong>需要 API 金鑰嗎？</strong>到「設定 → Secrets 管理」新增（例：<code>HF_TOKEN</code>、<code>OPENAI_API_KEY</code>），啟動 Lab / 送 GPU 任務時會自動以環境變數注入容器。
+                                <p>
+                                    <span data-i18n="lab_tip_secrets">🔐 需要 API 金鑰嗎？到「設定 → Secrets 管理」新增（例：HF_TOKEN、OPENAI_API_KEY），啟動 Lab / 送 GPU 任務時會自動以環境變數注入容器。</span>
                                     <a href="#" id="lab-jump-to-secrets" style="color:var(--neon-cyan); text-decoration:underline; margin-left:4px;" data-i18n="lab_tip_secrets_link">前往設定</a>
                                 </p>
                             </div>
@@ -1234,7 +1234,7 @@
     <!-- ZH: 載入圖標庫與主程式碼 | EN: Load Icon library and Main Logic -->
     <script type="module" src="https://unpkg.com/ionicons@7.1.0/dist/ionicons/ionicons.esm.js"></script>
     <script nomodule src="https://unpkg.com/ionicons@7.1.0/dist/ionicons/ionicons.js"></script>
-    <script src="app.js"></script>
+    <script src="app.js?v=20260527-2"></script>
 </body>
 
 </html>
