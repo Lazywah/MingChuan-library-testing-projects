@@ -20,12 +20,14 @@ EN: Features:
   5. Print full configuration summary and next steps
 
 ZH: 使用方式：
-  python scripts/setup_env.py          ← 互動式（推薦）
+  python scripts/setup_env.py          ← 互動式（推薦，首次部署）
   python scripts/setup_env.py --show   ← 僅顯示現有 .env 設定，不寫入
+  python scripts/setup_env.py --check  ← 檢查 .env 缺哪些必要 key，只追加不覆寫
 
 EN: Usage:
-  python scripts/setup_env.py          ← interactive (recommended)
+  python scripts/setup_env.py          ← interactive (recommended, first deploy)
   python scripts/setup_env.py --show   ← show existing .env config without writing
+  python scripts/setup_env.py --check  ← detect missing required keys, append only
 
 ZH: 需求：Python 3.6+，無額外套件
 EN: Requirements: Python 3.6+, no extra packages
@@ -135,9 +137,56 @@ def ask_yes_no(prompt: str, default: bool = True) -> bool:
 # ══════════════════════════════════════════════════════════════════════════════
 # 驗證器 / Validators
 # ══════════════════════════════════════════════════════════════════════════════
+# v2.1: 服務層預設 port，給 SERVICE_LAYER_URL 自動補齊用
+SERVICE_PORT_DEFAULT = "8002"
+
+
+def smart_url_normalize(raw: str) -> str:
+    """
+    ZH: 把使用者輸入的多種形式正規化為完整 URL
+    EN: Normalize various URL input forms into a full URL
+
+    支援 / Supports:
+      127.0.0.1                  → http://127.0.0.1:8002
+      192.168.1.50               → http://192.168.1.50:8002
+      192.168.1.50:8002          → http://192.168.1.50:8002
+      host.docker.internal       → http://host.docker.internal:8002
+      http://server              → http://server:8002 (自動補 port)
+      http://server:8002         → http://server:8002 (保留)
+      https://prod.example.com   → https://prod.example.com (HTTPS 不補 port)
+    """
+    raw = raw.strip().rstrip("/")
+    if not raw:
+        return raw
+    has_scheme = raw.startswith(("http://", "https://"))
+    if not has_scheme:
+        raw = "http://" + raw
+    # 切出 scheme + body 來檢查 body 有沒有 port
+    scheme, _, rest = raw.partition("://")
+    # body 可能含 /path，先切出 host[:port]
+    host_part = rest.split("/", 1)[0]
+    if ":" not in host_part:
+        # HTTPS 不主動補預設 port（一般是 443，留給瀏覽器決定）
+        if scheme == "http":
+            raw = raw.replace(host_part, f"{host_part}:{SERVICE_PORT_DEFAULT}", 1)
+    return raw
+
+
 def validate_url(v):
-    if not v.startswith(("http://", "https://")):
-        return "必須以 http:// 或 https:// 開頭 / Must start with http:// or https://"
+    """v2.1: 改為驗證 smart_url_normalize 後的結果是否合法 URL"""
+    normalized = smart_url_normalize(v)
+    if not normalized.startswith(("http://", "https://")):
+        return "必須包含主機/IP 或以 http(s):// 開頭 / Must contain host/IP or start with http(s)://"
+    # 確認 host 部分非空
+    scheme, _, rest = normalized.partition("://")
+    host_part = rest.split("/", 1)[0]
+    if ":" in host_part:
+        host_only = host_part.split(":", 1)[0]
+    else:
+        host_only = host_part
+    if not host_only:
+        return "主機名稱不可為空 / Host cannot be empty"
+
 
 def validate_positive_int(v):
     try:
@@ -178,12 +227,86 @@ def section(title: str) -> None:
 # ══════════════════════════════════════════════════════════════════════════════
 # 密鑰生成 / Secret Generation
 # ══════════════════════════════════════════════════════════════════════════════
+# v2.1: REQUIRED_KEYS 同時供首次生成、--check migration、--show 列表使用。
+# 每筆 = (產生器, 中英文用途說明)。修改此表時，service_content 範本也要同步更新。
+REQUIRED_KEYS = {
+    "JWT_SECRET_KEY":     (lambda: secrets.token_hex(64),     "512-bit JWT 簽章 / signing key"),
+    "WORKER_API_TOKEN":   (lambda: secrets.token_hex(32),     "256-bit Worker 認證 / worker auth"),
+    "WEBUI_SECRET_KEY":   (lambda: secrets.token_hex(32),     "256-bit Open WebUI session"),
+    # v2.0 Lab 模組 AES-256-GCM 加密主金鑰（必須 ≥ 32 字元）
+    "SECRETS_MASTER_KEY": (lambda: secrets.token_urlsafe(48), "v2.0 Lab AES-256-GCM KEK"),
+}
+
+
 def generate_secrets() -> dict:
-    return {
-        "JWT_SECRET_KEY":   secrets.token_hex(64),   # 512-bit
-        "WORKER_API_TOKEN": secrets.token_hex(32),   # 256-bit
-        "WEBUI_SECRET_KEY": secrets.token_hex(32),   # 256-bit
-    }
+    """產生全部必要 secrets (首次部署用) / Generate all required secrets (first deploy)"""
+    return {key: gen() for key, (gen, _desc) in REQUIRED_KEYS.items()}
+
+
+def parse_env_file(path: Path) -> dict:
+    """讀取 .env 為 dict（用於 --check 與 migrate 邏輯）/ Parse .env into dict"""
+    if not path.exists():
+        return {}
+    result = {}
+    with open(path, encoding="utf-8") as f:
+        for line in f:
+            line = line.rstrip()
+            if not line or line.startswith("#"):
+                continue
+            key, _, val = line.partition("=")
+            key, val = key.strip(), val.strip()
+            if key:
+                result[key] = val
+    return result
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# --check 模式：補齊 .env 缺漏 key / Migration: patch missing required keys
+# ══════════════════════════════════════════════════════════════════════════════
+def check_and_patch(path: Path) -> int:
+    """
+    ZH: 檢測 .env 缺少哪些必要 key，只追加不覆寫既有值。
+    EN: Detect missing required keys and append only — never overwrite existing.
+
+    Returns:
+        缺失欄位數 / number of missing fields patched
+    """
+    section(f"檢查 .env / Checking {path.name}")
+    if not path.exists():
+        print(f"  {err('.env 不存在 / .env not found：' + str(path))}")
+        print(f"  {dim('請先用互動模式建立 / Run setup_env.py without --check first')}")
+        return -1
+
+    existing = parse_env_file(path)
+    print(f"  {dim(f'已存在欄位 / Existing keys: {len(existing)}')}")
+
+    missing = []
+    for key, (gen, desc) in REQUIRED_KEYS.items():
+        if not existing.get(key):
+            missing.append((key, gen(), desc))
+            print(f"  {err('缺失 / Missing')}  {cyan(key.ljust(20))}  {dim(desc)}")
+        else:
+            print(f"  {ok('存在 / OK     ')}  {cyan(key.ljust(20))}  {dim(mask_secret(existing[key]))}")
+
+    if not missing:
+        print()
+        print(f"  {bold(green('✅ 所有必要 key 都存在 / All required keys present'))}")
+        return 0
+
+    print()
+    print(f"  {warn(f'共 {len(missing)} 個欄位缺失，準備追加 / Patching {len(missing)} missing fields')}")
+    if not ask_yes_no("確認追加？/ Confirm append?", default=True):
+        print(f"  {dim('已取消 / Cancelled')}")
+        return -1
+
+    backup_if_exists(path)
+    now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    with open(path, "a", encoding="utf-8") as f:
+        f.write(f"\n# ── Migrated by setup_env.py --check at {now_str} ──\n")
+        for key, val, desc in missing:
+            f.write(f"# {desc}\n{key}={val}\n")
+    print(f"  {ok(f'已補齊 {len(missing)} 個欄位 / Patched {len(missing)} fields → ' + str(path))}")
+    return len(missing)
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -230,6 +353,21 @@ def main() -> None:
     # ── --show 模式 ───────────────────────────────────────────────────────────
     if "--show" in sys.argv:
         show_existing()
+        return
+
+    # ── --check 模式：偵測 .env 缺漏 key，只追加不覆寫 ─────────────────────────
+    if "--check" in sys.argv:
+        rc1 = check_and_patch(SERVICE_ENV)
+        rc2 = check_and_patch(WORKER_ENV) if WORKER_ENV.exists() else 0
+        print()
+        if rc1 < 0 or rc2 < 0:
+            print(f"  {warn('部分檢查未完成 / Some checks not completed')}")
+            sys.exit(1)
+        if rc1 == 0 and rc2 == 0:
+            print(f"  {bold(green('✅ 一切就緒 / Everything in order — 可以 docker compose up -d 了'))}")
+        else:
+            print(f"  {bold(yellow('⚠ 已補齊缺漏，請重新啟動容器 / Patched — restart containers:'))}")
+            print(f"     {cyan('docker compose down && docker compose up -d')}")
         return
 
     # ── 平台提示 / Platform note ──────────────────────────────────────────────
@@ -320,11 +458,32 @@ def main() -> None:
     )
     worker: dict = {}
     if setup_worker:
-        worker["SERVICE_LAYER_URL"] = ask(
-            "SERVICE_LAYER_URL  服務層主機 IP:Port / Service layer host IP:Port",
-            default="http://192.168.1.50:8002",
-            validator=validate_url
+        # v2.1: 部署模式前置題 — 自動帶入合適的 SERVICE_LAYER_URL 預設值
+        print()
+        print(f"  {bold('部署模式 / Deployment Mode')}")
+        print(f"     {cyan('[1]')} 單機完全體 All-in-one（服務層 + GPU Worker 都在這台）")
+        print(f"     {cyan('[2]')} 分機 Multi-host（GPU Worker 與服務層在不同電腦）")
+        mode = ask("選擇 / Choose", default="1", validator=lambda v: None if v in ("1", "2") else "請輸入 1 或 2")
+
+        if mode == "1":
+            # 單機：用 Docker Desktop 的 host.docker.internal（Win/Mac）或 172.17.0.1（Linux）
+            default_url = "http://host.docker.internal:8002" if IS_WIN else "http://172.17.0.1:8002"
+            print(f"  {dim('單機模式：worker 容器透過 ' + default_url.split('//')[1].split(':')[0] + ' 找到主機上的 scheduler')}")
+        else:
+            default_url = "http://192.168.1.50:8002"
+            print(f"  {dim('分機模式：請填入服務層那台的區網 IP（先在那台跑 ipconfig / ip a 查）')}")
+
+        print(f"  {dim('輸入格式都可：純 IP / 主機名 / 完整 URL — 沒寫 port 會自動補 :' + SERVICE_PORT_DEFAULT)}")
+        print(f"  {dim('Accepts: bare IP, hostname, or full URL — port :' + SERVICE_PORT_DEFAULT + ' auto-appended')}")
+        raw_url = ask(
+            "SERVICE_LAYER_URL  服務層位址 / Service layer address",
+            default=default_url,
+            validator=validate_url,
         )
+        worker["SERVICE_LAYER_URL"] = smart_url_normalize(raw_url)
+        if worker["SERVICE_LAYER_URL"] != raw_url:
+            print(f"  {dim('  → 已正規化為 / normalized to: ' + worker['SERVICE_LAYER_URL'])}")
+
         worker["NODE_ID"] = ask(
             "NODE_ID  此 Worker 在儀表板的名稱 / Worker name shown in dashboard",
             default="gpu-node-01"
@@ -383,6 +542,9 @@ SMTP_FROM_EMAIL={smtp['SMTP_FROM_EMAIL']}
 JWT_SECRET_KEY={gen['JWT_SECRET_KEY']}
 WORKER_API_TOKEN={gen['WORKER_API_TOKEN']}
 WEBUI_SECRET_KEY={gen['WEBUI_SECRET_KEY']}
+# v2.0 Lab AES-256-GCM 加密主金鑰（變更會讓既有 secrets 全部失效）
+# v2.0 Lab AES-256-GCM master key (changing this invalidates all existing secrets)
+SECRETS_MASTER_KEY={gen['SECRETS_MASTER_KEY']}
 
 # ── JWT 設定 / JWT Configuration
 JWT_ALGORITHM=HS256
@@ -463,6 +625,8 @@ STORAGE_MOUNT_PATH={worker['STORAGE_MOUNT_PATH']}
                                       "256-bit · 服務層+Worker 已對齊 / synced"),
         ("WEBUI_SECRET_KEY",          mask_secret(gen['WEBUI_SECRET_KEY'], 12),
                                       "256-bit · 自動生成 / auto-gen"),
+        ("SECRETS_MASTER_KEY",        mask_secret(gen['SECRETS_MASTER_KEY'], 12),
+                                      "v2.0 Lab AES-256-GCM KEK · 自動生成 / auto-gen"),
         ("ACCESS_TOKEN_EXPIRE",       f"{jwt_expire} 分鐘 / min",
                                       "JWT 有效期 / expiry"),
         ("DEFAULT_TOKEN_LIMIT",       f"{int(token_limit):,} tokens",
