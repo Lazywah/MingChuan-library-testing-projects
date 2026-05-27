@@ -23,7 +23,7 @@ import logging
 from datetime import datetime, timezone
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, status, Header, Request
+from fastapi import APIRouter, Body, Depends, HTTPException, status, Header, Request
 from sqlalchemy.orm import Session
 
 from .. import crud, models
@@ -44,14 +44,17 @@ router = APIRouter(tags=["Lab 模組 Lab Module"])
 @limiter.limit("5/minute")
 def start_lab(
     request: Request,
-    base_image: Optional[str] = None,
+    payload: dict = Body(default={}),
     current_user: models.User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     """
     ZH: 啟動使用者的 code-server 容器，回傳 URL 與 one-time password
     EN: Start user's code-server container, returns URL and one-time password
+
+    v2.1 修正：base_image 從 query param 改為 JSON body 欄位 (前端 POST body 才會被收到)
     """
+    base_image = (payload or {}).get("base_image")
     try:
         result = lab_manager.start_session(db, current_user.id, base_image=base_image)
     except PermissionError as e:

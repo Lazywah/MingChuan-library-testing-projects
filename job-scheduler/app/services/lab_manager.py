@@ -223,12 +223,14 @@ def start_session(db: Session, user_id: str, base_image: Optional[str] = None) -
     if not allowed:
         raise PermissionError(f"Cannot start session: {reason}")
 
-    # ZH: 若已有 active session，直接回傳同一個 URL（不重複啟）
-    # EN: If active session exists, return same URL (don't double-start)
+    # ZH: 找既有 session row（UNIQUE(user_id, session_name) 保證最多一筆）
+    #     若仍 running 直接回傳；否則 reuse 該 row 重新啟動，避免 INSERT 撞 UNIQUE
+    # EN: Find existing row (UNIQUE constraint guarantees at most one).
+    #     If still running → return URL; otherwise reuse the row to avoid UNIQUE conflict on re-start
+    # v2.1 修正：原本只查 running/starting，導致 stopped 殘留 row 讓下次 start INSERT 撞 UNIQUE
     existing = db.query(models.LabSession).filter(
         models.LabSession.user_id == user_id,
         models.LabSession.session_name == "default",
-        models.LabSession.status.in_(["running", "starting"]),
     ).first()
     if existing and existing.status == "running":
         return _build_url(user_id, existing)

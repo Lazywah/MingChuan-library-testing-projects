@@ -82,7 +82,9 @@ default_disk_quota_gb:
 codeserver_resources:
   cpu_quota: 0.5                      # 每個容器 0.5 CPU cores
   mem_quota_mb: 2048                  # 2 GB RAM
-  default_image: "aibase/pytorch:2026-spring"
+  # v2.1 修正：Lab 編輯容器必須是 code-server (長時間跑 IDE 守 8080)；
+  # 訓練 image (pytorch 等) entrypoint 是 /bin/bash，無 TTY 下立刻 exit 0
+  default_image: "aibase/code-server:2026-spring"
 
 # ==============================================================================
 # ZH: 學期日曆（保護學生資料不在學期中被歸檔/刪除）
