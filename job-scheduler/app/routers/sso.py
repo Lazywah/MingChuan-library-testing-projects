@@ -116,11 +116,13 @@ def _finalize_sso_login(db: Session, user_info: dict, request: Request = None) -
     access_token = create_access_token(data={"sub": user.username, "role": user.role})
     response = RedirectResponse(url=f"/train/?sso_token={access_token}")
     # v2.1: 同步設 cookie，讓瀏覽器直接導航 /code/ 時也帶得到 token (auth_request 用)
+    # SPA 透過 URL ?sso_token= 自行存 localStorage 給 fetch 用，cookie 純粹給瀏覽器
+    # 自動帶到 /code/ 走 nginx auth_request；兩個 storage 用途不同。
     response.set_cookie(
         key="ai_hud_token",
         value=access_token,
         max_age=7200,           # 2 小時，與 JWT 預設一致
-        httponly=False,          # SPA JS 需要讀取以同步 localStorage
+        httponly=True,           # v2.1: SPA 不需要讀 cookie (走 URL 拿 token)，防 XSS 偷
         samesite="lax",
         path="/",
     )

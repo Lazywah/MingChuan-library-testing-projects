@@ -23,7 +23,7 @@ EN: Modular design:
 ==============================================================================
 """
 
-from fastapi import APIRouter, Depends, HTTPException, status, Request, BackgroundTasks
+from fastapi import APIRouter, Depends, HTTPException, status, Request, Response, BackgroundTasks
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 from datetime import datetime, timezone
@@ -92,6 +92,7 @@ async def register(request: Request, user: schemas.UserCreate, db: Session = Dep
 @limiter.limit("10/minute")
 async def login(
     request: Request,
+    response: Response,
     background_tasks: BackgroundTasks,
     form_data: OAuth2PasswordRequestForm = Depends(),
     db: Session = Depends(get_db)
@@ -177,6 +178,16 @@ async def login(
     access_token = create_access_token(
         data={"sub": user.username, "role": user.role}
     )
+    # v2.1: 設 HttpOnly cookie，讓瀏覽器導航 /code/ 時 nginx auth_request 能讀到
+    # SPA 仍從 JSON response 拿 token 存 localStorage 給 fetch 用，兩條路平行
+    response.set_cookie(
+        key="ai_hud_token",
+        value=access_token,
+        max_age=7200,
+        httponly=True,
+        samesite="lax",
+        path="/",
+    )
     logger.info(f"ZH: 使用者登入成功: {user.username} | EN: User logged in: {user.username}")
     return {"access_token": access_token, "token_type": "bearer"}
 
@@ -235,6 +246,7 @@ async def forgot_password(
 # ==============================================================================
 @router.post("/logout")
 def logout(
+    response: Response,
     current_user: models.User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
@@ -245,6 +257,9 @@ def logout(
         db.commit()
     except Exception as e:
         logger.error(f"Failed to update logout status: {e}")
+    # v2.1: 同步清掉 HttpOnly cookie；否則 localStorage 清了 cookie 還在會讓
+    # 已登出的瀏覽器仍能 navigate /code/ (nginx auth_request 仍會通過)
+    response.delete_cookie("ai_hud_token", path="/")
     return {"message": "Logged out successfully"}
 
 # ==============================================================================
