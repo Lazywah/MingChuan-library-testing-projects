@@ -1,3 +1,16 @@
+/* ============================================================
+   v2.2: 全域隱藏滾動軸視覺（滾動性保留）
+   ============================================================ */
+* {
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+}
+*::-webkit-scrollbar {
+    width: 0;
+    height: 0;
+    display: none;
+}
+
 :root {
     /* ZH: 預設暗黑模式與 Chess 風格變數 | EN: DEFAULT DARK MODE & CHESS-STYLE VARIABLES */
     --bg-universe: radial-gradient(circle at 10% 50%, rgba(68, 26, 167, 0.4), transparent 60%),

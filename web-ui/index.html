@@ -166,7 +166,8 @@
     </div>
 
     <!-- ZH: Moodle 風格側邊抽屜 | EN: Moodle Side Drawer -->
-    <div id="side-drawer" class="side-drawer closed">
+    <!-- v2.2: 預設展開 sidebar，避免新使用者迷路找不到主功能；點外面或漢堡可收起 -->
+    <div id="side-drawer" class="side-drawer">
         <button id="nav-sidebar-toggle" class="sidebar-pull-tab">
             <ion-icon name="chevron-back-outline"></ion-icon>
         </button>
@@ -620,16 +621,22 @@
                             <div class="lab-config widget">
                                 <div class="lab-config-row">
                                     <label data-i18n="lab_image_select">選擇 Image：</label>
+                                    <!-- v2.2: 分組 + 描述，讓學生看得懂該選哪個 -->
                                     <select id="lab-image-select" class="lab-select">
-                                        <!-- v2.1: code-server 是 Lab 編輯容器本體；其他 image 是訓練容器（Run on GPU 用） -->
-                                        <option value="aibase/code-server:2026-spring">Code Editor (VS Code in Browser, CPU)</option>
-                                        <option value="aibase/pytorch:2026-spring">PyTorch (CUDA 12.8)</option>
-                                        <option value="aibase/pytorch-legacy:2026-spring">PyTorch Legacy (CUDA 11.8)</option>
-                                        <option value="aibase/tensorflow:2026-spring">TensorFlow</option>
-                                        <option value="aibase/huggingface:2026-spring">HuggingFace Transformers</option>
-                                        <option value="aibase/llamacpp:2026-spring">llama.cpp</option>
-                                        <option value="aibase/vllm:2026-spring">vLLM</option>
-                                        <option value="aibase/dev-tools:2026-spring">Dev Tools (Python/C++/CUDA/Java)</option>
+                                        <optgroup label="🟢 新手推薦 (CPU)">
+                                            <option value="aibase/code-server:2026-spring">Code Editor — 純編輯環境，最快啟動</option>
+                                            <option value="aibase/dev-tools:2026-spring">Dev Tools — Python / C++ / Java 通用</option>
+                                        </optgroup>
+                                        <optgroup label="🔵 深度學習 (CUDA GPU)">
+                                            <option value="aibase/pytorch:2026-spring">PyTorch (CUDA 12.8) — 深度學習入門推薦</option>
+                                            <option value="aibase/pytorch-legacy:2026-spring">PyTorch (CUDA 11.8 Legacy) — 舊驅動環境</option>
+                                            <option value="aibase/tensorflow:2026-spring">TensorFlow — Google 系深度學習</option>
+                                        </optgroup>
+                                        <optgroup label="🟣 LLM 微調與推論">
+                                            <option value="aibase/huggingface:2026-spring">HuggingFace — 微調大語言模型</option>
+                                            <option value="aibase/llamacpp:2026-spring">llama.cpp — 量化版 LLaMA 本地推論</option>
+                                            <option value="aibase/vllm:2026-spring">vLLM — 高效能 LLM 線上推論</option>
+                                        </optgroup>
                                     </select>
                                 </div>
                             </div>
@@ -1260,7 +1267,7 @@
     <!-- ZH: 載入圖標庫與主程式碼 | EN: Load Icon library and Main Logic -->
     <script type="module" src="https://unpkg.com/ionicons@7.1.0/dist/ionicons/ionicons.esm.js"></script>
     <script nomodule src="https://unpkg.com/ionicons@7.1.0/dist/ionicons/ionicons.js"></script>
-    <script src="app.js?v=20260528-2"></script>
+    <script src="app.js?v=20260528-3"></script>
 </body>
 
 </html>
