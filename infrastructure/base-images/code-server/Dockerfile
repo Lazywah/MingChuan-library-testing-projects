@@ -109,4 +109,9 @@ ENTRYPOINT ["/usr/local/bin/aibase-entrypoint.sh"]
 # nginx 已用 auth_request /api/v1/lab/_authz 驗證 JWT 與 user_id 對應，
 # code-server 不需再次密碼驗證。原 password 模式會在通過 nginx 後再彈 login 頁，
 # 但 window.open 不帶密碼 → 死鎖 401。
+#
+# ⚠️ 已知風險（v2.2 處理）：所有 lab 容器在同一 ai-platform-net，
+# 若使用者從自己 lab 容器內執行 `curl http://cs-<other_uid>:8080/` 可繞過 nginx
+# 直接讀其他人的工作目錄。學校教學平台威脅模型可接受，但 v2.2 會用
+# per-user docker network 隔離。詳見：docs/dev/v2.2-roadmap.md
 CMD ["--bind-addr", "0.0.0.0:8080", "--auth", "none", "/home/coder/projects"]
