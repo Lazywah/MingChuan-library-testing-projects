@@ -178,6 +178,9 @@ app = FastAPI(
     lifespan=lifespan,
     docs_url="/docs",       # ZH: Swagger UI 路徑 | EN: Swagger UI path
     redoc_url="/redoc",     # ZH: ReDoc 路徑 | EN: ReDoc path
+    # v2.1 修正：關掉 trailing-slash 自動 redirect，避免與 nginx 的 location 形成
+    # 307 連鎖。配合 nginx.conf 的 regex location (匹配有/無斜線兩種形態)。
+    redirect_slashes=False,
 )
 
 # ZH: 掛載速率限制器 | EN: Mount rate limiter
