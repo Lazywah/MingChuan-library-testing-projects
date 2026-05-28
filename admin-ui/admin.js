@@ -94,6 +94,19 @@ const TRANSLATIONS = {
         confirm_reset_user: "確定要初始化使用者 {name} 的帳號嗎？\n密碼將被重置，用量將歸零。",
         toast_user_reset: "帳號已初始化",
         btn_add_test: "建立帳號",
+        // v2.2: Announcements
+        admin_announcements: "公告管理",
+        btn_new_announcement: "新增公告",
+        th_pinned: "置頂",
+        th_title: "標題",
+        th_posted_at: "發布時間",
+        th_visible: "顯示",
+        placeholder_announcement_title: "公告標題（最多 200 字）",
+        placeholder_announcement_body: "公告內容（支援多行）",
+        label_pinned: "置頂顯示",
+        label_visible: "公開可見",
+        announcement_new_title: "新增公告",
+        announcement_edit_title: "編輯公告",
         // v2.2: Export users modal
         btn_export_users: "匯出 Excel / CSV",
         btn_export_confirm: "匯出",
@@ -296,6 +309,19 @@ const TRANSLATIONS = {
         confirm_reset_user: "Are you sure to initialize user {name}?\nPassword will be reset, usage will be cleared.",
         toast_user_reset: "Account initialized",
         btn_add_test: "Provision User",
+        // v2.2: Announcements
+        admin_announcements: "Announcements",
+        btn_new_announcement: "New Announcement",
+        th_pinned: "Pinned",
+        th_title: "Title",
+        th_posted_at: "Posted At",
+        th_visible: "Visible",
+        placeholder_announcement_title: "Title (max 200 chars)",
+        placeholder_announcement_body: "Body (supports multiple lines)",
+        label_pinned: "Pin to top",
+        label_visible: "Publicly visible",
+        announcement_new_title: "New Announcement",
+        announcement_edit_title: "Edit Announcement",
         // v2.2: Export users modal
         btn_export_users: "Export Excel / CSV",
         btn_export_confirm: "Export",
@@ -946,6 +972,8 @@ async function fetchAdminData() {
 
         // v2.1: 同步更新 3 個 tab 的 badge 計數（額外打 3 個 light request）
         updateAuthSourceCounts();
+        // v2.2: 同步拉公告列表（admin UI 用）
+        fetchAnnouncementsAdmin();
     } catch (e) {
         console.error("Failed to fetch admin data", e);
     }
@@ -1786,6 +1814,126 @@ async function resetUserUsage(userId) {
 }
 
 // -------------------------
+// v2.2: Announcements Management (公告管理)
+// -------------------------
+async function fetchAnnouncementsAdmin() {
+    const tbody = document.getElementById('announcements-body');
+    if (!tbody) return;
+    try {
+        const res = await fetch(`${API_BASE}/admin/announcements?include_hidden=true`, {
+            headers: { 'Authorization': `Bearer ${authToken}` },
+        });
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        const items = await res.json();
+        if (items.length === 0) {
+            tbody.innerHTML = `<tr><td colspan="5" style="text-align:center; color:var(--text-muted); padding:16px;">尚無公告</td></tr>`;
+            return;
+        }
+        tbody.innerHTML = items.map(a => {
+            const dt = new Date(a.posted_at);
+            const dateStr = `${dt.getFullYear()}-${String(dt.getMonth()+1).padStart(2,'0')}-${String(dt.getDate()).padStart(2,'0')} ${String(dt.getHours()).padStart(2,'0')}:${String(dt.getMinutes()).padStart(2,'0')}`;
+            const pinIcon = a.is_pinned ? '<ion-icon name="pin" style="color:var(--neon-yellow); font-size:18px;" title="置頂"></ion-icon>' : '<span style="color:var(--text-muted);">—</span>';
+            const visIcon = a.is_visible ? '<ion-icon name="eye-outline" style="color:var(--neon-green); font-size:18px;" title="公開"></ion-icon>' : '<ion-icon name="eye-off-outline" style="color:var(--text-muted); font-size:18px;" title="隱藏"></ion-icon>';
+            const titleSpan = document.createElement('span');
+            titleSpan.textContent = a.title;
+            return `
+                <tr>
+                    <td style="text-align:center;">${pinIcon}</td>
+                    <td>${titleSpan.outerHTML.replace(/<\/?span>/g, '')}</td>
+                    <td style="font-family:monospace; font-size:12px;">${dateStr}</td>
+                    <td style="text-align:center;">${visIcon}</td>
+                    <td>
+                        <button class="job-action-btn" onclick="editAnnouncement(${a.id})" title="編輯">
+                            <ion-icon name="create-outline"></ion-icon>
+                        </button>
+                        <button class="job-action-btn cancel-btn" onclick="deleteAnnouncement(${a.id})" title="刪除">
+                            <ion-icon name="trash-outline"></ion-icon>
+                        </button>
+                    </td>
+                </tr>
+            `;
+        }).join('');
+    } catch (e) {
+        console.error('Failed to fetch announcements:', e);
+        tbody.innerHTML = `<tr><td colspan="5" style="text-align:center; color:var(--neon-pink); padding:16px;">載入失敗：${e.message}</td></tr>`;
+    }
+}
+
+let _announcementsCache = [];
+async function _loadAnnouncementsCache() {
+    const res = await fetch(`${API_BASE}/admin/announcements?include_hidden=true`, {
+        headers: { 'Authorization': `Bearer ${authToken}` },
+    });
+    if (res.ok) _announcementsCache = await res.json();
+}
+
+function openAnnouncementModal(ann) {
+    const modal = document.getElementById('announcement-modal');
+    document.getElementById('announcement-id').value = ann ? ann.id : '';
+    document.getElementById('announcement-title').value = ann ? ann.title : '';
+    document.getElementById('announcement-body').value = ann ? ann.body : '';
+    document.getElementById('announcement-pinned').checked = ann ? !!ann.is_pinned : false;
+    document.getElementById('announcement-visible').checked = ann ? !!ann.is_visible : true;
+    document.querySelector('#announcement-modal-title span').textContent = ann ? '編輯公告' : '新增公告';
+    modal.classList.remove('hidden');
+}
+
+function closeAnnouncementModal() {
+    document.getElementById('announcement-modal').classList.add('hidden');
+}
+
+async function submitAnnouncementForm(e) {
+    e.preventDefault();
+    const id = document.getElementById('announcement-id').value;
+    const payload = {
+        title: document.getElementById('announcement-title').value.trim(),
+        body: document.getElementById('announcement-body').value.trim(),
+        is_pinned: document.getElementById('announcement-pinned').checked ? 1 : 0,
+        is_visible: document.getElementById('announcement-visible').checked ? 1 : 0,
+    };
+    if (!payload.title || !payload.body) {
+        showToast('請填寫標題與內容', true);
+        return;
+    }
+    try {
+        const url = id ? `${API_BASE}/admin/announcements/${id}` : `${API_BASE}/admin/announcements`;
+        const method = id ? 'PUT' : 'POST';
+        const res = await fetch(url, {
+            method,
+            headers: { 'Authorization': `Bearer ${authToken}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+        });
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        closeAnnouncementModal();
+        fetchAnnouncementsAdmin();
+        showToast(id ? '公告已更新' : '公告已建立', false);
+    } catch (e) {
+        showToast('儲存失敗：' + e.message, true);
+    }
+}
+
+async function editAnnouncement(id) {
+    await _loadAnnouncementsCache();
+    const ann = _announcementsCache.find(a => a.id === id);
+    if (ann) openAnnouncementModal(ann);
+}
+
+async function deleteAnnouncement(id) {
+    if (!confirm('確定要刪除這則公告嗎？')) return;
+    try {
+        const res = await fetch(`${API_BASE}/admin/announcements/${id}`, {
+            method: 'DELETE',
+            headers: { 'Authorization': `Bearer ${authToken}` },
+        });
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        fetchAnnouncementsAdmin();
+        showToast('公告已刪除', false);
+    } catch (e) {
+        showToast('刪除失敗：' + e.message, true);
+    }
+}
+
+// -------------------------
 // v2.2: Export Users Modal — 匯出使用者資料 (Excel / CSV)
 // -------------------------
 async function openExportModal() {
@@ -2019,6 +2167,18 @@ document.addEventListener('DOMContentLoaded', () => {
     if (provisionCloseBtn) provisionCloseBtn.addEventListener('click', closeProvision);
     const provisionBackdrop = document.getElementById('provision-backdrop');
     if (provisionBackdrop) provisionBackdrop.addEventListener('click', closeProvision);
+
+    // v2.2: Announcements Modal Bindings
+    const newAnnBtn = document.getElementById('btn-new-announcement');
+    if (newAnnBtn) newAnnBtn.addEventListener('click', () => openAnnouncementModal(null));
+    const annForm = document.getElementById('announcement-form');
+    if (annForm) annForm.addEventListener('submit', submitAnnouncementForm);
+    const annCloseBtn = document.getElementById('announcement-close-btn');
+    if (annCloseBtn) annCloseBtn.addEventListener('click', closeAnnouncementModal);
+    const annCancelBtn = document.getElementById('announcement-cancel-btn');
+    if (annCancelBtn) annCancelBtn.addEventListener('click', closeAnnouncementModal);
+    const annBackdrop = document.getElementById('announcement-backdrop');
+    if (annBackdrop) annBackdrop.addEventListener('click', closeAnnouncementModal);
 
     // v2.2: Export Users Modal Bindings
     const exportBtn = document.getElementById('btn-export-users');

@@ -97,6 +97,32 @@
                 <style>
                     @keyframes spin { to { transform: rotate(360deg); } }
                 </style>
+
+                <!-- v2.2: 本機帳號 fallback 登入表單（預設摺疊；admin / IT provision 過的學生 / 老師用） -->
+                <details id="local-login-details" style="margin-top: 24px; width: 100%;">
+                    <summary style="cursor: pointer; color: var(--text-muted); font-size: 0.85em; text-align: center; padding: 8px;"
+                             data-i18n="local_login_summary">沒有學校帳號？</summary>
+                    <div style="display: flex; flex-direction: column; gap: 12px; margin-top: 16px; padding: 16px; background: rgba(255,255,255,0.03); border-radius: 8px;">
+                        <p style="color: var(--text-muted); font-size: 0.8em; margin: 0 0 6px 0; line-height: 1.5;"
+                           data-i18n="local_login_hint">本機帳號登入 — 請聯絡老師或管理員取得帳號。</p>
+                        <div class="input">
+                            <input type="text" id="local-username" placeholder=" " autocomplete="username">
+                            <label data-i18n="label_username">帳號</label>
+                            <ion-icon name="person-outline"></ion-icon>
+                        </div>
+                        <div class="input">
+                            <input type="password" id="local-password" placeholder=" " autocomplete="current-password">
+                            <label data-i18n="label_password">密碼</label>
+                            <ion-icon name="lock-closed-outline"></ion-icon>
+                        </div>
+                        <button type="button" id="local-login-btn" class="ready-btn"
+                                style="display: flex; align-items: center; justify-content: center; gap: 8px;">
+                            <ion-icon name="log-in-outline" style="font-size: 18px;"></ion-icon>
+                            <span data-i18n="btn_local_login">登入</span>
+                        </button>
+                        <p id="local-login-error" style="color: var(--neon-pink); font-size: 0.85em; margin: 0; min-height: 1em; text-align: center;"></p>
+                    </div>
+                </details>
             </form>
         </div>
     </div>
@@ -285,18 +311,10 @@
                             <h3><ion-icon name="megaphone-outline"></ion-icon> <span
                                     data-i18n="drawer_announcements">Announcements & Updates</span></h3>
                         </div>
-                        <div class="announcement-list">
-                            <div class="announcement-item">
-                                <span class="date">2026-05-01</span>
-                                <p data-i18n="anno_1">系統升級至 Blackwell 架構完成。</p>
-                            </div>
-                            <div class="announcement-item">
-                                <span class="date">2026-04-20</span>
-                                <p>全新 UI 介面上線，提供更佳的操作體驗。</p>
-                            </div>
-                            <div class="announcement-item">
-                                <span class="date">2026-04-01</span>
-                                <p>AI 訓練大廳測試開放，歡迎多加利用。</p>
+                        <!-- v2.2: 動態公告 (admin 在 admin UI 編輯) -->
+                        <div class="announcement-list" id="announcement-list">
+                            <div class="announcement-item" data-loading="1">
+                                <p style="color: var(--text-muted); text-align: center; padding: 20px;" data-i18n="anno_loading">載入公告中...</p>
                             </div>
                         </div>
                     </section>
@@ -306,11 +324,12 @@
                             <h3><ion-icon name="link-outline"></ion-icon> Quick Links</h3>
                         </div>
                         <div class="bottom-quick-links">
+                            <!-- v2.2: JupyterLab → AI Base Lab，連到 Notebook 分頁 -->
                             <div class="quick-link-card">
-                                <ion-icon name="logo-python" class="ql-icon"></ion-icon>
-                                <h4 data-i18n="ql_jupyter_title">JupyterLab</h4>
-                                <p data-i18n="ql_jupyter_desc">進入進階開發環境</p>
-                                <button class="ready-btn mini-btn">Go <ion-icon
+                                <ion-icon name="rocket-outline" class="ql-icon"></ion-icon>
+                                <h4 data-i18n="ql_lab_title">AI Base Lab</h4>
+                                <p data-i18n="ql_lab_desc">VS Code in Browser + Run on GPU</p>
+                                <button class="ready-btn mini-btn" id="ql-lab-go">Go <ion-icon
                                         name="arrow-forward-outline"></ion-icon></button>
                             </div>
                             <div class="quick-link-card">

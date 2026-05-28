@@ -392,3 +392,29 @@ class WorkerNodeInfo(BaseModel):
 class WorkerNodeListResponse(BaseModel):
     """ZH: 線上 Worker 節點列表回應 | EN: Online worker node list response"""
     nodes: List[WorkerNodeInfo]
+
+
+# ==============================================================================
+# ZH: 公告 Schema (v2.2 新增) | EN: Announcement Schemas (v2.2)
+# ==============================================================================
+
+class AnnouncementCreate(BaseModel):
+    """ZH: admin 建立 / 編輯公告的請求 | EN: Admin create/edit announcement"""
+    title: str
+    body: str
+    is_pinned: int = 0          # 0 / 1
+    is_visible: int = 1         # 0 / 1
+
+
+class AnnouncementResponse(BaseModel):
+    """ZH: 公告回應 | EN: Announcement response"""
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    title: str
+    body: str
+    posted_by: Optional[str] = None
+    posted_at: datetime
+    updated_at: Optional[datetime] = None
+    is_pinned: int = 0
+    is_visible: int = 1

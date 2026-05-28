@@ -693,6 +693,68 @@
                 </div>
             </section>
 
+            <!-- v2.2: 公告管理 -->
+            <section class="widget form-box-panel" style="grid-column: 1 / -1;">
+                <div class="widget-header split">
+                    <h3><ion-icon name="megaphone-outline" style="margin-right:6px;"></ion-icon> <span data-i18n="admin_announcements">公告管理</span></h3>
+                    <button id="btn-new-announcement" class="ready-btn config-save-btn" style="width:auto; padding: 6px 14px; font-size: 13px;">
+                        <ion-icon name="add-outline" style="margin-right:4px; vertical-align:middle;"></ion-icon>
+                        <span data-i18n="btn_new_announcement">新增公告</span>
+                    </button>
+                </div>
+                <div class="admin-table-wrap scrollbar-custom">
+                    <table class="admin-table">
+                        <thead>
+                            <tr>
+                                <th style="width:60px;" data-i18n="th_pinned">置頂</th>
+                                <th data-i18n="th_title">標題</th>
+                                <th data-i18n="th_posted_at">發布時間</th>
+                                <th style="width:80px;" data-i18n="th_visible">顯示</th>
+                                <th style="width:140px;" data-i18n="th_actions">操作</th>
+                            </tr>
+                        </thead>
+                        <tbody id="announcements-body">
+                            <tr><td colspan="5" style="text-align:center; color:var(--text-muted); padding: 16px;" data-i18n="msg_loading">載入中...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+
+            <!-- v2.2: 公告編輯 Modal -->
+            <div id="announcement-modal" class="tutorial-modal hidden">
+                <div class="tutorial-backdrop" id="announcement-backdrop"></div>
+                <div class="tutorial-content" style="max-width: 560px; padding: 30px;">
+                    <button class="tutorial-close" id="announcement-close-btn"><ion-icon name="close-outline"></ion-icon></button>
+                    <h2 id="announcement-modal-title" style="margin-bottom: 16px; display: flex; align-items: center; gap: 8px;">
+                        <ion-icon name="megaphone-outline"></ion-icon>
+                        <span data-i18n="announcement_new_title">新增公告</span>
+                    </h2>
+                    <form id="announcement-form" style="display:flex; flex-direction:column; gap:12px;">
+                        <input type="hidden" id="announcement-id" value="">
+                        <div class="input-wrap">
+                            <ion-icon name="text-outline"></ion-icon>
+                            <input type="text" id="announcement-title" required maxlength="200" data-i18n-placeholder="placeholder_announcement_title" placeholder="標題">
+                        </div>
+                        <textarea id="announcement-body" required rows="5" data-i18n-placeholder="placeholder_announcement_body" placeholder="公告內容"
+                                  style="width:100%; padding:10px; border-radius:8px; background:rgba(255,255,255,0.05); border:1px solid var(--border-color); color:var(--text-primary); font-family:inherit; font-size:14px; resize:vertical;"></textarea>
+                        <div style="display:flex; gap:18px; font-size:14px;">
+                            <label style="cursor:pointer; display:flex; align-items:center; gap:6px;">
+                                <input type="checkbox" id="announcement-pinned">
+                                <span data-i18n="label_pinned">置頂顯示</span>
+                            </label>
+                            <label style="cursor:pointer; display:flex; align-items:center; gap:6px;">
+                                <input type="checkbox" id="announcement-visible" checked>
+                                <span data-i18n="label_visible">公開可見</span>
+                            </label>
+                        </div>
+                        <div style="display:flex; gap:10px; justify-content:flex-end; margin-top:6px;">
+                            <button type="button" id="announcement-cancel-btn" class="ready-btn" style="width:auto; padding:8px 18px; font-size:13px;" data-i18n="btn_cancel">取消</button>
+                            <button type="submit" class="ready-btn config-save-btn" style="width:auto; padding:8px 22px; font-size:13px;" data-i18n="btn_save">儲存</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+
             <!-- ZH: 系統設定管理（開發中）| EN: System Config Management (Coming Soon) -->
             <section class="widget form-box-panel" style="grid-column: 1 / -1;">
                 <div class="widget-header">

@@ -43,8 +43,8 @@ const TRANSLATIONS = {
         label_epochs: "訓練迴圈數",
         label_batch: "批次大小",
         btn_dispatch: "派發任務",
-        compute_high: "高算力運算",
-        compute_mid_low: "中低算力運算",
+        compute_high: "大型訓練",
+        compute_mid_low: "快速作業",
         pipeline_active: "運行管線 / 佇列",
         msg_no_signal: "無訊號 / 佇列空閒",
         btn_view_details: "查看詳情",
@@ -142,6 +142,19 @@ const TRANSLATIONS = {
         anno_1: "系統升級至 Blackwell 架構完成。",
         ql_jupyter_title: "JupyterLab",
         ql_jupyter_desc: "進入進階開發環境",
+        ql_lab_title: "AI Base Lab",
+        ql_lab_desc: "VS Code in Browser + Run on GPU",
+        anno_loading: "載入公告中...",
+        anno_empty: "目前沒有公告",
+        anno_load_failed: "公告載入失敗",
+        // v2.2: 本機帳號 fallback 登入
+        local_login_summary: "沒有學校帳號？",
+        local_login_hint: "本機帳號登入 — 請聯絡老師或管理員取得帳號。",
+        label_username: "帳號",
+        label_password: "密碼",
+        btn_local_login: "登入",
+        local_login_empty: "請輸入帳號與密碼",
+        local_login_failed: "登入失敗：",
         ql_school_title: "學校首頁",
         ql_school_desc: "前往 MCU 官方網站",
         ql_support_title: "問題回報",
@@ -293,8 +306,8 @@ const TRANSLATIONS = {
         label_epochs: "Epochs",
         label_batch: "Batch Size",
         btn_dispatch: "Dispatch Task",
-        compute_high: "High Compute",
-        compute_mid_low: "Mid / Low Compute",
+        compute_high: "Large Training",
+        compute_mid_low: "Quick Tasks",
         pipeline_active: "Active Pipeline",
         msg_no_signal: "No Signal / Queue Empty",
         btn_view_details: "View Details",
@@ -392,6 +405,19 @@ const TRANSLATIONS = {
         anno_1: "System upgraded to Blackwell architecture.",
         ql_jupyter_title: "JupyterLab",
         ql_jupyter_desc: "Access advanced dev environment",
+        ql_lab_title: "AI Base Lab",
+        ql_lab_desc: "VS Code in Browser + Run on GPU",
+        anno_loading: "Loading announcements...",
+        anno_empty: "No announcements at the moment",
+        anno_load_failed: "Failed to load announcements",
+        // v2.2: Local account fallback login
+        local_login_summary: "No school account?",
+        local_login_hint: "Local account login — please contact teacher or admin for credentials.",
+        label_username: "Username",
+        label_password: "Password",
+        btn_local_login: "Sign In",
+        local_login_empty: "Please enter username and password",
+        local_login_failed: "Login failed: ",
         ql_school_title: "School Homepage",
         ql_school_desc: "Visit MCU official website",
         ql_support_title: "Report Issues",
@@ -739,6 +765,70 @@ document.addEventListener('DOMContentLoaded', () => {
             // 點在 toggle 按鈕本身（理論上 stopPropagation 已擋下但保險）→ 略過
             if (sideDrawerToggle.contains(e.target)) return;
             sideDrawer.classList.add('closed');
+        });
+    }
+
+    // v2.2: 本機帳號 fallback 登入表單
+    const localLoginBtn = document.getElementById('local-login-btn');
+    if (localLoginBtn) {
+        localLoginBtn.addEventListener('click', async () => {
+            const usernameInput = document.getElementById('local-username');
+            const passwordInput = document.getElementById('local-password');
+            const errEl = document.getElementById('local-login-error');
+            const username = (usernameInput?.value || '').trim();
+            const password = passwordInput?.value || '';
+            if (!username || !password) {
+                errEl.textContent = t('local_login_empty') || '請輸入帳號與密碼';
+                return;
+            }
+            localLoginBtn.disabled = true;
+            errEl.textContent = '';
+            try {
+                const body = new URLSearchParams({ username, password });
+                const res = await fetch(`${API_BASE}/auth/login`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                    body: body.toString(),
+                    credentials: 'include',
+                });
+                if (!res.ok) {
+                    const err = await res.json().catch(() => ({ detail: 'login failed' }));
+                    throw new Error(err.detail || 'login failed');
+                }
+                const data = await res.json();
+                localStorage.setItem('ai_hud_token', data.access_token);
+                authToken = data.access_token;
+                if (passwordInput) passwordInput.value = '';
+                window.location.href = '/train/';
+            } catch (e) {
+                errEl.textContent = (t('local_login_failed') || '登入失敗：') + e.message;
+            } finally {
+                localLoginBtn.disabled = false;
+            }
+        });
+        // Enter 鍵也能送出
+        ['local-username', 'local-password'].forEach(id => {
+            const el = document.getElementById(id);
+            if (el) el.addEventListener('keypress', (e) => {
+                if (e.key === 'Enter') { e.preventDefault(); localLoginBtn.click(); }
+            });
+        });
+    }
+
+    // v2.2: Quick Link「AI Base Lab」→ 跳到 Compute → Notebook 分頁
+    const qlLabGo = document.getElementById('ql-lab-go');
+    if (qlLabGo) {
+        qlLabGo.addEventListener('click', (e) => {
+            e.preventDefault();
+            if (!authToken) {
+                if (typeof showToast === 'function') showToast('auth_required_to_use', 'warning');
+                return;
+            }
+            switchTab('dashboard');
+            setTimeout(() => {
+                const subTab = document.getElementById('sub-tab-notebook');
+                if (subTab) subTab.click();
+            }, 100);
         });
     }
 
@@ -1182,7 +1272,48 @@ function toggleAuthGatedUI(show) {
 // ZH: 儀表板與任務邏輯 | EN: Dashboard & Jobs
 // =========================
 async function fetchDashboardData() {
-    await Promise.all([fetchUserProfile(), fetchTokenUsage(), fetchJobs()]);
+    await Promise.all([fetchUserProfile(), fetchTokenUsage(), fetchJobs(), fetchAnnouncements()]);
+}
+
+// v2.2: 拉動態公告 (admin 在 admin UI 可編輯)
+async function fetchAnnouncements() {
+    const listEl = document.getElementById('announcement-list');
+    if (!listEl) return;
+    try {
+        const res = await fetch(`${API_BASE}/announcements?limit=10`, {
+            headers: { 'Authorization': `Bearer ${authToken}` },
+        });
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        const items = await res.json();
+        renderAnnouncements(items);
+    } catch (e) {
+        console.error('Error fetching announcements:', e);
+        listEl.innerHTML = `<div class="announcement-item"><p style="color: var(--text-muted); text-align: center; padding: 12px;">${t('anno_load_failed') || '公告載入失敗'}</p></div>`;
+    }
+}
+
+function renderAnnouncements(items) {
+    const listEl = document.getElementById('announcement-list');
+    if (!listEl) return;
+    if (!items || items.length === 0) {
+        listEl.innerHTML = `<div class="announcement-item"><p style="color: var(--text-muted); text-align: center; padding: 20px;">${t('anno_empty') || '目前沒有公告'}</p></div>`;
+        return;
+    }
+    listEl.innerHTML = items.map(a => {
+        const dt = new Date(a.posted_at);
+        const dateStr = `${dt.getFullYear()}-${String(dt.getMonth()+1).padStart(2,'0')}-${String(dt.getDate()).padStart(2,'0')}`;
+        const titleEl = document.createElement('span');
+        titleEl.textContent = a.title;
+        const bodyEl = document.createElement('p');
+        bodyEl.textContent = a.body;
+        const pinned = a.is_pinned ? '<ion-icon name="pin" style="color:var(--neon-yellow); margin-right:4px; vertical-align:middle;" title="置頂"></ion-icon>' : '';
+        return `
+            <div class="announcement-item">
+                <span class="date">${dateStr}</span>
+                <p>${pinned}<strong>${titleEl.outerHTML.replace(/<\/?span>/g, '')}</strong> — ${bodyEl.outerHTML.replace(/<\/?p>/g, '')}</p>
+            </div>
+        `;
+    }).join('');
 }
 
 async function fetchUserProfile() {

@@ -228,7 +228,7 @@ app.include_router(jobs.router, prefix="/api/v1/jobs")
 # ZH: 新增聊天助理與管理員路由 | EN: Chat assistant and admin routes
 # ZH: Phase E 移除 notebooks router（v1 偽 Notebook 已被 v2.0 Lab 取代）
 # EN: Phase E removed notebooks router (v1 pseudo-Notebook replaced by v2.0 Lab)
-from .routers import chat, admin, datasets, worker, sso, lab, secrets
+from .routers import chat, admin, datasets, worker, sso, lab, secrets, announcements
 app.include_router(chat.router,      prefix="/api/v1/chat")
 app.include_router(admin.router,     prefix="/api/v1/admin")
 app.include_router(datasets.router,  prefix="/api/v1/datasets")
@@ -239,6 +239,9 @@ app.include_router(sso.router,       prefix="/api/v1/sso")
 # ZH: v2.0 Lab 模組 | EN: v2.0 Lab module
 app.include_router(lab.router,       prefix="/api/v1/lab")
 app.include_router(secrets.router,   prefix="/api/v1/secrets")
+# ZH: v2.2 公告（user 看 + admin 編）
+app.include_router(announcements.router,        prefix="/api/v1/announcements")
+app.include_router(announcements.admin_router,  prefix="/api/v1/admin/announcements")
 
 
 # ==============================================================================

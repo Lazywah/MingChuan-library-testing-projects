@@ -333,6 +333,26 @@ class AdminAction(Base):
 
 
 # ==============================================================================
+# ZH: 表 14-: Announcement - 首頁公告 (v2.2 新增)
+# EN: Table 14-: Announcement - Homepage announcements (v2.2)
+# ZH: admin 可在 admin UI 動態管理公告 (新增/編輯/置頂/刪除)
+#     使用者首頁拉最新 N 則可見公告
+# ==============================================================================
+class Announcement(Base):
+    __tablename__ = "announcements"
+
+    id          = Column(Integer, primary_key=True, autoincrement=True)
+    title       = Column(String, nullable=False)
+    body        = Column(Text, nullable=False)
+    posted_by   = Column(String, ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
+    posted_at   = Column(DateTime, default=lambda: datetime.now(timezone.utc), index=True)
+    updated_at  = Column(DateTime, default=lambda: datetime.now(timezone.utc),
+                                   onupdate=lambda: datetime.now(timezone.utc))
+    is_pinned   = Column(Integer, default=0)                                # ZH: 1 = 置頂 (排在最前)
+    is_visible  = Column(Integer, default=1)                                # ZH: 0 = 隱藏 (草稿/已下架)
+
+
+# ==============================================================================
 # ZH: 表 14: UserSessionUsage - 使用者每日 session 累積時長
 # EN: Table 14: UserSessionUsage - Per-user daily session usage
 # ZH: 複合 PK (user_id, date)，每日一筆，scheduler 自動累加
