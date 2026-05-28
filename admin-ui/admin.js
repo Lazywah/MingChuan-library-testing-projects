@@ -971,7 +971,15 @@ let _adminUsersCache = [];
 
 function renderAdminUsers(users) {
     try {
-        if (users) _adminUsersCache = users;
+        if (users) {
+            _adminUsersCache = users;
+            // v2.2: 更新「最後刷新時間」徽章，讓 admin 知道 polling 真的在跑
+            const stamp = document.getElementById('admin-users-last-updated');
+            if (stamp) {
+                const t = new Date();
+                stamp.textContent = `${t.getHours().toString().padStart(2,'0')}:${t.getMinutes().toString().padStart(2,'0')}:${t.getSeconds().toString().padStart(2,'0')}`;
+            }
+        }
         const tbody = document.getElementById('admin-users-body');
         if (!tbody) return;
         
@@ -1004,20 +1012,35 @@ function renderAdminUsers(users) {
 
             // Online status indicator: red=disabled, green=online, gray=offline, dash="N/A"
             // v2.1 修正：admin 從未登入 user UI → online_status=null → 顯示「—」（不適用）
+            // v2.2: hover 顯示「上次活動：N 分鐘前」讓 admin 知道判斷依據
             const lblOnline   = tl.label_online   || 'Online';
             const lblOffline  = tl.label_offline  || 'Offline';
             const lblDisabled = tl.status_disabled || 'Disabled';
             const lblNA       = tl.label_na       || 'Not applicable';
+
+            // 計算「上次登入距今多久」當 tooltip 補充資訊
+            let detailTooltip = '';
+            if (u.last_login_time) {
+                const diffMs = Date.now() - new Date(u.last_login_time).getTime();
+                const diffMin = Math.floor(diffMs / 60000);
+                if (diffMin < 1) detailTooltip = ' (剛剛登入)';
+                else if (diffMin < 60) detailTooltip = ` (上次登入 ${diffMin} 分鐘前)`;
+                else if (diffMin < 1440) detailTooltip = ` (上次登入 ${Math.floor(diffMin/60)} 小時前)`;
+                else detailTooltip = ` (上次登入 ${Math.floor(diffMin/1440)} 天前)`;
+            } else {
+                detailTooltip = ' (從未登入)';
+            }
+
             let onlineDot;
             if (!u.is_active) {
-                onlineDot = `<span style="display:inline-block; width:8px; height:8px; border-radius:50%; background:#ef4444; margin-right:6px; box-shadow:0 0 5px #ef4444;" title="${lblDisabled}"></span>`;
+                onlineDot = `<span style="display:inline-block; width:8px; height:8px; border-radius:50%; background:#ef4444; margin-right:6px; box-shadow:0 0 5px #ef4444;" title="${lblDisabled}${detailTooltip}"></span>`;
             } else if (u.online_status === null || u.online_status === undefined) {
                 // v2.1: admin 未登入 user UI → 線上狀態不適用
-                onlineDot = `<span style="display:inline-block; width:8px; height:8px; line-height:8px; text-align:center; color:#9ca3af; margin-right:6px; font-size:10px;" title="${lblNA}">—</span>`;
+                onlineDot = `<span style="display:inline-block; width:8px; height:8px; line-height:8px; text-align:center; color:#9ca3af; margin-right:6px; font-size:10px;" title="${lblNA} (本機 admin，沒登入 user UI 不顯示在線狀態)">—</span>`;
             } else if (u.online_status === 1) {
-                onlineDot = `<span style="display:inline-block; width:8px; height:8px; border-radius:50%; background:#10b981; margin-right:6px; box-shadow:0 0 5px #10b981;" title="${lblOnline}"></span>`;
+                onlineDot = `<span style="display:inline-block; width:8px; height:8px; border-radius:50%; background:#10b981; margin-right:6px; box-shadow:0 0 5px #10b981;" title="${lblOnline} (10 分鐘內活躍)${detailTooltip}"></span>`;
             } else {
-                onlineDot = `<span style="display:inline-block; width:8px; height:8px; border-radius:50%; background:#6b7280; margin-right:6px;" title="${lblOffline}"></span>`;
+                onlineDot = `<span style="display:inline-block; width:8px; height:8px; border-radius:50%; background:#6b7280; margin-right:6px;" title="${lblOffline} (>10 分鐘未活動)${detailTooltip}"></span>`;
             }
             
             // Token display

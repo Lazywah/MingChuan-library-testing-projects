@@ -200,6 +200,11 @@
                         <label style="font-size:12px; display:flex; align-items:center; gap:4px; color:var(--text-muted); cursor:pointer;">
                             <input type="checkbox" id="auto-refresh-users" checked> <span data-i18n="label_auto_refresh">Auto Refresh</span>
                         </label>
+                        <!-- v2.2: 最後更新時間徽章 - 讓 admin 知道 polling 正在跑 -->
+                        <span style="font-size:12px; color:var(--text-muted); font-family:monospace;" title="最後更新時間 (auto refresh 每 5s)">
+                            <ion-icon name="time-outline" style="vertical-align:middle; font-size:14px;"></ion-icon>
+                            <span id="admin-users-last-updated">--:--:--</span>
+                        </span>
                         <ion-icon name="refresh-circle-outline" id="refresh-admin-btn" class="refresh-icon" title="Refresh"></ion-icon>
                     </div>
                 </div>
