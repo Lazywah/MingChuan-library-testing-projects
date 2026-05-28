@@ -771,6 +771,9 @@ document.addEventListener('DOMContentLoaded', () => {
     // v2.2: 本機帳號 fallback 登入表單
     const localLoginBtn = document.getElementById('local-login-btn');
     if (localLoginBtn) {
+        // 保留原本內容以便恢復
+        const originalBtnHTML = localLoginBtn.innerHTML;
+
         localLoginBtn.addEventListener('click', async () => {
             const usernameInput = document.getElementById('local-username');
             const passwordInput = document.getElementById('local-password');
@@ -781,7 +784,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 errEl.textContent = t('local_login_empty') || '請輸入帳號與密碼';
                 return;
             }
+            // 立即視覺回饋（避免使用者覺得「按了沒反應」）
             localLoginBtn.disabled = true;
+            localLoginBtn.innerHTML = '<div class="spinner" style="width:16px; height:16px; border:2px solid rgba(255,255,255,0.3); border-top-color:#fff; border-radius:50%; animation:spin 0.8s linear infinite;"></div><span>登入中…</span>';
             errEl.textContent = '';
             try {
                 const body = new URLSearchParams({ username, password });
@@ -799,11 +804,20 @@ document.addEventListener('DOMContentLoaded', () => {
                 localStorage.setItem('ai_hud_token', data.access_token);
                 authToken = data.access_token;
                 if (passwordInput) passwordInput.value = '';
-                window.location.href = '/train/';
+
+                // v2.2: 不再 window.location.href reload（會多一輪 HTML+JS download）
+                // 直接 SPA 切換：呼叫 checkAuth → switchToDashboard 流程
+                if (typeof checkAuth === 'function') {
+                    await checkAuth();
+                } else {
+                    // checkAuth 還沒掛載，fallback 才 reload
+                    window.location.href = '/train/';
+                }
             } catch (e) {
                 errEl.textContent = (t('local_login_failed') || '登入失敗：') + e.message;
             } finally {
                 localLoginBtn.disabled = false;
+                localLoginBtn.innerHTML = originalBtnHTML;
             }
         });
         // Enter 鍵也能送出
