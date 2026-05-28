@@ -78,6 +78,9 @@ python scripts/setup_env.py
 ## 5. 啟動服務
 
 ```bash
+# Linux 主機若 SELinux 嚴格建議先建 data 目錄
+mkdir -p data
+
 docker compose up -d --build      # 第一次 build 約 3-8 分鐘
 docker compose ps
 ```
@@ -91,17 +94,30 @@ docker compose ps
 curl http://localhost/health      # → "OK"
 ```
 
+### 5.1 （選用）啟動 AI 推理層
+
+想用「AI 助手」對話功能必須**額外**啟動 Portkey + Open WebUI + Ollama：
+
+```bash
+docker compose -f docker-compose.ai-models.yml up -d
+```
+
+不啟動的話 user UI 仍可登入、Notebook / 任務都能跑，**只有「AI 助手」對話功能會回 503**。
+記得在 `docker-compose.ai-models.yml` 的 `portkey` 區塊填入真實 API key（`ANTHROPIC_API_KEY` / `OPENAI_API_KEY` / `GOOGLE_API_KEY`）才能真的串到 LLM。
+
 ---
 
-## 6. 開啟介面（此時還沒帳號）
+## 6. 開啟介面
 
-| URL | 用途 |
-|---|---|
-| http://localhost/train/ | 使用者介面 |
-| http://localhost:8888/ | 管理員介面 |
-| http://localhost:8002/docs | API Swagger |
+| URL | 用途 | 第一次能做什麼 |
+|---|---|---|
+| http://localhost/train/ | 使用者介面 | 看得到登入頁；展開「沒有學校帳號？」可用本機 admin 登入（v2.2+，做完 §7 後可用）|
+| http://localhost:8888/ | 管理員介面 | 本機 admin 直接 username + password 登入 |
+| http://localhost:8002/docs | API Swagger | OpenAPI 文件、可直接打 API 測試 |
 
-此時看得到登入頁但無法登入 — 下一步建第一個 admin。
+> v2.2 後 user UI 登入頁加了**摺疊式 fallback 表單**：預設只顯示「使用學校帳號登入」(SSO)；點「沒有學校帳號？」展開可填 username + password。設計上學生看不到此入口，但 IT/老師/admin 自己用 user UI 可從這進。
+>
+> 此時 DB 還沒任何帳號 — 下一步建第一個 admin。
 
 ---
 
@@ -152,8 +168,10 @@ db.close()
 ### A. 管理員 UI（推薦）
 admin UI → 使用者管理 → Provision User → 填 username/email/role → 系統寄臨時密碼信（需 SMTP）
 
+> **v2.2 新增**：admin UI 使用者管理頁加了「📊 匯出 Excel / CSV」按鈕。可勾選欄位 + 範圍批次匯出做開學分發 / 期末檔案備份。
+
 ### B. 學生自助註冊
-http://localhost/train/ → 註冊 → 強制 `role=student`（schema 層擋下，無法手動改 admin）
+http://localhost/train/ → 點「沒有學校帳號？」展開 fallback → 註冊 → 強制 `role=student`（schema 層擋下，無法手動改 admin）
 
 ### C. 批次匯入（Python）
 範例見 `docs/archive/PLAN-v2.1-sso-oidc.md` 或直接：
@@ -187,7 +205,7 @@ EOF
 
 ## 9. （選用）建立 Lab base images
 
-> 想用 **v2.0 Lab**（VS Code in Browser）才需要。**只建 code-server 就能用**（10 分鐘）；全套 7 個 image 需 30-60 分鐘。
+> 想用 **v2.0 Lab**（VS Code in Browser）才需要。**只建 code-server 就能用**（**15-25 分鐘**，含 npm install + vsce package + miniconda 下載）；全套 7 個 image 需 30-60 分鐘。
 
 ```bash
 # 最小可用：只 build code-server
@@ -197,6 +215,8 @@ docker build -t aibase/code-server:2026-spring \
 # 全套：含 PyTorch / TensorFlow / HuggingFace / llama.cpp / vLLM / dev-tools
 bash infrastructure/base-images/build-all.sh
 ```
+
+> ⚠️ Linux：build script 需要 LF 換行；若你在 Windows host 編過 `aibase-entrypoint.sh` 可能被轉成 CRLF 導致容器啟動失敗。Dockerfile 已加 `sed -i 's/\r$//'` 補救，但若 build 仍報 `exec format error` 請手動 `dos2unix infrastructure/base-images/code-server/aibase-entrypoint.sh`。
 
 驗證：登入 → 運算任務 → Notebook → 選 image → 點「開啟 Notebook」→ 跳到 `/code/<uid>/` 看到 VS Code 即成功。
 
@@ -211,8 +231,12 @@ bash infrastructure/base-images/build-all.sh
 | `error while interpolating ...` | 同上，缺 env 變數 |
 | scheduler 不 healthy | `docker compose logs job-scheduler --tail 30` |
 | 忘記 admin 密碼 | 重跑 §7 但加 `admin.hashed_password = get_password_hash('NEW_PW')` |
-| 要重新開始（清空所有資料）| `docker compose down -v && rm -rf data/ai_platform.db && docker compose up -d --build` ⚠️ 不可逆 |
+| `python` 找不到（Ubuntu 24+）| 用 `python3 scripts/setup_env.py` |
+| AI 助手回 503 | 沒啟動 ai-models — `docker compose -f docker-compose.ai-models.yml up -d`，並填 LLM API key |
+| 要重新開始（清空所有資料）| `docker compose down -v && rm -rf data/ai_platform.db && docker compose up -d --build` ⚠️ **不可逆**（`-v` 會刪掉每位使用者的 `home_<uid>` 工作目錄 + 所有 secrets + DB）|
 | Notebook 點開 502 | base image 沒 build，看 §9 |
+| 要改首頁公告 | admin UI → 公告管理（v2.2+）→ 新增 / 編輯 / 刪除 / 置頂 |
+| 要做學生匯出做開學分發 | admin UI → 使用者管理 → 📊 匯出 Excel / CSV（v2.2+，可勾選欄位）|
 
 ---
 
