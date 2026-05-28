@@ -94,6 +94,23 @@ const TRANSLATIONS = {
         confirm_reset_user: "確定要初始化使用者 {name} 的帳號嗎？\n密碼將被重置，用量將歸零。",
         toast_user_reset: "帳號已初始化",
         btn_add_test: "建立帳號",
+        // v2.2: Export users modal
+        btn_export_users: "匯出 Excel / CSV",
+        btn_export_confirm: "匯出",
+        btn_cancel: "取消",
+        export_title: "匯出使用者資料",
+        export_scope_label: "範圍：",
+        export_scope_filter: "目前篩選結果（依 3-tab 與搜尋）",
+        export_scope_all: "全部使用者",
+        export_columns_label: "要包含的欄位：",
+        export_select_all: "全選",
+        export_select_none: "全不選",
+        export_format_label: "格式：",
+        export_format_xlsx: "Excel (.xlsx)",
+        export_format_csv: "CSV (UTF-8 BOM)",
+        export_no_columns: "請至少勾選一個欄位",
+        export_success: "匯出完成",
+        export_failed: "匯出失敗：",
         add_test_title: "建立帳號",
         btn_add_test_submit: "建立帳號",
         add_test_temp_password: "臨時密碼（僅顯示一次）：",
@@ -279,6 +296,23 @@ const TRANSLATIONS = {
         confirm_reset_user: "Are you sure to initialize user {name}?\nPassword will be reset, usage will be cleared.",
         toast_user_reset: "Account initialized",
         btn_add_test: "Provision User",
+        // v2.2: Export users modal
+        btn_export_users: "Export Excel / CSV",
+        btn_export_confirm: "Export",
+        btn_cancel: "Cancel",
+        export_title: "Export User Data",
+        export_scope_label: "Scope:",
+        export_scope_filter: "Current filtered results (by 3-tab and search)",
+        export_scope_all: "All users",
+        export_columns_label: "Columns to include:",
+        export_select_all: "Select all",
+        export_select_none: "Select none",
+        export_format_label: "Format:",
+        export_format_xlsx: "Excel (.xlsx)",
+        export_format_csv: "CSV (UTF-8 BOM)",
+        export_no_columns: "Please select at least one column",
+        export_success: "Export complete",
+        export_failed: "Export failed: ",
         add_test_title: "Provision User",
         btn_add_test_submit: "Create Account",
         add_test_temp_password: "Temporary Password (shown once):",
@@ -1729,6 +1763,107 @@ async function resetUserUsage(userId) {
 }
 
 // -------------------------
+// v2.2: Export Users Modal — 匯出使用者資料 (Excel / CSV)
+// -------------------------
+async function openExportModal() {
+    const modal = document.getElementById('export-modal');
+    modal.classList.remove('hidden');
+
+    // 重置選項
+    document.querySelector('input[name="export-scope"][value="filter"]').checked = true;
+    document.querySelector('input[name="export-format"][value="xlsx"]').checked = true;
+
+    // fetch 欄位清單
+    const listEl = document.getElementById('export-columns-list');
+    const tl = TRANSLATIONS[currentLang] || {};
+    listEl.innerHTML = `<div style="grid-column: 1 / -1; color: var(--text-muted); font-size: 13px; text-align: center; padding: 10px;">${tl.msg_loading || '載入中...'}</div>`;
+    try {
+        const res = await fetch(`${API_BASE}/admin/users/export/columns`, {
+            headers: { 'Authorization': `Bearer ${authToken}` },
+        });
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        const cols = await res.json();
+        // 預設勾選的欄位（基本資料）
+        const defaultChecked = new Set(['username', 'email', 'role', 'auth_source', 'is_active', 'department', 'last_login_time', 'tokens_used', 'tokens_limit']);
+        listEl.innerHTML = cols.map(c => `
+            <label style="font-size: 13px; cursor: pointer; display: flex; align-items: center; gap: 6px;">
+                <input type="checkbox" class="export-col-cb" value="${c.key}" ${defaultChecked.has(c.key) ? 'checked' : ''}>
+                ${c.label}
+            </label>
+        `).join('');
+    } catch (e) {
+        console.error('Failed to load export columns:', e);
+        listEl.innerHTML = `<div style="grid-column: 1 / -1; color: var(--neon-pink); font-size: 13px; text-align: center; padding: 10px;">載入欄位失敗：${e.message}</div>`;
+    }
+}
+
+function closeExportModal() {
+    document.getElementById('export-modal').classList.add('hidden');
+}
+
+function toggleExportColumns(checked) {
+    document.querySelectorAll('.export-col-cb').forEach(cb => { cb.checked = checked; });
+}
+
+async function submitExport() {
+    const checked = Array.from(document.querySelectorAll('.export-col-cb:checked')).map(cb => cb.value);
+    if (checked.length === 0) {
+        const tl = TRANSLATIONS[currentLang] || {};
+        showToast(tl.export_no_columns || '請至少勾選一個欄位', true);
+        return;
+    }
+    const scope = document.querySelector('input[name="export-scope"]:checked').value;
+    const fmt = document.querySelector('input[name="export-format"]:checked').value;
+
+    // 組 query
+    const params = new URLSearchParams({
+        fmt,
+        scope,
+        columns: checked.join(','),
+    });
+    if (scope === 'filter' && typeof _currentAuthSource !== 'undefined' && _currentAuthSource) {
+        params.set('auth_source', _currentAuthSource);
+    }
+
+    const btn = document.getElementById('export-confirm-btn');
+    const originalText = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = '<ion-icon name="hourglass-outline"></ion-icon> 匯出中...';
+    try {
+        const res = await fetch(`${API_BASE}/admin/users/export?${params}`, {
+            headers: { 'Authorization': `Bearer ${authToken}` },
+        });
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        // 抓 Content-Disposition 取得檔名（fallback 用日期）
+        const cd = res.headers.get('content-disposition') || '';
+        const m = cd.match(/filename="?([^";]+)"?/);
+        const filename = m ? m[1] : `users-${Date.now()}.${fmt}`;
+
+        const blob = await res.blob();
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+
+        const tl = TRANSLATIONS[currentLang] || {};
+        showToast(tl.export_success || '匯出完成', false);
+        closeExportModal();
+    } catch (e) {
+        console.error('Export failed:', e);
+        const tl = TRANSLATIONS[currentLang] || {};
+        showToast((tl.export_failed || '匯出失敗：') + e.message, true);
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = originalText;
+    }
+}
+
+
+// -------------------------
 // Provision User Modal
 // -------------------------
 function openProvision() {
@@ -1861,6 +1996,22 @@ document.addEventListener('DOMContentLoaded', () => {
     if (provisionCloseBtn) provisionCloseBtn.addEventListener('click', closeProvision);
     const provisionBackdrop = document.getElementById('provision-backdrop');
     if (provisionBackdrop) provisionBackdrop.addEventListener('click', closeProvision);
+
+    // v2.2: Export Users Modal Bindings
+    const exportBtn = document.getElementById('btn-export-users');
+    if (exportBtn) exportBtn.addEventListener('click', openExportModal);
+    const exportCloseBtn = document.getElementById('export-close-btn');
+    if (exportCloseBtn) exportCloseBtn.addEventListener('click', closeExportModal);
+    const exportBackdrop = document.getElementById('export-backdrop');
+    if (exportBackdrop) exportBackdrop.addEventListener('click', closeExportModal);
+    const exportCancelBtn = document.getElementById('export-cancel-btn');
+    if (exportCancelBtn) exportCancelBtn.addEventListener('click', closeExportModal);
+    const exportConfirmBtn = document.getElementById('export-confirm-btn');
+    if (exportConfirmBtn) exportConfirmBtn.addEventListener('click', submitExport);
+    const exportSelectAll = document.getElementById('export-select-all');
+    if (exportSelectAll) exportSelectAll.addEventListener('click', (e) => { e.preventDefault(); toggleExportColumns(true); });
+    const exportSelectNone = document.getElementById('export-select-none');
+    if (exportSelectNone) exportSelectNone.addEventListener('click', (e) => { e.preventDefault(); toggleExportColumns(false); });
 
     // Model Modal Bindings
     const modelBackdrop = document.getElementById('model-modal-backdrop');

@@ -36,3 +36,7 @@ docker==7.1.0
 # ZH: cryptography 用於 secrets_service AES-256-GCM 加解密
 # EN: cryptography used by secrets_service for AES-256-GCM encryption
 cryptography>=42.0.0
+
+# ZH: openpyxl 用於 admin 使用者管理 Excel 匯出 (v2.2 新增)
+# EN: openpyxl for admin user-management Excel export (v2.2)
+openpyxl==3.1.5

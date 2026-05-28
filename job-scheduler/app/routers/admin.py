@@ -29,10 +29,13 @@ ZH: 端點清單：
 """
 
 from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, Query
+from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 from datetime import datetime, timezone
 from typing import Any, Optional
+import csv
+import io
 import logging
 
 from .. import models, schemas, crud
@@ -162,6 +165,176 @@ def get_all_users(
             )
         )
     return result
+
+
+# ==============================================================================
+# v2.2: 使用者管理 Excel/CSV 匯出（欄位 + 範圍 admin 可勾選）
+# v2.2: User-management export to Excel/CSV (admin chooses columns + scope)
+# ==============================================================================
+
+# 欄位白名單 — 防止 admin 隨便丟未授權欄位名稱（避免存取 hashed_password 等敏感欄）
+# Whitelist of allowed export columns — prevents injection of sensitive attribute names
+_EXPORT_COLUMNS = {
+    # key: (顯示標題, getter function)
+    "username":            ("帳號名稱", lambda u, t: u.username),
+    "email":               ("Email", lambda u, t: u.email),
+    "role":                ("角色", lambda u, t: u.role),
+    "auth_source":         ("登入來源", lambda u, t: getattr(u, "auth_source", "local") or "local"),
+    "is_active":           ("是否啟用", lambda u, t: bool(u.is_active)),
+    "department":          ("學系", lambda u, t: u.department or ""),
+    "last_login_time":     ("最後登入時間", lambda u, t: u.last_login_time.isoformat() if u.last_login_time else ""),
+    "last_login_ip":       ("最後登入 IP", lambda u, t: u.last_login_ip or ""),
+    "created_at":          ("建立日期", lambda u, t: u.created_at.isoformat() if u.created_at else ""),
+    "login_count":         ("登入次數", lambda u, t: u.login_count or 0),
+    "tokens_used":         ("Token 已用", lambda u, t: (t.tokens_used if t else 0)),
+    "tokens_limit":        ("Token 配額", lambda u, t: (t.tokens_limit if t else 0)),
+    "lifetime_tokens_used":("歷史累計 Token", lambda u, t: u.lifetime_tokens_used or 0),
+    "online_status":       ("線上狀態", lambda u, t: _compute_online(u)),
+}
+
+
+@router.get("/users/export", summary="v2.2 — 匯出使用者管理資料 (Excel / CSV)")
+def export_users(
+    columns: str = Query(
+        "username,email,role,auth_source,is_active,department,last_login_time,tokens_used,tokens_limit",
+        description="ZH: 逗號分隔欄位名稱 (見 _EXPORT_COLUMNS 白名單) | EN: comma-separated column names",
+    ),
+    fmt: str = Query("xlsx", pattern="^(xlsx|csv)$", description="ZH: xlsx 或 csv | EN: xlsx | csv"),
+    scope: str = Query("filter", pattern="^(filter|all)$", description="ZH: filter=套用 auth_source 篩選 / all=全部 | EN: filter | all"),
+    auth_source: Optional[str] = Query(None, description="ZH: 當 scope=filter 時的篩選值 | EN: filter value when scope=filter"),
+    db: Session = Depends(get_db),
+    current_admin: models.User = Depends(require_admin),
+) -> Any:
+    """
+    ZH: 把使用者管理列表匯出成 Excel (.xlsx) 或 CSV。
+    EN: Export user-management list as Excel (.xlsx) or CSV.
+
+    使用範例 / Examples:
+      GET /api/v1/admin/users/export?fmt=xlsx&columns=username,email,tokens_used
+      GET /api/v1/admin/users/export?fmt=csv&scope=filter&auth_source=local
+
+    安全 / Security:
+      - 限 admin (require_admin)
+      - 欄位走白名單 (_EXPORT_COLUMNS)，避免拉到 hashed_password 等敏感欄位
+      - 寫入 audit log
+    """
+    # 解析 + 驗證 columns
+    requested = [c.strip() for c in columns.split(",") if c.strip()]
+    if not requested:
+        raise HTTPException(status_code=400, detail="columns 不可為空 / columns must not be empty")
+    unknown = [c for c in requested if c not in _EXPORT_COLUMNS]
+    if unknown:
+        raise HTTPException(
+            status_code=400,
+            detail=f"未知欄位 / Unknown columns: {unknown}. 允許 / Allowed: {list(_EXPORT_COLUMNS)}",
+        )
+
+    # 查資料（沿用 get_all_users 的 join + filter 邏輯）
+    query = (
+        db.query(models.User, models.TokenUsage)
+        .outerjoin(models.TokenUsage, models.TokenUsage.user_id == models.User.id)
+    )
+    if scope == "filter" and auth_source:
+        query = query.filter(models.User.auth_source == auth_source)
+    rows = query.order_by(models.User.created_at.desc()).all()
+
+    # v2.1 yaml filter（同 get_all_users）
+    yaml_usernames = _yaml_mock_usernames()
+    visible = [
+        (u, t) for u, t in rows
+        if not (u.auth_source == "sso_mock" and u.username not in yaml_usernames)
+    ]
+
+    # 組標題列 + 資料列
+    headers = [_EXPORT_COLUMNS[c][0] for c in requested]
+    data_rows = [
+        [_EXPORT_COLUMNS[c][1](u, t) for c in requested]
+        for u, t in visible
+    ]
+
+    # audit log
+    try:
+        import json as _json
+        db.add(models.AdminAction(
+            admin_id=current_admin.id,
+            target_user=None,
+            action="export_users",
+            payload=_json.dumps({
+                "format": fmt,
+                "scope": scope,
+                "auth_source": auth_source,
+                "columns": requested,
+                "row_count": len(visible),
+            }, ensure_ascii=False),
+            timestamp=datetime.now(timezone.utc),
+        ))
+        db.commit()
+    except Exception as e:
+        # audit log 失敗不阻止匯出
+        logger.warning(f"audit log write failed for export_users: {e}")
+        db.rollback()
+
+    # 產生檔案
+    timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+    filename = f"users-export-{timestamp}.{fmt}"
+
+    if fmt == "csv":
+        buf = io.StringIO()
+        writer = csv.writer(buf)
+        writer.writerow(headers)
+        writer.writerows(data_rows)
+        # 加 UTF-8 BOM 讓 Excel 開 CSV 時正確顯示中文
+        content = ("﻿" + buf.getvalue()).encode("utf-8")
+        return StreamingResponse(
+            io.BytesIO(content),
+            media_type="text/csv; charset=utf-8",
+            headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        )
+
+    # fmt == "xlsx"
+    try:
+        from openpyxl import Workbook
+    except ImportError:
+        raise HTTPException(status_code=500, detail="openpyxl 未安裝 / openpyxl not installed; pip install openpyxl")
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Users"
+    ws.append(headers)
+    for row in data_rows:
+        ws.append(row)
+
+    # 簡單格式化：標題列粗體 + 凍結首列
+    from openpyxl.styles import Font, PatternFill
+    for cell in ws[1]:
+        cell.font = Font(bold=True)
+        cell.fill = PatternFill("solid", fgColor="DDEBF7")
+    ws.freeze_panes = "A2"
+
+    # auto width（粗略）
+    for col_idx, col_name in enumerate(headers, start=1):
+        max_len = max(
+            [len(str(col_name))]
+            + [len(str(row[col_idx - 1])) for row in data_rows[:200]]  # 看前 200 行
+        )
+        ws.column_dimensions[ws.cell(row=1, column=col_idx).column_letter].width = min(max_len + 2, 40)
+
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    return StreamingResponse(
+        buf,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+@router.get("/users/export/columns", summary="v2.2 — 列出可匯出的欄位清單（給前端 UI 用）")
+def export_users_columns(
+    _: models.User = Depends(require_admin),
+) -> Any:
+    """ZH: 回傳 [{key, label}, ...] 給前端 modal 動態建勾選清單"""
+    return [{"key": k, "label": v[0]} for k, v in _EXPORT_COLUMNS.items()]
 
 
 @router.put("/users/batch/tokens")
