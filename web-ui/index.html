@@ -98,32 +98,37 @@
                     @keyframes spin { to { transform: rotate(360deg); } }
                 </style>
 
-                <!-- v2.2: 本機帳號 fallback 登入表單（預設摺疊；admin / IT provision 過的學生 / 老師用） -->
-                <details id="local-login-details" style="margin-top: 24px; width: 100%;">
-                    <summary style="cursor: pointer; color: var(--text-muted); font-size: 0.85em; text-align: center; padding: 8px;"
-                             data-i18n="local_login_summary">沒有學校帳號？</summary>
-                    <div style="display: flex; flex-direction: column; gap: 12px; margin-top: 16px; padding: 16px; background: rgba(255,255,255,0.03); border-radius: 8px;">
-                        <p style="color: var(--text-muted); font-size: 0.8em; margin: 0 0 6px 0; line-height: 1.5;"
-                           data-i18n="local_login_hint">本機帳號登入 — 請聯絡老師或管理員取得帳號。</p>
-                        <div class="input">
-                            <input type="text" id="local-username" placeholder=" " autocomplete="username">
-                            <label data-i18n="label_username">帳號</label>
-                            <ion-icon name="person-outline"></ion-icon>
-                        </div>
-                        <div class="input">
-                            <input type="password" id="local-password" placeholder=" " autocomplete="current-password">
-                            <label data-i18n="label_password">密碼</label>
-                            <ion-icon name="lock-closed-outline"></ion-icon>
-                        </div>
-                        <button type="button" id="local-login-btn" class="ready-btn"
-                                style="display: flex; align-items: center; justify-content: center; gap: 8px;">
-                            <ion-icon name="log-in-outline" style="font-size: 18px;"></ion-icon>
-                            <span data-i18n="btn_local_login">登入</span>
-                        </button>
-                        <p id="local-login-error" style="color: var(--neon-pink); font-size: 0.85em; margin: 0; min-height: 1em; text-align: center;"></p>
-                    </div>
-                </details>
             </form>
+
+            <!-- v2.2: 本機帳號 fallback 登入表單（移到 <form> 外，避免 Enter 觸發外層 form submit） -->
+            <details id="local-login-details" style="margin-top: 24px; width: 100%;">
+                <summary style="cursor: pointer; color: var(--text-muted); font-size: 0.85em; text-align: center; padding: 8px;"
+                         data-i18n="local_login_summary">沒有學校帳號？</summary>
+                <div style="display: flex; flex-direction: column; gap: 12px; margin-top: 16px; padding: 16px; background: rgba(255,255,255,0.03); border-radius: 8px;">
+                    <p style="color: var(--text-muted); font-size: 0.8em; margin: 0 0 6px 0; line-height: 1.5;"
+                       data-i18n="local_login_hint">本機帳號登入 — 請聯絡老師或管理員取得帳號。</p>
+                    <div class="input">
+                        <input type="text" id="local-username" placeholder=" " autocomplete="username">
+                        <label data-i18n="label_username">帳號</label>
+                        <ion-icon name="person-outline"></ion-icon>
+                    </div>
+                    <div class="input login-eye" style="position: relative;">
+                        <input type="password" id="local-password" placeholder=" " autocomplete="current-password">
+                        <label data-i18n="label_password">密碼</label>
+                        <ion-icon name="lock-closed-outline"></ion-icon>
+                        <span class="eye-toggle-pwd" data-target="local-password"
+                              style="position:absolute; right:15px; top:50%; transform:translateY(-50%); cursor:pointer; color:var(--text-muted); z-index:2;">
+                            <ion-icon name="eye-off-outline"></ion-icon>
+                        </span>
+                    </div>
+                    <button type="button" id="local-login-btn" class="ready-btn"
+                            style="display: flex; align-items: center; justify-content: center; gap: 8px;">
+                        <ion-icon name="log-in-outline" style="font-size: 18px;"></ion-icon>
+                        <span data-i18n="btn_local_login">登入</span>
+                    </button>
+                    <p id="local-login-error" style="color: var(--neon-pink); font-size: 0.85em; margin: 0; min-height: 1em; text-align: center;"></p>
+                </div>
+            </details>
         </div>
     </div>
 
@@ -1255,7 +1260,7 @@
     <!-- ZH: 載入圖標庫與主程式碼 | EN: Load Icon library and Main Logic -->
     <script type="module" src="https://unpkg.com/ionicons@7.1.0/dist/ionicons/ionicons.esm.js"></script>
     <script nomodule src="https://unpkg.com/ionicons@7.1.0/dist/ionicons/ionicons.js"></script>
-    <script src="app.js?v=20260527-2"></script>
+    <script src="app.js?v=20260528-1"></script>
 </body>
 
 </html>
