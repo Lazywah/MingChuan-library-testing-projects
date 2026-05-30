@@ -102,8 +102,8 @@ const TRANSLATIONS = {
         hub_card_translate: "多語翻譯",
         hub_card_health: "衛生教育",
         hub_card_kb: "知識庫",
-        hub_coming_soon_title: "🚧 此功能即將推出 🚧",
-        hub_coming_soon_desc: "我們正在努力開發此模組，敬請期待未來更新！",
+        hub_coming_soon_title: "💡 此功能在規劃中",
+        hub_coming_soon_desc: "這是我們正在評估的功能，還沒上線。若你希望優先開發，可到「設定 → 問題回報」告訴我們，學生需求最有說服力。",
         btn_back_hub: "返回大廳",
         // 管理員
         admin_users: "使用者管理",
@@ -372,8 +372,8 @@ const TRANSLATIONS = {
         hub_card_translate: "Translation",
         hub_card_health: "Health Edu",
         hub_card_kb: "Knowledge Base",
-        hub_coming_soon_title: "🚧 Coming Soon 🚧",
-        hub_coming_soon_desc: "We are currently developing this module, stay tuned!",
+        hub_coming_soon_title: "💡 Proposed Feature",
+        hub_coming_soon_desc: "We are evaluating this feature — not yet shipped. If you want it prioritized, head to Settings → Report Issues and tell us. Student demand is the strongest signal.",
         btn_back_hub: "Back to Hub",
         // Admin
         admin_users: "User Management",

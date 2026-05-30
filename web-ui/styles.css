@@ -1343,6 +1343,60 @@ ion-icon {
     color: var(--text-primary);
 }
 
+/* ==========================================================================
+   v2.2: AI Hub stub vs functional card 視覺區分
+   --------------------------------------------------------------------------
+   只用 CSS attribute selector 區分 — HTML/JS 完全不動
+   - data-target="chat-layout"        → 已上線 (綠 badge)
+   - data-target="coming-soon-layout" → 提案中 (灰 badge + 降低不透明度)
+   ========================================================================== */
+.hub-sub-card {
+    position: relative;   /* 給 ::after badge 定位用 */
+}
+
+/* 已上線 — 綠色 badge */
+.hub-sub-card[data-target="chat-layout"]::after {
+    content: "已上線";
+    position: absolute;
+    top: 8px; right: 8px;
+    background: rgba(16, 185, 129, 0.85);   /* emerald-500 透明 */
+    color: #fff;
+    font-size: 10px;
+    font-weight: 600;
+    padding: 2px 7px;
+    border-radius: 8px;
+    letter-spacing: 1px;
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
+    pointer-events: none;
+}
+
+/* 提案中 — 灰 badge + 降不透明度 */
+.hub-sub-card[data-target="coming-soon-layout"] {
+    opacity: 0.55;
+    filter: saturate(0.7);
+    transition: opacity 0.25s ease, filter 0.25s ease;
+}
+.hub-sub-card[data-target="coming-soon-layout"]:hover {
+    opacity: 0.85;
+    filter: saturate(1);
+}
+.hub-sub-card[data-target="coming-soon-layout"]::after {
+    content: "提案中";
+    position: absolute;
+    top: 8px; right: 8px;
+    background: rgba(100, 116, 139, 0.75);   /* slate-500 透明 */
+    color: #fff;
+    font-size: 10px;
+    font-weight: 600;
+    padding: 2px 7px;
+    border-radius: 8px;
+    letter-spacing: 1px;
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
+    pointer-events: none;
+}
+
 /* 待開發佔位版面 */
 .coming-soon-layout {
     display: none;
