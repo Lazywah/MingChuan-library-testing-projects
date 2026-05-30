@@ -218,6 +218,95 @@ bash infrastructure/base-images/build-all.sh
 
 > ⚠️ Linux：build script 需要 LF 換行；若你在 Windows host 編過 `aibase-entrypoint.sh` 可能被轉成 CRLF 導致容器啟動失敗。Dockerfile 已加 `sed -i 's/\r$//'` 補救，但若 build 仍報 `exec format error` 請手動 `dos2unix infrastructure/base-images/code-server/aibase-entrypoint.sh`。
 
+### 9.1 TensorFlow image：Keras 2 vs Keras 3
+
+`aibase/tensorflow:2026-spring` 內建 **TF 2.21 + Keras 3**（Python 3.13 + CUDA 12.8 host 唯一相容組合；TF 自帶 CUDA 12.9 libs 並存於 `site-packages/nvidia/`），同時也預裝 `tf-keras 2.21.0`（Keras 2 套件）給舊作業 / 教材用。
+
+#### 🎯 哪個 import 拿到哪個 Keras？
+
+> **關鍵概念**：image 裡實際存在 **兩個獨立的 Keras 套件**，端看你怎麼 import：
+
+```
+┌────────────────────────────────────────────────────────────────────┐
+│  image 內存在的套件：                                              │
+│    keras 3.14.1        (Keras 3 — 新版、預設)                      │
+│    tf_keras 2.21.0     (Keras 2 — 舊作業相容用)                    │
+│    tensorflow 2.21.0                                              │
+└────────────────────────────────────────────────────────────────────┘
+
+                           你 import 什麼？
+                                 │
+        ┌────────────────────────┼────────────────────────┐
+        ▼                        ▼                        ▼
+  import keras           import tensorflow as tf    import tf_keras
+        │                        │                        │
+        │                        ▼                        │
+        │              tf.keras 是哪一個？                │
+        │              ┌─────────┴─────────┐              │
+        │              │                   │              │
+        │       沒設 env var        TF_USE_LEGACY=1        │
+        │              │                   │              │
+        ▼              ▼                   ▼              ▼
+   ✅ Keras 3      ✅ Keras 3        ✅ Keras 2       ✅ Keras 2
+   (永遠是 3，    (預設行為)        (legacy 模式)    (直接拿，
+    與環境變數                                        不受 env var
+    無關)                                             影響)
+```
+
+**👉 重點：「最上層 `import keras` 永遠拿 Keras 3」這個事實，是切換 Keras 2 時最常踩的坑。**
+
+#### ✅ Keras 2 相容寫法（兩種選一種）
+
+**寫法 A — 用 `tf.keras`（最少改動，推薦）**：
+```python
+import os
+os.environ["TF_USE_LEGACY_KERAS"] = "1"   # ⚠️ 必須在 import tensorflow 之前
+import tensorflow as tf
+
+# 此後 tf.keras.* 全部變 Keras 2 API
+model = tf.keras.Sequential([
+    tf.keras.layers.Dense(64, activation='relu'),
+    tf.keras.layers.Dense(10),
+])
+```
+
+**寫法 B — 直接 import `tf_keras`（最明確）**：
+```python
+import tf_keras   # 直接吃 Keras 2，不需 env var
+model = tf_keras.Sequential([
+    tf_keras.layers.Dense(64, activation='relu'),
+    tf_keras.layers.Dense(10),
+])
+```
+
+#### ❌ 常踩錯誤
+
+```python
+# 期待是 Keras 2，實際拿到 Keras 3！TF_USE_LEGACY_KERAS 對 top-level keras 無效
+os.environ["TF_USE_LEGACY_KERAS"] = "1"
+import keras                       # ← 這還是 Keras 3.14.1
+model = keras.Sequential([...])    # ← 用了 Keras 3 API
+```
+
+#### 🔧 常見 Keras 2 → Keras 3 遷移坑
+
+| Keras 2 寫法 | Keras 3 寫法 |
+|---|---|
+| `Adam(lr=1e-3)` | `Adam(learning_rate=1e-3)`（參數改名）|
+| `model.save('xxx.h5')` | 仍可用，但建議改 `model.save('xxx.keras')` 新格式 |
+| `tf.keras.utils.get_file(...)` | API 不變 |
+| 自訂 layer 的 `get_config()` / `from_config()` | API 不變 |
+| `keras.backend.set_floatx('float64')` | 改 `keras.config.set_floatx(...)` |
+
+> 💡 **為什麼不直接釘 TF 2.15 維持 Keras 2 預設？**
+> common-tools 用 Miniconda latest = Python 3.13；各版 TF 對應的 Python wheel:
+> - TF 2.15 只有到 cp311
+> - TF 2.19 只有到 cp312
+> - TF 2.20 才首版支援 cp313
+> - **TF 2.21** 是首選穩定版
+>
+> 硬要用 TF 2.15 必須整套 base image 改用 Python 3.11，連帶 PyTorch / HuggingFace / vLLM 都得跟著降版，得不償失。
+
 驗證：登入 → 運算任務 → Notebook → 選 image → 點「開啟 Notebook」→ 跳到 `/code/<uid>/` 看到 VS Code 即成功。
 
 ---
@@ -237,6 +326,11 @@ bash infrastructure/base-images/build-all.sh
 | Notebook 點開 502 | base image 沒 build，看 §9 |
 | 要改首頁公告 | admin UI → 公告管理（v2.2+）→ 新增 / 編輯 / 刪除 / 置頂 |
 | 要做學生匯出做開學分發 | admin UI → 使用者管理 → 📊 匯出 Excel / CSV（v2.2+，可勾選欄位）|
+| 設定頁找不到 Secrets 管理（v2.2+）| 已搬到「運算任務 → Notebook 分頁」最下方，更貼近使用情境；設定頁有連結帶你過去 |
+| 不懂 Token / Secrets 是什麼（v2.2+）| 點標題旁邊的 ℹ️ 圖示會跳浮動說明（中英雙語） |
+| nginx 502：announcements（已修）| v2.2 修正：infra/nginx.conf 補上 `/api/v1/announcements` location，需 `docker compose exec nginx nginx -s reload` |
+| TF image build 失敗 `Could not find a version that satisfies tensorflow==X.Y.Z` | common-tools 用 Miniconda latest = Python 3.13。TF 2.15/2.19 沒 cp313 wheel。Dockerfile 已升到 TF 2.21（v2.2 修正）|
+| 舊 Keras 2 程式在 TF 2.21 跑不動 | notebook 開頭加 `os.environ["TF_USE_LEGACY_KERAS"]="1"`（要在 import tf 之前），詳見 §9.1 |
 
 ---
 
