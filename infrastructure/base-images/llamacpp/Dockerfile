@@ -31,11 +31,32 @@ RUN curl -fsSL https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_6
     && /opt/conda/bin/conda clean -afy
 
 # llama.cpp from source with CUDA support
+#
+# 三個關鍵 flag（缺一不可）:
+#   1. CMAKE_CUDA_ARCHITECTURES="75;80;86;89;90"
+#      - 不指定的話 llama.cpp 預設 build compute_50 ~ compute_120a 全套
+#      - compute_50 (Maxwell 2014) 在 CUDA 12.8 已 deprecate → nvcc 報錯
+#      - compute_120a (Blackwell RTX 50x) 太新、部分 nvcc 還沒支援 → 報錯
+#      - 75-90 涵蓋 T4 / A100 / RTX 30x / RTX 40x / H100，校園實際會用到的全有
+#
+#   2. -j 4 (不用 $(nproc))
+#      - host 28 cores × CUDA nvcc ~2-3 GB/process = 60-80 GB RAM 需求
+#      - Docker Desktop 預設 31 GB → kernel kill nvcc → 留下 generic Error 2
+#      - 限 4 並行 ≈ 12 GB peak，build 慢一倍但不會炸
+#
+#   3. -DLLAMA_BUILD_TESTS=OFF / EXAMPLES=OFF
+#      - 只要 cli / server / quantize 三個 binaries，砍掉 30+ 個 example
+#        可減少 ~40% build 時間
 RUN git clone --depth 1 https://github.com/ggerganov/llama.cpp.git /opt/llama.cpp \
     && cd /opt/llama.cpp \
     && mkdir build && cd build \
-    && cmake .. -DGGML_CUDA=ON \
-    && cmake --build . --config Release -j $(nproc) \
+    && cmake .. \
+        -DGGML_CUDA=ON \
+        -DCMAKE_CUDA_ARCHITECTURES="75;80;86;89;90" \
+        -DLLAMA_BUILD_TESTS=OFF \
+        -DLLAMA_BUILD_EXAMPLES=OFF \
+        -DBUILD_SHARED_LIBS=OFF \
+    && cmake --build . --config Release -j 4 \
     && ln -s /opt/llama.cpp/build/bin/llama-cli /usr/local/bin/llama-cli \
     && ln -s /opt/llama.cpp/build/bin/llama-server /usr/local/bin/llama-server \
     && ln -s /opt/llama.cpp/build/bin/llama-quantize /usr/local/bin/llama-quantize
