@@ -238,8 +238,15 @@ const TRANSLATIONS = {
         sso_pending_msg: "系統登入功能尚在設定中",
         sso_pending_hint: "若您是管理員，請透過管理介面登入",
         auth_required_to_use: "請先登入才能使用此功能",
-        lab_tip_secrets: "🔐 需要 API 金鑰嗎？到「設定 → Secrets 管理」新增（例：HF_TOKEN、OPENAI_API_KEY），啟動 Lab / 送 GPU 任務時會自動以環境變數注入容器。",
-        lab_tip_secrets_link: "前往設定",
+        lab_tip_secrets: "🔐 需要 API 金鑰嗎？在下方「Secrets 管理」新增（例：HF_TOKEN、OPENAI_API_KEY），啟動 Lab / 送 GPU 任務時會自動以環境變數注入容器。",
+        lab_tip_secrets_link: "↓ 跳到下方",
+        secrets_moved_notice: "🔐 Secrets 管理已搬到「運算任務 → Notebook」分頁，更貼近實際使用情境（啟動 Lab / 送 GPU 任務時用得到）。",
+        secrets_moved_link: "→ 前往 Notebook 分頁的 Secrets 區塊",
+        secrets_skip_hint: "💡 不確定自己需不需要？只有要呼叫 OpenAI / Claude / HuggingFace 等付費 API 才用得到；一般 Python 作業 / 學習用途可以略過。",
+        tip_tokens_title: "Token 是什麼？",
+        tip_tokens: "Token 是你跟 AI 對話消耗的單位 — 大致上 1 個英文單字 ≈ 1.3 Token、1 個中文字 ≈ 1.5 Token。問一個短問題大約消耗 100–500 Token，產生一段 200 字回答約 600 Token。\n\n每月配額會在 reset_date 那天自動歸零；額度用完請等下月、或請老師 / admin 加額。",
+        tip_secrets_title: "Secrets 是什麼？",
+        tip_secrets: "Secrets 是「程式執行時才需要、但不能寫進程式碼裡」的東西 — 最常見就是 API key（HF_TOKEN、OPENAI_API_KEY 等）。\n\n在這裡新增後，啟動 Lab 或送 GPU 任務時平台會自動以「環境變數」注入容器，程式裡用 os.environ[\"KEY_NAME\"] 讀取即可。\n\n💡 一般 Python 作業沒有要呼叫付費 API 的話，這區可以略過。",
         secrets_help_summary: "什麼是環境變數？為什麼這樣設計？",
         secrets_help_body: "環境變數是程式啟動時從作業系統環境讀的「鍵 = 值」對。把金鑰寫死在程式碼會被誤 commit 到 git 外洩，所以業界做法是統一存在 Secrets 機制中、執行時注入。可以類比 Chrome 密碼管理員 — 程式不用知道密碼，只在需要時自動填入。本平台用 AES-256-GCM 加密儲存，僅在 Lab 容器啟動 / GPU 任務執行時解密注入。",
         password_sso_msg: "您使用學校 Microsoft 帳號登入，密碼由學校統一管理。",
@@ -501,8 +508,15 @@ const TRANSLATIONS = {
         sso_pending_msg: "Login system is being configured",
         sso_pending_hint: "Administrators please use the admin panel to log in",
         auth_required_to_use: "Please sign in to use this feature",
-        lab_tip_secrets: "🔐 Need an API key? Add it in Settings → Secrets (e.g. HF_TOKEN, OPENAI_API_KEY). It will be injected as an environment variable into your Lab container and GPU jobs automatically.",
-        lab_tip_secrets_link: "Open settings",
+        lab_tip_secrets: "🔐 Need an API key? Add it in the \"Secrets Management\" section below (e.g. HF_TOKEN, OPENAI_API_KEY). It will be injected as an environment variable into your Lab container and GPU jobs automatically.",
+        lab_tip_secrets_link: "↓ Jump down",
+        secrets_moved_notice: "🔐 Secrets Management has moved to the Compute → Notebook tab — closer to where you actually use it (Lab startup / GPU jobs).",
+        secrets_moved_link: "→ Open Notebook tab → Secrets section",
+        secrets_skip_hint: "💡 Not sure if you need this? Only required when calling paid APIs like OpenAI / Claude / HuggingFace. For general Python coursework you can skip it.",
+        tip_tokens_title: "What is a Token?",
+        tip_tokens: "Tokens are the unit of usage when talking to an AI — roughly 1 English word ≈ 1.3 tokens, 1 Chinese character ≈ 1.5 tokens. A short question costs about 100–500 tokens; a 200-word reply ≈ 600 tokens.\n\nYour monthly quota auto-resets on the reset_date. If you run out, wait for next month or ask your teacher / admin to increase it.",
+        tip_secrets_title: "What are Secrets?",
+        tip_secrets: "Secrets are things your program needs at runtime but should never be hard-coded — most commonly API keys (HF_TOKEN, OPENAI_API_KEY, etc.).\n\nAdd them here and the platform injects them as environment variables when your Lab starts or a GPU job runs. Read them in your code with os.environ[\"KEY_NAME\"].\n\n💡 If your Python coursework doesn't call any paid APIs, you can skip this section.",
         secrets_help_summary: "What are environment variables and why this design?",
         secrets_help_body: "Environment variables are key=value pairs read from the OS environment when a program starts. Hard-coding keys in source code risks committing them to git. The industry pattern is to keep them in a Secrets store and inject at runtime — like Chrome's password manager: programs don't know your password, the system fills it in when needed. This platform uses AES-256-GCM encryption at rest and decrypts only when the Lab container starts or a GPU job runs.",
         password_sso_msg: "You are signed in with your school Microsoft account; passwords are managed by the school.",
@@ -846,7 +860,7 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    // v2.1: 從 Lab 卡片快速跳到 Settings → Secrets 區塊
+    // v2.2: Secrets 已搬到 Notebook 分頁 — Lab tips 的「↓ 跳到下方」直接 scroll 同頁
     const labJumpToSecrets = document.getElementById('lab-jump-to-secrets');
     if (labJumpToSecrets) {
         labJumpToSecrets.addEventListener('click', (e) => {
@@ -855,11 +869,29 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (typeof showToast === 'function') showToast('auth_required_to_use', 'warning');
                 return;
             }
-            switchTab('settings');
-            // 等 DOM 渲染完再 scroll，避免 page-view active 切換時還沒佈局好
+            const sec = document.getElementById('secrets-section');
+            if (sec) sec.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        });
+    }
+
+    // v2.2: Settings 頁的「→ 前往 Notebook 分頁的 Secrets」breadcrumb
+    const settingsJumpToSecrets = document.getElementById('settings-jump-to-secrets');
+    if (settingsJumpToSecrets) {
+        settingsJumpToSecrets.addEventListener('click', (e) => {
+            e.preventDefault();
+            if (!authToken) {
+                if (typeof showToast === 'function') showToast('auth_required_to_use', 'warning');
+                return;
+            }
+            // 切到「運算任務」分頁 → 點 Notebook sub-tab → scroll 到 secrets-section
+            switchTab('dashboard');
             setTimeout(() => {
-                const sec = document.getElementById('secrets-section');
-                if (sec) sec.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                const notebookSubTab = document.getElementById('sub-tab-notebook');
+                if (notebookSubTab) notebookSubTab.click();
+                setTimeout(() => {
+                    const sec = document.getElementById('secrets-section');
+                    if (sec) sec.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                }, 100);
             }, 80);
         });
     }
@@ -1347,6 +1379,8 @@ async function fetchUserProfile() {
         window.currentUsername = data.username;
         window.currentUserRole = data.role;
         window.currentUserData = data;
+        // v2.2 fix: 持久化 user id 給 Lab 開啟流程用（避免 SPA tab 切換時遺失全域）
+        if (data.id) localStorage.setItem('user_id', data.id);
         const userSessionsKey = `ai_hud_sessions_${data.username}`;
         let userSessions = JSON.parse(localStorage.getItem(userSessionsKey));
         
@@ -2146,12 +2180,20 @@ const Lab = (() => {
 
     async function _onOpenClick() {
         const openBtn = document.getElementById('lab-open-btn');
-        const userId  = (window.currentUser?.id) || localStorage.getItem('user_id') || '';
+        // v2.2 fix: 之前寫成 window.currentUser?.id（全域沒這個變數），導致 userId 永遠空字串
+        //         → 「進入 Notebook」每次都掉到 _start 分支重啟容器。改用正確的 currentUserData。
+        const userId  = (window.currentUserData?.id) || localStorage.getItem('user_id') || '';
 
         // ZH: 若已 running，直接開新 tab 跳轉
         // EN: If already running, just open new tab
         if (_state === 'running' && userId) {
             window.open(`/code/${userId}/`, '_blank', 'noopener');
+            return;
+        }
+
+        // v2.2: 若使用者已 running 但 userId 仍取不到（極少見），警告而非重啟
+        if (_state === 'running' && !userId) {
+            _setStatusText(_t('lab_status_error', '錯誤 Error') + ': user id missing — 請重新登入', 'error');
             return;
         }
 
@@ -2498,6 +2540,9 @@ document.addEventListener('DOMContentLoaded', () => {
     // v2.1: Password Modal 加強 — 強度提示 + 確認密碼 + eye toggle
     setupPasswordModalEnhancements();
 
+    // v2.2: 概念說明 tooltip (Token / Secrets)
+    setupInfoTipPopover();
+
     // 也讓 #password-change-form (modal 內 form) 真正可送出
     // 過去這個 form 沒 submit handler → 送出後 page reload。修為呼叫 PUT /me
     const modalForm = document.getElementById('password-change-form');
@@ -2707,6 +2752,87 @@ function resetPasswordStrength() {
     if (mismatch) mismatch.classList.add('hidden');
     const submitBtn = document.getElementById('password-submit-btn');
     if (submitBtn) submitBtn.disabled = true;
+}
+
+// ==========================================================================
+// v2.2 — 浮動 popover (Token / Secrets 概念說明)
+// --------------------------------------------------------------------------
+// ZH: HTML 用 <button class="info-tip-btn" data-tip="tip_xxx" data-tip-title="tip_xxx_title">
+//     按下後在按鈕旁顯示 popover，再按一次 / 點外面 / Esc 關閉
+// ==========================================================================
+function setupInfoTipPopover() {
+    const pop = document.getElementById('info-tip-popover');
+    const titleEl = document.getElementById('info-tip-popover-title');
+    const bodyEl = document.getElementById('info-tip-popover-body');
+    const closeBtn = document.getElementById('info-tip-close');
+    if (!pop || !titleEl || !bodyEl) return;
+
+    let currentBtn = null;
+
+    function positionPopover(btn) {
+        const rect = btn.getBoundingClientRect();
+        // 預設放右下；若超出視窗右邊則改放左下
+        const popW = Math.min(360, window.innerWidth - 24);
+        pop.style.maxWidth = popW + 'px';
+        let left = rect.right + 8;
+        let top = rect.top;
+        if (left + popW > window.innerWidth - 12) {
+            left = Math.max(12, rect.left - popW - 8);
+        }
+        // 若超出底部則向上移
+        const estimatedH = 200;
+        if (top + estimatedH > window.innerHeight - 12) {
+            top = Math.max(12, window.innerHeight - estimatedH - 12);
+        }
+        pop.style.left = left + 'px';
+        pop.style.top = top + 'px';
+    }
+
+    function openPopover(btn) {
+        const tipKey = btn.dataset.tip;
+        const titleKey = btn.dataset.tipTitle || tipKey + '_title';
+        if (!tipKey) return;
+        titleEl.textContent = t(titleKey) || titleKey;
+        bodyEl.textContent = t(tipKey) || tipKey;
+        pop.classList.remove('hidden');
+        positionPopover(btn);
+        currentBtn = btn;
+    }
+
+    function closePopover() {
+        pop.classList.add('hidden');
+        currentBtn = null;
+    }
+
+    // 全域 click delegate — 抓所有 .info-tip-btn
+    document.addEventListener('click', (e) => {
+        const btn = e.target.closest('.info-tip-btn');
+        if (btn) {
+            e.preventDefault();
+            e.stopPropagation();
+            if (currentBtn === btn) {
+                closePopover();   // 再按一次 = 關閉
+            } else {
+                openPopover(btn);
+            }
+            return;
+        }
+        // 點 popover 內部不關
+        if (e.target.closest('#info-tip-popover')) return;
+        // 其他地方 → 關
+        if (!pop.classList.contains('hidden')) closePopover();
+    });
+
+    if (closeBtn) closeBtn.addEventListener('click', closePopover);
+
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && !pop.classList.contains('hidden')) closePopover();
+    });
+
+    // 視窗 resize / scroll 重新定位
+    window.addEventListener('resize', () => {
+        if (currentBtn) positionPopover(currentBtn);
+    });
 }
 
 function setupPasswordModalEnhancements() {

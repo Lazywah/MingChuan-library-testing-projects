@@ -2419,3 +2419,78 @@ ion-icon {
 .password-strength-text[data-level="vstrong"]  { color: #06b6d4; }
 
 
+
+/* ==========================================================================
+   v2.2 — info-tip-btn + 浮動 popover（Token / Secrets 概念說明）
+   --------------------------------------------------------------------------
+   ZH: 標題旁邊的 ℹ️ 小按鈕；按下後 popover 浮動顯示，點外面關閉
+   EN: ℹ️ next to section titles; popover toggles on click, closes on outside click
+   ========================================================================== */
+.info-tip-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 22px;
+    padding: 0;
+    border: none;
+    border-radius: 50%;
+    background: rgba(99, 179, 237, 0.15);
+    color: var(--neon-cyan, #63b3ed);
+    cursor: pointer;
+    font-size: 14px;
+    line-height: 1;
+    transition: background 0.15s, transform 0.15s;
+}
+.info-tip-btn:hover { background: rgba(99, 179, 237, 0.30); transform: scale(1.08); }
+.info-tip-btn ion-icon { font-size: 16px; }
+
+.info-tip-popover {
+    position: fixed;
+    z-index: 9999;
+    max-width: 360px;
+    min-width: 260px;
+    background: var(--bg-card, #1a1f2e);
+    color: var(--text-primary, #e4e7eb);
+    border: 1px solid var(--border-soft, rgba(255,255,255,0.1));
+    border-radius: 10px;
+    box-shadow: 0 8px 28px rgba(0,0,0,0.45);
+    padding: 14px 16px;
+    font-size: 13px;
+    line-height: 1.65;
+    opacity: 1;
+    transform: translateY(0);
+    transition: opacity 0.16s, transform 0.16s;
+}
+.info-tip-popover.hidden {
+    display: none;
+}
+.info-tip-popover-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding-bottom: 8px;
+    margin-bottom: 8px;
+    border-bottom: 1px solid var(--border-soft, rgba(255,255,255,0.08));
+}
+.info-tip-popover-header strong {
+    font-size: 14px;
+    color: var(--neon-cyan, #63b3ed);
+}
+.info-tip-popover-header button {
+    background: transparent;
+    border: none;
+    color: var(--text-muted, #8b95a3);
+    cursor: pointer;
+    padding: 2px;
+    display: inline-flex;
+}
+.info-tip-popover-header button:hover { color: var(--text-primary, #e4e7eb); }
+.info-tip-popover-body { white-space: pre-line; }
+.info-tip-popover-body code {
+    background: rgba(255,255,255,0.08);
+    padding: 1px 5px;
+    border-radius: 4px;
+    font-size: 12px;
+}

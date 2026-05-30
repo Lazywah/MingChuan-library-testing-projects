@@ -663,9 +663,40 @@
                                     💡 共用模型快取在 <code>/opt/models</code>（read-only），自己的 pip 套件用 <code>pip install --user</code> 安裝到 <code>~/.local/</code> 永久保留。
                                 </p>
                                 <p>
-                                    <span data-i18n="lab_tip_secrets">🔐 需要 API 金鑰嗎？到「設定 → Secrets 管理」新增（例：HF_TOKEN、OPENAI_API_KEY），啟動 Lab / 送 GPU 任務時會自動以環境變數注入容器。</span>
-                                    <a href="#" id="lab-jump-to-secrets" style="color:var(--neon-cyan); text-decoration:underline; margin-left:4px;" data-i18n="lab_tip_secrets_link">前往設定</a>
+                                    <span data-i18n="lab_tip_secrets">🔐 需要 API 金鑰嗎？在下方「Secrets 管理」新增（例：HF_TOKEN、OPENAI_API_KEY），啟動 Lab / 送 GPU 任務時會自動以環境變數注入容器。</span>
+                                    <a href="#" id="lab-jump-to-secrets" style="color:var(--neon-cyan); text-decoration:underline; margin-left:4px;" data-i18n="lab_tip_secrets_link">↓ 跳到下方</a>
                                 </p>
+                            </div>
+                        </div>
+
+                        <!-- ZH: v2.2 Secrets 管理（搬自 Settings） | EN: v2.2 Secrets (moved from Settings) -->
+                        <div class="lab-section" id="secrets-section" style="margin-top: 20px; padding: 18px; background: var(--bg-soft); border-radius: 12px; border: 1px solid var(--border-soft);">
+                            <h3 style="margin: 0 0 10px; display:flex; align-items:center; gap:6px;">
+                                <ion-icon name="key-outline"></ion-icon>
+                                <span data-i18n="settings_secrets">Secrets 管理</span>
+                                <button type="button" class="info-tip-btn" data-tip="tip_secrets" data-tip-title="tip_secrets_title" aria-label="說明" title="說明">
+                                    <ion-icon name="information-circle-outline"></ion-icon>
+                                </button>
+                            </h3>
+                            <p data-i18n="secrets_desc" style="margin: 0 0 12px; color: var(--text-muted); font-size: 13px; line-height: 1.5;">
+                                在這裡新增 API key 等敏感資訊（HF_TOKEN、WANDB_API_KEY、OPENAI_API_KEY 等），啟動 Lab 或提交 GPU 任務時會自動以「環境變數」注入容器，程式可用 <code>os.environ["KEY_NAME"]</code> 讀取。
+                            </p>
+                            <p data-i18n="secrets_skip_hint" style="margin: 0 0 12px; padding: 8px 12px; background: rgba(245, 158, 11, 0.08); border-left: 3px solid #f59e0b; color: var(--text-muted); font-size: 12px; line-height: 1.6;">
+                                💡 不確定自己需不需要？只有要呼叫 OpenAI / Claude / HuggingFace 等付費 API 才用得到；一般 Python 作業 / 學習用途可以略過。
+                            </p>
+                            <details style="margin: 0 0 12px; color: var(--text-muted); font-size: 12px;">
+                                <summary style="cursor:pointer;" data-i18n="secrets_help_summary">什麼是環境變數？為什麼這樣設計？</summary>
+                                <div style="padding: 8px 12px; background: var(--bg-soft); border-radius: 8px; margin-top: 6px; line-height: 1.6;" data-i18n="secrets_help_body">
+                                    環境變數是程式啟動時從作業系統環境讀的「鍵 = 值」對。把金鑰寫死在程式碼會被誤 commit 到 git 外洩，所以業界做法是統一存在 Secrets 機制中、執行時注入。可以類比 Chrome 密碼管理員 — 程式不用知道密碼，只在需要時自動填入。本平台用 AES-256-GCM 加密儲存，僅在 Lab 容器啟動 / GPU 任務執行時解密注入。
+                                </div>
+                            </details>
+                            <div id="secrets-list" class="secrets-list">
+                                <div class="secret-item" style="justify-content: center; color: var(--text-muted);" data-i18n="secrets_empty">尚未設定任何 secret</div>
+                            </div>
+                            <div class="secret-add-row">
+                                <input type="text" id="secret-name-input" data-i18n-placeholder="secrets_name_placeholder" placeholder="名稱（例：HF_TOKEN）" />
+                                <input type="password" id="secret-value-input" data-i18n-placeholder="secrets_value_placeholder" placeholder="值（vault 加密儲存）" />
+                                <button id="secret-add-btn"><span data-i18n="secrets_add">新增</span></button>
                             </div>
                         </div>
 
@@ -912,7 +943,12 @@
                     <!-- ZH: Token 資源概況 (從儀表板移來) | EN: Token Resources (moved from dashboard) -->
                     <section class="widget form-box-panel">
                         <div class="widget-header">
-                            <h3 data-i18n="token_overview">Token Resources</h3>
+                            <h3 style="display:flex; align-items:center; gap:6px;">
+                                <span data-i18n="token_overview">Token Resources</span>
+                                <button type="button" class="info-tip-btn" data-tip="tip_tokens" data-tip-title="tip_tokens_title" aria-label="說明" title="說明">
+                                    <ion-icon name="information-circle-outline"></ion-icon>
+                                </button>
+                            </h3>
                         </div>
                         <div class="token-display">
                             <div class="token-ring-container">
@@ -974,31 +1010,19 @@
                         </div>
                     </section>
 
-                    <!-- ZH: v2.0 Secrets 管理 | EN: v2.0 Secrets Management -->
-                    <section class="widget form-box-panel" id="secrets-section">
+                    <!-- ZH: v2.2 Secrets 管理已搬到「運算任務 → Notebook」分頁 | EN: v2.2 Secrets moved to Notebook tab -->
+                    <section class="widget form-box-panel" id="secrets-moved-notice">
                         <div class="widget-header">
                             <h3>
                                 <ion-icon name="key-outline" style="margin-right:6px;"></ion-icon>
                                 <span data-i18n="settings_secrets">Secrets 管理</span>
                             </h3>
                         </div>
-                        <p data-i18n="secrets_desc" style="margin: 0 0 12px; color: var(--text-muted); font-size: 13px; line-height: 1.5;">
-                            在這裡新增 API key 等敏感資訊（HF_TOKEN、WANDB_API_KEY、OPENAI_API_KEY 等），啟動 Lab 或提交 GPU 任務時會自動以「環境變數」注入容器，程式可用 <code>os.environ["KEY_NAME"]</code> 讀取。
+                        <p style="margin: 0; color: var(--text-muted); font-size: 13px; line-height: 1.7;">
+                            <span data-i18n="secrets_moved_notice">🔐 Secrets 管理已搬到「運算任務 → Notebook」分頁，更貼近實際使用情境（啟動 Lab / 送 GPU 任務時用得到）。</span>
+                            <br>
+                            <a href="#" id="settings-jump-to-secrets" style="color:var(--neon-cyan); text-decoration:underline;" data-i18n="secrets_moved_link">→ 前往 Notebook 分頁的 Secrets 區塊</a>
                         </p>
-                        <details style="margin: 0 0 12px; color: var(--text-muted); font-size: 12px;">
-                            <summary style="cursor:pointer;" data-i18n="secrets_help_summary">什麼是環境變數？為什麼這樣設計？</summary>
-                            <div style="padding: 8px 12px; background: var(--bg-soft); border-radius: 8px; margin-top: 6px; line-height: 1.6;" data-i18n="secrets_help_body">
-                                環境變數是程式啟動時從作業系統環境讀的「鍵 = 值」對。把金鑰寫死在程式碼會被誤 commit 到 git 外洩，所以業界做法是統一存在 Secrets 機制中、執行時注入。可以類比 Chrome 密碼管理員 — 程式不用知道密碼，只在需要時自動填入。本平台用 AES-256-GCM 加密儲存，僅在 Lab 容器啟動 / GPU 任務執行時解密注入。
-                            </div>
-                        </details>
-                        <div id="secrets-list" class="secrets-list">
-                            <div class="secret-item" style="justify-content: center; color: var(--text-muted);" data-i18n="secrets_empty">尚未設定任何 secret</div>
-                        </div>
-                        <div class="secret-add-row">
-                            <input type="text" id="secret-name-input" data-i18n-placeholder="secrets_name_placeholder" placeholder="名稱（例：HF_TOKEN）" />
-                            <input type="password" id="secret-value-input" data-i18n-placeholder="secrets_value_placeholder" placeholder="值（vault 加密儲存）" />
-                            <button id="secret-add-btn"><span data-i18n="secrets_add">新增</span></button>
-                        </div>
                     </section>
 
 
@@ -1261,13 +1285,24 @@
         </div>
     </div>
 
+    <!-- ZH: v2.2 概念說明浮動 tooltip | EN: v2.2 concept tooltip popover -->
+    <div id="info-tip-popover" class="info-tip-popover hidden" role="dialog" aria-modal="false">
+        <div class="info-tip-popover-header">
+            <strong id="info-tip-popover-title">說明</strong>
+            <button type="button" id="info-tip-close" aria-label="關閉">
+                <ion-icon name="close-outline"></ion-icon>
+            </button>
+        </div>
+        <div id="info-tip-popover-body" class="info-tip-popover-body"></div>
+    </div>
+
     <!-- ZH: Monaco Editor (語法高亮程式碼編輯器) | EN: Monaco Editor (syntax-highlighting code editor) -->
     <script src="https://cdn.jsdelivr.net/npm/monaco-editor@0.44.0/min/vs/loader.js"></script>
 
     <!-- ZH: 載入圖標庫與主程式碼 | EN: Load Icon library and Main Logic -->
     <script type="module" src="https://unpkg.com/ionicons@7.1.0/dist/ionicons/ionicons.esm.js"></script>
     <script nomodule src="https://unpkg.com/ionicons@7.1.0/dist/ionicons/ionicons.js"></script>
-    <script src="app.js?v=20260528-3"></script>
+    <script src="app.js?v=20260529-3"></script>
 </body>
 
 </html>
