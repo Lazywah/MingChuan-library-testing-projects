@@ -129,6 +129,42 @@ const TRANSLATIONS = {
         tutorial_step3_desc: "查看您的 Token 配額、切換主題和語言、管理帳戶。",
         tutorial_dismiss: "不再顯示",
         tutorial_ok: "了解！",
+        // v2.2 Day 9-10: 教學中心 (zh)
+        nav_tutorial_center: "教學中心",
+        tut_center_title: "教學中心",
+        tut_center_subtitle: "不知道從哪開始？點下面任一單元，平台會帶你一步一步走過實際操作。每個單元 5 分鐘以內。",
+        tut_start: "開始",
+        tut_redo: "重新學",
+        tut_prev: "上一步",
+        tut_next: "下一步",
+        tut_finish: "完成",
+        tut_min: "分鐘",
+        tut_stub_label: "即將推出",
+        tut_completed_toast: "🎉 完成這個單元！",
+        // Unit 1 — 第一次用 Notebook (5 steps, 從 Notebook 分頁開始)
+        tut_u1_title: "第一次用 Notebook",
+        tut_u1_desc: "5 分鐘走完：選 Image、開啟 VS Code in Browser、了解容器生命週期。",
+        tut_u1_s1_title: "👋 歡迎來到 Notebook",
+        tut_u1_s1_body: "Notebook 是給你寫 Python 用的 VS Code 線上版。我會帶你完整跑一次「開啟 Notebook」流程 — 接下來 4 步，每步約 30 秒。按「下一步」開始。",
+        tut_u1_s2_title: "Step 2 — 選 Image",
+        tut_u1_s2_body: "Image 就是「你要用什麼環境跑程式」。新手推薦 Code Editor (純編輯)、Dev Tools (Python/C++/Java) 或 PyTorch (深度學習)。從下拉選一個。",
+        tut_u1_s3_title: "Step 3 — 開啟 Notebook",
+        tut_u1_s3_body: "按下這個按鈕，平台會幫你開一個你專屬的 VS Code 容器，5-10 秒內可以使用。第一次會比較慢、之後快很多。",
+        tut_u1_s4_title: "Step 4 — 開啟後會發生什麼",
+        tut_u1_s4_body: "按下後會跳新分頁到 /code/你的id/，就是完整的 VS Code 介面 — 可以建檔、開終端機 (Ctrl+`)、執行程式。這個容器永久保留你的檔案，30 分鐘沒動會自動關但檔案不會丟。",
+        tut_u1_s5_title: "🎉 完成！",
+        tut_u1_s5_body: "你已經知道怎麼啟動 Notebook。下一步建議學「寫第一個 Python 檔」或「把程式送 GPU 訓練」 — 教學中心可以選。",
+        // 其他單元描述 (Step C 才實作 steps；先填 i18n 讓卡片有字)
+        tut_u2_title: "寫第一個 Python 檔",
+        tut_u2_desc: "建檔、寫程式、在終端機跑起來。",
+        tut_u3_title: "把程式送 GPU 訓練",
+        tut_u3_desc: "在 VS Code 內右鍵 .py → AI Base: Run on GPU。",
+        tut_u4_title: "管理 Secrets",
+        tut_u4_desc: "幫你的 API key 加密存放，啟動容器時自動注入環境變數。",
+        tut_u5_title: "AI 助手怎麼用",
+        tut_u5_desc: "從側邊欄 AI 助手 → 開新對話。Token 用量、何時用得到 AI 都會講。",
+        tut_u6_title: "管理員專屬",
+        tut_u6_desc: "Admin UI 在 port 8888，使用者管理、Token 配額、公告管理都在那邊。",
         // 首頁 & 面板
         nav_home: "首頁",
         nav_docs: "文件庫",
@@ -399,6 +435,42 @@ const TRANSLATIONS = {
         tutorial_step3_desc: "Check your token quota, switch themes & language, and manage your account.",
         tutorial_dismiss: "Don't show again",
         tutorial_ok: "Got it!",
+        // v2.2 Day 9-10: Tutorial Center (en)
+        nav_tutorial_center: "Tutorial Center",
+        tut_center_title: "Tutorial Center",
+        tut_center_subtitle: "Not sure where to start? Pick any unit below — the platform will walk you through the actual workflow step by step. Each unit takes under 5 minutes.",
+        tut_start: "Start",
+        tut_redo: "Redo",
+        tut_prev: "Back",
+        tut_next: "Next",
+        tut_finish: "Finish",
+        tut_min: "min",
+        tut_stub_label: "Coming soon",
+        tut_completed_toast: "🎉 Unit completed!",
+        // Unit 1 (5 steps, starts directly on Notebook tab)
+        tut_u1_title: "First Notebook session",
+        tut_u1_desc: "5 minutes: pick an image, open VS Code in Browser, understand container lifecycle.",
+        tut_u1_s1_title: "👋 Welcome to Notebook",
+        tut_u1_s1_body: "Notebook is your in-browser VS Code for Python. I'll walk you through the full \"open a notebook\" flow — 4 quick steps, about 30 seconds each. Click Next to begin.",
+        tut_u1_s2_title: "Step 2 — Pick an Image",
+        tut_u1_s2_body: "An \"image\" is the runtime environment. Beginners: Code Editor (editor only), Dev Tools (Python/C++/Java) or PyTorch (deep learning). Pick one from the dropdown.",
+        tut_u1_s3_title: "Step 3 — Open Notebook",
+        tut_u1_s3_body: "Click this button — the platform spins up a private VS Code container. Ready in 5–10 seconds. First time is slow, subsequent ones are fast.",
+        tut_u1_s4_title: "Step 4 — What happens next",
+        tut_u1_s4_body: "A new tab opens at /code/<your_id>/ — the full VS Code UI. Create files, open a terminal with Ctrl+`, run programs. The container keeps your files forever and auto-stops after 30 min idle (files persist).",
+        tut_u1_s5_title: "🎉 Done!",
+        tut_u1_s5_body: "You now know how to start a Notebook session. Next up: try \"Write your first Python file\" or \"Run on GPU\" — pick one from Tutorial Center.",
+        // Other units (Step C will fill in step scripts)
+        tut_u2_title: "Write your first Python file",
+        tut_u2_desc: "Create a file, write code, run it in the terminal.",
+        tut_u3_title: "Run on GPU",
+        tut_u3_desc: "Right-click a .py file in VS Code → AI Base: Run on GPU.",
+        tut_u4_title: "Manage Secrets",
+        tut_u4_desc: "Encrypt API keys; the platform injects them as env vars when your container starts.",
+        tut_u5_title: "How to use AI Assistant",
+        tut_u5_desc: "Sidebar → AI Assistant → New chat. Covers token usage and when AI actually helps.",
+        tut_u6_title: "Admin tools",
+        tut_u6_desc: "Admin UI on port 8888: user management, token quotas, announcements.",
         // Home & Drawer
         nav_home: "Home",
         nav_docs: "Documents",
@@ -932,12 +1004,16 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     });
     
-    // Quick tutorial Nav - bind the info button to the global showTutorial()
+    // v2.2 Day 9-10: sidebar 底 (i) 改開「教學中心 modal」(取代舊的 3-step onboarding)
     const navQuickTutorial = document.getElementById('nav-quick-tutorial');
     if (navQuickTutorial) {
         navQuickTutorial.addEventListener('click', (e) => {
             e.preventDefault();
-            showTutorial();
+            if (typeof TutorialEngine !== 'undefined') {
+                TutorialEngine.openCenter();
+            } else {
+                showTutorial();  // fallback 舊 modal
+            }
         });
     }
 
@@ -1066,6 +1142,320 @@ function switchTab(tabId) {
         renderActiveChat();
     }
 }
+
+// ============================================================
+// v2.2 Day 9-10 — 教學中心 + TutorialEngine
+// ------------------------------------------------------------
+// 設計:
+//  · UNITS: 6 個單元定義，每個有 steps 陣列
+//  · step 型別: 'highlight' (對 selector 加 ring + 浮 bubble) 或 'modal' (純說明)
+//  · 進度存 localStorage; admin-only unit 學生看不到
+//  · 開始教學時鎖住背景滾動避免 highlight 漂掉
+// ============================================================
+const TutorialEngine = (() => {
+    const STORAGE_KEY = 'ai_hud_tutorial_progress';
+    let _progress = {};
+    let _activeUnit = null;
+    let _stepIdx = 0;
+    let _highlightedEl = null;
+
+    function _loadProgress() {
+        try { _progress = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}'); }
+        catch (_) { _progress = {}; }
+    }
+    _loadProgress();
+
+    // === 6 個教學單元 ===
+    // step.type:
+    //   'modal'     → bubble 居中、無 highlight ring
+    //   'highlight' → bubble 在元素旁、ring 圍著 selector 對應元素 (+5px outset)
+    // step.onEnter() 在每步顯示前執行 (切 tab / 點 sub-tab / 等)
+    const UNITS = [
+        {
+            id: 'first-notebook',
+            titleKey: 'tut_u1_title',
+            descKey: 'tut_u1_desc',
+            durationMin: 5,
+            icon: 'rocket-outline',
+            adminOnly: false,
+            // 開始前: 切到「運算任務 → Notebook」分頁，讓所有後續 step 都在這頁
+            beforeStart: () => {
+                switchTab('dashboard');
+                // 用 rAF 而非 setTimeout(80) — 等 dashboard 渲染 1 個 frame 後再 click sub-tab
+                requestAnimationFrame(() => {
+                    document.getElementById('sub-tab-notebook')?.click();
+                });
+            },
+            steps: [
+                // s1 — 中央 modal: 歡迎介紹
+                { type: 'modal',
+                  titleKey: 'tut_u1_s1_title', bodyKey: 'tut_u1_s1_body' },
+                // s2 — 高亮 Image 下拉
+                { type: 'highlight', selector: '#lab-image-select',
+                  titleKey: 'tut_u1_s2_title', bodyKey: 'tut_u1_s2_body' },
+                // s3 — 高亮「開啟 Notebook」按鈕
+                { type: 'highlight', selector: '#lab-open-btn',
+                  titleKey: 'tut_u1_s3_title', bodyKey: 'tut_u1_s3_body' },
+                // s4 — 中央 modal: 開啟後會發生什麼 (跳新分頁 / 30 min idle 保留檔案)
+                { type: 'modal',
+                  titleKey: 'tut_u1_s4_title', bodyKey: 'tut_u1_s4_body' },
+                // s5 — 中央 modal: 完成提示 + 下一步建議
+                { type: 'modal',
+                  titleKey: 'tut_u1_s5_title', bodyKey: 'tut_u1_s5_body' },
+            ],
+        },
+        // 其餘 5 個單元（Step C 才實作 — 目前 placeholder 用同樣 stub steps）
+        { id: 'first-python',  titleKey: 'tut_u2_title', descKey: 'tut_u2_desc', durationMin: 3, icon: 'code-slash-outline', adminOnly: false, _stub: true, steps: [] },
+        { id: 'run-on-gpu',    titleKey: 'tut_u3_title', descKey: 'tut_u3_desc', durationMin: 5, icon: 'flash-outline', adminOnly: false, _stub: true, steps: [] },
+        { id: 'manage-secrets',titleKey: 'tut_u4_title', descKey: 'tut_u4_desc', durationMin: 3, icon: 'key-outline', adminOnly: false, _stub: true, steps: [] },
+        { id: 'ai-assistant',  titleKey: 'tut_u5_title', descKey: 'tut_u5_desc', durationMin: 2, icon: 'chatbubbles-outline', adminOnly: false, _stub: true, steps: [] },
+        { id: 'admin-tools',   titleKey: 'tut_u6_title', descKey: 'tut_u6_desc', durationMin: 3, icon: 'shield-checkmark-outline', adminOnly: true,  _stub: true, steps: [] },
+    ];
+
+    function _visibleUnits() {
+        const role = window.currentUserRole;
+        return UNITS.filter(u => !u.adminOnly || role === 'admin');
+    }
+
+    function renderCenter() {
+        const grid = document.getElementById('tutorial-unit-grid');
+        if (!grid) return;
+        grid.innerHTML = '';
+        _visibleUnits().forEach(u => {
+            const done = !!_progress[u.id];
+            const stub = !!u._stub;
+            const card = document.createElement('div');
+            card.className = 'tutorial-unit-card' + (done ? ' completed' : '');
+            card.innerHTML = `
+                <ion-icon class="unit-icon" name="${u.icon}"></ion-icon>
+                <h4 data-i18n="${u.titleKey}">${t(u.titleKey)}</h4>
+                <div class="unit-meta">
+                    <span>⏱ ${u.durationMin} ${t('tut_min') || 'min'}</span>
+                    ${stub ? `<span style="color:#94a3b8;">· ${t('tut_stub_label') || '即將推出'}</span>` : ''}
+                </div>
+                <p class="unit-desc" data-i18n="${u.descKey}">${t(u.descKey)}</p>
+                <div class="unit-action">
+                    <button type="button" data-unit-id="${u.id}" ${stub ? 'disabled style="opacity:0.5;cursor:not-allowed;"' : ''}>
+                        ${done ? (t('tut_redo') || '重新學') : (t('tut_start') || '開始')}
+                    </button>
+                </div>
+            `;
+            const btn = card.querySelector('button[data-unit-id]');
+            if (btn && !stub) btn.addEventListener('click', () => start(u.id));
+            grid.appendChild(card);
+        });
+    }
+
+    function start(unitId) {
+        const u = UNITS.find(x => x.id === unitId);
+        if (!u || u._stub) return;
+        _activeUnit = u;
+        _stepIdx = 0;
+        // 教學進行時收起 Tutorial Center modal — 避免擋住要 highlight 的元素
+        closeCenter();
+        if (typeof u.beforeStart === 'function') u.beforeStart();
+        // overlay 由 _showStep 在定位完才顯示 — 避免閃在角落
+        // 雙 rAF 讓 closeCenter / beforeStart 的 DOM 切換有 1 frame paint
+        requestAnimationFrame(() => requestAnimationFrame(_showStep));
+    }
+
+    // v2.2: floating ring (position:fixed) — 不掛 class 到 target，改用獨立 div 跟隨 target rect
+    function _clearHighlight() {
+        const ring = document.getElementById('tutorial-highlight-ring');
+        if (ring) ring.classList.add('hidden');
+        _highlightedEl = null;
+    }
+    function _positionRing(targetEl) {
+        const ring = document.getElementById('tutorial-highlight-ring');
+        if (!ring || !targetEl) return;
+        const r = targetEl.getBoundingClientRect();
+        const gap = 5;                          // 與目標 5px outset 留白
+        ring.style.top    = (r.top - gap) + 'px';
+        ring.style.left   = (r.left - gap) + 'px';
+        ring.style.width  = (r.width + gap * 2) + 'px';
+        ring.style.height = (r.height + gap * 2) + 'px';
+        ring.classList.remove('hidden');
+    }
+
+    function _positionBubble(targetEl) {
+        // v2.2: 操作 wrapper 不是 bubble — wrap 接定位 transform，bubble 內層動畫不衝突
+        const wrap = document.getElementById('tutorial-bubble-wrap');
+        if (!wrap) return;
+        if (!targetEl) {
+            // 螢幕中央
+            wrap.style.left = '50%';
+            wrap.style.top = '50%';
+            wrap.style.transform = 'translate(-50%, -50%)';
+            return;
+        }
+        // ⚠️ 必須用 'none'，否則 CSS .tutorial-bubble-wrap 預設 translate(-50%,-50%) 還生效
+        //    → wrap 中心對準 (rect.right+16, rect.top)，bubble 偏移半個寬高
+        wrap.style.transform = 'none';
+        const rect = targetEl.getBoundingClientRect();
+        // 量實際 bubble 寬高，而非硬寫 320/200（內容/字級/i18n 不同會撐開）
+        const bubble = document.getElementById('tutorial-bubble');
+        const bb = bubble ? bubble.getBoundingClientRect() : { width: 320, height: 200 };
+        const bw = bb.width || 320;
+        const bh = bb.height || 200;
+        const gap = 16;   // 與目標元素的間距
+        const margin = 12;  // 與視窗邊緣的最小留白
+
+        // 預設放在目標右側
+        let left = rect.right + gap;
+        let top  = rect.top;
+
+        // 右側放不下 → 改放左側
+        if (left + bw > window.innerWidth - margin) {
+            left = rect.left - gap - bw;
+        }
+        // 左邊也放不下（例如 sidebar tab 太靠左邊）→ 改放下方
+        if (left < margin) {
+            left = Math.max(margin, rect.left);
+            top  = rect.bottom + gap;
+        }
+        // 頂部 / 底部 clamp
+        if (top + bh > window.innerHeight - margin) top = Math.max(margin, window.innerHeight - bh - margin);
+        if (top < margin) top = margin;
+
+        wrap.style.left = Math.round(left) + 'px';
+        wrap.style.top  = Math.round(top)  + 'px';
+    }
+
+    function _showStep() {
+        if (!_activeUnit) return;
+        const step = _activeUnit.steps[_stepIdx];
+        if (!step) { _finish(); return; }
+
+        const overlay = document.getElementById('tutorial-overlay');
+        const bubble  = document.getElementById('tutorial-bubble');
+        const titleEl = document.getElementById('tutorial-bubble-title');
+        const bodyEl  = document.getElementById('tutorial-bubble-body');
+        const badge   = document.getElementById('tutorial-step-badge');
+        const nextBtn = document.getElementById('tutorial-next-btn');
+        const prevBtn = document.getElementById('tutorial-prev-btn');
+
+        // 1) 隱藏 bubble + 移除 animate-in 準備重觸發動畫
+        if (bubble) {
+            bubble.style.visibility = 'hidden';
+            bubble.classList.remove('animate-in');
+        }
+
+        // 2) onEnter 切 tab / 點 sub-tab + 清舊 ring
+        if (typeof step.onEnter === 'function') step.onEnter();
+        _clearHighlight();
+
+        // 3) 同步把文字 / 按鈕狀態先填好（不在 rAF 內，避免「沒文字 → 有文字」閃）
+        if (badge) badge.textContent = `Step ${_stepIdx + 1} / ${_activeUnit.steps.length}`;
+        if (titleEl) titleEl.textContent = t(step.titleKey) || step.titleKey;
+        if (bodyEl)  bodyEl.textContent  = t(step.bodyKey)  || step.bodyKey;
+        if (prevBtn) prevBtn.style.visibility = _stepIdx === 0 ? 'hidden' : 'visible';
+        if (nextBtn) nextBtn.querySelector('span').textContent =
+            (_stepIdx === _activeUnit.steps.length - 1)
+                ? (t('tut_finish') || '完成')
+                : (t('tut_next') || '下一步');
+
+        // 4) rAF 等 onEnter 的 DOM 切換被 paint 一次後再定位 + 顯示
+        requestAnimationFrame(() => {
+            let target = null;
+            if (step.type === 'highlight' && step.selector) {
+                target = document.querySelector(step.selector);
+                if (target) {
+                    const r = target.getBoundingClientRect();
+                    if (r.top < 80 || r.bottom > window.innerHeight - 80) {
+                        target.scrollIntoView({ behavior: 'auto', block: 'center' });
+                    }
+                    _positionRing(target);
+                    _highlightedEl = target;
+                }
+            }
+            // 不管 modal 還是 highlight 都統一定位 bubble；target=null → bubble 居中
+            _positionBubble(target);
+
+            // 5) 一切就定位後才解隱 + 顯示 overlay + 重觸發 animate-in
+            if (overlay) overlay.classList.remove('hidden');
+            if (bubble) {
+                bubble.style.visibility = 'visible';
+                // force reflow → 確保下面 classList.add 觸發 animation 重跑
+                void bubble.offsetWidth;
+                bubble.classList.add('animate-in');
+            }
+        });
+    }
+
+    // 視窗 resize / scroll 時 ring 與 bubble 跟著動 (避免被高亮的 sticky header 漂掉)
+    function _trackTarget() {
+        if (_highlightedEl) {
+            _positionRing(_highlightedEl);
+            _positionBubble(_highlightedEl);
+        }
+    }
+
+    function next() {
+        if (!_activeUnit) return;
+        if (_stepIdx >= _activeUnit.steps.length - 1) { _finish(); return; }
+        _stepIdx++;
+        _showStep();
+    }
+
+    function prev() {
+        if (!_activeUnit || _stepIdx === 0) return;
+        _stepIdx--;
+        _showStep();
+    }
+
+    function abort() {
+        _clearHighlight();
+        _activeUnit = null;
+        document.getElementById('tutorial-overlay')?.classList.add('hidden');
+    }
+
+    function _finish() {
+        if (!_activeUnit) return;
+        const id = _activeUnit.id;
+        _progress[id] = { completedAt: new Date().toISOString() };
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(_progress));
+        abort();
+        // 完成後重開 Tutorial Center，讓使用者看見「✓ 已完成」+ 挑下一個
+        requestAnimationFrame(openCenter);
+        if (typeof showToast === 'function') showToast(t('tut_completed_toast') || '🎉 完成這個單元！', 'success');
+    }
+
+    // v2.2: Tutorial Center modal 開關 (由 sidebar 底 (i) 觸發)
+    function openCenter() {
+        const m = document.getElementById('tutorial-center-modal');
+        if (!m) return;
+        renderCenter();
+        m.classList.remove('hidden');
+    }
+    function closeCenter() {
+        document.getElementById('tutorial-center-modal')?.classList.add('hidden');
+    }
+
+    function _bindControls() {
+        document.getElementById('tutorial-next-btn')?.addEventListener('click', next);
+        document.getElementById('tutorial-prev-btn')?.addEventListener('click', prev);
+        document.getElementById('tutorial-abort-btn')?.addEventListener('click', abort);
+        document.getElementById('tutorial-center-close')?.addEventListener('click', closeCenter);
+        document.getElementById('tutorial-center-backdrop')?.addEventListener('click', closeCenter);
+        document.addEventListener('keydown', (e) => {
+            if (_activeUnit) {
+                if (e.key === 'Escape') abort();
+                else if (e.key === 'ArrowRight' || e.key === 'Enter') next();
+                else if (e.key === 'ArrowLeft') prev();
+            } else if (e.key === 'Escape') {
+                // Tutorial Center modal 開著、但沒在跑 unit
+                const m = document.getElementById('tutorial-center-modal');
+                if (m && !m.classList.contains('hidden')) closeCenter();
+            }
+        });
+        // resize / scroll → 跟著動，避免 sticky header 或 layout 變化讓 ring 漂掉
+        window.addEventListener('resize', _trackTarget);
+        window.addEventListener('scroll', _trackTarget, true);
+    }
+    _bindControls();
+
+    return { renderCenter, start, next, prev, abort, openCenter, closeCenter };
+})();
 
 // =========================
 // ZH: 聊天室會話管理 | EN: Chat Session Management

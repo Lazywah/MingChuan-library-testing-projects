@@ -190,6 +190,7 @@
                     <ion-icon name="chatbubbles-outline"></ion-icon>
                     <span data-i18n="nav_assistant">Assistant</span>
                 </button>
+                <!-- v2.2 Day 9-10: 教學中心已搬到 sidebar 底 (i) 按鈕觸發的 modal -->
                 <button class="tab-btn" id="nav-doc-lib" data-tab="docs">
                     <ion-icon name="library-outline"></ion-icon>
                     <span data-i18n="nav_docs">Document Library</span>
@@ -936,6 +937,49 @@
                 </div>
             </main>
 
+            <!-- ZH: 教學中心 modal (v2.2 Day 9-10 — 由 sidebar 底 (i) 按鈕觸發) -->
+            <div id="tutorial-center-modal" class="tutorial-center-modal hidden" role="dialog" aria-modal="true">
+                <div class="tutorial-center-backdrop" id="tutorial-center-backdrop"></div>
+                <div class="tutorial-center-panel form-box-panel">
+                    <button type="button" class="tutorial-center-close" id="tutorial-center-close" aria-label="關閉">
+                        <ion-icon name="close-outline"></ion-icon>
+                    </button>
+                    <div class="tutorial-center-header">
+                        <h2><ion-icon name="book-outline" style="margin-right:8px;"></ion-icon><span data-i18n="tut_center_title">教學中心</span></h2>
+                        <p data-i18n="tut_center_subtitle">不知道從哪開始？點下面任一單元，平台會帶你一步一步走過實際操作。每個單元 5 分鐘以內。</p>
+                    </div>
+                    <div class="tutorial-unit-grid" id="tutorial-unit-grid">
+                        <!-- 卡片由 TutorialEngine.renderCenter() 動態插入 -->
+                    </div>
+                </div>
+            </div>
+
+            <!-- v2.2 教學引導 floating ring (position:fixed，不會被 sidebar overflow 切) -->
+            <div id="tutorial-highlight-ring" class="tutorial-highlight-ring hidden"></div>
+
+            <!-- 教學引導 overlay 容器 (Engine 啟動時 toggle) -->
+            <!-- v2.2: wrapper 分層 — wrap 負責定位 transform，bubble 內層只動畫，兩個 transform 不衝突 -->
+            <div id="tutorial-overlay" class="tutorial-overlay hidden" role="dialog" aria-modal="false">
+                <div id="tutorial-bubble-wrap" class="tutorial-bubble-wrap">
+                    <div class="tutorial-overlay-bubble" id="tutorial-bubble">
+                        <div class="tutorial-bubble-header">
+                            <span class="tutorial-step-badge" id="tutorial-step-badge">Step 1 / 5</span>
+                            <button type="button" id="tutorial-abort-btn" aria-label="結束教學"><ion-icon name="close-outline"></ion-icon></button>
+                        </div>
+                        <h3 id="tutorial-bubble-title"></h3>
+                        <p id="tutorial-bubble-body"></p>
+                        <div class="tutorial-bubble-actions">
+                            <button type="button" id="tutorial-prev-btn" class="ready-btn" style="width:auto; min-width:80px;">
+                                <ion-icon name="arrow-back-outline"></ion-icon> <span data-i18n="tut_prev">上一步</span>
+                            </button>
+                            <button type="button" id="tutorial-next-btn" class="ready-btn" style="width:auto; min-width:100px;">
+                                <span data-i18n="tut_next">下一步</span> <ion-icon name="arrow-forward-outline"></ion-icon>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
             <!-- ZH: 分頁 3: 設定視圖 | EN: PAGE 3: Settings View -->
             <main id="settings-page" class="settings-container page-view">
                 <div class="settings-grid">
@@ -1302,7 +1346,7 @@
     <!-- ZH: 載入圖標庫與主程式碼 | EN: Load Icon library and Main Logic -->
     <script type="module" src="https://unpkg.com/ionicons@7.1.0/dist/ionicons/ionicons.esm.js"></script>
     <script nomodule src="https://unpkg.com/ionicons@7.1.0/dist/ionicons/ionicons.js"></script>
-    <script src="app.js?v=20260530-1"></script>
+    <script src="app.js?v=20260530-11"></script>
 </body>
 
 </html>
