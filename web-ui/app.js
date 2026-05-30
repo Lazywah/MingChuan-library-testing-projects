@@ -154,7 +154,7 @@ const TRANSLATIONS = {
         tut_u1_s4_body: "按下後會跳新分頁到 /code/你的id/，就是完整的 VS Code 介面 — 可以建檔、開終端機 (Ctrl+`)、執行程式。這個容器永久保留你的檔案，30 分鐘沒動會自動關但檔案不會丟。",
         tut_u1_s5_title: "🎉 完成！",
         tut_u1_s5_body: "你已經知道怎麼啟動 Notebook。下一步建議學「寫第一個 Python 檔」或「把程式送 GPU 訓練」 — 教學中心可以選。",
-        // 其他單元描述 (Step C 才實作 steps；先填 i18n 讓卡片有字)
+        // === Units 2-6 卡片標題 + 描述 ===
         tut_u2_title: "寫第一個 Python 檔",
         tut_u2_desc: "建檔、寫程式、在終端機跑起來。",
         tut_u3_title: "把程式送 GPU 訓練",
@@ -165,6 +165,55 @@ const TRANSLATIONS = {
         tut_u5_desc: "從側邊欄 AI 助手 → 開新對話。Token 用量、何時用得到 AI 都會講。",
         tut_u6_title: "管理員專屬",
         tut_u6_desc: "Admin UI 在 port 8888，使用者管理、Token 配額、公告管理都在那邊。",
+        // === Unit 2 steps ===
+        tut_u2_s1_title: "📝 介紹",
+        tut_u2_s1_body: "你已經會開 Notebook 了 (Unit 1)。這個 unit 教你用 VS Code 建檔、寫程式、執行。前提：你的 Notebook 容器要在跑。",
+        tut_u2_s2_title: "Step 2 — 建檔 + 寫程式",
+        tut_u2_s2_body: "在 VS Code 內按 Ctrl+N 開新檔 (或 File → New File)。在裡面寫: print('Hello AI Base')",
+        tut_u2_s3_title: "Step 3 — 存檔 + 開終端機",
+        tut_u2_s3_body: "Ctrl+S 存檔，命名 hello.py (預設存到 /home/coder/)。按 Ctrl+` (反引號) 開終端機，輸入: python3 hello.py",
+        tut_u2_s4_title: "🎉 完成",
+        tut_u2_s4_body: "看到「Hello AI Base」印出來就成功了。檔案永久保留在容器內，可以接著寫更複雜的程式。",
+        // === Unit 3 steps ===
+        tut_u3_s1_title: "⚡ 什麼時候用 GPU",
+        tut_u3_s1_body: "GPU 用在: 深度學習訓練、大量矩陣運算、影像處理。一般作業 (寫 if/for 等基礎程式) CPU 就夠了。GPU 任務會排隊，所以只在需要時才送。",
+        tut_u3_s2_title: "Step 2 — 在 VS Code 內送任務",
+        tut_u3_s2_body: "在 VS Code 的檔案總管 (左邊樹狀)，右鍵任何 .py 檔 → 選「AI Base: Run on GPU」。平台會把這個檔送到 GPU 工作節點開始執行。",
+        tut_u3_s3_title: "Step 3 — 切到高算力分頁看狀態",
+        tut_u3_s3_body: "「高算力」分頁顯示所有 GPU 任務佇列。狀態: pending (排隊) / running (跑中) / completed (完成) / failed (失敗)。中低算力任務在隔壁分頁。",
+        tut_u3_s4_title: "🎉 完成",
+        tut_u3_s4_body: "點任務看 streaming log。完成後輸出檔案在 /code/<你的id>/outputs/ — 從 VS Code 內可以打開查看。",
+        // === Unit 4 steps ===
+        tut_u4_s1_title: "🔐 Secrets 是什麼",
+        tut_u4_s1_body: "Secrets 是 API key 之類的敏感資訊。寫在程式碼裡會被誤推到 git → 改放這裡，執行時自動以環境變數注入容器。",
+        tut_u4_s2_title: "Step 2 — Secrets 區塊位置",
+        tut_u4_s2_body: "這就是 Secrets 管理區，在 Notebook 分頁最下面。Lab 啟動或送 GPU 任務時，下面新增的 secret 會自動以環境變數進容器。",
+        tut_u4_s3_title: "Step 3 — 名稱欄",
+        tut_u4_s3_body: "名稱用大寫底線格式 (例: HF_TOKEN、OPENAI_API_KEY)。程式裡用 os.environ['HF_TOKEN'] 讀。",
+        tut_u4_s4_title: "Step 4 — 新增",
+        tut_u4_s4_body: "輸入完按「新增」就會 AES-256-GCM 加密存進去。Secret 一旦存入，平台也無法解密回明文 — 只在容器啟動時解密注入。",
+        tut_u4_s5_title: "🎉 完成",
+        tut_u4_s5_body: "💡 一般 Python 作業不一定要 Secrets。只有要呼叫 OpenAI / Claude / HuggingFace 等付費 API 才需要。",
+        // === Unit 5 steps ===
+        tut_u5_s1_title: "🤖 AI 助手在哪",
+        tut_u5_s1_body: "AI 助手就是和 AI 對話 — 幫你解答問題、整理思路、debug 程式碼。從 sidebar 點這裡進去。",
+        tut_u5_s2_title: "Step 2 — 文字聊天",
+        tut_u5_s2_body: "AI 助手目前提供「文字聊天」(已上線)。其他卡片是規劃中功能 — 點下去可以告訴我們你希望優先做哪個。",
+        tut_u5_s3_title: "Step 3 — 怎麼用最有效",
+        tut_u5_s3_body: "問問題寫具體場景。例: 「我有一個 list of dicts 要按某個 key 排序」比「python 怎麼排序」好得多。AI 不知道你的程式，要附上 code snippet。",
+        tut_u5_s4_title: "🎉 Token 用量",
+        tut_u5_s4_body: "每次對話消耗 token，設定頁可看月配額和剩餘量。額度用完請聯絡老師或 admin 加額。約略: 1 中文字 ≈ 1.5 token。",
+        // === Unit 6 steps (admin only) ===
+        tut_u6_s1_title: "👤 Admin UI 在 port 8888",
+        tut_u6_s1_body: "管理員專用介面在 http://localhost:8888 (這個 user UI 在 :80)。從瀏覽器另開分頁進去，用同樣的 admin 帳號登入。",
+        tut_u6_s2_title: "Step 2 — 使用者管理",
+        tut_u6_s2_body: "「使用者管理」分頁: 看所有帳號的線上狀態、Token 用量、最後登入時間。可以 Provision 新帳號、停用 / 啟用。",
+        tut_u6_s3_title: "Step 3 — Token 配額調整",
+        tut_u6_s3_body: "在使用者管理裡，每個帳號可調整月配額 (預設 5M)。也可以批次匯入 .csv 一次調很多人 (見 docs/04-operations.md)。",
+        tut_u6_s4_title: "Step 4 — 公告 + Excel 匯出",
+        tut_u6_s4_body: "「公告管理」分頁可動態增刪首頁公告 (v2.2+)。「📊 匯出」按鈕可勾選欄位匯出 Excel/CSV，做開學分發或期末備份。",
+        tut_u6_s5_title: "🎉 完成",
+        tut_u6_s5_body: "更多 admin 功能在 docs/04-operations.md。記得 admin 帳號開學前換強密碼。",
         // 首頁 & 面板
         nav_home: "首頁",
         nav_docs: "文件庫",
@@ -460,7 +509,7 @@ const TRANSLATIONS = {
         tut_u1_s4_body: "A new tab opens at /code/<your_id>/ — the full VS Code UI. Create files, open a terminal with Ctrl+`, run programs. The container keeps your files forever and auto-stops after 30 min idle (files persist).",
         tut_u1_s5_title: "🎉 Done!",
         tut_u1_s5_body: "You now know how to start a Notebook session. Next up: try \"Write your first Python file\" or \"Run on GPU\" — pick one from Tutorial Center.",
-        // Other units (Step C will fill in step scripts)
+        // === Units 2-6 card titles + descs ===
         tut_u2_title: "Write your first Python file",
         tut_u2_desc: "Create a file, write code, run it in the terminal.",
         tut_u3_title: "Run on GPU",
@@ -471,6 +520,55 @@ const TRANSLATIONS = {
         tut_u5_desc: "Sidebar → AI Assistant → New chat. Covers token usage and when AI actually helps.",
         tut_u6_title: "Admin tools",
         tut_u6_desc: "Admin UI on port 8888: user management, token quotas, announcements.",
+        // === Unit 2 steps ===
+        tut_u2_s1_title: "📝 Intro",
+        tut_u2_s1_body: "You already know how to open a Notebook (Unit 1). This unit teaches you to create files, write code, and run them in VS Code. Prereq: your Notebook container is running.",
+        tut_u2_s2_title: "Step 2 — Create + write",
+        tut_u2_s2_body: "In VS Code press Ctrl+N for a new file (or File → New File). Write: print('Hello AI Base')",
+        tut_u2_s3_title: "Step 3 — Save + open terminal",
+        tut_u2_s3_body: "Ctrl+S to save as hello.py (default path /home/coder/). Press Ctrl+` (backtick) to open the integrated terminal, then run: python3 hello.py",
+        tut_u2_s4_title: "🎉 Done",
+        tut_u2_s4_body: "If you see 'Hello AI Base' printed, it worked. Files persist in the container — keep writing more programs.",
+        // === Unit 3 steps ===
+        tut_u3_s1_title: "⚡ When to use GPU",
+        tut_u3_s1_body: "Use GPU for: deep learning training, large matrix ops, image processing. Regular coursework (if/for/loops) runs fine on CPU. GPU jobs queue — only submit when needed.",
+        tut_u3_s2_title: "Step 2 — Submit from VS Code",
+        tut_u3_s2_body: "In the VS Code file tree (left), right-click any .py → \"AI Base: Run on GPU\". The platform sends it to a GPU worker node.",
+        tut_u3_s3_title: "Step 3 — High-compute tab",
+        tut_u3_s3_body: "\"High Compute\" tab shows the GPU queue. States: pending (queued) / running / completed / failed. Mid/low jobs live in the next tab.",
+        tut_u3_s4_title: "🎉 Done",
+        tut_u3_s4_body: "Click a job to see streaming log. After completion, outputs are at /code/<your_id>/outputs/ — viewable from VS Code.",
+        // === Unit 4 steps ===
+        tut_u4_s1_title: "🔐 What are Secrets",
+        tut_u4_s1_body: "Secrets are sensitive things like API keys. Hard-coding them risks committing to git — put them here, platform injects as env vars at container start.",
+        tut_u4_s2_title: "Step 2 — Secrets section location",
+        tut_u4_s2_body: "This is the Secrets section, at the bottom of the Notebook tab. Anything added below auto-injects as env var when Lab starts or GPU job runs.",
+        tut_u4_s3_title: "Step 3 — Name field",
+        tut_u4_s3_body: "Use UPPER_SNAKE_CASE (e.g. HF_TOKEN, OPENAI_API_KEY). In your code: os.environ['HF_TOKEN']",
+        tut_u4_s4_title: "Step 4 — Add",
+        tut_u4_s4_body: "Hit Add → encrypted with AES-256-GCM. Once stored, even the platform cannot decrypt to plaintext — only decrypted on container start.",
+        tut_u4_s5_title: "🎉 Done",
+        tut_u4_s5_body: "💡 Most coursework doesn't need Secrets. Only required when calling paid APIs like OpenAI / Claude / HuggingFace.",
+        // === Unit 5 steps ===
+        tut_u5_s1_title: "🤖 Where the AI Assistant lives",
+        tut_u5_s1_body: "AI Assistant lets you chat with AI — get answers, organize thoughts, debug code. Click here in the sidebar to enter.",
+        tut_u5_s2_title: "Step 2 — Text Chat",
+        tut_u5_s2_body: "Only \"Text Chat\" is live; other cards are proposed features — click them to tell us which you want prioritized.",
+        tut_u5_s3_title: "Step 3 — How to chat effectively",
+        tut_u5_s3_body: "Be specific. \"Sort this list of dicts by a key\" is way better than \"how to sort in python\". AI doesn't know your code — paste snippets.",
+        tut_u5_s4_title: "🎉 Token usage",
+        tut_u5_s4_body: "Each chat costs tokens. Check Settings → Token Resources for your monthly quota and remaining. If out, ask your teacher or admin. ~1 English word ≈ 1.3 tokens.",
+        // === Unit 6 steps (admin only) ===
+        tut_u6_s1_title: "👤 Admin UI on port 8888",
+        tut_u6_s1_body: "Admin-only interface at http://localhost:8888 (user UI is on :80). Open it in a new browser tab, log in with the same admin credentials.",
+        tut_u6_s2_title: "Step 2 — User management",
+        tut_u6_s2_body: "\"Users\" tab: see all accounts' online status, token usage, last login. Provision new accounts, disable/enable, reset password.",
+        tut_u6_s3_title: "Step 3 — Token quota",
+        tut_u6_s3_body: "In Users tab, adjust per-account monthly quota (default 5M). Bulk CSV import also supported (see docs/04-operations.md).",
+        tut_u6_s4_title: "Step 4 — Announcements + Excel export",
+        tut_u6_s4_body: "\"Announcements\" tab manages homepage announcements (v2.2+). \"📊 Export\" button: pick columns, export Excel/CSV for term backup or onboarding.",
+        tut_u6_s5_title: "🎉 Done",
+        tut_u6_s5_body: "More admin features in docs/04-operations.md. Remember to set a strong admin password before term starts.",
         // Home & Drawer
         nav_home: "Home",
         nav_docs: "Documents",
@@ -1204,12 +1302,95 @@ const TutorialEngine = (() => {
                   titleKey: 'tut_u1_s5_title', bodyKey: 'tut_u1_s5_body' },
             ],
         },
-        // 其餘 5 個單元（Step C 才實作 — 目前 placeholder 用同樣 stub steps）
-        { id: 'first-python',  titleKey: 'tut_u2_title', descKey: 'tut_u2_desc', durationMin: 3, icon: 'code-slash-outline', adminOnly: false, _stub: true, steps: [] },
-        { id: 'run-on-gpu',    titleKey: 'tut_u3_title', descKey: 'tut_u3_desc', durationMin: 5, icon: 'flash-outline', adminOnly: false, _stub: true, steps: [] },
-        { id: 'manage-secrets',titleKey: 'tut_u4_title', descKey: 'tut_u4_desc', durationMin: 3, icon: 'key-outline', adminOnly: false, _stub: true, steps: [] },
-        { id: 'ai-assistant',  titleKey: 'tut_u5_title', descKey: 'tut_u5_desc', durationMin: 2, icon: 'chatbubbles-outline', adminOnly: false, _stub: true, steps: [] },
-        { id: 'admin-tools',   titleKey: 'tut_u6_title', descKey: 'tut_u6_desc', durationMin: 3, icon: 'shield-checkmark-outline', adminOnly: true,  _stub: true, steps: [] },
+        // Unit 2 — 寫第一個 Python 檔 (3 min)
+        // VS Code 內步驟用「modal 說明 + 使用者手動 + 下一步確認」
+        {
+            id: 'first-python',
+            titleKey: 'tut_u2_title', descKey: 'tut_u2_desc',
+            durationMin: 3, icon: 'code-slash-outline', adminOnly: false,
+            beforeStart: () => {
+                switchTab('dashboard');
+                requestAnimationFrame(() => document.getElementById('sub-tab-notebook')?.click());
+            },
+            steps: [
+                { type: 'modal', titleKey: 'tut_u2_s1_title', bodyKey: 'tut_u2_s1_body' },
+                { type: 'modal', titleKey: 'tut_u2_s2_title', bodyKey: 'tut_u2_s2_body' },
+                { type: 'modal', titleKey: 'tut_u2_s3_title', bodyKey: 'tut_u2_s3_body' },
+                { type: 'modal', titleKey: 'tut_u2_s4_title', bodyKey: 'tut_u2_s4_body' },
+            ],
+        },
+        // Unit 3 — 把程式送 GPU 訓練 (5 min)
+        {
+            id: 'run-on-gpu',
+            titleKey: 'tut_u3_title', descKey: 'tut_u3_desc',
+            durationMin: 5, icon: 'flash-outline', adminOnly: false,
+            beforeStart: () => {
+                switchTab('dashboard');
+                requestAnimationFrame(() => document.getElementById('sub-tab-notebook')?.click());
+            },
+            steps: [
+                { type: 'modal', titleKey: 'tut_u3_s1_title', bodyKey: 'tut_u3_s1_body' },
+                { type: 'modal', titleKey: 'tut_u3_s2_title', bodyKey: 'tut_u3_s2_body' },
+                { type: 'highlight', selector: '#sub-tab-high',
+                  titleKey: 'tut_u3_s3_title', bodyKey: 'tut_u3_s3_body',
+                  onEnter: () => { document.getElementById('sub-tab-high')?.click(); } },
+                { type: 'modal', titleKey: 'tut_u3_s4_title', bodyKey: 'tut_u3_s4_body' },
+            ],
+        },
+        // Unit 4 — 管理 Secrets (3 min)
+        {
+            id: 'manage-secrets',
+            titleKey: 'tut_u4_title', descKey: 'tut_u4_desc',
+            durationMin: 3, icon: 'key-outline', adminOnly: false,
+            beforeStart: () => {
+                switchTab('dashboard');
+                requestAnimationFrame(() => {
+                    document.getElementById('sub-tab-notebook')?.click();
+                    requestAnimationFrame(() => {
+                        document.getElementById('secrets-section')?.scrollIntoView({ behavior: 'auto', block: 'center' });
+                    });
+                });
+            },
+            steps: [
+                { type: 'modal',     titleKey: 'tut_u4_s1_title', bodyKey: 'tut_u4_s1_body' },
+                { type: 'highlight', selector: '#secrets-section',
+                  titleKey: 'tut_u4_s2_title', bodyKey: 'tut_u4_s2_body' },
+                { type: 'highlight', selector: '#secret-name-input',
+                  titleKey: 'tut_u4_s3_title', bodyKey: 'tut_u4_s3_body' },
+                { type: 'highlight', selector: '#secret-add-btn',
+                  titleKey: 'tut_u4_s4_title', bodyKey: 'tut_u4_s4_body' },
+                { type: 'modal',     titleKey: 'tut_u4_s5_title', bodyKey: 'tut_u4_s5_body' },
+            ],
+        },
+        // Unit 5 — AI 助手怎麼用 (2 min)
+        {
+            id: 'ai-assistant',
+            titleKey: 'tut_u5_title', descKey: 'tut_u5_desc',
+            durationMin: 2, icon: 'chatbubbles-outline', adminOnly: false,
+            beforeStart: () => { switchTab('home'); },
+            steps: [
+                { type: 'highlight', selector: '#tab-chat',
+                  titleKey: 'tut_u5_s1_title', bodyKey: 'tut_u5_s1_body' },
+                { type: 'highlight', selector: '.hub-sub-card[data-target="chat-layout"]',
+                  titleKey: 'tut_u5_s2_title', bodyKey: 'tut_u5_s2_body',
+                  onEnter: () => { switchTab('assistant'); } },
+                { type: 'modal', titleKey: 'tut_u5_s3_title', bodyKey: 'tut_u5_s3_body' },
+                { type: 'modal', titleKey: 'tut_u5_s4_title', bodyKey: 'tut_u5_s4_body' },
+            ],
+        },
+        // Unit 6 — 管理員專屬 (admin only)
+        {
+            id: 'admin-tools',
+            titleKey: 'tut_u6_title', descKey: 'tut_u6_desc',
+            durationMin: 3, icon: 'shield-checkmark-outline', adminOnly: true,
+            steps: [
+                { type: 'modal', titleKey: 'tut_u6_s1_title', bodyKey: 'tut_u6_s1_body' },
+                { type: 'modal', titleKey: 'tut_u6_s2_title', bodyKey: 'tut_u6_s2_body' },
+                { type: 'modal', titleKey: 'tut_u6_s3_title', bodyKey: 'tut_u6_s3_body' },
+                { type: 'modal', titleKey: 'tut_u6_s4_title', bodyKey: 'tut_u6_s4_body' },
+                { type: 'modal', titleKey: 'tut_u6_s5_title', bodyKey: 'tut_u6_s5_body' },
+            ],
+        },
     ];
 
     function _visibleUnits() {
