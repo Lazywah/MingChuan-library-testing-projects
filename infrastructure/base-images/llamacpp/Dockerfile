@@ -33,11 +33,14 @@ RUN curl -fsSL https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_6
 # llama.cpp from source with CUDA support
 #
 # 三個關鍵 flag（缺一不可）:
-#   1. CMAKE_CUDA_ARCHITECTURES="75;80;86;89;90"
+#   1. CMAKE_CUDA_ARCHITECTURES="75;80;86;89;90;120"
 #      - 不指定的話 llama.cpp 預設 build compute_50 ~ compute_120a 全套
 #      - compute_50 (Maxwell 2014) 在 CUDA 12.8 已 deprecate → nvcc 報錯
-#      - compute_120a (Blackwell RTX 50x) 太新、部分 nvcc 還沒支援 → 報錯
-#      - 75-90 涵蓋 T4 / A100 / RTX 30x / RTX 40x / H100，校園實際會用到的全有
+#      - 75-90 涵蓋 T4 / A100 / RTX 30x / RTX 40x / H100，校園既有卡全有
+#      - v2.3 P0：服務層改用 RTX 5090 (sm_120 / Blackwell)，加 "120"
+#        （標準 compute_120，非 120a；CUDA 12.8 nvcc 已支援）
+#      - fallback：若 120 在此 CUDA 版 build 失敗 → 移除 120，
+#        本地推論改 reverse proxy 到 vLLM（vLLM 已支援 sm_120）
 #
 #   2. -j 4 (不用 $(nproc))
 #      - host 28 cores × CUDA nvcc ~2-3 GB/process = 60-80 GB RAM 需求
@@ -52,7 +55,7 @@ RUN git clone --depth 1 https://github.com/ggerganov/llama.cpp.git /opt/llama.cp
     && mkdir build && cd build \
     && cmake .. \
         -DGGML_CUDA=ON \
-        -DCMAKE_CUDA_ARCHITECTURES="75;80;86;89;90" \
+        -DCMAKE_CUDA_ARCHITECTURES="75;80;86;89;90;120" \
         -DLLAMA_BUILD_TESTS=OFF \
         -DLLAMA_BUILD_EXAMPLES=OFF \
         -DBUILD_SHARED_LIBS=OFF \
