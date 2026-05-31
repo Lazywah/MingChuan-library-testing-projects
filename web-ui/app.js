@@ -92,6 +92,15 @@ const TRANSLATIONS = {
         hub_card_editor: "AI小編",
         hub_card_pdf: "PDF合約",
         hub_card_ppt: "文書簡報",
+        // v2.3 P1 文書簡報專項 agent
+        pres_title: "文書簡報生成",
+        pres_welcome: "嗨！我可以幫你把想法做成 PowerPoint 簡報。先告訴我主題、用途，以及大概幾張投影片吧！",
+        pres_placeholder: "例如：幫我做一份 10 張的機器學習報告，主題 CNN，給同學看",
+        pres_hint: "生成的 .pptx 會存到你的 Notebook /home/coder/outputs/（請先啟動 Notebook 容器）",
+        pres_done_title: "簡報已生成！",
+        pres_done_path: "位置",
+        pres_done_howto: "請到「Notebook」開啟容器，於 outputs/ 資料夾右鍵下載這個 .pptx。",
+        pres_failed: "簡報生成失敗",
         hub_title_media: "影音創作",
         hub_desc_media: "生成圖片、生成影片、生成歌曲！",
         hub_card_image: "生成圖片",
@@ -447,6 +456,15 @@ const TRANSLATIONS = {
         hub_card_editor: "AI Editor",
         hub_card_pdf: "PDF Contract",
         hub_card_ppt: "Presentation",
+        // v2.3 P1 presentation agent
+        pres_title: "Presentation Generator",
+        pres_welcome: "Hi! I can turn your ideas into a PowerPoint deck. Tell me the topic, the purpose, and roughly how many slides you want.",
+        pres_placeholder: "e.g. Make me a 10-slide machine learning report on CNNs for classmates",
+        pres_hint: "The generated .pptx is saved to your Notebook at /home/coder/outputs/ (start your Notebook container first).",
+        pres_done_title: "Presentation generated!",
+        pres_done_path: "Location",
+        pres_done_howto: "Open your Notebook container, then right-click the .pptx in the outputs/ folder to download it.",
+        pres_failed: "Presentation generation failed",
         hub_title_media: "Multimedia",
         hub_desc_media: "Generate images, videos, and music!",
         hub_card_image: "Image Gen",
@@ -761,6 +779,7 @@ const chatModelSelect = document.getElementById('chat-model-select');
 const aiHubContainer = document.getElementById('ai-hub-container');
 const chatLayout = document.getElementById('chat-layout');
 const comingSoonLayout = document.getElementById('coming-soon-layout');
+const presentationLayout = document.getElementById('presentation-layout'); // v2.3 P1
 const hubSubCards = document.querySelectorAll('.hub-sub-card');
 const backToHubBtns = document.querySelectorAll('.back-to-hub-btn');
 
@@ -769,16 +788,20 @@ function showHubView(targetId) {
     aiHubContainer.classList.remove('active');
     chatLayout.classList.add('hidden');
     comingSoonLayout.classList.remove('active');
+    if (presentationLayout) presentationLayout.classList.add('hidden');
     if (targetId === 'chat-layout') {
         chatLayout.classList.remove('hidden');
     } else if (targetId === 'coming-soon-layout') {
         comingSoonLayout.classList.add('active');
+    } else if (targetId === 'presentation-layout' && presentationLayout) {
+        presentationLayout.classList.remove('hidden');
     }
 }
 function showHub() {
     aiHubContainer.classList.add('active');
     chatLayout.classList.add('hidden');
     comingSoonLayout.classList.remove('active');
+    if (presentationLayout) presentationLayout.classList.add('hidden');
 }
 
 // Bind hub card clicks
@@ -2357,6 +2380,141 @@ function renderBubble(msg) {
     const div = createBubble(msg.role, msg.content);
     chatHistoryEl.appendChild(div);
     chatHistoryEl.scrollTop = chatHistoryEl.scrollHeight;
+}
+
+// =========================
+// ZH: v2.3 P1 文書簡報專項 agent 串流 | EN: v2.3 P1 presentation agent stream
+// =========================
+const presentationForm = document.getElementById('presentation-form');
+const presentationInput = document.getElementById('presentation-input');
+const presentationHistoryEl = document.getElementById('presentation-history');
+// ZH: 簡報用獨立 session（PoC 不持久化到 localStorage）| EN: standalone session
+let presentationMessages = [];
+let presentationSessionId = null;
+
+function _newPresentationSession() {
+    presentationMessages = [];
+    presentationSessionId = (window.crypto && crypto.randomUUID)
+        ? crypto.randomUUID()
+        : 'pres-' + Date.now();
+}
+
+// ZH: 渲染生成結果卡片 | EN: render generation result card
+function renderPptxResult(result) {
+    if (!presentationHistoryEl) return;
+    const div = document.createElement('div');
+    div.className = 'ai-bubble';
+    const c = document.createElement('div');
+    c.className = 'bubble-content';
+    if (result && result.ok) {
+        const fname = document.createElement('div');
+        fname.style.fontWeight = 'bold';
+        fname.textContent = '✅ ' + t('pres_done_title');
+        const file = document.createElement('div');
+        file.textContent = '📄 ' + (result.filename || '');
+        const path = document.createElement('div');
+        path.style.cssText = 'color:var(--text-muted);font-size:13px;margin-top:4px;';
+        path.textContent = t('pres_done_path') + ': ' + (result.path || '');
+        const howto = document.createElement('div');
+        howto.style.cssText = 'font-size:13px;margin-top:6px;';
+        howto.textContent = t('pres_done_howto');
+        c.appendChild(fname); c.appendChild(file); c.appendChild(path); c.appendChild(howto);
+    } else {
+        const head = document.createElement('div');
+        head.style.cssText = 'color:#ff4d4f;font-weight:bold;';
+        head.textContent = '⚠️ ' + t('pres_failed');
+        const msg = document.createElement('div');
+        msg.style.cssText = 'font-size:13px;margin-top:4px;';
+        msg.textContent = (result && result.error) ? result.error : '';
+        c.appendChild(head); c.appendChild(msg);
+    }
+    div.appendChild(c);
+    presentationHistoryEl.appendChild(div);
+    presentationHistoryEl.scrollTop = presentationHistoryEl.scrollHeight;
+}
+
+if (presentationForm) {
+    presentationForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const prompt = presentationInput.value.trim();
+        if (!prompt) return;
+        if (!presentationSessionId) _newPresentationSession();
+
+        presentationInput.value = '';
+        presentationInput.style.height = '42.4px';
+
+        // User bubble
+        presentationMessages.push({ role: 'user', content: prompt });
+        const userDiv = createBubble('user', prompt);
+        presentationHistoryEl.appendChild(userDiv);
+        presentationHistoryEl.scrollTop = presentationHistoryEl.scrollHeight;
+        trackTokenUsage(prompt, true);
+
+        // Empty AI bubble
+        const aiBubble = createBubble('assistant', '');
+        const contentEl = aiBubble.querySelector('.bubble-content');
+        presentationHistoryEl.appendChild(aiBubble);
+        presentationHistoryEl.scrollTop = presentationHistoryEl.scrollHeight;
+
+        let aiFullText = '';
+        try {
+            const response = await fetch(`${API_BASE}/chat/completions`, {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${authToken}`,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    model_id: chatModelSelect ? chatModelSelect.value : 'llama3:latest',
+                    messages: presentationMessages,
+                    stream: true,
+                    tool_type: 'presentation',
+                    session_id: presentationSessionId
+                })
+            });
+            if (!response.ok) throw new Error('Stream Error');
+
+            const reader = response.body.getReader();
+            const decoder = new TextDecoder();
+
+            while (true) {
+                const { value, done } = await reader.read();
+                if (done) break;
+                const chunk = decoder.decode(value);
+                const lines = chunk.split('\n');
+                for (const line of lines) {
+                    if (!line.startsWith('data: ')) continue;
+                    const dataStr = line.replace('data: ', '').trim();
+                    if (dataStr === '[DONE]') continue;
+                    try {
+                        const json = JSON.parse(dataStr);
+                        if (json.error) {
+                            const errMsg = json.error === 'Token quota exceeded'
+                                ? t('error_quota_exceeded') : json.error;
+                            aiFullText = `${t('prefix_system_reject')}: ${errMsg}`;
+                            contentEl.innerHTML = `<span style="color:#ff4d4f;font-weight:bold;">${aiFullText}</span>`;
+                            break;
+                        }
+                        // ZH: 生成結果事件 | EN: generation result event
+                        if (json.pptx_generated) {
+                            renderPptxResult(json.pptx_generated);
+                            continue;
+                        }
+                        const content = (json.choices && json.choices[0].delta.content) || '';
+                        aiFullText += content;
+                        contentEl.textContent = aiFullText;
+                        presentationHistoryEl.scrollTop = presentationHistoryEl.scrollHeight;
+                    } catch (e) { }
+                }
+            }
+
+            presentationMessages.push({ role: 'assistant', content: aiFullText });
+            trackTokenUsage(aiFullText, false);
+        } catch (err) {
+            const errorHint = `<br><br><span style="color:#ff4d4f;font-size:13px;font-weight:bold;">${t('prefix_system_notice')}: ${t('error_stream_interrupted')} (${err.message})</span>`;
+            contentEl.innerHTML = (aiFullText ? aiFullText : contentEl.textContent) + errorHint;
+        }
+    });
 }
 
 function createBubble(role, content) {

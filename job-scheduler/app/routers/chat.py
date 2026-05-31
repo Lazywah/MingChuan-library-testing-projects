@@ -31,6 +31,7 @@ from .. import crud, schemas, models
 from ..auth import get_current_user
 from ..database import get_db
 from ..config import settings
+from ..services import agent_dispatcher, document_generator
 
 logger = logging.getLogger(__name__)
 
@@ -74,6 +75,16 @@ async def chat_completions(
         async def quota_exceeded():
             yield f"data: {json.dumps({'error': 'Token quota exceeded'}, ensure_ascii=False)}\n\n"
         return StreamingResponse(quota_exceeded(), media_type="text/event-stream")
+
+    # ZH: v2.3 P1 — 專項生成 agent（文書簡報等）走獨立 dispatch 流程，
+    #     不影響既有純 chat 行為（tool_type 為空/"chat" 時走下方原邏輯）
+    # EN: v2.3 P1 — specialized generation agents use an isolated dispatch path;
+    #     existing plain chat behaviour is untouched (empty/"chat" → original below)
+    if agent_dispatcher.is_dispatch_tool(request.tool_type):
+        return StreamingResponse(
+            _dispatch_stream_generator(request, current_user.id, db),
+            media_type="text/event-stream",
+        )
 
     # ZH: 使用請求傳入的 session_id；若未傳入則產生新 UUID
     # EN: Use session_id from request; generate new UUID if not provided
@@ -192,6 +203,193 @@ async def chat_completions(
             db.rollback()
 
     return StreamingResponse(stream_generator(), media_type="text/event-stream")
+
+
+# ==============================================================================
+# ZH: v2.3 P1 — 專項生成 agent dispatch 串流（文書簡報）
+# EN: v2.3 P1 — specialized generation agent dispatch stream (presentation)
+# ==============================================================================
+
+def _sse(payload: dict) -> str:
+    """ZH: 包成單行 SSE data 事件 | EN: Wrap into one SSE data line"""
+    return f"data: {json.dumps(payload, ensure_ascii=False)}\n\n"
+
+
+def _content_event(text: str) -> str:
+    """ZH: 仿 OpenAI delta 格式，讓前端既有 parser 直接吃 | EN: OpenAI-style delta"""
+    return _sse({"choices": [{"delta": {"content": text}}]})
+
+
+def _extract_spec_json(block: str) -> str:
+    """ZH: 容錯地把標記區塊內的 JSON 取出（去掉可能的 ``` 圍欄）
+       EN: Tolerantly extract JSON from the marker block (strip code fences)"""
+    s = block.strip()
+    if s.startswith("```"):
+        # 去掉第一行 ```/```json 與結尾 ```
+        s = s.split("\n", 1)[1] if "\n" in s else s
+        if s.rstrip().endswith("```"):
+            s = s.rstrip()[:-3]
+    return s.strip()
+
+
+async def _dispatch_stream_generator(
+    request: schemas.ChatRequest,
+    user_id: str,
+    db: Session,
+):
+    """
+    ZH: 專項 agent 串流：注入 system prompt → 串流 → 偵測生成契約 →
+        擷取 spec → document_generator 渲染 → 回傳生成結果事件。
+        對使用者隱藏原始 JSON（偵測到 START 標記後停止外送內容）。
+    EN: Specialized agent stream: inject system prompt → stream → detect the
+        generation contract → extract spec → render → emit result event.
+        Raw JSON is hidden from the user (stop forwarding once START is seen).
+    """
+    cfg = agent_dispatcher.get_agent_config(request.tool_type)
+    start_marker = cfg["spec_start"]
+    end_marker = cfg["spec_end"]
+    system_prompt = cfg["system_prompt"]
+
+    session_id = (request.session_id or "").strip() or str(uuid.uuid4())
+    last_message = request.messages[-1].content if request.messages else ""
+
+    # ZH: system prompt 置頂；其餘維持使用者對話 | EN: prepend system prompt
+    out_messages = [{"role": "system", "content": system_prompt}]
+    out_messages += [{"role": m.role, "content": m.content} for m in request.messages]
+
+    portkey_payload = {
+        "model": request.model_id,
+        "messages": out_messages,
+        "stream": True,
+        "stream_options": {"include_usage": True},
+    }
+    portkey_headers = _get_portkey_headers(request.model_id)
+
+    full = ""              # ZH: AI 完整輸出（含標記）| EN: full AI output (with markers)
+    emitted = 0            # ZH: 已外送字元數 | EN: chars already forwarded
+    spec_mode = False      # ZH: 已進入 spec 區塊 | EN: inside spec block
+    start_idx = -1
+    total_tokens = 0
+    hold = len(start_marker)
+
+    try:
+        async with httpx.AsyncClient(timeout=httpx.Timeout(connect=5.0, read=120.0, write=10.0, pool=5.0)) as client:
+            async with client.stream(
+                "POST", settings.PORTKEY_URL, json=portkey_payload, headers=portkey_headers,
+            ) as upstream:
+                if upstream.status_code != 200:
+                    body = await upstream.aread()
+                    err_msg = body.decode("utf-8", errors="replace")[:200]
+                    logger.error(f"Portkey returned {upstream.status_code}: {err_msg}")
+                    yield _sse({"error": f"AI service error ({upstream.status_code})"})
+                    return
+
+                async for line in upstream.aiter_lines():
+                    if not line or not line.startswith("data: "):
+                        continue
+                    data_str = line[6:]
+                    if data_str == "[DONE]":
+                        break
+                    try:
+                        chunk = json.loads(data_str)
+                        delta = chunk.get("choices", [{}])[0].get("delta", {})
+                        content = delta.get("content")
+                        if chunk_usage := chunk.get("usage"):
+                            total_tokens = chunk_usage.get("total_tokens", 0)
+                    except (json.JSONDecodeError, IndexError, KeyError):
+                        continue
+                    if not content:
+                        continue
+
+                    full += content
+                    if not spec_mode:
+                        idx = full.find(start_marker)
+                        if idx != -1:
+                            # ZH: 標記出現 → 外送標記前的人類文字，之後全部隱藏
+                            if idx > emitted:
+                                yield _content_event(full[emitted:idx])
+                                emitted = idx
+                            spec_mode = True
+                            start_idx = idx
+                        else:
+                            # ZH: 保留尾端 hold 字元，避免把跨 chunk 的標記切一半送出
+                            safe = max(emitted, len(full) - hold)
+                            if safe > emitted:
+                                yield _content_event(full[emitted:safe])
+                                emitted = safe
+                    # spec_mode → 不外送
+    except httpx.ConnectError:
+        logger.error(f"Cannot connect to Portkey at {settings.PORTKEY_URL}")
+        yield _sse({"error": "AI 服務尚未啟動，請聯絡管理員 | AI service not available."})
+        return
+    except httpx.TimeoutException:
+        logger.error("Portkey request timed out (dispatch)")
+        yield _sse({"error": "AI service timed out, please try again"})
+        return
+    except Exception as e:
+        logger.error(f"Dispatch streaming error: {e}", exc_info=True)
+        yield _sse({"error": "Internal streaming error"})
+        return
+
+    # ZH: 收尾 — 決定 assistant 存檔內容、必要時觸發生成
+    # EN: Finalize — decide saved assistant text, trigger generation if needed
+    if not spec_mode:
+        if len(full) > emitted:
+            yield _content_event(full[emitted:])
+        assistant_text = full
+    else:
+        # ZH: 擷取 START..END 間 JSON | EN: extract JSON between START..END
+        json_start = start_idx + len(start_marker)
+        end_pos = full.find(end_marker, json_start)
+        raw_block = full[json_start:end_pos] if end_pos != -1 else full[json_start:]
+        assistant_text = full[:start_idx].strip() or "好的，正在為你生成簡報。"
+
+        result = None
+        try:
+            spec = json.loads(_extract_spec_json(raw_block))
+            result = document_generator.generate_presentation(spec, user_id)
+        except json.JSONDecodeError as e:
+            logger.warning("Presentation spec JSON parse failed: %s", e)
+            result = {"ok": False, "error": "AI 產生的簡報結構無法解析，請再說一次「請生成」。"
+                                            " | Could not parse the generated spec; please reconfirm."}
+
+        yield _sse({"pptx_generated": result})
+
+    yield "data: [DONE]\n\n"
+
+    # ZH: 存對話紀錄 + 扣 token（與 /completions 同邏輯）
+    # EN: Save history + deduct tokens (same logic as /completions)
+    if not assistant_text:
+        return
+    try:
+        prompt_text = "".join(m.content for m in request.messages)
+        estimated = total_tokens or max(1, (len(prompt_text) + len(full)) // 3)
+        db.add(models.ChatHistory(
+            user_id=user_id, session_id=session_id,
+            role="user", content=last_message,
+            tool_type=request.tool_type or "presentation", tokens_used=0,
+        ))
+        db.add(models.ChatHistory(
+            user_id=user_id, session_id=session_id,
+            role="assistant", content=assistant_text,
+            tool_type=request.tool_type or "presentation", tokens_used=estimated,
+        ))
+        db.execute(
+            _sa_update(models.TokenUsage)
+            .where(models.TokenUsage.user_id == user_id)
+            .values(tokens_used=models.TokenUsage.tokens_used + estimated)
+            .execution_options(synchronize_session=False)
+        )
+        db.execute(
+            _sa_update(models.User)
+            .where(models.User.id == user_id)
+            .values(lifetime_tokens_used=models.User.lifetime_tokens_used + estimated)
+            .execution_options(synchronize_session=False)
+        )
+        db.commit()
+    except Exception as e:
+        logger.error(f"Failed to save dispatch chat history: {e}", exc_info=True)
+        db.rollback()
 
 
 @router.get("/history")

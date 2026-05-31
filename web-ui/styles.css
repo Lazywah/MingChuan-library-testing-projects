@@ -544,6 +544,22 @@ ion-icon {
     height: 100%;
 }
 
+/* ZH: v2.3 P1 — chat-layout / presentation-layout 共用 .chat-layout，需讓
+       .hidden 真正隱藏，否則兩個面板會同時 display:grid 上下堆疊。
+   EN: v2.3 P1 — chat-layout & presentation-layout share .chat-layout; make
+       .hidden actually hide so the two panes don't both render (stacked). */
+.chat-layout.hidden {
+    display: none !important;
+}
+
+/* ZH: 文書簡報視圖無左側 session 欄，單欄填滿（chat-layout 預設 300px 1fr 會
+       把唯一 .chat-main 擠進 300px 欄）。
+   EN: Presentation view has no session sidebar — make it a single full-width
+       column (chat-layout's 300px 1fr would squeeze the lone .chat-main). */
+#presentation-layout {
+    grid-template-columns: 1fr;
+}
+
 .chat-sidebar {
     display: flex;
     flex-direction: column;
@@ -1361,15 +1377,17 @@ ion-icon {
    v2.2: AI Hub stub vs functional card 視覺區分
    --------------------------------------------------------------------------
    只用 CSS attribute selector 區分 — HTML/JS 完全不動
-   - data-target="chat-layout"        → 已上線 (綠 badge)
-   - data-target="coming-soon-layout" → 提案中 (灰 badge + 降低不透明度)
+   - data-target="chat-layout"         → 已上線 (綠 badge)
+   - data-target="presentation-layout" → 已上線 (綠 badge, v2.3 P1)
+   - data-target="coming-soon-layout"  → 提案中 (灰 badge + 降低不透明度)
    ========================================================================== */
 .hub-sub-card {
     position: relative;   /* 給 ::after badge 定位用 */
 }
 
 /* 已上線 — 綠色 badge */
-.hub-sub-card[data-target="chat-layout"]::after {
+.hub-sub-card[data-target="chat-layout"]::after,
+.hub-sub-card[data-target="presentation-layout"]::after {
     content: "已上線";
     position: absolute;
     top: 8px; right: 8px;

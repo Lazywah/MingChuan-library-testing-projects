@@ -16,7 +16,7 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
     <!-- ZH: 引入主任務面板樣式 | EN: Import main stylesheet -->
-    <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="styles.css?v=20260601-13">
 
     <!-- ZH: 引入 Google Material Icons | EN: Import Google Material Icons -->
     <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
@@ -758,7 +758,7 @@
                                     </div>
                                     <span class="card-title" data-i18n="hub_card_pdf">PDF合約</span>
                                 </div>
-                                <div class="hub-sub-card" data-target="coming-soon-layout">
+                                <div class="hub-sub-card" data-target="presentation-layout">
                                     <div class="card-bg" style="background: linear-gradient(135deg, #ef4444, #b91c1c);">
                                         <ion-icon name="easel-outline"></ion-icon>
                                     </div>
@@ -884,6 +884,43 @@
                                             <option value="llama3:latest">Ollama Llama3</option>
                                         </select>
                                     </div>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ZH: v2.3 P1 文書簡報專項 agent 視圖 | EN: Presentation agent layout -->
+                <div id="presentation-layout" class="chat-layout hidden">
+                    <div class="chat-main" style="width:100%;">
+                        <div class="sidebar-header"
+                            style="justify-content: flex-start; gap: 10px; padding: 14px 18px; border-bottom: 1px solid var(--border-soft);">
+                            <button class="icon-btn back-to-hub-btn" data-i18n-aria="btn_back_hub" aria-label="返回大廳"
+                                style="background: transparent; border: none; color: var(--text-primary); cursor: pointer; font-size: 20px;"><ion-icon
+                                    name="arrow-back-outline"></ion-icon></button>
+                            <ion-icon name="easel-outline" style="color:#ef4444;font-size:20px;"></ion-icon>
+                            <h3 data-i18n="pres_title">文書簡報生成</h3>
+                        </div>
+                        <div id="presentation-history" class="chat-history scrollbar-custom">
+                            <div class="ai-bubble intro">
+                                <div class="bubble-content" data-i18n="pres_welcome">嗨！我可以幫你把想法做成 PowerPoint
+                                    簡報。先告訴我主題、用途，以及大概幾張投影片吧！</div>
+                            </div>
+                        </div>
+                        <div class="chat-input-area">
+                            <form id="presentation-form" class="chat-form">
+                                <div class="chat-input-row">
+                                    <textarea id="presentation-input" data-i18n-placeholder="pres_placeholder"
+                                        placeholder="例如：幫我做一份 10 張的機器學習報告，主題 CNN，給同學看" required></textarea>
+                                    <button type="submit" id="send-presentation-btn" class="send-btn"
+                                        aria-label="Send message">
+                                        <span class="material-icons">send</span>
+                                    </button>
+                                </div>
+                                <div class="chat-controls-bar">
+                                    <span style="color:var(--text-muted);font-size:12px;" data-i18n="pres_hint">
+                                        生成的 .pptx 會存到你的 Notebook /home/coder/outputs/（請先啟動 Notebook 容器）
+                                    </span>
                                 </div>
                             </form>
                         </div>
@@ -1346,7 +1383,7 @@
     <!-- ZH: 載入圖標庫與主程式碼 | EN: Load Icon library and Main Logic -->
     <script type="module" src="https://unpkg.com/ionicons@7.1.0/dist/ionicons/ionicons.esm.js"></script>
     <script nomodule src="https://unpkg.com/ionicons@7.1.0/dist/ionicons/ionicons.js"></script>
-    <script src="app.js?v=20260530-12"></script>
+    <script src="app.js?v=20260601-13"></script>
 </body>
 
 </html>

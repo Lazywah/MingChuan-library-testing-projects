@@ -40,3 +40,10 @@ cryptography>=42.0.0
 # ZH: openpyxl 用於 admin 使用者管理 Excel 匯出 (v2.2 新增)
 # EN: openpyxl for admin user-management Excel export (v2.2)
 openpyxl==3.1.5
+
+# ZH: python-pptx 用於 v2.3 P1「文書簡報」agent 生成 .pptx
+#     Pillow 為 python-pptx 處理圖片的相依（預留封面/圖示用）
+# EN: python-pptx for v2.3 P1 presentation agent (.pptx generation)
+#     Pillow is python-pptx's image backend (reserved for cover/icon use)
+python-pptx==1.0.2
+Pillow>=10.4.0
