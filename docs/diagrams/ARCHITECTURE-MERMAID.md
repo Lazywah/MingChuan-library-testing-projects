@@ -1,12 +1,84 @@
-# 02 — 系統架構 | Architecture
+# 系統架構圖表（Mermaid）| Architecture Diagrams (Mermaid)
 
-三層分離設計：**工作站 → 服務層 → GPU 高階伺服器**。本文件全面以 **Mermaid** 繪製（GitHub / VS Code「Markdown Preview Mermaid Support」/ Obsidian 皆可直接渲染）。
+> 本文件以 Mermaid 語法繪製專案完整架構，可直接在 GitHub / VS Code / Obsidian 等支援 Mermaid 的工具中渲染。
+> 2026-06 二次重新設計：#2 三層架構（拆除巢狀 subgraph、精簡連線標籤，徹底消除連線覆蓋方塊）、#8 / #10 循序圖（階段標題改置於左側 margin `Note left of`，並縮短自訊息與箭頭標籤避免壓字）。
+
+## 📑 目錄 | Table of Contents
+1. [檔案結構樹（Project File Tree）](#1-檔案結構樹-project-file-tree)
+2. [三層系統架構（Three-Layer Architecture）](#2-三層系統架構-three-layer-architecture)
+3. [Docker 容器網路（Container Network）](#3-docker-容器網路-container-network)
+4. [資料庫 ER 圖（Database ER）](#4-資料庫-er-圖-database-er)
+5. [API 端點地圖（API Endpoint Map）](#5-api-端點地圖-api-endpoint-map)
+6. [前端模組與頁面導覽（Frontend Navigation）](#6-前端模組與頁面導覽-frontend-navigation)
+7. [使用者角色 RBAC（Role-Based Access Control）](#7-使用者角色-rbac-role-based-access-control)
+8. [使用者認證流程（Auth Sequence）](#8-使用者認證流程-auth-sequence)
+9. [GPU Worker Pull 模式（Worker Pull Sequence）](#9-gpu-worker-pull-模式-worker-pull-sequence)
+10. [Notebook 提交與執行流程（Notebook Execution Sequence）](#10-notebook-提交與執行流程-notebook-execution-sequence)
+11. [訓練任務狀態機（Job State Machine）](#11-訓練任務狀態機-job-state-machine)
+12. [類別關聯圖（Class Diagram – Backend Modules）](#12-類別關聯圖-class-diagram--backend-modules)
 
 ---
 
-## 1. 整體架構（三層）
+## 1. 檔案結構樹（Project File Tree）
 
-> 三層以 L1/L2/L3 subgraph 區隔；拆除前端 SPA / LLM 推理的巢狀內框（巢狀框邊界正是連線橫越主因），群組資訊改寫進節點名稱，並精簡連線標籤避免浮動標籤壓住節點。
+```mermaid
+flowchart LR
+    Root["CodeSpace/"] --> Env[".env / .env.example"]
+    Root --> DC1["docker-compose.yml<br/>(核心:nginx+scheduler)"]
+    Root --> DC2["docker-compose.ai-models.yml<br/>(open-webui+portkey+ollama)"]
+    Root --> Readme["README.md"]
+
+    Root --> WebUI["web-ui/<br/>使用者前端"]
+    WebUI --> WI["index.html"]
+    WebUI --> WA["app.js<br/>(SPA 業務邏輯)"]
+    WebUI --> WS["styles.css"]
+
+    Root --> AdminUI["admin-ui/<br/>管理員前端"]
+    AdminUI --> AI["index.html"]
+    AdminUI --> AA["admin.js"]
+    AdminUI --> AS["styles.css"]
+
+    Root --> JS["job-scheduler/<br/>FastAPI 後端"]
+    JS --> JSDF["Dockerfile / requirements.txt"]
+    JS --> JSApp["app/"]
+    JSApp --> M1["main.py<br/>應用入口"]
+    JSApp --> M2["config.py / database.py"]
+    JSApp --> M3["models.py<br/>(8 張表)"]
+    JSApp --> M4["schemas.py / crud.py"]
+    JSApp --> M5["auth.py / sso_client.py"]
+    JSApp --> M6["scheduler.py<br/>(每 5 分超時清理)"]
+    JSApp --> M7["rate_limit.py"]
+    JSApp --> Pol["*.yaml<br/>(scheduler/sso policy)"]
+    JSApp --> R["routers/"]
+    R --> R1["auth.py / sso.py"]
+    R --> R2["jobs.py / worker.py"]
+    R --> R3["admin.py / system.py"]
+    R --> R4["chat.py / datasets.py"]
+    R --> R5["notebooks.py<br/>(2026-05 新增)"]
+    JSApp --> Svc["services/email_service.py"]
+
+    Root --> GW["gpu-worker/<br/>GPU 節點代理"]
+    GW --> GWD["Dockerfile / docker-compose.yml"]
+    GW --> GWW["worker.py<br/>(輪詢 + 容器派發)"]
+
+    Root --> INF["infrastructure/"]
+    INF --> NG["nginx.conf<br/>(反向代理)"]
+    INF --> SQL["schema.sql"]
+
+    Root --> PK["portkey/config.yaml<br/>(LLM 閘道路由)"]
+    Root --> SCR["scripts/<br/>(deploy.sh / setup_env.py)"]
+    Root --> T["tests/<br/>(72 個測試)"]
+    Root --> Data["data/<br/>(SQLite + 上傳檔)"]
+    Root --> DocDir["docs/<br/>(11 份手冊)"]
+```
+
+---
+
+## 2. 三層系統架構（Three-Layer Architecture）
+
+> 二次重新設計重點：拆除巢狀 subgraph（前端 SPA / LLM 推理不再各自包一層框），
+> 巢狀框邊界正是先前連線橫越的主因；同時把多行長標籤精簡成單行短字，
+> 消除浮動標籤方塊壓住節點。三層仍以 L1/L2/L3 subgraph 區隔，群組資訊改寫進節點名稱。
 
 ```mermaid
 flowchart TB
@@ -20,19 +92,19 @@ flowchart TB
         WebFE["web-ui SPA · /train/*"]
         AdmFE["admin-ui SPA · /admin-ui/*"]
         FA["Job Scheduler<br/>FastAPI :8002"]
-        SCH["scheduler.py<br/>背景排程"]
+        SCH["scheduler.py<br/>每 5 分超時清理"]
         DB[("SQLite DB<br/>ai_platform.db")]
         PKG["Portkey Gateway :8000<br/>LLM 閘道"]
-        OL["Ollama / vLLM<br/>本地模型"]
+        OL["Ollama :11434<br/>本地模型"]
         OWUI["Open WebUI :3000<br/>備用入口"]
     end
 
-    subgraph L3["第三層：GPU 高階伺服器 Win11 + WSL2 / Ubuntu"]
+    subgraph L3["第三層：GPU 伺服器 Win11 + WSL2"]
         direction TB
         WK["gpu-worker<br/>worker.py"]
         NV["nvidia-smi GPU 偵測"]
-        DC["docker run --rm<br/>per-job 隔離容器"]
-        STG["共享 volume /workspace"]
+        DC["docker run 訓練容器"]
+        STG["Samba 共享 /workspace"]
     end
 
     subgraph EXTG["外部 API（選用）"]
@@ -65,118 +137,62 @@ flowchart TB
     class WK,NV,DC,STG l3
 ```
 
-**關鍵設計**：
-- GPU 節點 **Pull**（主動領取）→ 無需開放對外 port、藏在 NAT 後仍可用
-- 服務層**沒有**GPU 節點的 SSH 私鑰 → 服務層被駭頂多塞惡意任務、不能登入 GPU 機
-- 訓練容器都是 `--rm` → 結束即清空、惡意腳本最多污染 container 不污染 host
-
 ---
 
-## 2. 認證流程
-
-平台**三 provider 並存**：`local`（本機帳號）/ `sso_mock` / `sso_cas` / `sso_oidc`（Microsoft Entra ID）。下圖以「本機帳號 + SSO Mock + 受保護端點」為代表；OIDC 另在 IdP 端多一段 302 redirect（見下方說明）。
+## 3. Docker 容器網路（Container Network）
 
 ```mermaid
-sequenceDiagram
-    autonumber
-    participant U as 使用者
-    participant W as web-ui
-    participant N as Nginx
-    participant API as FastAPI
-    participant DB as SQLite
-    participant SSO as SSO (Mock/CAS/OIDC)
-
-    rect rgb(218, 232, 252)
-        Note left of U: ① 本機帳號登入
-        U->>W: 輸入帳號 + 密碼
-        W->>N: POST /auth/login
-        N->>API: 轉發請求
-        API->>DB: SELECT user
-        DB-->>API: User record
-        API->>API: 驗證密碼 + 簽發 JWT
-        API->>DB: UPDATE 登入紀錄
-        API-->>W: access_token + cookie
+flowchart LR
+    subgraph Net["ai-platform-net (bridge network)"]
+        direction TB
+        N1["ai-platform-nginx<br/>:80 / :8888"]
+        N2["ai-platform-scheduler<br/>:8002"]
+        N3["ai-platform-portkey<br/>:8000"]
+        N4["ai-platform-ollama<br/>:11434"]
+        N5["ai-platform-webui<br/>(open-webui :3000)"]
     end
 
-    rect rgb(213, 232, 212)
-        Note left of U: ② SSO 登入 (Mock/CAS/OIDC)
-        U->>W: 點「使用學校帳號登入」
-        W->>API: /sso/<provider>/login
-        API->>SSO: 導向 IdP
-        SSO-->>API: 回呼 code+state
-        API->>API: _finalize_sso_login()
-        API->>DB: upsert user (新帳號自動建立)
-        API-->>W: 簽 JWT + 302 /train/
+    subgraph Vols["Docker Volumes"]
+        V1[("./data → /data<br/>SQLite + datasets")]
+        V2[("./infrastructure/nginx.conf")]
+        V3[("./web-ui /usr/share/nginx/html/train")]
+        V4[("./admin-ui /usr/share/nginx/html/admin-ui")]
+        V5[("open-webui-data")]
+        V6[("ollama-data")]
+        V7[("./portkey/config.yaml")]
     end
 
-    rect rgb(255, 230, 204)
-        Note left of U: ③ 受保護端點存取
-        U->>W: 開啟 /compute-page
-        W->>API: GET /jobs (Bearer)
-        API->>API: 驗證 JWT 簽章
-        API->>DB: SELECT jobs (依角色範圍)
-        DB-->>API: jobs[]
-        API-->>W: JSON 回應
+    subgraph Compose["Compose 檔案"]
+        C1["docker-compose.yml<br/>(核心)"]
+        C2["docker-compose.ai-models.yml<br/>(AI Models)"]
     end
+
+    C1 --> N1
+    C1 --> N2
+    C2 --> N3
+    C2 --> N4
+    C2 --> N5
+
+    N1 --> V2
+    N1 --> V3
+    N1 --> V4
+    N2 --> V1
+    N5 --> V5
+    N4 --> V6
+    N3 --> V7
+
+    N1 -. "depends_on" .-> N2
+    N5 -. "depends_on" .-> N3
+    N3 -. "depends_on" .-> N4
+
+    Host(["🖥️ Host: Ubuntu / Windows"]) -->|":80"| N1
+    Host -->|":8888 Admin"| N1
+    Host -->|":3000 Open WebUI"| N5
 ```
-
-**重點**：
-- `auth_source` 欄位區分 4 種：`local` / `sso_mock` / `sso_cas` / `sso_oidc`
-- 密碼變更 UI 依 `auth_source` 分流（SSO 帳號改密碼導向 IdP）
-- admin 走獨立 port 8888，學生不會發現
-- Mock SSO **不曝光於 UI 按鈕**（避免 admin 用別人身分）
-
-### Cookie 用途（v2.1 HttpOnly）
-
-| Token 來源 | 用途 | XSS 風險 |
-|---|---|---|
-| `localStorage['ai_hud_token']` | SPA `fetch()` 帶 `Authorization: Bearer` | 有，但 fetch 必經 IP/CORS 防護 |
-| Cookie `ai_hud_token` (HttpOnly) | 瀏覽器 `window.open('/code/<uid>/')` 由 nginx auth_request 讀 | 無（JS 讀不到） |
 
 ---
 
-## 3. v2.0 Lab 啟動流程
-
-```mermaid
-sequenceDiagram
-    autonumber
-    participant U as 使用者
-    participant FE as web-ui
-    participant API as FastAPI (lab router)
-    participant LM as lab_manager
-    participant DK as Docker SDK
-    participant CS as cs-&lt;uid&gt; (code-server)
-    participant NGX as Nginx
-
-    rect rgb(218, 232, 252)
-        Note left of U: ① 啟動 Lab
-        U->>FE: Notebook 分頁 → 點「開啟 Notebook」
-        FE->>API: POST /lab/start {base_image}
-        API->>LM: start_session(user_id)
-        LM->>LM: 檢查每日配額 (360 min/day)
-        LM->>LM: 找/建 LabSession + volume
-        LM->>DK: containers.run(name=cs-&lt;uid&gt;)
-        DK-->>LM: 容器啟動
-        LM-->>API: url + password
-        API-->>FE: 200 {url: /code/&lt;uid&gt;/, pwd}
-        FE->>U: window.open(url, '_blank')
-    end
-
-    rect rgb(213, 232, 212)
-        Note left of U: ② 存取 code-server (每次請求)
-        U->>NGX: GET /code/&lt;uid&gt;/...
-        NGX->>API: auth_request → /lab/_authz
-        API-->>NGX: 200 OK 或 401
-        NGX->>CS: proxy_pass cs-&lt;uid&gt;:8080
-        CS-->>U: VS Code Web UI
-    end
-```
-
-**Idle 30 分鐘 + 每日 360 分鐘**：scheduler 背景每 60s 掃描 → 自動關 idle session、累計 daily 用量。
-
----
-
-## 4. 資料庫 ER 圖（核心表）
+## 4. 資料庫 ER 圖（Database ER）
 
 ```mermaid
 erDiagram
@@ -294,162 +310,74 @@ erDiagram
 
 ---
 
-## 5. 檔案結構樹
-
-```mermaid
-flowchart LR
-    Root["CodeSpace/"] --> Env[".env / .env.example"]
-    Root --> DC1["docker-compose.yml<br/>(核心:nginx+scheduler)"]
-    Root --> DC2["docker-compose.ai-models.yml<br/>(open-webui+portkey+ollama)"]
-    Root --> Readme["README.md"]
-
-    Root --> WebUI["web-ui/<br/>使用者前端"]
-    WebUI --> WI["index.html"]
-    WebUI --> WA["app.js<br/>(SPA 業務邏輯)"]
-    WebUI --> WS["styles.css"]
-
-    Root --> AdminUI["admin-ui/<br/>管理員前端"]
-    AdminUI --> AI["index.html"]
-    AdminUI --> AA["admin.js"]
-    AdminUI --> AS["styles.css"]
-
-    Root --> JS["job-scheduler/<br/>FastAPI 後端"]
-    JS --> JSDF["Dockerfile / requirements.txt"]
-    JS --> JSApp["app/"]
-    JSApp --> M1["main.py<br/>應用入口"]
-    JSApp --> M2["config.py / database.py"]
-    JSApp --> M3["models.py / schemas.py / crud.py"]
-    JSApp --> M5["auth.py / sso_client.py"]
-    JSApp --> M6["scheduler.py<br/>(背景排程)"]
-    JSApp --> Pol["*.yaml<br/>(scheduler/sso policy)"]
-    JSApp --> R["routers/"]
-    R --> R1["auth.py / sso.py"]
-    R --> R2["jobs.py / worker.py"]
-    R --> R3["admin.py / system.py"]
-    R --> R4["chat.py / datasets.py"]
-    R --> R5["lab.py / secrets.py / notebooks.py"]
-    JSApp --> Svc["services/<br/>(lab_manager / secrets / quota / email / agent_dispatcher / document_generator)"]
-
-    Root --> GW["gpu-worker/<br/>GPU 節點代理"]
-    GW --> GWW["worker.py<br/>(輪詢 + 容器派發)"]
-
-    Root --> INF["infrastructure/<br/>nginx.conf + base-images/"]
-    Root --> Data["data/<br/>(SQLite + 上傳檔)"]
-    Root --> DocDir["docs/<br/>(8 主檔 + archive)"]
-```
-
----
-
-## 6. Docker 容器網路
-
-```mermaid
-flowchart LR
-    subgraph Net["ai-platform-net (bridge network)"]
-        direction TB
-        N1["ai-platform-nginx<br/>:80 / :8888"]
-        N2["ai-platform-scheduler<br/>:8002"]
-        N3["ai-platform-portkey<br/>:8000"]
-        N4["ai-platform-ollama<br/>:11434"]
-        N5["ai-platform-webui<br/>(open-webui :3000)"]
-    end
-
-    subgraph Vols["Docker Volumes"]
-        V1[("./data → /data<br/>SQLite + datasets")]
-        V2[("./infrastructure/nginx.conf")]
-        V3[("./web-ui → /train")]
-        V4[("./admin-ui → /admin-ui")]
-        V5[("open-webui-data")]
-        V6[("ollama-data")]
-        V7[("./portkey/config.yaml")]
-    end
-
-    subgraph Compose["Compose 檔案"]
-        C1["docker-compose.yml<br/>(核心)"]
-        C2["docker-compose.ai-models.yml<br/>(AI Models)"]
-    end
-
-    C1 --> N1
-    C1 --> N2
-    C2 --> N3
-    C2 --> N4
-    C2 --> N5
-
-    N1 --> V2
-    N1 --> V3
-    N1 --> V4
-    N2 --> V1
-    N5 --> V5
-    N4 --> V6
-    N3 --> V7
-
-    N1 -. "depends_on" .-> N2
-    N5 -. "depends_on" .-> N3
-    N3 -. "depends_on" .-> N4
-
-    Host(["🖥️ Host: Ubuntu / Windows"]) -->|":80"| N1
-    Host -->|":8888 Admin"| N1
-    Host -->|":3000 Open WebUI"| N5
-```
-
----
-
-## 7. API 端點地圖
+## 5. API 端點地圖（API Endpoint Map）
 
 ```mermaid
 flowchart LR
     API(("/api/v1"))
 
     API --> AuthGrp["auth/"]
-    AuthGrp --> A1["login / register / me"]
-    AuthGrp --> A2["usage / logout / forgot-password"]
-
-    API --> SsoGrp["sso/"]
-    SsoGrp --> SS1["oidc login / callback"]
-    SsoGrp --> SS2["mock login / providers"]
+    AuthGrp --> A1["POST /login"]
+    AuthGrp --> A2["POST /register"]
+    AuthGrp --> A3["GET /me"]
+    AuthGrp --> A4["PUT /me"]
+    AuthGrp --> A5["GET /usage"]
+    AuthGrp --> A6["POST /logout"]
+    AuthGrp --> A7["POST /forgot-password"]
+    AuthGrp --> A8["POST /sso/login"]
 
     API --> JobsGrp["jobs/"]
-    JobsGrp --> J1["POST / · GET / · GET /:id"]
-    JobsGrp --> J2["DELETE /:id · GET /:id/stream (SSE)"]
+    JobsGrp --> J1["POST /"]
+    JobsGrp --> J2["GET /"]
+    JobsGrp --> J3["GET /:id"]
+    JobsGrp --> J4["DELETE /:id"]
+    JobsGrp --> J5["GET /:id/stream<br/>(SSE)"]
 
     API --> ChatGrp["chat/"]
-    ChatGrp --> CH1["POST /completions (SSE)"]
+    ChatGrp --> CH1["POST /completions<br/>(SSE)"]
     ChatGrp --> CH2["GET /history"]
 
-    API --> LabGrp["lab/"]
-    LabGrp --> LB1["start / stop / status / heartbeat / _authz"]
+    API --> DSGrp["datasets/"]
+    DSGrp --> D1["POST /upload"]
+    DSGrp --> D2["GET /list"]
 
-    API --> SecGrp["secrets/"]
-    SecGrp --> SC1["CRUD (AES-256-GCM)"]
+    API --> NBGrp["notebooks/<br/>(2026-05)"]
+    NBGrp --> NB1["GET /mine"]
+    NBGrp --> NB2["PUT /mine"]
+    NBGrp --> NB3["GET /nodes"]
 
-    API --> NBGrp["notebooks/"]
-    NBGrp --> NB1["GET /mine · PUT /mine · GET /nodes"]
+    API --> WkGrp["worker/<br/>Bearer Token"]
+    WkGrp --> W1["POST /take"]
+    WkGrp --> W2["POST /jobs/:id/update"]
+    WkGrp --> W3["POST /heartbeat"]
 
-    API --> WkGrp["worker/<br/>API Token"]
-    WkGrp --> W1["take / jobs/:id/update / heartbeat"]
+    API --> SysGrp["system/<br/>admin only"]
+    SysGrp --> S1["GET /files"]
+    SysGrp --> S2["GET /files/:name"]
+    SysGrp --> S3["PUT /files/:name"]
 
     API --> AdmGrp["admin/<br/>admin only"]
-    AdmGrp --> AD1["users CRUD · provision · tokens"]
-    AdmGrp --> AD2["jobs · models · cluster/stats · analytics"]
+    AdmGrp --> AD1["GET /users"]
+    AdmGrp --> AD2["PUT /users/:id"]
+    AdmGrp --> AD3["POST /users/:id/delete"]
+    AdmGrp --> AD4["POST /users/:id/reset"]
+    AdmGrp --> AD5["POST /users/provision"]
+    AdmGrp --> AD6["PUT /users/batch/tokens"]
+    AdmGrp --> AD7["POST /verify"]
+    AdmGrp --> AD8["GET /jobs"]
+    AdmGrp --> AD9["POST /jobs/:id/cancel"]
+    AdmGrp --> AD10["PUT /jobs/:id/priority"]
+    AdmGrp --> AD11["GET /models / POST / PUT / DELETE"]
+    AdmGrp --> AD12["GET /cluster/stats"]
+    AdmGrp --> AD13["GET /analytics"]
+
+    classDef new fill:#fff2cc,stroke:#d6b656
+    class NBGrp,NB1,NB2,NB3 new
 ```
-
-完整 endpoint 與範例見 [`05-api-reference.md`](05-api-reference.md)。
-
-| Prefix | 模組 | 認證 |
-|---|---|---|
-| `/api/v1/auth/*` | 註冊、登入、登出、forgot-password、me、usage | JWT |
-| `/api/v1/sso/*` | OIDC login/callback、mock login、providers | 無（callback 後簽 JWT） |
-| `/api/v1/jobs/*` | 提交/查/取消 GPU 任務、SSE 進度 | JWT |
-| `/api/v1/chat/*` | LLM 對話、聊天歷史、SSE 串流 | JWT |
-| `/api/v1/datasets/*` | 資料集上傳、自動分析 | JWT |
-| `/api/v1/lab/*` | 啟動/停止 lab session、status、heartbeat、`_authz` | JWT / cookie |
-| `/api/v1/secrets/*` | 使用者 AES-256-GCM secrets CRUD | JWT |
-| `/api/v1/admin/*` | 使用者管理、配額 grant、storage、audit | JWT (admin) |
-| `/api/v1/worker/*` | Pull 任務、更新進度、heartbeat | API_TOKEN（與 .env 對齊） |
-| `/api/v1/system/*` | 系統設定、健康檢查 | JWT (admin) |
 
 ---
 
-## 8. 前端模組與頁面導覽
+## 6. 前端模組與頁面導覽（Frontend Navigation）
 
 ```mermaid
 flowchart TB
@@ -462,30 +390,40 @@ flowchart TB
     Compute[#compute-page<br/>運算任務]
     Compute --> Tab1[High 高算力表單]
     Compute --> Tab2[Mid/Low 中低算力表單]
-    Compute --> Tab3["Notebook 子頁籤"]
+    Compute --> Tab3["Notebook 子頁籤<br/>(2026-05)"]
     Tab3 --> NB1[工具列: 框架/模式/GPU]
+    Tab3 --> NB2[資料集列]
     Tab3 --> NB3[Cells 容器<br/>code/shell/markdown]
     Tab3 --> NB4[輸出面板<br/>SSE + 進度條]
 
     Compute --> Assistant[#assistant-page<br/>AI 大廳]
-    Assistant --> Hub[AI Hub 卡片]
-    Hub -->|"✅ 已實作"| Chat[文字聊天 / 文書簡報]
-    Hub -->|"🚫 提案中"| Soon[其餘佔位卡]
+    Assistant --> Hub[AI Hub 12 張卡片]
+    Hub -->|"✅ 已實作"| Chat[文字聊天]
+    Hub -->|"🚫 Coming Soon"| Soon[11 項佔位]
 
     Compute --> Settings[#settings-page<br/>系統設定]
-    Settings --> ST1[Token 資源環形]
-    Settings --> ST2[Profile / Appearance]
-    Settings --> ST4[Localization 中/英 · Tutorial · Logout]
+    Settings --> ST1[Token Resources 環形]
+    Settings --> ST2[Profile Update]
+    Settings --> ST3[Appearance 主題]
+    Settings --> ST4[Localization 中/英]
+    Settings --> ST5[Tutorial 開啟教學]
+    Settings --> ST6[Logout]
 
     Compute -->|"admin role"| AdminUI["/admin-ui/<br/>(獨立 SPA :8888)"]
     AdminUI --> AU1[使用者管理]
-    AdminUI --> AU2[模型管理 / 全域排程]
-    AdminUI --> AU5[數據分析 / 叢集 GPU 狀態]
+    AdminUI --> AU2[模型管理]
+    AdminUI --> AU3[全域任務排程]
+    AdminUI --> AU4[設定檔編輯]
+    AdminUI --> AU5[數據分析]
+    AdminUI --> AU6[叢集 GPU 狀態]
+
+    classDef new fill:#fff2cc,stroke:#d6b656
+    class Tab3,NB1,NB2,NB3,NB4 new
 ```
 
 ---
 
-## 9. 使用者角色 RBAC
+## 7. 使用者角色 RBAC（Role-Based Access Control）
 
 ```mermaid
 flowchart TB
@@ -538,7 +476,59 @@ flowchart TB
 
 ---
 
-## 10. GPU Worker Pull 模式
+## 8. 使用者認證流程（Auth Sequence）
+
+> 二次重新設計重點：階段標題從橫跨所有 lifeline 的 `Note over U,SSO`（整列大方塊）
+> 改為靠左 margin 的 `Note left of U`（小標籤、不壓 lifeline），色帶仍保留分段；
+> 並合併／縮短自訊息標籤，避免向右溢出蓋住相鄰 lifeline。
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant U as 使用者
+    participant W as web-ui
+    participant N as Nginx
+    participant API as FastAPI
+    participant DB as SQLite
+    participant SSO as SSO Mock
+
+    rect rgb(218, 232, 252)
+        Note left of U: ① 本機帳號登入
+        U->>W: 輸入帳號 + 密碼
+        W->>N: POST /auth/login
+        N->>API: 轉發請求
+        API->>DB: SELECT user
+        DB-->>API: User record
+        API->>API: 驗證密碼 + 簽發 JWT
+        API->>DB: UPDATE 登入紀錄
+        API-->>W: access_token
+        W->>W: 存入 localStorage
+    end
+
+    rect rgb(213, 232, 212)
+        Note left of U: ② SSO Mock 登入
+        U->>W: 點擊 SSO + 學號
+        W->>API: POST /auth/sso/login
+        API->>SSO: 比對 sso_policy.yaml
+        SSO-->>API: 認證成功
+        API->>DB: upsert user
+        API-->>W: access_token
+    end
+
+    rect rgb(255, 230, 204)
+        Note left of U: ③ 受保護端點存取
+        U->>W: 開啟 /compute-page
+        W->>API: GET /jobs (Bearer)
+        API->>API: 驗證 JWT 簽章
+        API->>DB: SELECT jobs (依角色範圍)
+        DB-->>API: jobs[]
+        API-->>W: JSON 回應
+    end
+```
+
+---
+
+## 9. GPU Worker Pull 模式（Worker Pull Sequence）
 
 ```mermaid
 sequenceDiagram
@@ -566,7 +556,7 @@ sequenceDiagram
             alt 搶佔成功
                 API-->>W: {job: {...inline_code, docker_image...}}
                 W->>W: 寫入 /tmp/job_{id}/run.sh
-                W->>DK: docker run --rm --gpus device=N<br/>image bash -eu run.sh
+                W->>DK: docker run --rm --gpus device=N<br/>-v /workspace -v /job_code<br/>image bash -eu run.sh
                 loop 串流 stdout
                     DK-->>W: 訓練日誌
                     W->>W: parse_progress()<br/>(Epoch / step / [N/M] / %)
@@ -574,9 +564,9 @@ sequenceDiagram
                 end
                 DK-->>W: exit code
                 alt exit == 0
-                    W->>API: update {status: completed, output_path}
+                    W->>API: POST /worker/jobs/:id/update<br/>{status: completed, output_path}
                 else
-                    W->>API: update {status: failed, error}
+                    W->>API: POST /worker/jobs/:id/update<br/>{status: failed, error}
                 end
                 W->>W: rmtree /tmp/job_{id}
             else 已被別人領走
@@ -588,7 +578,11 @@ sequenceDiagram
 
 ---
 
-## 11. Notebook 提交與執行流程
+## 10. Notebook 提交與執行流程（Notebook Execution Sequence）
+
+> 二次重新設計重點：四階段標題從橫跨全 lifeline 的 `Note over U,WK`（整列大方塊）
+> 改為靠左 margin 的 `Note left of U`，色帶仍保留分段；訊息標籤縮短、拆除多行 `<br/>`，
+> 避免標籤方塊向右溢出蓋住中間 lifeline。
 
 ```mermaid
 sequenceDiagram
@@ -654,7 +648,7 @@ sequenceDiagram
 
 ---
 
-## 12. 訓練任務狀態機
+## 11. 訓練任務狀態機（Job State Machine）
 
 ```mermaid
 stateDiagram-v2
@@ -674,7 +668,7 @@ stateDiagram-v2
 
 ---
 
-## 13. 後端類別關聯圖
+## 12. 類別關聯圖（Class Diagram – Backend Modules）
 
 ```mermaid
 classDiagram
@@ -683,31 +677,38 @@ classDiagram
         +on_startup()
         +on_shutdown()
     }
+
     class Settings {
         +DATABASE_PATH
         +JWT_SECRET_KEY
         +WORKER_API_TOKEN
         +PORTKEY_URL
     }
+
     class Database {
         +SessionLocal
         +engine
+        +Base
         +get_db()
     }
+
     class CRUD {
         +get_user()
         +create_job()
         +get_pending_jobs()
         +get_notebook()
         +save_notebook()
+        +upsert_worker_heartbeat()
         +get_online_worker_nodes()
     }
+
     class Auth {
         +create_access_token()
         +get_current_user()
         +require_admin()
         +verify_password()
     }
+
     class Scheduler {
         +cleanup_timeout_jobs()
         +run_every_5_min()
@@ -719,7 +720,9 @@ classDiagram
     class RouterChat
     class RouterAdmin
     class RouterNotebooks
-    class RouterLab
+    class RouterDatasets
+    class RouterSystem
+    class RouterSSO
 
     class User {
         +id, username, email
@@ -747,17 +750,22 @@ classDiagram
     FastAPIApp --> RouterChat : mounts
     FastAPIApp --> RouterAdmin : mounts
     FastAPIApp --> RouterNotebooks : mounts
-    FastAPIApp --> RouterLab : mounts
+    FastAPIApp --> RouterDatasets : mounts
+    FastAPIApp --> RouterSystem : mounts
+    FastAPIApp --> RouterSSO : mounts
     FastAPIApp --> Scheduler : starts
 
     RouterAuth --> CRUD
     RouterJobs --> CRUD
     RouterWorker --> CRUD
+    RouterChat --> CRUD
+    RouterAdmin --> CRUD
     RouterNotebooks --> CRUD
 
     RouterAuth ..> Auth : uses
     RouterJobs ..> Auth : uses
     RouterAdmin ..> Auth : require_admin
+    RouterNotebooks ..> Auth : uses
 
     CRUD --> Database : Session
     CRUD --> User : ORM
@@ -771,32 +779,13 @@ classDiagram
 
 ---
 
-## 14. 安全模型摘要
-
-| 威脅 | 防護 |
-|---|---|
-| 學生互看別人任務 | JWT 認證 + admin-only 端點 |
-| 學生互看別人 Lab 工作目錄 | nginx auth_request 驗 user_id 對應 — ⚠️ v2.1 同網段可繞過，**v2.2 加 per-user network**（見 [`08-status-and-roadmap.md`](08-status-and-roadmap.md)） |
-| XSS 偷 token | Cookie `HttpOnly` (v2.1)；不過 localStorage 仍可被 XSS 讀取 |
-| Secrets 洩漏 | AES-256-GCM 加密儲存、admin 亦不可讀 plaintext、僅在容器啟動時解密注入 |
-| GPU 節點被 SSH 入侵 | 採 Pull 架構、無需開對外 port |
-| 服務層被駭 → 橫向移動 | 服務層無 GPU 節點私鑰、最多塞惡意任務（被 `--rm` 容器隔離）|
-| 暴力破解 admin | rate limit + emergency-only port 8888 |
-
----
-
 ## 渲染建議 | Rendering Tips
 
-- **GitHub**：直接開啟即可自動渲染 Mermaid。
+- **GitHub**：直接開啟 `.md` 即可自動渲染 Mermaid。
 - **VS Code**：安裝 `Markdown Preview Mermaid Support` 擴充套件。
 - **Obsidian**：原生支援。
-- **匯出 PNG/SVG**：`npx -p @mermaid-js/mermaid-cli mmdc -i 02-architecture.md -o out.png`
-- **線上編輯**：複製單一 ```mermaid 區塊至 [Mermaid Live Editor](https://mermaid.live/)。
-
----
-
-## 下一步
-
-- [`03-deployment.md`](03-deployment.md) — 加 GPU 工作節點 / SSO / 正式上線
-- [`05-api-reference.md`](05-api-reference.md) — API 完整參考
-- [`07-development.md`](07-development.md) — 模組擴展、新增 router、i18n
+- **匯出 PNG/SVG**：
+  ```bash
+  npx -p @mermaid-js/mermaid-cli mmdc -i ARCHITECTURE-MERMAID.md -o out.png
+  ```
+- **線上編輯**：複製單一程式碼區塊至 [Mermaid Live Editor](https://mermaid.live/)。
