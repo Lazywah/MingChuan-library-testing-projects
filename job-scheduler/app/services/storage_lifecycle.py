@@ -80,6 +80,25 @@ def get_or_create_state(db: Session, user_id: str) -> models.UserStorageState:
     return state
 
 
+def list_states(db: Session, filter_state: Optional[str] = None) -> list[dict]:
+    """ZH: 列出所有使用者儲存狀態，供 admin Lab「儲存生命週期」面板。
+       EN: List all user storage states for the admin Lab storage panel."""
+    q = db.query(models.UserStorageState)
+    if filter_state and filter_state not in ("all", ""):
+        q = q.filter(models.UserStorageState.state == filter_state)
+    out: list[dict] = []
+    for s in q.all():
+        out.append({
+            "user_id": s.user_id,
+            "state": s.state,
+            "current_size_gb": s.current_size_gb,
+            "state_since": s.state_since.isoformat() if s.state_since else None,
+            "archive_path": s.archive_path,
+            "notes": s.notes,
+        })
+    return out
+
+
 # ==============================================================================
 # ZH: 狀態轉換 | State transitions
 # ==============================================================================

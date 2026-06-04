@@ -1,0 +1,26 @@
+# ==============================================================================
+# ZH: AI 模塊 — GPU 加速 override（選用）
+# EN: AI models — GPU acceleration override (opt-in)
+#
+# ZH: 用途：讓 Ollama 使用 NVIDIA GPU 推理。基礎 docker-compose.ai-models.yml 預設走
+#     CPU（可在任何機器啟動）；本檔以 override 疊加 GPU 需求，僅在有 NVIDIA GPU +
+#     Docker GPU passthrough 的機器上使用。
+# EN: Purpose: run Ollama on the NVIDIA GPU. The base compose stays CPU-portable;
+#     layer this file only on machines with an NVIDIA GPU + Docker GPU passthrough.
+#
+# 用法 | Usage:
+#   docker compose -f docker-compose.ai-models.yml -f docker-compose.ai-models.gpu.yml up -d
+#
+# 先決條件 | Prereq（驗證 GPU passthrough 可用）:
+#   docker run --rm --gpus all nvidia/cuda:12.3.0-base-ubuntu22.04 nvidia-smi
+# ==============================================================================
+
+services:
+  ollama:
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]

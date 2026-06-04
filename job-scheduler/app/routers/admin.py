@@ -36,6 +36,7 @@ from datetime import datetime, timezone
 from typing import Any, Optional
 import csv
 import io
+import json
 import logging
 
 from .. import models, schemas, crud
@@ -749,18 +750,44 @@ def get_cluster_stats(
     db: Session = Depends(get_db),
     _: models.User = Depends(require_admin),
 ) -> Any:
-    """ZH: 取得 Worker 節點最新心跳狀態 | EN: Get latest Worker node heartbeat status"""
+    """ZH: 取得各 GPU 即時狀態（每張卡一筆，供前端 cluster 卡片）
+       EN: Per-GPU live stats (one entry per card) for the admin cluster panel."""
     nodes = db.query(models.WorkerHeartbeat).order_by(models.WorkerHeartbeat.last_seen.desc()).all()
-    return [
-        {
-            "node_id": n.node_id,
-            "available_gpus": n.available_gpus,
-            "gpu_utilization": n.gpu_utilization,
-            "last_seen": n.last_seen,
-            "status": "online" if n.is_online else "offline",
-        }
-        for n in nodes
-    ]
+    out: list[dict] = []
+    for n in nodes:
+        status = "online" if n.is_online else "offline"
+        try:
+            detail = json.loads(n.gpus_detail or "[]")
+        except Exception:
+            detail = []
+        if detail:
+            for g in detail:
+                out.append({
+                    "node_id": n.node_id,
+                    "gpu_id": g.get("gpu_id", "-"),
+                    "name": g.get("name", "GPU"),
+                    "utilization": g.get("utilization", 0),
+                    "temperature": g.get("temperature", 0),
+                    "memory_used": g.get("memory_used", 0),
+                    "memory_total": g.get("memory_total", 0),
+                    "last_seen": n.last_seen,
+                    "status": status,
+                })
+        else:
+            # ZH: 舊版 worker（無 per-GPU 詳細）→ 退回單一聚合卡，避免顯示 undefined
+            # EN: Old worker (no per-GPU detail) → single aggregate card so the UI isn't "undefined"
+            out.append({
+                "node_id": n.node_id,
+                "gpu_id": "-",
+                "name": n.node_id,
+                "utilization": n.gpu_utilization or 0,
+                "temperature": 0,
+                "memory_used": 0,
+                "memory_total": 0,
+                "last_seen": n.last_seen,
+                "status": status,
+            })
+    return out
 
 
 # ==============================================================================

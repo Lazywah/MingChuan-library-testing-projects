@@ -18,8 +18,8 @@ services:
     ports:
       - "3000:8080"
     environment:
-      # ZH: 透過 Portkey Gateway 連接 LLM | EN: Connect LLM via Portkey
-      OLLAMA_API_BASE_URL: http://portkey:8000
+      # ZH: 透過 Portkey Gateway 連接 LLM（OSS gateway 實際聽 8787）| EN: via Portkey (OSS listens on 8787)
+      OLLAMA_API_BASE_URL: http://portkey:8787
       WEBUI_AUTH: "True"
       WEBUI_SECRET_KEY: ${WEBUI_SECRET_KEY:-defaul-secret-key-please-change}
       ENABLE_COMMUNITY_SHARING: "False"
@@ -34,10 +34,12 @@ services:
   portkey:
     image: portkeyai/gateway:latest
     container_name: ai-platform-portkey
+    # ZH: OSS gateway 固定監聽 8787（PORT env 無效），故對外與內部一律走 8787
+    # EN: OSS gateway always listens on 8787 (PORT env ignored); use 8787 everywhere
     ports:
-      - "8000:8000"
+      - "8787:8787"
     environment:
-      PORT: "8000"
+      PORT: "8787"
       LOG_LEVEL: info
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-placeholder}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-placeholder}

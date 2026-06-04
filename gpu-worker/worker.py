@@ -40,6 +40,11 @@ POLL_INTERVAL = int(os.environ.get("POLL_INTERVAL", "5"))
 STORAGE_MOUNT_PATH = os.environ.get("STORAGE_MOUNT_PATH", "C:\\storage")
 # Heartbeat is sent every HEARTBEAT_INTERVAL polls (default: every 30 s = 6 polls × 5 s)
 HEARTBEAT_INTERVAL = int(os.environ.get("HEARTBEAT_INTERVAL", "30"))
+# ZH: GPU 視為「空閒」的使用率上限(%)。專用 GPU 節點維持預設 10；
+#     單機/桌機(GPU 與 OS/瀏覽器/Ollama 共用)可調高(如 90)讓任務仍能派發。
+# EN: Max GPU util(%) to consider "idle". Dedicated node: keep 10;
+#     single-PC/desktop (GPU shared with OS/browser/Ollama): raise it (e.g. 90).
+GPU_IDLE_UTIL_THRESHOLD = int(os.environ.get("GPU_IDLE_UTIL_THRESHOLD", "10"))
 
 HEADERS = {"Authorization": f"Bearer {API_TOKEN}"}
 
@@ -68,9 +73,9 @@ def get_available_gpus():
                 idx, util = line.split(',')
                 idx = idx.strip()
                 util = int(util.strip())
-                if util < 10 and idx not in busy:
-                    # ZH: 使用率低於 10% 且未在本機 busy-set，才視為空閒
-                    # EN: Idle only if util < 10% AND not in local busy-set
+                if util < GPU_IDLE_UTIL_THRESHOLD and idx not in busy:
+                    # ZH: 使用率低於門檻且未在本機 busy-set，才視為空閒
+                    # EN: Idle only if util < threshold AND not in local busy-set
                     available.append(idx)
         return available
     except Exception as e:
@@ -93,6 +98,39 @@ def get_gpu_utilization() -> float:
         return 0.0
 
 
+def get_gpu_details() -> list:
+    """
+    ZH: 查詢每張 GPU 的 name/util/temp/memory，供 admin 叢集監控卡片顯示。
+    EN: Per-GPU name/util/temp/memory for the admin cluster panel.
+    """
+    try:
+        result = subprocess.run(
+            ["nvidia-smi",
+             "--query-gpu=index,name,utilization.gpu,temperature.gpu,memory.used,memory.total",
+             "--format=csv,noheader,nounits"],
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, check=True,
+        )
+        gpus = []
+        for line in result.stdout.strip().split("\n"):
+            if not line.strip():
+                continue
+            parts = [p.strip() for p in line.split(",")]
+            if len(parts) < 6:
+                continue
+            idx, name, util, temp, mem_used, mem_total = parts[:6]
+            gpus.append({
+                "gpu_id": idx,
+                "name": name,
+                "utilization": float(util) if util.replace('.', '', 1).isdigit() else 0,
+                "temperature": float(temp) if temp.replace('.', '', 1).isdigit() else 0,
+                "memory_used": int(float(mem_used)) if mem_used.replace('.', '', 1).isdigit() else 0,
+                "memory_total": int(float(mem_total)) if mem_total.replace('.', '', 1).isdigit() else 0,
+            })
+        return gpus
+    except Exception:
+        return []
+
+
 def send_heartbeat(available_gpus: list) -> None:
     """
     POST /api/v1/worker/heartbeat to keep the service layer informed of this
@@ -104,6 +142,7 @@ def send_heartbeat(available_gpus: list) -> None:
             "node_id": NODE_ID,
             "available_gpus": available_gpus,
             "gpu_utilization": gpu_util,
+            "gpus_detail": get_gpu_details(),
         }
         resp = requests.post(
             f"{SERVICE_LAYER_URL}/api/v1/worker/heartbeat",
@@ -224,17 +263,15 @@ def execute_job(job):
     code_dir: str | None = None
 
     if inline_code:
-        # ZH: Notebook 模式 — 將 compileNotebook() 產出的 shell script 寫入暫存目錄
-        # EN: Notebook mode — write compiled shell script to temp dir and mount it
-        code_dir = f"/tmp/job_{job_id}"
-        os.makedirs(code_dir, exist_ok=True)
-        script_file = os.path.join(code_dir, "run.sh")
-        with open(script_file, "w", encoding="utf-8") as f:
-            f.write(inline_code)
-        os.chmod(script_file, 0o755)
-        extra_mounts = ["-v", f"{code_dir}:/job_code"]
-        entry = ["bash", "-eu", "/job_code/run.sh"]
-        logger.info(f"Notebook mode: script written to {script_file}")
+        # ZH: Notebook 模式 — 直接以 bash -c 執行已編譯的 shell script。
+        #     不寫檔/掛載：兄弟容器模式下 worker 容器內的 /tmp 路徑主機 docker 看不到
+        #     （-v 由主機 daemon 解析），會導致 /job_code/run.sh 找不到。改用 bash -c 跨平台可靠。
+        # EN: Notebook mode — run the compiled script via `bash -c` directly. No file/mount:
+        #     in the sibling-container pattern the worker's in-container /tmp is invisible to the
+        #     host docker daemon (which resolves -v), so the mounted run.sh is missing. `bash -c`
+        #     is cross-platform and avoids the shared-path problem entirely.
+        entry = ["bash", "-euc", inline_code]
+        logger.info("Notebook mode: running compiled script via bash -c")
     elif entry_args:
         # ZH: 自訂入口（llama.cpp、vLLM 等非 Python 工具）
         # EN: Custom entry (llama.cpp, vLLM, and other non-Python tools)

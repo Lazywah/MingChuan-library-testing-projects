@@ -1257,12 +1257,12 @@ function _renderJobTable(tbodyId, jobs) {
         const prioLabel = TRANSLATIONS[currentLang]?.btn_reprioritize || 'Reprioritize';
         const actionsHtml = canManage ? `
             <div style="display:flex; gap:4px; flex-wrap:wrap;">
-                <button class="job-action-btn priority-btn" onclick="reprioritizeJob('${j.id}', '${j.job_name}')">${prioLabel}</button>
-                <button class="job-action-btn cancel-btn" onclick="cancelJobAdmin('${j.id}', '${j.job_name}')">${cancelLabel}</button>
+                <button class="job-action-btn priority-btn" onclick="reprioritizeJob('${j.job_id}', '${j.job_name}')">${prioLabel}</button>
+                <button class="job-action-btn cancel-btn" onclick="cancelJobAdmin('${j.job_id}', '${j.job_name}')">${cancelLabel}</button>
             </div>` : `<span style="color:var(--text-muted); font-size:12px;">—</span>`;
 
         tr.innerHTML = `
-            <td>${j.job_name}<br><small style="color:var(--text-muted)">${j.id.substring(0, 8)}</small></td>
+            <td>${j.job_name}<br><small style="color:var(--text-muted)">${(j.job_id || '').substring(0, 8)}</small></td>
             <td>${j.user_id ? j.user_id.substring(0, 8) : 'N/A'}</td>
             <td>${statusBadge}</td>
             <td>${j.priority}</td>

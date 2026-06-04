@@ -377,6 +377,7 @@ class WorkerHeartbeatPayload(BaseModel):
     node_id: str
     available_gpus: List[str]
     gpu_utilization: Optional[float] = 0.0  # ZH: GPU 使用率 % | EN: GPU utilization %
+    gpus_detail: Optional[List[Dict[str, Any]]] = None  # ZH: 每張 GPU 詳細 | EN: Per-GPU detail
 
 
 # ZH: Notebook Schema 已於 Phase E 移除 — 被 v2.0 Lab schemas 取代

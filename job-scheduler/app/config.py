@@ -99,8 +99,13 @@ class Settings(BaseSettings):
     # ------------------------------------------------------------------
     # ZH: Portkey LLM Gateway | EN: Portkey LLM Gateway
     # ------------------------------------------------------------------
-    PORTKEY_URL: str = "http://ai-platform-portkey:8000/v1/chat/completions"
+    # ZH: Portkey OSS gateway 實際監聽 8787（PORT env 無效）；Ollama 需經 custom-host 指向
+    # EN: Portkey OSS gateway actually listens on 8787 (PORT env ignored); Ollama needs custom-host
+    PORTKEY_URL: str = "http://ai-platform-portkey:8787/v1/chat/completions"
     PORTKEY_ENABLED: bool = True
+    # ZH: 本機 Ollama 位址（Portkey OSS 為 header 路由，ollama 須明確告知 host）
+    # EN: Local Ollama base URL (OSS Portkey is header-routed; ollama needs explicit host)
+    OLLAMA_BASE_URL: str = "http://ai-platform-ollama:11434"
 
     # ------------------------------------------------------------------
     # ZH: 任務超時設定 (分鐘) | EN: Job timeout (minutes)

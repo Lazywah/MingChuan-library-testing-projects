@@ -216,6 +216,7 @@ class WorkerHeartbeat(Base):
     node_id = Column(String, primary_key=True)                                # ZH: 節點識別碼 | EN: Node identifier
     available_gpus = Column(Text, default="[]")                               # ZH: 可用 GPU 清單 (JSON) | EN: Available GPUs (JSON array)
     gpu_utilization = Column(Float, default=0.0)                              # ZH: GPU 使用率 % | EN: GPU utilization %
+    gpus_detail = Column(Text, default="[]")                                  # ZH: 每張 GPU 詳細 (JSON: name/util/temp/mem) | EN: Per-GPU detail (JSON)
     last_seen = Column(DateTime, default=lambda: datetime.now(timezone.utc))  # ZH: 最後心跳時間 | EN: Last heartbeat time
     is_online = Column(Integer, default=1)                                    # ZH: 是否在線 | EN: Online status
     pool_type = Column(String, default="batch")                               # ZH: 節點池類型 batch/interactive (v2.0 Lab) | EN: Pool type batch/interactive

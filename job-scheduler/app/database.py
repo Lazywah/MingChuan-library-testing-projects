@@ -181,6 +181,8 @@ def init_db():
             except Exception: pass
             try: conn.execute(text("ALTER TABLE worker_heartbeats ADD COLUMN pool_type VARCHAR DEFAULT 'batch'"))
             except Exception: pass
+            try: conn.execute(text("ALTER TABLE worker_heartbeats ADD COLUMN gpus_detail TEXT DEFAULT '[]'"))
+            except Exception: pass
 
             # --- Phase E 清理 v1 Notebook 表 | Phase E drop v1 notebooks table ---
             # ZH: 注意 — 不刪除 training_jobs 的 docker_image/inline_code/entry_args/preferred_node 4 欄位

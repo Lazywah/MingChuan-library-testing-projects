@@ -629,16 +629,20 @@ def estimate_job_tokens(config: Optional[dict]) -> int:
 # ==============================================================================
 
 def upsert_worker_heartbeat(
-    db: Session, node_id: str, available_gpus: List[str], gpu_utilization: float
+    db: Session, node_id: str, available_gpus: List[str], gpu_utilization: float,
+    gpus_detail: Optional[list] = None
 ) -> models.WorkerHeartbeat:
     """ZH: 更新或新增 Worker 節點心跳 | EN: Upsert worker heartbeat record"""
     node = db.query(models.WorkerHeartbeat).filter(
         models.WorkerHeartbeat.node_id == node_id
     ).first()
     now = datetime.now(timezone.utc)
+    detail_json = json.dumps(gpus_detail) if gpus_detail is not None else None
     if node:
         node.available_gpus = json.dumps(available_gpus)
         node.gpu_utilization = gpu_utilization
+        if detail_json is not None:
+            node.gpus_detail = detail_json
         node.last_seen = now
         node.is_online = True
     else:
@@ -646,6 +650,7 @@ def upsert_worker_heartbeat(
             node_id=node_id,
             available_gpus=json.dumps(available_gpus),
             gpu_utilization=gpu_utilization,
+            gpus_detail=detail_json if detail_json is not None else "[]",
             last_seen=now,
             is_online=True,
         )

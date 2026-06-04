@@ -206,7 +206,8 @@ def worker_heartbeat(
     EN: Worker periodically reports liveness and GPU utilization (recommend every 30s)
     """
     crud.upsert_worker_heartbeat(
-        db, payload.node_id, payload.available_gpus, payload.gpu_utilization or 0.0
+        db, payload.node_id, payload.available_gpus, payload.gpu_utilization or 0.0,
+        gpus_detail=payload.gpus_detail,
     )
     logger.debug(f"Heartbeat from {payload.node_id}, gpus={payload.available_gpus}")
     return {"status": "ok", "node_id": payload.node_id}

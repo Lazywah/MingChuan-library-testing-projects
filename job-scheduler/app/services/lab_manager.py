@@ -444,6 +444,32 @@ def scan_and_evict(db: Session) -> int:
     return closed
 
 
+def list_all_sessions(db: Session) -> list[dict]:
+    """ZH: 列出目前所有(非 stopped) lab sessions，供 admin「Lab 管理」監控。
+       EN: List all non-stopped lab sessions for the admin Lab dashboard."""
+    rows = (
+        db.query(models.LabSession)
+        .filter(models.LabSession.status != "stopped")
+        .order_by(models.LabSession.started_at.desc())
+        .all()
+    )
+    out: list[dict] = []
+    for s in rows:
+        user = db.query(models.User).filter(models.User.id == s.user_id).first()
+        out.append({
+            "user_id": s.user_id,
+            "username": user.username if user else s.user_id,
+            "status": s.status,
+            "container_name": s.container_name,
+            "base_image": s.base_image,
+            "started_at": s.started_at.isoformat() if s.started_at else None,
+            "last_activity": s.last_activity.isoformat() if s.last_activity else None,
+            "cpu_quota": s.cpu_quota,
+            "mem_quota_mb": s.mem_quota_mb,
+        })
+    return out
+
+
 def _build_url(user_id: str, session) -> dict:
     """ZH: 組裝給前端跳轉的 URL | EN: Build URL for frontend redirect"""
     return {

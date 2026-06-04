@@ -57,6 +57,10 @@ def _get_portkey_headers(model_id: str) -> dict:
     for prefix, provider in _PROVIDER_MAP.items():
         if prefix in model_lower:
             headers["x-portkey-provider"] = provider
+            # ZH: Ollama 為自架（非託管 API），Portkey OSS gateway 需以 custom-host 明確指向
+            # EN: Ollama is self-hosted; the OSS Portkey gateway needs custom-host to reach it
+            if provider == "ollama":
+                headers["x-portkey-custom-host"] = settings.OLLAMA_BASE_URL
             break
     return headers
 
