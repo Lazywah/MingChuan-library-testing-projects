@@ -27,6 +27,10 @@
 
     --text-primary: #ffffff;
     --text-muted: #d1d5db;
+    /* v2.3: --text-color 是先前漏定義的變數（多處 var(--text-color) 與個人資訊/密碼彈窗的
+       .profile-section-title 用到），未定義時在淺色模式會 fallback 成淺紫 #e0e0ff → 白底看不見。
+       設為 --text-primary 的別名後，深淺模式都正確（深=白、淺=深藍）。 */
+    --text-color: var(--text-primary);
     --font-main: 'Times New Roman', '標楷體', 'DFKai-SB', serif;
 
     /* v2.2: 補上之前被誤用的 vars (info-tip / tutorial / secrets / badges 等用到) */
@@ -133,6 +137,18 @@ body {
     to {
         box-shadow: 0 0 20px var(--border-glow-color);
     }
+}
+
+/* v2.3: 個人資訊 / 密碼變更彈窗的 hover 特效（不重播開啟動畫、不閃爍）。
+   背景：.tutorial-content 帶常駐開啟動畫 animation: fadeIn 0.4s。原本 .form-box-panel:hover 會把
+   animation 改成 border-glow，導致滑鼠移開、animation 還原成 fadeIn 時「重播一次」→ 面板淡出又淡入=閃爍。
+   解法(已用 DevTools 實測)：hover 的 animation 釘死成與靜止態相同的 fadeIn，使 animation 屬性自始至終
+   不變、不會重播；hover 視覺改用 border-color + box-shadow 發光(由面板既有 transition:0.4s 平滑漸變)，
+   兩者都不會觸發開啟動畫重播，所以有 hover 反饋又不閃。 */
+.tutorial-content.form-box-panel:hover {
+    animation: 0.4s ease fadeIn;
+    border-color: var(--border-glow-color);
+    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.5), 0 0 22px var(--border-glow-color);
 }
 
 .form-box .close {
