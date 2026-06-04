@@ -99,6 +99,7 @@ class AdminModelCreate(BaseModel):
     framework: Optional[str] = None                  # ZH: 框架 | EN: Framework (PyTorch/TF/etc.)
     storage_path: Optional[str] = ""                  # ZH: 儲存路徑 | EN: Storage path
     is_public: Optional[int] = 0                     # ZH: 公開旗標 | EN: Public flag
+    tool_types: Optional[str] = "chat"               # ZH: 適用工具 CSV (chat,presentation) | EN: Applicable tools CSV
     # ZH: API 模型專用 | EN: API model fields
     api_provider: Optional[str] = None               # ZH: 供應商 (anthropic/openai/google/ollama) | EN: Provider
     api_endpoint: Optional[str] = None               # ZH: API 端點 | EN: Endpoint URL
@@ -112,9 +113,17 @@ class AdminModelUpdate(BaseModel):
     framework: Optional[str] = None
     storage_path: Optional[str] = None
     is_public: Optional[int] = None
+    tool_types: Optional[str] = None
     api_provider: Optional[str] = None
     api_endpoint: Optional[str] = None
     api_model_id: Optional[str] = None
+
+class PublicModel(BaseModel):
+    """ZH: 使用者端可見的模型 (依工具動態載入) | EN: User-facing model (loaded per tool)"""
+    value: str                                       # ZH: 送給 chat 的 model_id | EN: model_id sent to chat
+    label: str                                       # ZH: 顯示名稱 | EN: Display name
+    model_type: Optional[str] = None
+    api_provider: Optional[str] = None
 
 class AuthForgotPassword(BaseModel):
     """ZH: 忘記密碼請求 | EN: Forgot password request"""

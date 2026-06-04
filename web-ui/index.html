@@ -878,11 +878,8 @@
                                 <div class="chat-controls-bar">
                                     <div class="input-select-group mini-select">
                                         <label data-i18n="label_ai_model">AI Model</label>
-                                        <select id="chat-model-select" class="select-box">
-                                            <option value="gemini-1.5-pro">Gemini 1.5 Pro</option>
-                                            <option value="claude-3-5-sonnet">Claude 3.5 Sonnet</option>
-                                            <option value="llama3:latest">Ollama Llama3</option>
-                                        </select>
+                                        <!-- v2.4: 選項由 JS 依 tool_type=chat 動態載入（populateModelSelect） -->
+                                        <select id="chat-model-select" class="select-box"></select>
                                     </div>
                                 </div>
                             </form>
@@ -918,6 +915,11 @@
                                     </button>
                                 </div>
                                 <div class="chat-controls-bar">
+                                    <div class="input-select-group mini-select">
+                                        <label data-i18n="label_ai_model">AI Model</label>
+                                        <!-- v2.4: 選項由 JS 依 tool_type=presentation 動態載入 -->
+                                        <select id="presentation-model-select" class="select-box"></select>
+                                    </div>
                                     <span style="color:var(--text-muted);font-size:12px;" data-i18n="pres_hint">
                                         生成的 .pptx 會存到你的 Notebook /home/coder/outputs/（請先啟動 Notebook 容器）
                                     </span>

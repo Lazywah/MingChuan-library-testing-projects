@@ -585,6 +585,28 @@ def create_chat_history(db: Session, chat: models.ChatHistory) -> models.ChatHis
 
 
 # ==============================================================================
+# ZH: 動態模型清單 | EN: Dynamic model list
+# ==============================================================================
+
+def list_public_models(db: Session, tool_type: str = "chat") -> List[models.Model]:
+    """ZH: 列出某工具「公開且適用」的模型（tool_types 以逗號邊界精確比對，避免子字串誤判）。
+       EN: List public models applicable to a tool (exact comma-split match)."""
+    tt = (tool_type or "chat").strip().lower()
+    rows = (
+        db.query(models.Model)
+        .filter(models.Model.is_public == 1)
+        .order_by(models.Model.created_at.asc())
+        .all()
+    )
+    out: List[models.Model] = []
+    for m in rows:
+        tools = [t.strip().lower() for t in (m.tool_types or "chat").split(",") if t.strip()]
+        if tt in tools:
+            out.append(m)
+    return out
+
+
+# ==============================================================================
 # ZH: Token 估算 | EN: Token Estimation
 # ==============================================================================
 

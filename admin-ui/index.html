@@ -632,6 +632,20 @@
                                 <option value="1" data-i18n="opt_visibility_public">公開</option>
                             </select>
                         </div>
+                        <!-- v2.4: 適用工具（決定此模型出現在哪些 AI 工具的下拉） -->
+                        <div style="display:flex; flex-direction:column; gap:8px;">
+                            <label style="font-size:0.85em; color:var(--text-muted);" data-i18n="label_tool_types">適用工具</label>
+                            <div style="display:flex; gap:18px; flex-wrap:wrap;">
+                                <label style="display:flex; align-items:center; gap:6px; cursor:pointer;">
+                                    <input type="checkbox" class="model-tool-type" value="chat" checked>
+                                    <span data-i18n="tool_chat">文字聊天</span>
+                                </label>
+                                <label style="display:flex; align-items:center; gap:6px; cursor:pointer;">
+                                    <input type="checkbox" class="model-tool-type" value="presentation">
+                                    <span data-i18n="tool_presentation">文書簡報</span>
+                                </label>
+                            </div>
+                        </div>
                         <button type="submit" class="ready-btn config-save-btn" style="width: 100%;" data-i18n="btn_save_config">儲存</button>
                     </form>
                 </div>

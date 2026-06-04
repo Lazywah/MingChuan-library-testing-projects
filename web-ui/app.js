@@ -55,6 +55,7 @@ const TRANSLATIONS = {
         // AI 助手
         chat_sessions: "對話紀錄",
         label_ai_model: "選擇 AI 模型",
+        model_none: "尚無可用模型，請聯絡管理員",
         chat_welcome: "哈囉！我是 AI 助手，今天有什麼我可以幫您的嗎？",
         btn_clear_chat: "清除內容",
         placeholder_chat: "輸入訊息...",
@@ -409,6 +410,7 @@ const TRANSLATIONS = {
         // Assistant
         chat_sessions: "Sessions",
         label_ai_model: "AI Model",
+        model_none: "No models available — contact your admin",
         chat_welcome: "Hello! I am your AI assistant. How can I help you today?",
         btn_clear_chat: "Clear",
         placeholder_chat: "Type a message...",
@@ -754,6 +756,51 @@ const chatHistoryEl = document.getElementById('chat-history');
 const chatForm = document.getElementById('chat-form');
 const chatInput = document.getElementById('chat-input');
 const chatModelSelect = document.getElementById('chat-model-select');
+const presentationModelSelect = document.getElementById('presentation-model-select');
+
+// v2.4: 各 AI 工具的模型下拉改由後端動態抓取（依 tool_type）
+async function populateModelSelect(selectEl, toolType) {
+    if (!selectEl || !authToken) return;
+    try {
+        const res = await fetch(`${API_BASE}/models?tool_type=${encodeURIComponent(toolType)}`, {
+            headers: { 'Authorization': `Bearer ${authToken}` }
+        });
+        if (!res.ok) throw new Error('models fetch failed');
+        const list = await res.json();
+        const prev = selectEl.value;
+        selectEl.innerHTML = '';
+        if (!Array.isArray(list) || list.length === 0) {
+            const opt = document.createElement('option');
+            opt.value = '';
+            opt.disabled = true;
+            opt.selected = true;
+            opt.textContent = (TRANSLATIONS[currentLang] && TRANSLATIONS[currentLang].model_none) || '尚無可用模型';
+            selectEl.appendChild(opt);
+            return;
+        }
+        list.forEach(m => {
+            const opt = document.createElement('option');
+            opt.value = m.value;
+            opt.textContent = m.label;
+            selectEl.appendChild(opt);
+        });
+        // 還原先前選取（若仍在清單中）
+        if (prev && list.some(m => m.value === prev)) selectEl.value = prev;
+    } catch (e) {
+        selectEl.innerHTML = '';
+        const opt = document.createElement('option');
+        opt.value = '';
+        opt.disabled = true;
+        opt.selected = true;
+        opt.textContent = (TRANSLATIONS[currentLang] && TRANSLATIONS[currentLang].model_none) || '尚無可用模型';
+        selectEl.appendChild(opt);
+    }
+}
+
+function loadModelSelects() {
+    populateModelSelect(chatModelSelect, 'chat');
+    populateModelSelect(presentationModelSelect, 'presentation');
+}
 
 // AI Hub Nodes
 const aiHubContainer = document.getElementById('ai-hub-container');
@@ -1851,6 +1898,9 @@ function switchToDashboard() {
     // ZH: 顯示需登入才能用的導覽項目 | EN: Show auth-gated nav items
     toggleAuthGatedUI(true);
 
+    // v2.4: 動態載入各 AI 工具的模型下拉（chat / presentation）
+    loadModelSelects();
+
     // ZH: 教學導覽: 首次登入時顯示 | EN: Show tutorial on first login
     if (!isTutorialDismissed()) {
         showTutorial();
@@ -2467,7 +2517,7 @@ if (presentationForm) {
                     'Content-Type': 'application/json'
                 },
                 body: JSON.stringify({
-                    model_id: chatModelSelect ? chatModelSelect.value : 'llama3:latest',
+                    model_id: (presentationModelSelect && presentationModelSelect.value) || 'llama3:latest',
                     messages: presentationMessages,
                     stream: true,
                     tool_type: 'presentation',

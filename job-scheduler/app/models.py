@@ -164,6 +164,7 @@ class Model(Base):
     size_bytes = Column(Integer)                                              # ZH: 檔案大小 | EN: File size
     uploaded_by = Column(String, nullable=False)                              # ZH: 上傳者 | EN: Uploader
     is_public = Column(Integer, default=0)                                    # ZH: 公開旗標 | EN: Public flag
+    tool_types = Column(String, default="chat")                               # ZH: 適用工具 (CSV, e.g. "chat,presentation") | EN: Applicable tools (CSV)
 
     # ZH: API 模型專用欄位 | EN: API model-specific fields
     api_provider = Column(String)                                             # ZH: API 供應商 (anthropic/openai/google) | EN: API provider

@@ -229,8 +229,11 @@ app.include_router(jobs.router, prefix="/api/v1/jobs")
 # ZH: Phase E 移除 notebooks router（v1 偽 Notebook 已被 v2.0 Lab 取代）
 # EN: Phase E removed notebooks router (v1 pseudo-Notebook replaced by v2.0 Lab)
 from .routers import chat, admin, datasets, worker, sso, lab, secrets, announcements
+from .routers import models as models_router
 app.include_router(chat.router,      prefix="/api/v1/chat")
 app.include_router(admin.router,     prefix="/api/v1/admin")
+# ZH: 動態模型清單（各 AI 工具的下拉依 tool_type 抓取）| EN: Dynamic model list per tool
+app.include_router(models_router.router, prefix="/api/v1/models")
 app.include_router(datasets.router,  prefix="/api/v1/datasets")
 app.include_router(worker.router,    prefix="/api/v1/worker")
 # ZH: SSO 路由 (C1 修復：先前漏掛載導致 Nginx 代理 /api/v1/sso/ 永遠 404)

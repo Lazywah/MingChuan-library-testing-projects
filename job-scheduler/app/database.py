@@ -159,6 +159,8 @@ def init_db():
             except Exception: pass
             try: conn.execute(text("ALTER TABLE models ADD COLUMN api_model_id VARCHAR"))
             except Exception: pass
+            try: conn.execute(text("ALTER TABLE models ADD COLUMN tool_types VARCHAR DEFAULT 'chat'"))
+            except Exception: pass
             # --- chat_history 表遷移 | chat_history table migrations ---
             try: conn.execute(text("ALTER TABLE chat_history ADD COLUMN tool_type VARCHAR DEFAULT 'chat'"))
             except Exception: pass
@@ -202,5 +204,33 @@ def init_db():
 
     except Exception as e:
         logger.warning(f"Manual DB migration skipped or partially failed: {e}")
+
+    # --- 動態模型清單 — Seed 預設 AI 模型（僅當不存在時）| Seed default AI models (only if absent) ---
+    # ZH: 本機 Ollama Llama3 預設公開 (chat+presentation 皆可用)；雲端模型先建檔但不公開，
+    #     待管理員接入 API key 後再於管理頁公開 (is_public=1)。
+    # EN: Local Ollama Llama3 is public by default; cloud models are seeded but unpublished
+    #     until an admin connects API keys and publishes them.
+    try:
+        from .models import Model
+        _db = SessionLocal()
+        try:
+            _default_models = [
+                # (name, api_model_id, model_type, api_provider, is_public, tool_types, description)
+                ("Ollama Llama3", "llama3:latest", "api", "ollama", 1, "chat,presentation", "本機 Ollama Llama3（預設可用）"),
+                ("Claude 3.5 Sonnet", "claude-3-5-sonnet", "api", "anthropic", 0, "chat", "Anthropic Claude（需管理員接入 API key 後公開）"),
+                ("Gemini 1.5 Pro", "gemini-1.5-pro", "api", "google", 0, "chat", "Google Gemini（需管理員接入 API key 後公開）"),
+            ]
+            for name, mid, mtype, provider, pub, tools, desc in _default_models:
+                if not _db.query(Model).filter(Model.name == name).first():
+                    _db.add(Model(
+                        name=name, api_model_id=mid, model_type=mtype,
+                        api_provider=provider, is_public=pub, tool_types=tools,
+                        description=desc, uploaded_by="system",
+                    ))
+            _db.commit()
+        finally:
+            _db.close()
+    except Exception as e:
+        logger.warning(f"Seed default models skipped: {e}")
 
     logger.info(f"ZH: 資料庫初始化完成 ({settings.DATABASE_PATH}) | EN: Database initialized ({settings.DATABASE_PATH})")

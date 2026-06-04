@@ -199,6 +199,9 @@ const TRANSLATIONS = {
         opt_provider_other: "其他",
         opt_visibility_private: "私有",
         opt_visibility_public: "公開",
+        label_tool_types: "適用工具",
+        tool_chat: "文字聊天",
+        tool_presentation: "文書簡報",
         // Placeholders
         placeholder_search_users: "搜尋使用者...（密碼已加密）",
         placeholder_batch_token: "例如 5000000",
@@ -430,6 +433,9 @@ const TRANSLATIONS = {
         opt_provider_other: "Other",
         opt_visibility_private: "Private",
         opt_visibility_public: "Public",
+        label_tool_types: "Applicable tools",
+        tool_chat: "Text Chat",
+        tool_presentation: "Presentation",
         // Placeholders
         placeholder_search_users: "Search users... (Passwords are encrypted)",
         placeholder_batch_token: "e.g. 5000000",
@@ -1480,6 +1486,8 @@ function openModelModal(modelId) {
     document.getElementById('model-api-endpoint').value = '';
     document.getElementById('model-api-model-id').value = '';
     document.getElementById('model-is-public').value = '0';
+    // v2.4: 適用工具 — 預設只勾 chat
+    _setModelToolTypes('chat');
 
     if (modelId) {
         const m = _adminModelsCache.find(x => x.id === modelId);
@@ -1494,6 +1502,7 @@ function openModelModal(modelId) {
             document.getElementById('model-api-endpoint').value = m.api_endpoint || '';
             document.getElementById('model-api-model-id').value = m.api_model_id || '';
             document.getElementById('model-is-public').value = m.is_public ? '1' : '0';
+            _setModelToolTypes(m.tool_types || 'chat');
         }
         title.textContent = TRANSLATIONS[currentLang]?.edit_model_title || 'Edit Model';
     } else {
@@ -1507,6 +1516,16 @@ function closeModelModal() {
     document.getElementById('model-modal').classList.add('hidden');
 }
 
+// v2.4: 適用工具 checkbox 讀寫輔助
+function _setModelToolTypes(csv) {
+    const set = new Set(String(csv || 'chat').split(',').map(s => s.trim().toLowerCase()).filter(Boolean));
+    document.querySelectorAll('.model-tool-type').forEach(cb => { cb.checked = set.has(cb.value); });
+}
+function _getModelToolTypes() {
+    const vals = Array.from(document.querySelectorAll('.model-tool-type:checked')).map(cb => cb.value);
+    return vals.length ? vals.join(',') : 'chat';   // 至少保底 chat
+}
+
 async function submitModelForm(e) {
     e.preventDefault();
     const editId = document.getElementById('model-edit-id').value;
@@ -1515,7 +1534,8 @@ async function submitModelForm(e) {
         name: document.getElementById('model-name').value,
         model_type: modelType,
         description: document.getElementById('model-description').value || null,
-        is_public: parseInt(document.getElementById('model-is-public').value)
+        is_public: parseInt(document.getElementById('model-is-public').value),
+        tool_types: _getModelToolTypes()
     };
 
     if (modelType === 'api') {

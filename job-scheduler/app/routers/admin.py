@@ -654,6 +654,7 @@ def get_all_models(
             "description": m.description, "framework": m.framework,
             "storage_path": m.storage_path, "size_bytes": m.size_bytes,
             "uploaded_by": m.uploaded_by, "is_public": m.is_public,
+            "tool_types": m.tool_types or "chat",
             "api_provider": m.api_provider, "api_endpoint": m.api_endpoint,
             "api_model_id": m.api_model_id, "created_at": m.created_at,
         }
@@ -675,6 +676,7 @@ def admin_create_model(
         name=data.name, model_type=data.model_type or "local",
         description=data.description, framework=data.framework,
         storage_path=data.storage_path or "", is_public=data.is_public or 0,
+        tool_types=data.tool_types or "chat",
         uploaded_by=current_user.id, api_provider=data.api_provider,
         api_endpoint=data.api_endpoint, api_model_id=data.api_model_id,
     )
@@ -707,7 +709,7 @@ def admin_update_model(
         mdl.name = data.name
 
     for field in ("description", "model_type", "framework", "storage_path",
-                  "is_public", "api_provider", "api_endpoint", "api_model_id"):
+                  "is_public", "tool_types", "api_provider", "api_endpoint", "api_model_id"):
         val = getattr(data, field, None)
         if val is not None:
             setattr(mdl, field, val)
