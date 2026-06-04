@@ -1064,6 +1064,19 @@
                                     name="moon-outline"></ion-icon> <span data-i18n="btn_toggle_theme">Toggle
                                     Theme</span></button>
                         </div>
+                        <!-- v2.3: 介面字體大小調整（透過根層 zoom，連 px 文字一起縮放） -->
+                        <div class="settings-option font-size-option">
+                            <span data-i18n="label_font_size">Interface Font Size</span>
+                            <div class="font-size-control">
+                                <ion-icon name="text-outline" style="font-size:14px; color:var(--text-muted);"></ion-icon>
+                                <input type="range" id="font-scale-slider" min="80" max="150" step="5" value="100"
+                                       aria-label="Font size">
+                                <ion-icon name="text-outline" style="font-size:22px; color:var(--text-muted);"></ion-icon>
+                                <span id="font-scale-value" class="font-scale-value">100%</span>
+                                <button class="ready-btn" id="font-scale-reset" style="width:auto; min-width:auto; padding:6px 12px; font-size:0.85em;"
+                                        data-i18n="btn_font_reset">Reset</button>
+                            </div>
+                        </div>
                     </section>
 
                     <section class="widget form-box-panel">

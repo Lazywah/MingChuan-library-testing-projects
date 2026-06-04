@@ -13,27 +13,12 @@
     <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
-        .admin-layout {
-            padding: 20px;
+        /* v2.3: .admin-layout / .admin-nav 樣式已移至 styles.css（改為左 Side Bar + 右內容兩欄）；
+           原置中 max-width 容器與頂部 nav bar 規則移除，避免覆蓋新版版面。
+           .admin-content 內容區自帶 max-width 約束見下方。 */
+        .admin-content > .admin-tab-content {
             max-width: 1400px;
             margin: 0 auto;
-        }
-
-        .admin-nav {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 30px;
-            padding: 15px 25px;
-            background: var(--bg-panel);
-            backdrop-filter: blur(20px);
-            -webkit-backdrop-filter: blur(20px);
-            border: 1px solid var(--border-color);
-            border-radius: 16px;
-            box-shadow: 0 4px 30px rgba(0, 0, 0, 0.2);
-            position: sticky;
-            top: 20px;
-            z-index: 1000;
         }
 
         .back-link {
@@ -108,17 +93,8 @@
 <body>
     <div class="empty bg-grad custom-bg" id="main-bg"></div>
 
-    <!-- Global Actions (Language & Theme Toggles) -->
-    <div style="position: fixed; top: 20px; right: 30px; display: flex; gap: 15px; z-index: 10000;">
-        <button class="icon-action toggle-lang-btn" title="切換語言 / Toggle Language"
-            style="font-size:30px; background:transparent; border:none; cursor:pointer; color:var(--text-primary); transition:0.3s;">
-            <ion-icon name="language-outline"></ion-icon>
-        </button>
-        <button class="icon-action toggle-theme-btn" title="切換主題 / Toggle Theme"
-            style="font-size:30px; background:transparent; border:none; cursor:pointer; color:var(--text-primary); transition:0.3s;">
-            <ion-icon name="moon-outline"></ion-icon>
-        </button>
-    </div>
+    <!-- v2.3: 語言 / 主題切換已移入管理側邊欄（Side Bar）底部（避免與右側 Side Bar 重疊）；
+         登入頁沿用上次儲存的主題 / 語言（localStorage）。 -->
 
     <div id="toast" class="toast hidden">
         <span id="toast-icon"></span>
@@ -151,30 +127,57 @@
     </div>
 
     <div class="admin-layout" id="admin-main-layout" style="display: none;">
-        <div class="admin-nav">
-            <div style="display: flex; align-items: center; gap: 20px;">
-                <a href="javascript:void(0);" onclick="window.location.href = window.location.protocol + '//' + window.location.hostname + '/train/';" class="back-link" style="text-decoration: none; color: var(--neon-blue); display: flex; align-items: center; gap: 5px; cursor: pointer;">
-                    <ion-icon name="arrow-back-outline"></ion-icon> <span data-i18n="btn_back_hub">大廳</span>
-                </a>
-                <div style="width: 1px; height: 30px; background: var(--border-color); opacity: 0.5;"></div>
-                <h2 style="margin: 0; display: flex; align-items: center; gap: 8px; font-size: 1.5em; text-shadow: 0 0 10px var(--border-glow-color);">
-                    <ion-icon name="shield-checkmark-outline" style="color: var(--neon-pink);"></ion-icon> 
-                    <span data-i18n="admin_dashboard">管理中心</span>
-                </h2>
+        <!-- v2.3: 三個主分頁改用左側 Side Bar 呈現（對齊使用者介面的 side-drawer 體驗） -->
+        <aside class="admin-sidebar">
+            <div class="admin-sidebar-head">
+                <ion-icon name="shield-checkmark-outline" style="color: var(--neon-pink); font-size: 1.4em;"></ion-icon>
+                <span data-i18n="admin_dashboard">管理中心</span>
             </div>
-            
-            <div class="model-tabs" style="display:flex; gap: 16px; background: var(--bg-panel); border: 1px solid var(--border-color); border-radius: 12px; padding: 6px;">
-                <button id="nav-tab-management" class="model-tab active" onclick="switchAdminMainTab('management')" data-i18n="tab_management" style="border-radius: 8px; border: none; padding: 8px 20px;">管理介面</button>
-                <button id="nav-tab-analytics" class="model-tab" onclick="switchAdminMainTab('analytics')" data-i18n="tab_analytics" style="border-radius: 8px; border: none; padding: 8px 20px;">數據分析</button>
-                <button id="nav-tab-lab" class="model-tab" onclick="switchAdminMainTab('lab')" data-i18n="tab_lab_admin" style="border-radius: 8px; border: none; padding: 8px 20px;">Lab 管理</button>
-            </div>
-            
-            <button id="admin-logout-btn" class="ready-btn"
-                style="width:auto; min-width:auto; border-color:#fb7185; background: rgba(251, 113, 133, 0.1); color:#fb7185; padding: 8px 20px; font-size: 1em; display: inline-flex; align-items: center; justify-content: center; gap: 8px; border-radius: 10px;">
-                <ion-icon name="log-out-outline" style="font-size: 1.2em;"></ion-icon> <span data-i18n="btn_logout">登出</span>
-            </button>
-        </div>
 
+            <nav class="admin-sidebar-nav">
+                <button id="nav-tab-management" class="admin-side-tab active" onclick="switchAdminMainTab('management')">
+                    <ion-icon name="grid-outline"></ion-icon> <span data-i18n="tab_management">管理介面</span>
+                </button>
+                <button id="nav-tab-analytics" class="admin-side-tab" onclick="switchAdminMainTab('analytics')">
+                    <ion-icon name="bar-chart-outline"></ion-icon> <span data-i18n="tab_analytics">數據分析</span>
+                </button>
+                <button id="nav-tab-lab" class="admin-side-tab" onclick="switchAdminMainTab('lab')">
+                    <ion-icon name="flask-outline"></ion-icon> <span data-i18n="tab_lab_admin">Lab 管理</span>
+                </button>
+            </nav>
+
+            <div class="admin-sidebar-footer">
+                <!-- v2.3: 介面字體大小（根層 zoom，含 px 文字一起縮放） -->
+                <div class="admin-font-control">
+                    <span class="admin-font-label" data-i18n="label_font_size">字體大小</span>
+                    <div class="admin-font-stepper">
+                        <button id="admin-font-dec" type="button" title="A-">A−</button>
+                        <span id="admin-font-value">100%</span>
+                        <button id="admin-font-inc" type="button" title="A+">A+</button>
+                    </div>
+                </div>
+                <!-- v2.3: 主題 / 語言 / 管理導覽 移入 Side Bar -->
+                <div class="admin-sidebar-actions">
+                    <button class="admin-side-action toggle-theme-btn" title="切換主題 / Toggle Theme">
+                        <ion-icon name="moon-outline"></ion-icon>
+                    </button>
+                    <button class="admin-side-action toggle-lang-btn" title="切換語言 / Toggle Language">
+                        <ion-icon name="language-outline"></ion-icon>
+                    </button>
+                    <button class="admin-side-action" id="admin-tutorial-btn" data-i18n-title="admin_guide" title="管理導覽 / Admin Guide">
+                        <ion-icon name="information-circle-outline"></ion-icon>
+                    </button>
+                </div>
+                <a href="javascript:void(0);" onclick="window.location.href = window.location.protocol + '//' + window.location.hostname + '/train/';" class="admin-side-link">
+                    <ion-icon name="arrow-back-outline"></ion-icon> <span data-i18n="btn_back_hub">返回大廳</span>
+                </a>
+                <button id="admin-logout-btn" class="admin-side-link admin-side-logout">
+                    <ion-icon name="log-out-outline"></ion-icon> <span data-i18n="btn_logout">登出</span>
+                </button>
+            </div>
+        </aside>
+
+        <main class="admin-content">
         <div id="tab-management" class="admin-tab-content active">
             <div class="admin-grid">
             <!-- ZH: 叢集資源監控 | EN: Cluster Status -->
@@ -940,7 +943,31 @@
 
             </div>
         </div> <!-- End of tab-lab -->
+        </main> <!-- End of admin-content -->
     </div> <!-- End of admin-layout -->
+
+    <!-- v2.3: 管理者引導式教學（overlay + 高亮框 + 氣泡；原使用者介面 Unit 6 移入，從 Side Bar ⓘ 導覽開啟） -->
+    <div id="admin-guide-ring" class="tutorial-highlight-ring hidden"></div>
+    <div id="admin-guide-overlay" class="tutorial-overlay hidden" role="dialog" aria-modal="false">
+        <div id="admin-guide-bubble-wrap" class="tutorial-bubble-wrap">
+            <div class="tutorial-overlay-bubble" id="admin-guide-bubble">
+                <div class="tutorial-bubble-header">
+                    <span class="tutorial-step-badge" id="admin-guide-badge">1 / 5</span>
+                    <button type="button" id="admin-guide-abort" aria-label="結束導覽"><ion-icon name="close-outline"></ion-icon></button>
+                </div>
+                <h3 id="admin-guide-step-title"></h3>
+                <p id="admin-guide-step-body"></p>
+                <div class="tutorial-bubble-actions">
+                    <button type="button" id="admin-guide-prev" class="ready-btn" style="width:auto; min-width:80px;">
+                        <ion-icon name="arrow-back-outline"></ion-icon> <span data-i18n="guide_prev">上一步</span>
+                    </button>
+                    <button type="button" id="admin-guide-next" class="ready-btn" style="width:auto; min-width:100px;">
+                        <span data-i18n="guide_next">下一步</span> <ion-icon name="arrow-forward-outline"></ion-icon>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
 
     <!-- 載入 Ionicons -->
     <script type="module" src="https://unpkg.com/ionicons@7.1.0/dist/ionicons/ionicons.esm.js"></script>

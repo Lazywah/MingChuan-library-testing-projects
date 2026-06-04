@@ -126,7 +126,7 @@ body {
     position: absolute;
     top: 15px;
     right: 15px;
-    font-size: 30px;
+    font-size: 1.875rem;
     color: var(--text-primary);
     cursor: pointer;
     transition: 0.3s;
@@ -143,7 +143,7 @@ form {
 }
 
 form h1 {
-    font-size: 28px;
+    font-size: 1.75rem;
     margin-bottom: 20px;
     font-weight: 700;
 }
@@ -180,7 +180,7 @@ form h1 {
     border: none;
     outline: none;
     color: var(--text-primary);
-    font-size: 16px;
+    font-size: 1rem;
     padding: 5px 0;
 }
 
@@ -188,7 +188,7 @@ form h1 {
     position: absolute;
     left: 0;
     top: 5px;
-    font-size: 16px;
+    font-size: 1rem;
     color: var(--text-primary);
     transition: 0.4s ease;
     pointer-events: none;
@@ -198,12 +198,12 @@ form h1 {
 .input input:focus~label,
 .input input:not(:placeholder-shown)~label {
     transform: translateY(-25px);
-    font-size: 14px;
+    font-size: 0.875rem;
     color: var(--accent-glow);
 }
 
 .input ion-icon {
-    font-size: 20px;
+    font-size: 1.25rem;
     color: var(--text-primary);
     background: transparent;
     padding: 2px;
@@ -240,7 +240,7 @@ form h1 {
     border-radius: 20px;
     margin: 20px 0;
     padding: 10px;
-    font-size: 16px;
+    font-size: 1rem;
     font-weight: 600;
     cursor: pointer;
     transition: all 0.5s ease;
@@ -318,12 +318,12 @@ form h1 {
 }
 
 .moodle-header .logo-image ion-icon {
-    font-size: 36px;
+    font-size: 2.25rem;
     color: var(--accent-glow);
 }
 
 .moodle-header .logo {
-    font-size: 24px;
+    font-size: 1.5rem;
     font-weight: 700;
 }
 
@@ -334,7 +334,7 @@ form h1 {
 }
 
 .header-right .icon-action {
-    font-size: 24px;
+    font-size: 1.5rem;
     color: var(--text-primary);
     background: transparent;
     border: none;
@@ -356,14 +356,14 @@ form h1 {
     border: 1px solid var(--accent-glow);
     background: transparent;
     color: var(--accent-glow);
-    font-size: 15px;
+    font-size: 0.9375rem;
     font-weight: 600;
     cursor: pointer;
     transition: all 0.3s ease;
 }
 
 .header-login-btn ion-icon {
-    font-size: 18px;
+    font-size: 1.125rem;
 }
 
 .header-login-btn:hover {
@@ -398,13 +398,13 @@ ion-icon {
 /* Action icons in buttons */
 .ready-btn ion-icon,
 .mini-btn ion-icon {
-    font-size: 16px;
+    font-size: 1rem;
     margin-right: 4px;
 }
 
 /* Session action icons */
 .session-actions ion-icon {
-    font-size: 14px;
+    font-size: 0.875rem;
     color: var(--text-muted);
     cursor: pointer;
     transition: color 0.2s ease;
@@ -429,7 +429,7 @@ ion-icon {
 
 /* New chat button icon */
 #new-chat-btn ion-icon {
-    font-size: 14px;
+    font-size: 0.875rem;
     color: var(--text-primary);
     display: inline-flex;
     align-items: center;
@@ -441,7 +441,7 @@ ion-icon {
 
 /* Tab button icons - improved sizing */
 .tab-btn ion-icon {
-    font-size: 22px;
+    font-size: 1.375rem;
     transition: all 0.3s ease;
     display: inline-flex;
     align-items: center;
@@ -457,7 +457,7 @@ ion-icon {
 
 /* Refresh icon */
 .refresh-icon {
-    font-size: 24px;
+    font-size: 1.5rem;
     cursor: pointer;
     transition: all 0.3s ease;
     background: transparent;
@@ -602,7 +602,7 @@ ion-icon {
 }
 
 .session-item.new-chat-btn ion-icon {
-    font-size: 14px;
+    font-size: 0.875rem;
     color: var(--accent-glow);
     width: 14px;
     height: 14px;
@@ -612,7 +612,7 @@ ion-icon {
 .session-item.new-chat-btn span {
     font-weight: 500;
     color: var(--text-primary);
-    font-size: 13px;
+    font-size: 0.8125rem;
 }
 
 .session-name {
@@ -620,7 +620,7 @@ ion-icon {
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
-    font-size: 14px;
+    font-size: 0.875rem;
 }
 
 .session-actions {
@@ -670,7 +670,7 @@ ion-icon {
     max-width: 100%;
     padding: 12px 16px;
     border-radius: 16px;
-    font-size: 14px;
+    font-size: 0.875rem;
     line-height: 1.4;
     word-wrap: break-word;
 }
@@ -740,7 +740,7 @@ ion-icon {
 }
 
 .send-btn .material-icons {
-    font-size: 20px;
+    font-size: 1.25rem;
     color: #ffffff;
     /* 機頭朝右上 (Points to top-right) */
     transform: rotate(-45deg);
@@ -787,7 +787,7 @@ ion-icon {
     /* 單行高度 22.4px + padding 20px */
     max-height: 87.2px;
     /* 三行高度 67.2px + padding 20px */
-    font-size: 16px;
+    font-size: 1rem;
     outline: none;
     transition: border-color 0.3s ease, box-shadow 0.3s ease;
     line-height: 1.4;
@@ -826,7 +826,7 @@ ion-icon {
 }
 
 .mini-select label {
-    font-size: 13px;
+    font-size: 0.8125rem;
     color: var(--text-muted);
 }
 
@@ -834,7 +834,7 @@ ion-icon {
     width: 220px;
     height: 36px;
     padding: 0 12px;
-    font-size: 13px;
+    font-size: 0.8125rem;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -851,7 +851,7 @@ ion-icon {
 .chat-actions .mini-btn {
     padding: 6px 15px;
     margin: 0;
-    font-size: 13px;
+    font-size: 0.8125rem;
     border-radius: 8px;
     background: rgba(251, 113, 133, 0.1);
     border-color: #fb7185;
@@ -908,7 +908,7 @@ ion-icon {
     }
 
     .tab-btn {
-        font-size: 14px;
+        font-size: 0.875rem;
         padding: 6px 12px;
     }
 
@@ -936,17 +936,17 @@ ion-icon {
     }
 
     .header-left .logo {
-        font-size: 18px;
+        font-size: 1.125rem;
     }
 
     .tab-btn {
-        font-size: 12px;
+        font-size: 0.75rem;
         padding: 4px 8px;
         gap: 4px;
     }
 
     .tab-btn ion-icon {
-        font-size: 16px;
+        font-size: 1rem;
     }
 
     .chat-input-row {
@@ -973,7 +973,7 @@ ion-icon {
     border: 1px solid var(--text-primary);
     border-radius: 12px;
     padding: 2px 8px;
-    font-size: 12px;
+    font-size: 0.75rem;
 }
 
 
@@ -1003,7 +1003,7 @@ ion-icon {
 }
 
 .refresh-icon {
-    font-size: 28px;
+    font-size: 1.75rem;
     cursor: pointer;
     transition: 0.3s;
 }
@@ -1039,13 +1039,13 @@ ion-icon {
     top: 50%;
     left: 50%;
     transform: translate(-50%, -50%);
-    font-size: 22px;
+    font-size: 1.375rem;
     font-weight: bold;
     color: var(--accent-glow);
 }
 
 .stat-row {
-    font-size: 18px;
+    font-size: 1.125rem;
     margin-bottom: 8px;
 }
 
@@ -1138,13 +1138,13 @@ ion-icon {
 
 .job-title {
     font-weight: bold;
-    font-size: 16px;
+    font-size: 1rem;
     display: block;
     margin-bottom: 4px;
 }
 
 .job-id {
-    font-size: 11px;
+    font-size: 0.6875rem;
     opacity: 0.7;
     color: var(--text-muted);
 }
@@ -1152,7 +1152,7 @@ ion-icon {
 .job-meta {
     display: flex;
     gap: 15px;
-    font-size: 12px;
+    font-size: 0.75rem;
     margin-bottom: 10px;
     opacity: 0.8;
 }
@@ -1167,7 +1167,7 @@ ion-icon {
 .job-status {
     padding: 4px 8px;
     border-radius: 8px;
-    font-size: 11px;
+    font-size: 0.6875rem;
     font-weight: 600;
     white-space: nowrap;
 }
@@ -1198,7 +1198,7 @@ ion-icon {
     padding: 15px 30px;
     border-radius: 30px;
     backdrop-filter: blur(10px);
-    font-size: 18px;
+    font-size: 1.125rem;
     display: flex;
     align-items: center;
     gap: 10px;
@@ -1280,7 +1280,7 @@ ion-icon {
 }
 
 .hub-section-header h3 {
-    font-size: 18px;
+    font-size: 1.125rem;
     display: flex;
     align-items: center;
     gap: 8px;
@@ -1288,7 +1288,7 @@ ion-icon {
     margin-bottom: 5px;
 }
 .hub-section-header p {
-    font-size: 13px;
+    font-size: 0.8125rem;
     color: var(--text-secondary);
 }
 
@@ -1325,13 +1325,13 @@ ion-icon {
     display: flex;
     justify-content: center;
     align-items: center;
-    font-size: 40px;
+    font-size: 2.5rem;
     color: #fff;
     box-shadow: inset 0 0 10px rgba(0,0,0,0.3);
 }
 
 .hub-sub-card .card-title {
-    font-size: 13px;
+    font-size: 0.8125rem;
     font-weight: 500;
     color: var(--text-primary);
 }
@@ -1357,7 +1357,7 @@ ion-icon {
     max-width: 500px;
 }
 .coming-soon-content ion-icon {
-    font-size: 64px;
+    font-size: 4rem;
     color: var(--accent-primary);
 }
 .back-to-hub-btn {
@@ -1406,32 +1406,182 @@ ion-icon {
 /* ======================================================
    ZH: 管理者專屬介面樣式 | EN: Admin UI Styles
 ====================================================== */
+/* v2.3: admin-layout 改為「左 Side Bar + 右內容」兩欄 */
 .admin-layout {
     position: absolute;
     top: 0; left: 0; right: 0; bottom: 0;
     width: 100%;
     height: 100vh;
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: row;
+    overflow: hidden;
+}
+
+/* v2.3: 右側內容區（原本的儀表板/分頁內容） */
+.admin-content {
+    flex: 1;
+    min-width: 0;
+    height: 100vh;
     overflow-y: auto;
     padding: 40px;
     box-sizing: border-box;
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+}
+.admin-content::-webkit-scrollbar { display: none; }
+
+/* v2.3: 左側 Side Bar（對齊使用者介面 side-drawer 體驗） */
+.admin-sidebar {
+    width: 350px; /* v2.3: 與使用者介面 .side-drawer 同寬 */
+    flex-shrink: 0;
+    height: 100vh;
+    box-sizing: border-box;
     display: flex;
     flex-direction: column;
-    
-    /* Hide scrollbar for IE, Edge and Firefox */
-    -ms-overflow-style: none;  
-    scrollbar-width: none;  
+    background: var(--bg-panel);
+    /* v2.3: Side Bar 置於右側（order:2 排到內容之後）*/
+    order: 2;
+    border-left: 1px solid var(--border-color);
+    padding: 20px 14px;
+    gap: 18px;
 }
-
-/* Hide scrollbar for Chrome, Safari and Opera */
-.admin-layout::-webkit-scrollbar {
-    display: none;
-}
-
-.admin-nav {
+.admin-sidebar-head {
     display: flex;
-    justify-content: space-between;
     align-items: center;
-    margin-bottom: 20px;
+    gap: 8px;
+    font-size: 1.15em;
+    font-weight: 700;
+    color: var(--text-primary);
+    padding: 6px 8px 14px 8px;
+    border-bottom: 1px solid var(--border-color);
+    text-shadow: 0 0 10px var(--border-glow-color);
+}
+.admin-sidebar-nav {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    flex: 1;
+}
+.admin-side-tab {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    width: 100%;
+    padding: 12px 14px;
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: 10px;
+    color: var(--text-muted);
+    font-family: inherit;
+    font-size: 0.98em;
+    text-align: left;
+    cursor: pointer;
+    transition: background 0.2s, color 0.2s, border-color 0.2s;
+}
+.admin-side-tab ion-icon { font-size: 1.25em; flex-shrink: 0; }
+.admin-side-tab:hover {
+    background: var(--bg-hover, rgba(255,255,255,0.05));
+    color: var(--text-primary);
+}
+.admin-side-tab.active {
+    background: rgba(99, 102, 241, 0.12);
+    border-color: var(--accent-glow);
+    color: var(--accent-glow);
+    box-shadow: 0 0 12px var(--border-glow-color);
+}
+
+/* v2.3: Side Bar 底部（字體大小 + 返回 + 登出） */
+.admin-sidebar-footer {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding-top: 14px;
+    border-top: 1px solid var(--border-color);
+}
+.admin-font-control {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 4px 8px 10px 8px;
+}
+.admin-font-label {
+    font-size: 0.78em;
+    color: var(--text-muted);
+}
+.admin-font-stepper {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 6px;
+}
+.admin-font-stepper button {
+    width: 34px;
+    height: 30px;
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    background: transparent;
+    color: var(--text-primary);
+    font-weight: 700;
+    cursor: pointer;
+    transition: background 0.2s, border-color 0.2s;
+}
+.admin-font-stepper button:hover {
+    border-color: var(--accent-glow);
+    color: var(--accent-glow);
+}
+.admin-font-stepper #admin-font-value {
+    flex: 1;
+    text-align: center;
+    font-family: monospace;
+    font-size: 0.85em;
+    color: var(--text-primary);
+}
+.admin-side-link {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    padding: 10px 14px;
+    background: transparent;
+    border: none;
+    border-radius: 10px;
+    color: var(--neon-blue);
+    font-family: inherit;
+    font-size: 0.92em;
+    text-decoration: none;
+    cursor: pointer;
+    transition: background 0.2s;
+}
+.admin-side-link:hover { background: var(--bg-hover, rgba(255,255,255,0.05)); }
+.admin-side-logout { color: #fb7185; }
+.admin-side-logout:hover { background: rgba(251, 113, 133, 0.1); }
+
+/* v2.3: Side Bar 內 主題 / 語言 / 導覽 圓鈕列 */
+.admin-sidebar-actions {
+    display: flex;
+    gap: 8px;
+    justify-content: center;
+    padding: 4px 0 6px 0;
+}
+.admin-side-action {
+    flex: 1;
+    height: 38px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: transparent;
+    border: 1px solid var(--border-color);
+    border-radius: 10px;
+    color: var(--text-primary);
+    font-size: 1.25rem;
+    cursor: pointer;
+    transition: background 0.2s, border-color 0.2s, color 0.2s;
+}
+.admin-side-action:hover {
+    border-color: var(--accent-glow);
+    color: var(--accent-glow);
+    background: var(--bg-hover, rgba(255,255,255,0.05));
 }
 
 .admin-grid {
@@ -1458,7 +1608,7 @@ ion-icon {
     border-bottom: 2px solid transparent;
     color: var(--text-muted);
     padding: 8px 14px;
-    font-size: 13px;
+    font-size: 0.8125rem;
     cursor: pointer;
     display: flex;
     align-items: center;
@@ -1478,7 +1628,7 @@ ion-icon {
     padding: 1px 6px;
     border-radius: 10px;
     background: rgba(127, 127, 127, 0.15);
-    font-size: 11px;
+    font-size: 0.6875rem;
     color: var(--text-muted);
 }
 .user-source-tab.active .user-source-count {
@@ -1489,7 +1639,7 @@ ion-icon {
 .admin-table {
     width: 100%;
     border-collapse: collapse;
-    font-size: 13px;
+    font-size: 0.8125rem;
 }
 
 .admin-table th,
@@ -1503,7 +1653,7 @@ ion-icon {
 .admin-table th {
     font-weight: 600;
     color: var(--accent-glow);
-    font-size: 12px;
+    font-size: 0.75rem;
     text-transform: uppercase;
     letter-spacing: 0.5px;
 }
@@ -1676,7 +1826,7 @@ ion-icon {
 .tutorial-content h2 {
     display: flex;
     align-items: center;
-    font-size: 22px;
+    font-size: 1.375rem;
     margin-bottom: 20px;
 }
 
@@ -1686,7 +1836,7 @@ ion-icon {
     right: 15px;
     background: transparent;
     border: none;
-    font-size: 24px;
+    font-size: 1.5rem;
     color: var(--text-primary);
     cursor: pointer;
     transition: 0.3s;
@@ -1715,13 +1865,13 @@ ion-icon {
 }
 
 .tutorial-step h4 {
-    font-size: 15px;
+    font-size: 0.9375rem;
     margin-bottom: 4px;
     font-weight: 600;
 }
 
 .tutorial-step p {
-    font-size: 13px;
+    font-size: 0.8125rem;
     color: var(--text-muted);
     line-height: 1.5;
 }
@@ -1730,7 +1880,7 @@ ion-icon {
     display: flex;
     align-items: center;
     gap: 8px;
-    font-size: 14px;
+    font-size: 0.875rem;
     cursor: pointer;
     color: var(--text-muted);
 }
@@ -1778,7 +1928,7 @@ ion-icon {
     border-right: none;
     border-radius: 10px 0 0 10px;
     color: var(--text-primary);
-    font-size: 24px;
+    font-size: 1.5rem;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -1815,14 +1965,14 @@ ion-icon {
     display: flex;
     align-items: center;
     gap: 12px;
-    font-size: 16px;
+    font-size: 1rem;
     transition: 0.3s;
     border-left: 4px solid transparent;
     width: 100%;
 }
 
 .side-drawer .tab-btn ion-icon { 
-    font-size: 22px; 
+    font-size: 1.375rem; 
 }
 
 .side-drawer .tab-btn:hover { 
@@ -1848,7 +1998,7 @@ ion-icon {
     display: flex;
     align-items: center;
     gap: 10px;
-    font-size: 18px;
+    font-size: 1.125rem;
 }
 
 .drawer-content {
@@ -1876,7 +2026,7 @@ ion-icon {
     border: 1px solid var(--border-color);
     background: transparent;
     color: var(--text-muted);
-    font-size: 22px;
+    font-size: 1.375rem;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -1895,7 +2045,7 @@ ion-icon {
     margin-bottom: 10px;
     padding-bottom: 5px;
     border-bottom: 1px solid var(--accent-glow);
-    font-size: 16px;
+    font-size: 1rem;
     color: var(--accent-glow);
 }
 
@@ -1916,7 +2066,7 @@ ion-icon {
 
 .donut-text {
     fill: var(--text-primary);
-    font-size: 10px;
+    font-size: 0.625rem;
     font-weight: 700;
 }
 
@@ -1963,19 +2113,19 @@ ion-icon {
 }
 
 .quick-link-card .ql-icon {
-    font-size: 32px;
+    font-size: 2rem;
     color: var(--accent-glow);
     margin-bottom: 10px;
 }
 
 .quick-link-card h4 {
     margin-bottom: 5px;
-    font-size: 16px;
+    font-size: 1rem;
     color: var(--text-primary);
 }
 
 .quick-link-card p {
-    font-size: 12px;
+    font-size: 0.75rem;
     color: var(--text-muted);
     margin-bottom: 15px;
 }
@@ -2006,7 +2156,7 @@ ion-icon {
 }
 
 .announcement-item .date {
-    font-size: 12px;
+    font-size: 0.75rem;
     color: var(--text-muted);
     display: block;
     margin-bottom: 5px;
@@ -2025,7 +2175,7 @@ ion-icon {
     background: transparent;
     border: none;
     color: var(--text-muted);
-    font-size: 16px;
+    font-size: 1rem;
     padding: 10px 20px;
     cursor: pointer;
     border-radius: 8px 8px 0 0;
@@ -2077,19 +2227,19 @@ ion-icon {
 }
 
 .quick-link-card .ql-icon {
-    font-size: 32px;
+    font-size: 2rem;
     color: var(--accent-glow);
     margin-bottom: 10px;
 }
 
 .quick-link-card h4 {
     margin-bottom: 8px;
-    font-size: 18px;
+    font-size: 1.125rem;
 }
 
 .quick-link-card p {
     color: var(--text-muted);
-    font-size: 14px;
+    font-size: 0.875rem;
     margin-bottom: 15px;
     flex: 1;
 }
@@ -2123,7 +2273,7 @@ ion-icon {
 }
 
 .announcement-item .date {
-    font-size: 13px;
+    font-size: 0.8125rem;
     color: var(--text-muted);
     display: block;
     margin-bottom: 8px;
@@ -2131,7 +2281,7 @@ ion-icon {
 }
 
 .announcement-item p {
-    font-size: 15px;
+    font-size: 0.9375rem;
     color: var(--text-primary);
     line-height: 1.5;
 }
@@ -2179,7 +2329,7 @@ ion-icon {
     border-bottom: 2px solid transparent;
     color: var(--text-muted);
     padding: 10px 20px;
-    font-size: 14px;
+    font-size: 0.875rem;
     font-weight: 600;
     cursor: pointer;
     display: inline-flex;
@@ -2210,7 +2360,7 @@ ion-icon {
     color: var(--text-muted);
     padding: 3px 10px;
     border-radius: 6px;
-    font-size: 12px;
+    font-size: 0.75rem;
     cursor: pointer;
     transition: all 0.2s ease;
     font-family: var(--font-main);
@@ -2265,7 +2415,7 @@ ion-icon {
     height: 20px;
     padding: 0 6px;
     border-radius: 10px;
-    font-size: 11px;
+    font-size: 0.6875rem;
     font-weight: 700;
     background: rgba(255,255,255,0.1);
     color: var(--text-muted);
@@ -2303,22 +2453,71 @@ ion-icon {
     .widget-header h3 {
         font-size: clamp(14px, 1.6vw, 17px);
     }
-    .admin-layout {
+    .admin-content {
         padding: 14px;
     }
 }
 
-/* 平板/大手機（768px 以下）— layout 改 single-column */
+/* 平板/大手機（768px 以下）— Side Bar 收合成頂部橫列 */
 @media (max-width: 768px) {
     .admin-layout {
+        flex-direction: column;
+        overflow-y: auto;
+    }
+    .admin-content {
         padding: 10px;
         max-width: 100%;
+        height: auto;
+        overflow: visible;
     }
-    .admin-nav {
-        flex-direction: column;
+    .admin-sidebar {
+        order: 0; /* v2.3: 手機改回頂部橫列（取消右側 order） */
+        width: 100%;
+        height: auto;
+        flex-direction: row;
+        flex-wrap: wrap;
+        align-items: center;
         gap: 10px;
-        padding: 12px 14px;
-        position: static;
+        padding: 10px 12px;
+        border-left: none;
+        border-bottom: 1px solid var(--border-color);
+    }
+    .admin-sidebar-actions {
+        padding: 0;
+        flex: 0 0 auto;
+    }
+    .admin-side-action {
+        flex: 0 0 auto;
+        width: 38px;
+    }
+    .admin-sidebar-head {
+        border-bottom: none;
+        padding: 0 8px 0 0;
+    }
+    .admin-sidebar-nav {
+        flex-direction: row;
+        flex-wrap: wrap;
+        flex: 1;
+        gap: 6px;
+    }
+    .admin-side-tab {
+        width: auto;
+        padding: 8px 12px;
+    }
+    .admin-sidebar-footer {
+        flex-direction: row;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 8px;
+        width: 100%;
+        padding-top: 0;
+        border-top: none;
+    }
+    .admin-font-control {
+        flex-direction: row;
+        align-items: center;
+        gap: 8px;
+        padding: 0;
     }
     /* 儀表板 / 任務 / 審計多欄 grid → 改 single column */
     .widget[style*="grid-column"] {
@@ -2338,7 +2537,7 @@ ion-icon {
     }
     /* 3-tab bar 在小螢幕字級縮小 */
     .user-source-tab {
-        font-size: 11px;
+        font-size: 0.6875rem;
         padding: 6px 10px;
     }
     /* 表格內可選擇隱藏次要欄位（保留主要欄位） */
@@ -2357,11 +2556,11 @@ ion-icon {
 @media (max-width: 480px) {
     .admin-table th,
     .admin-table td {
-        font-size: 10.5px;
+        font-size: 0.65625rem;
         padding: 6px 8px;
     }
-    .admin-nav h2 {
-        font-size: 15px;
+    .admin-sidebar-head {
+        font-size: 0.9375rem;
     }
 }
 
@@ -2369,3 +2568,37 @@ ion-icon {
     background: rgba(255,255,255,0.2);
     color: var(--accent-glow);
 }
+/* v2.3: inline px 字級 rebasing -> rem，跟隨根層 font-size 縮放
+ (涵蓋 username / email / 學系 / 任務資訊等以 inline style 設定字級的內容；只改字級不動版面) */
+[style*="font-size:11px"],[style*="font-size: 11px"]{font-size:0.6875rem !important;}
+[style*="font-size:12px"],[style*="font-size: 12px"]{font-size:0.75rem !important;}
+[style*="font-size:13px"],[style*="font-size: 13px"]{font-size:0.8125rem !important;}
+[style*="font-size:14px"],[style*="font-size: 14px"]{font-size:0.875rem !important;}
+[style*="font-size:16px"],[style*="font-size: 16px"]{font-size:1rem !important;}
+[style*="font-size:18px"],[style*="font-size: 18px"]{font-size:1.125rem !important;}
+[style*="font-size:20px"],[style*="font-size: 20px"]{font-size:1.25rem !important;}
+[style*="font-size:22px"],[style*="font-size: 22px"]{font-size:1.375rem !important;}
+[style*="font-size:24px"],[style*="font-size: 24px"]{font-size:1.5rem !important;}
+[style*="font-size:28px"],[style*="font-size: 28px"]{font-size:1.75rem !important;}
+[style*="font-size:30px"],[style*="font-size: 30px"]{font-size:1.875rem !important;}
+[style*="font-size:48px"],[style*="font-size: 48px"]{font-size:3rem !important;}
+
+
+/* v2.3: 管理者引導式教學 — overlay + 高亮框 + 氣泡（移植自使用者介面 TutorialEngine） */
+.tutorial-highlight-ring { position: fixed; z-index: 10000; border: 3px solid #fbbf24; border-radius: 10px; pointer-events: none; box-shadow: 0 0 24px rgba(251,191,36,0.55); transition: top .15s ease, left .15s ease, width .15s ease, height .15s ease; animation: tutorialRingPulse 1.8s ease-in-out infinite; }
+.tutorial-highlight-ring.hidden { display: none !important; }
+@keyframes tutorialRingPulse { 0%,100% { box-shadow: 0 0 24px rgba(251,191,36,.55), 0 0 0 2px rgba(251,191,36,.20); } 50% { box-shadow: 0 0 36px rgba(251,191,36,.80), 0 0 0 4px rgba(251,191,36,.30); } }
+.tutorial-overlay { position: fixed; inset: 0; z-index: 10001; pointer-events: none; }
+.tutorial-overlay.hidden { display: none; }
+.tutorial-bubble-wrap { pointer-events: auto; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); transition: top .18s ease, left .18s ease; }
+.tutorial-overlay-bubble { background: var(--bg-solid); color: var(--text-primary); border: 1px solid var(--border-color); border-radius: 12px; box-shadow: 0 14px 32px rgba(0,0,0,0.5); padding: 16px 18px; min-width: 280px; max-width: 360px; line-height: 1.6; font-size: 0.8125rem; }
+.tutorial-overlay-bubble.animate-in { animation: tutBubbleIn .22s cubic-bezier(.16,1,.3,1); }
+@keyframes tutBubbleIn { from { opacity: 0; transform: translateY(8px) scale(.97); } to { opacity: 1; transform: translateY(0) scale(1); } }
+.tutorial-bubble-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+.tutorial-step-badge { background: rgba(99,102,241,0.2); color: var(--neon-pink, #ec4899); padding: 3px 9px; border-radius: 10px; font-size: 0.6875rem; font-weight: 600; letter-spacing: .5px; }
+.tutorial-bubble-header button { background: transparent; border: none; color: var(--text-muted); cursor: pointer; display: inline-flex; align-items: center; }
+.tutorial-bubble-header button:hover { color: var(--text-primary); }
+#admin-guide-step-title { font-size: 0.9375rem; font-weight: 700; margin: 0 0 8px; color: var(--text-primary); }
+#admin-guide-step-body { margin: 0 0 14px; color: var(--text-muted); }
+.tutorial-bubble-actions { display: flex; justify-content: space-between; gap: 8px; }
+.tutorial-bubble-actions button { padding: 6px 14px; font-size: 0.8125rem; margin: 0; }

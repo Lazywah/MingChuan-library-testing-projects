@@ -28,6 +28,22 @@ const TRANSLATIONS = {
         tab_local_models: "本地模型",
         tab_management: "管理介面",
         tab_analytics: "數據分析",
+        label_font_size: "字體大小",
+        admin_guide: "管理導覽",
+        guide_prev: "上一步",
+        guide_next: "下一步",
+        guide_done: "完成",
+        // 管理者引導式教學（原使用者介面 Unit 6 移入；改為左側 Side Bar 分頁導覽）
+        tut_u6_s1_title: "👤 歡迎使用管理中心",
+        tut_u6_s1_body: "管理員專用介面在 port 8888（學生 UI 在 :80）。左側 Side Bar 三個分頁涵蓋全部管理功能。接下來逐一介紹。",
+        tut_u6_s2_title: "Step 2 — 管理介面分頁",
+        tut_u6_s2_body: "叢集 GPU 即時監控、使用者管理（線上狀態 / Token 用量 / Provision / 停用 / 重設密碼）、模型與運算任務、公告，以及「📊 匯出」Excel/CSV 都在這。",
+        tut_u6_s3_title: "Step 3 — 數據分析分頁",
+        tut_u6_s3_body: "依系所 / 工具檢視 Token 使用與活躍度圖表，掌握全校使用概況。",
+        tut_u6_s4_title: "Step 4 — Lab 管理分頁",
+        tut_u6_s4_body: "監控與管理使用者的 Lab 容器、每日配額、儲存空間與操作稽核紀錄。",
+        tut_u6_s5_title: "🎉 個人化 & 完成",
+        tut_u6_s5_body: "Side Bar 底部可調整字體大小、切換主題 / 語言，並隨時重看本導覽。更多功能見 docs/04-operations.md，記得開學前換強 admin 密碼。",
         admin_configs: "系統設定檔",
         tab_high_compute: "高算力運算",
         tab_midlow_compute: "中低算力運算",
@@ -243,6 +259,22 @@ const TRANSLATIONS = {
         tab_local_models: "Local Models",
         tab_management: "Management",
         tab_analytics: "Analytics",
+        label_font_size: "Font Size",
+        admin_guide: "Admin Guide",
+        guide_prev: "Back",
+        guide_next: "Next",
+        guide_done: "Done",
+        // Admin guided tutorial (moved from user-UI Unit 6; now a Side Bar tab tour)
+        tut_u6_s1_title: "👤 Welcome to the Admin Center",
+        tut_u6_s1_body: "The admin-only interface runs on port 8888 (student UI is on :80). The three Side Bar tabs on the left cover every admin function. Let's walk through them.",
+        tut_u6_s2_title: "Step 2 — Management tab",
+        tut_u6_s2_body: "Real-time GPU cluster monitoring, user management (online status / token usage / provision / disable / reset password), models, compute jobs, announcements, and the \"📊 Export\" Excel/CSV button all live here.",
+        tut_u6_s3_title: "Step 3 — Analytics tab",
+        tut_u6_s3_body: "Token usage and activity charts by department / tool — see the whole campus usage at a glance.",
+        tut_u6_s4_title: "Step 4 — Lab Admin tab",
+        tut_u6_s4_body: "Monitor and manage user Lab containers, daily quota, storage and audit logs.",
+        tut_u6_s5_title: "🎉 Personalize & Done",
+        tut_u6_s5_body: "The Side Bar footer lets you adjust font size, switch theme / language, and replay this guide anytime. More in docs/04-operations.md — remember to set a strong admin password before term starts.",
         admin_configs: "System Configs",
         tab_high_compute: "High Compute",
         tab_midlow_compute: "Mid/Low Compute",
@@ -456,6 +488,12 @@ function applyTranslations() {
         const text = t[el.getAttribute('data-i18n-placeholder')];
         if (text) el.placeholder = text;
     });
+
+    // data-i18n-title: sets the title (tooltip) attribute
+    document.querySelectorAll('[data-i18n-title]').forEach(el => {
+        const text = t[el.getAttribute('data-i18n-title')];
+        if (text) el.title = text;
+    });
 }
 
 function applyTheme(theme) {
@@ -464,6 +502,17 @@ function applyTheme(theme) {
     document.querySelectorAll('.toggle-theme-btn ion-icon').forEach(icon => {
         icon.setAttribute('name', themeIcon);
     });
+}
+
+// v2.3: 介面字體大小 — 只放大字體（根層 font-size %），不縮放排版/位置（非放大鏡）
+const FONT_SCALE_MIN = 80, FONT_SCALE_MAX = 150, FONT_SCALE_STEP = 10;
+function applyFontScale(percent) {
+    const p = Math.min(FONT_SCALE_MAX, Math.max(FONT_SCALE_MIN, parseInt(percent, 10) || 100));
+    document.documentElement.style.fontSize = p + '%';
+    localStorage.setItem('ai_hud_font_scale', String(p));
+    const valEl = document.getElementById('admin-font-value');
+    if (valEl) valEl.textContent = p + '%';
+    return p;
 }
 
 function showToast(msg, isError = false) {
@@ -494,7 +543,7 @@ let deptChartInstance = null;
 let toolChartInstance = null;
 
 function switchAdminMainTab(tabId) {
-    document.querySelectorAll('.model-tabs button[id^="nav-tab-"]').forEach(btn => btn.classList.remove('active'));
+    document.querySelectorAll('.admin-side-tab').forEach(btn => btn.classList.remove('active'));
     document.getElementById('nav-tab-' + tabId).classList.add('active');
 
     document.querySelectorAll('.admin-tab-content').forEach(content => {
@@ -2240,6 +2289,100 @@ document.addEventListener('DOMContentLoaded', () => {
     applyTheme(currentTheme);
     applyTranslations();
 
+    // v2.3: 字體大小初始化 + A- / A+ 綁定
+    let currentFontScale = applyFontScale(localStorage.getItem('ai_hud_font_scale') || 100);
+    const fontDec = document.getElementById('admin-font-dec');
+    const fontInc = document.getElementById('admin-font-inc');
+    if (fontDec) fontDec.addEventListener('click', () => { currentFontScale = applyFontScale(currentFontScale - FONT_SCALE_STEP); });
+    if (fontInc) fontInc.addEventListener('click', () => { currentFontScale = applyFontScale(currentFontScale + FONT_SCALE_STEP); });
+
+    // v2.3: 管理者引導式教學（overlay + 高亮框 + 氣泡；5 步；原使用者介面 Unit 6 移入）
+    const GUIDE_STEPS = [
+        { t: 'tut_u6_s1_title', b: 'tut_u6_s1_body' },                                   // 居中歡迎
+        { t: 'tut_u6_s2_title', b: 'tut_u6_s2_body', sel: '#nav-tab-management' },
+        { t: 'tut_u6_s3_title', b: 'tut_u6_s3_body', sel: '#nav-tab-analytics' },
+        { t: 'tut_u6_s4_title', b: 'tut_u6_s4_body', sel: '#nav-tab-lab' },
+        { t: 'tut_u6_s5_title', b: 'tut_u6_s5_body', sel: '.admin-sidebar-actions' },
+    ];
+    let guideIdx = 0, guideHL = null;
+    const guideOverlay = document.getElementById('admin-guide-overlay');
+    const guideRing = document.getElementById('admin-guide-ring');
+    function guidePositionRing(el) {
+        if (!guideRing || !el) return;
+        const r = el.getBoundingClientRect(), gap = 5;
+        guideRing.style.top = (r.top - gap) + 'px';
+        guideRing.style.left = (r.left - gap) + 'px';
+        guideRing.style.width = (r.width + gap * 2) + 'px';
+        guideRing.style.height = (r.height + gap * 2) + 'px';
+        guideRing.classList.remove('hidden');
+    }
+    function guideClearRing() { if (guideRing) guideRing.classList.add('hidden'); guideHL = null; }
+    function guidePositionBubble(el) {
+        const wrap = document.getElementById('admin-guide-bubble-wrap');
+        if (!wrap) return;
+        if (!el) { wrap.style.left = '50%'; wrap.style.top = '50%'; wrap.style.transform = 'translate(-50%, -50%)'; return; }
+        wrap.style.transform = 'none';
+        const rect = el.getBoundingClientRect();
+        const bubble = document.getElementById('admin-guide-bubble');
+        const bb = bubble ? bubble.getBoundingClientRect() : { width: 320, height: 200 };
+        const bw = bb.width || 320, bh = bb.height || 200, gap = 16, margin = 12;
+        let left = rect.right + gap, top = rect.top;
+        if (left + bw > window.innerWidth - margin) left = rect.left - gap - bw;  // 右側放不下 → 左側
+        if (left < margin) { left = Math.max(margin, rect.left); top = rect.bottom + gap; }  // 左也不下 → 下方
+        if (top + bh > window.innerHeight - margin) top = Math.max(margin, window.innerHeight - bh - margin);
+        if (top < margin) top = margin;
+        wrap.style.left = Math.round(left) + 'px';
+        wrap.style.top = Math.round(top) + 'px';
+    }
+    function guideRender() {
+        const tr = TRANSLATIONS[currentLang] || {};
+        const step = GUIDE_STEPS[guideIdx];
+        const titleEl = document.getElementById('admin-guide-step-title');
+        const bodyEl = document.getElementById('admin-guide-step-body');
+        const badge = document.getElementById('admin-guide-badge');
+        const prevBtn = document.getElementById('admin-guide-prev');
+        const nextBtn = document.getElementById('admin-guide-next');
+        const bubble = document.getElementById('admin-guide-bubble');
+        if (!titleEl) return;
+        if (bubble) { bubble.style.visibility = 'hidden'; bubble.classList.remove('animate-in'); }
+        guideClearRing();
+        badge.textContent = (guideIdx + 1) + ' / ' + GUIDE_STEPS.length;
+        titleEl.textContent = tr[step.t] || '';
+        bodyEl.textContent = tr[step.b] || '';
+        prevBtn.style.visibility = guideIdx === 0 ? 'hidden' : 'visible';
+        const isLast = guideIdx === GUIDE_STEPS.length - 1;
+        nextBtn.querySelector('span').textContent = isLast ? (tr.guide_done || 'Done') : (tr.guide_next || 'Next');
+        requestAnimationFrame(() => {
+            let target = null;
+            if (step.sel) {
+                target = document.querySelector(step.sel);
+                if (target) { guidePositionRing(target); guideHL = target; }
+            }
+            guidePositionBubble(target);
+            if (guideOverlay) guideOverlay.classList.remove('hidden');
+            if (bubble) { bubble.style.visibility = 'visible'; void bubble.offsetWidth; bubble.classList.add('animate-in'); }
+        });
+    }
+    function guideOpen() { guideIdx = 0; guideRender(); }
+    function guideClose() { guideClearRing(); if (guideOverlay) guideOverlay.classList.add('hidden'); }
+    function guideNext() { if (guideIdx < GUIDE_STEPS.length - 1) { guideIdx++; guideRender(); } else { guideClose(); } }
+    function guidePrev() { if (guideIdx > 0) { guideIdx--; guideRender(); } }
+    const guideBtn = document.getElementById('admin-tutorial-btn');
+    if (guideBtn) guideBtn.addEventListener('click', guideOpen);
+    document.getElementById('admin-guide-next')?.addEventListener('click', guideNext);
+    document.getElementById('admin-guide-prev')?.addEventListener('click', guidePrev);
+    document.getElementById('admin-guide-abort')?.addEventListener('click', guideClose);
+    document.addEventListener('keydown', (e) => {
+        if (guideOverlay && !guideOverlay.classList.contains('hidden')) {
+            if (e.key === 'Escape') guideClose();
+            else if (e.key === 'ArrowRight' || e.key === 'Enter') guideNext();
+            else if (e.key === 'ArrowLeft') guidePrev();
+        }
+    });
+    const _guideTrack = () => { if (guideHL) { guidePositionRing(guideHL); guidePositionBubble(guideHL); } };
+    window.addEventListener('resize', _guideTrack);
+    window.addEventListener('scroll', _guideTrack, true);
+
     // Theme Toggle Binding
     document.querySelectorAll('.toggle-theme-btn').forEach(btn => {
         btn.addEventListener('click', () => {
@@ -2255,6 +2398,9 @@ document.addEventListener('DOMContentLoaded', () => {
             currentLang = currentLang === 'zh' ? 'en' : 'zh';
             localStorage.setItem('ai_hud_lang', currentLang);
             applyTranslations();
+            // v2.3: 導覽教學開啟時，切換語言一併重繪當前步驟（步驟文字由 JS 設定，非 data-i18n）
+            const gm = document.getElementById('admin-guide-overlay');
+            if (gm && !gm.classList.contains('hidden')) guideRender();
             // ZH: 若個人分析 Modal 正在顯示，重繪圖表使標籤套用新語系
             // EN: If the per-user analytics modal is open, re-render charts with updated labels
             const uaModal = document.getElementById('user-analytics-modal');

@@ -64,6 +64,8 @@ const TRANSLATIONS = {
         settings_appearance: "外觀視覺",
         label_theme: "佈景主題",
         btn_toggle_theme: "切換深淺模式",
+        label_font_size: "介面字體大小",
+        btn_font_reset: "重設",
         settings_language: "語言與區域",
         label_lang: "系統語言",
         btn_toggle_lang: "切換中英文",
@@ -172,8 +174,6 @@ const TRANSLATIONS = {
         tut_u4_desc: "幫你的 API key 加密存放，啟動容器時自動注入環境變數。",
         tut_u5_title: "AI 助手怎麼用",
         tut_u5_desc: "從側邊欄 AI 助手 → 開新對話。Token 用量、何時用得到 AI 都會講。",
-        tut_u6_title: "管理員專屬",
-        tut_u6_desc: "Admin UI 在 port 8888，使用者管理、Token 配額、公告管理都在那邊。",
         // === Unit 2 steps ===
         tut_u2_s1_title: "📝 介紹",
         tut_u2_s1_body: "你已經會開 Notebook 了 (Unit 1)。這個 unit 教你用 VS Code 建檔、寫程式、執行。前提：你的 Notebook 容器要在跑。",
@@ -212,17 +212,7 @@ const TRANSLATIONS = {
         tut_u5_s3_body: "問問題寫具體場景。例: 「我有一個 list of dicts 要按某個 key 排序」比「python 怎麼排序」好得多。AI 不知道你的程式，要附上 code snippet。",
         tut_u5_s4_title: "🎉 Token 用量",
         tut_u5_s4_body: "每次對話消耗 token，設定頁可看月配額和剩餘量。額度用完請聯絡老師或 admin 加額。約略: 1 中文字 ≈ 1.5 token。",
-        // === Unit 6 steps (admin only) ===
-        tut_u6_s1_title: "👤 Admin UI 在 port 8888",
-        tut_u6_s1_body: "管理員專用介面在 http://localhost:8888 (這個 user UI 在 :80)。從瀏覽器另開分頁進去，用同樣的 admin 帳號登入。",
-        tut_u6_s2_title: "Step 2 — 使用者管理",
-        tut_u6_s2_body: "「使用者管理」分頁: 看所有帳號的線上狀態、Token 用量、最後登入時間。可以 Provision 新帳號、停用 / 啟用。",
-        tut_u6_s3_title: "Step 3 — Token 配額調整",
-        tut_u6_s3_body: "在使用者管理裡，每個帳號可調整月配額 (預設 5M)。也可以批次匯入 .csv 一次調很多人 (見 docs/04-operations.md)。",
-        tut_u6_s4_title: "Step 4 — 公告 + Excel 匯出",
-        tut_u6_s4_body: "「公告管理」分頁可動態增刪首頁公告 (v2.2+)。「📊 匯出」按鈕可勾選欄位匯出 Excel/CSV，做開學分發或期末備份。",
-        tut_u6_s5_title: "🎉 完成",
-        tut_u6_s5_body: "更多 admin 功能在 docs/04-operations.md。記得 admin 帳號開學前換強密碼。",
+        // v2.3: Unit 6（管理員專屬）steps 已移至 admin-ui
         // 首頁 & 面板
         nav_home: "首頁",
         nav_docs: "文件庫",
@@ -428,6 +418,8 @@ const TRANSLATIONS = {
         settings_appearance: "Appearance",
         label_theme: "Theme Mode",
         btn_toggle_theme: "Toggle Theme",
+        label_font_size: "Interface Font Size",
+        btn_font_reset: "Reset",
         settings_language: "Localization",
         label_lang: "System Language",
         btn_toggle_lang: "Switch Lang",
@@ -536,8 +528,6 @@ const TRANSLATIONS = {
         tut_u4_desc: "Encrypt API keys; the platform injects them as env vars when your container starts.",
         tut_u5_title: "How to use AI Assistant",
         tut_u5_desc: "Sidebar → AI Assistant → New chat. Covers token usage and when AI actually helps.",
-        tut_u6_title: "Admin tools",
-        tut_u6_desc: "Admin UI on port 8888: user management, token quotas, announcements.",
         // === Unit 2 steps ===
         tut_u2_s1_title: "📝 Intro",
         tut_u2_s1_body: "You already know how to open a Notebook (Unit 1). This unit teaches you to create files, write code, and run them in VS Code. Prereq: your Notebook container is running.",
@@ -576,17 +566,7 @@ const TRANSLATIONS = {
         tut_u5_s3_body: "Be specific. \"Sort this list of dicts by a key\" is way better than \"how to sort in python\". AI doesn't know your code — paste snippets.",
         tut_u5_s4_title: "🎉 Token usage",
         tut_u5_s4_body: "Each chat costs tokens. Check Settings → Token Resources for your monthly quota and remaining. If out, ask your teacher or admin. ~1 English word ≈ 1.3 tokens.",
-        // === Unit 6 steps (admin only) ===
-        tut_u6_s1_title: "👤 Admin UI on port 8888",
-        tut_u6_s1_body: "Admin-only interface at http://localhost:8888 (user UI is on :80). Open it in a new browser tab, log in with the same admin credentials.",
-        tut_u6_s2_title: "Step 2 — User management",
-        tut_u6_s2_body: "\"Users\" tab: see all accounts' online status, token usage, last login. Provision new accounts, disable/enable, reset password.",
-        tut_u6_s3_title: "Step 3 — Token quota",
-        tut_u6_s3_body: "In Users tab, adjust per-account monthly quota (default 5M). Bulk CSV import also supported (see docs/04-operations.md).",
-        tut_u6_s4_title: "Step 4 — Announcements + Excel export",
-        tut_u6_s4_body: "\"Announcements\" tab manages homepage announcements (v2.2+). \"📊 Export\" button: pick columns, export Excel/CSV for term backup or onboarding.",
-        tut_u6_s5_title: "🎉 Done",
-        tut_u6_s5_body: "More admin features in docs/04-operations.md. Remember to set a strong admin password before term starts.",
+        // v2.3: Unit 6 (admin-only) steps moved to admin-ui
         // Home & Drawer
         nav_home: "Home",
         nav_docs: "Documents",
@@ -837,9 +817,20 @@ const submitJobBtn = document.getElementById('submit-job-btn');
 document.addEventListener('DOMContentLoaded', () => {
     applyTheme(currentTheme);
     applyLanguage(currentLang);
+    applyFontScale(localStorage.getItem('ai_hud_font_scale') || 100);
     renderSessions();
     if (authToken) {
         checkAuth();
+    }
+
+    // v2.3: 字體大小 slider / reset 綁定
+    const fontSlider = document.getElementById('font-scale-slider');
+    if (fontSlider) {
+        fontSlider.addEventListener('input', (e) => applyFontScale(e.target.value));
+    }
+    const fontReset = document.getElementById('font-scale-reset');
+    if (fontReset) {
+        fontReset.addEventListener('click', () => applyFontScale(100));
     }
 
     // ZH: 設定頁面事件綁定 | EN: Settings Page Event Binding
@@ -1274,14 +1265,18 @@ function switchTab(tabId) {
 //  · 開始教學時鎖住背景滾動避免 highlight 漂掉
 // ============================================================
 const TutorialEngine = (() => {
-    const STORAGE_KEY = 'ai_hud_tutorial_progress';
+    // v2.3: 進度依帳號區分 — 鍵帶 username，避免同瀏覽器多帳號共用完成狀態
+    function _storageKey() {
+        const u = window.currentUsername || (window.currentUserData && window.currentUserData.id) || '_guest';
+        return 'ai_hud_tutorial_progress_' + u;
+    }
     let _progress = {};
     let _activeUnit = null;
     let _stepIdx = 0;
     let _highlightedEl = null;
 
     function _loadProgress() {
-        try { _progress = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}'); }
+        try { _progress = JSON.parse(localStorage.getItem(_storageKey()) || '{}'); }
         catch (_) { _progress = {}; }
     }
     _loadProgress();
@@ -1401,19 +1396,7 @@ const TutorialEngine = (() => {
                 { type: 'modal', titleKey: 'tut_u5_s4_title', bodyKey: 'tut_u5_s4_body' },
             ],
         },
-        // Unit 6 — 管理員專屬 (admin only)
-        {
-            id: 'admin-tools',
-            titleKey: 'tut_u6_title', descKey: 'tut_u6_desc',
-            durationMin: 3, icon: 'shield-checkmark-outline', adminOnly: true,
-            steps: [
-                { type: 'modal', titleKey: 'tut_u6_s1_title', bodyKey: 'tut_u6_s1_body' },
-                { type: 'modal', titleKey: 'tut_u6_s2_title', bodyKey: 'tut_u6_s2_body' },
-                { type: 'modal', titleKey: 'tut_u6_s3_title', bodyKey: 'tut_u6_s3_body' },
-                { type: 'modal', titleKey: 'tut_u6_s4_title', bodyKey: 'tut_u6_s4_body' },
-                { type: 'modal', titleKey: 'tut_u6_s5_title', bodyKey: 'tut_u6_s5_body' },
-            ],
-        },
+        // v2.3: 原 Unit 6「管理員專屬」已移至 admin-ui 的引導式教學（管理側邊欄 ⓘ 導覽）
     ];
 
     function _visibleUnits() {
@@ -1617,7 +1600,7 @@ const TutorialEngine = (() => {
         if (!_activeUnit) return;
         const id = _activeUnit.id;
         _progress[id] = { completedAt: new Date().toISOString() };
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(_progress));
+        localStorage.setItem(_storageKey(), JSON.stringify(_progress));
         abort();
         // 完成後重開 Tutorial Center，讓使用者看見「✓ 已完成」+ 挑下一個
         requestAnimationFrame(openCenter);
@@ -1628,6 +1611,7 @@ const TutorialEngine = (() => {
     function openCenter() {
         const m = document.getElementById('tutorial-center-modal');
         if (!m) return;
+        _loadProgress();   // v2.3: 依當前登入帳號重新載入進度（IIFE 初次載入時尚未登入）
         renderCenter();
         m.classList.remove('hidden');
     }
@@ -1773,6 +1757,19 @@ function applyTheme(theme) {
     });
 }
 
+// v2.3: 介面字體大小 — 只放大字體（根層 font-size %），不縮放排版/位置（非放大鏡）
+//        body 未設 font-size，故 % 會自然 cascade 到繼承字級；px 間距/版面位置維持不變
+const FONT_SCALE_MIN = 80, FONT_SCALE_MAX = 150;
+function applyFontScale(percent) {
+    const p = Math.min(FONT_SCALE_MAX, Math.max(FONT_SCALE_MIN, parseInt(percent, 10) || 100));
+    document.documentElement.style.fontSize = p + '%';
+    localStorage.setItem('ai_hud_font_scale', String(p));
+    const slider = document.getElementById('font-scale-slider');
+    const valEl = document.getElementById('font-scale-value');
+    if (slider && slider.value !== String(p)) slider.value = String(p);
+    if (valEl) valEl.textContent = p + '%';
+}
+
 function applyLanguage(lang) {
     localStorage.setItem('ai_hud_lang', lang);
     const dict = TRANSLATIONS[lang];
@@ -1798,11 +1795,16 @@ function t(key) {
     return (TRANSLATIONS[currentLang] && TRANSLATIONS[currentLang][key]) || key;
 }
 
-function showToast(msgKey, isError = false) {
+function showToast(msgKey, type = false) {
     if (!toastMsg) return;
     toastMsg.textContent = t(msgKey);
-    toastIcon.innerHTML = isError ? '<ion-icon name="warning-outline" style="color:#fb7185"></ion-icon>' : '<ion-icon name="checkmark-circle-outline" style="color:var(--accent-glow)"></ion-icon>';
-    toastEl.style.borderColor = isError ? '#fb7185' : 'var(--border-color)';
+    // type: true / 'error' / 'warning' → 紅；'success' → 綠；false / 預設 → 中性
+    const isError = type === true || type === 'error' || type === 'warning';
+    const isSuccess = type === 'success';
+    const color = isError ? '#fb7185' : (isSuccess ? '#10b981' : 'var(--accent-glow)');
+    const icon = isError ? 'warning-outline' : 'checkmark-circle-outline';
+    toastIcon.innerHTML = `<ion-icon name="${icon}" style="color:${color}"></ion-icon>`;
+    toastEl.style.borderColor = isError ? '#fb7185' : (isSuccess ? '#10b981' : 'var(--border-color)');
     toastEl.classList.remove('hidden');
     setTimeout(() => { toastEl.classList.add('hidden'); }, 3000);
 }
