@@ -2,6 +2,10 @@
 
 > 本文件以 Mermaid 語法繪製專案完整架構，可直接在 GitHub / VS Code / Obsidian 等支援 Mermaid 的工具中渲染。
 > 2026-06 二次重新設計：#2 三層架構（拆除巢狀 subgraph、精簡連線標籤，徹底消除連線覆蓋方塊）、#8 / #10 循序圖（階段標題改置於左側 margin `Note left of`，並縮短自訊息與箭頭標籤避免壓字）。
+>
+> **v2.4 對齊提醒**：本檔為「圖表集」；**最新且最完整**的架構與「各模組分布與交互」請見
+> [`../02-architecture.md`](../02-architecture.md)（§1 三層、**§1.5 服務層模組分布與交互 Component Map**、§6 容器網路、§7 API 地圖）。
+> 重點差異：Portkey OSS 監聽 **:8787**（header 路由、Ollama 經 `x-portkey-custom-host`）、新增 `/api/v1/models` 動態模型清單、`agent_dispatcher`/`document_generator` 文書簡報、Lab 就緒偵測、GPU per-card telemetry。
 
 ## 📑 目錄 | Table of Contents
 1. [檔案結構樹（Project File Tree）](#1-檔案結構樹-project-file-tree)

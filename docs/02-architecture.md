@@ -2,6 +2,8 @@
 
 三層分離設計：**工作站 → 服務層 → GPU 高階伺服器**。本文件全面以 **Mermaid** 繪製（GitHub / VS Code「Markdown Preview Mermaid Support」/ Obsidian 皆可直接渲染）。
 
+> **v2.4 更新**：對齊實際部署 — Portkey OSS 監聽 **:8787**（header 路由、Ollama 經 `x-portkey-custom-host`）、新增**動態模型清單**模組（`/api/v1/models` + `Model.tool_types`）、**文書簡報 agent**（`agent_dispatcher` + `document_generator`）、**Lab 就緒偵測**、**GPU per-card telemetry**。新增 §1.5「服務層模組分布與交互」總覽各模組與互動。本機完整部署步驟見 [`00-本機完整部署指南.md`](00-本機完整部署指南.md)。
+
 ---
 
 ## 1. 整體架構（三層）
@@ -22,9 +24,10 @@ flowchart TB
         FA["Job Scheduler<br/>FastAPI :8002"]
         SCH["scheduler.py<br/>背景排程"]
         DB[("SQLite DB<br/>ai_platform.db")]
-        PKG["Portkey Gateway :8000<br/>LLM 閘道"]
-        OL["Ollama / vLLM<br/>本地模型"]
+        PKG["Portkey Gateway :8787<br/>LLM 閘道 (header 路由)"]
+        OL["Ollama :11434 (GPU)<br/>本地模型"]
         OWUI["Open WebUI :3000<br/>備用入口"]
+        CS["code-server cs-&lt;uid&gt;<br/>per-user Lab 容器 (動態)"]
     end
 
     subgraph L3["第三層：GPU 高階伺服器 Win11 + WSL2 / Ubuntu"]
@@ -46,11 +49,13 @@ flowchart TB
     FA --- DB
     SCH --> DB
     FA -->|SSE 代理| PKG
-    PKG --> OL
-    PKG --> EXT
+    FA -.->|Docker SDK 啟動/就緒偵測| CS
+    NGX -->|/code/&lt;uid&gt;/ auth_request 代理| CS
+    PKG -->|custom-host| OL
+    PKG -.->|選用| EXT
     OWUI -.->|備用| PKG
 
-    WK -->|輪詢 + 心跳| FA
+    WK -->|輪詢 + 心跳 + GPU telemetry| FA
     WK --> NV
     WK --> DC
     DC -->|--gpus device=N| STG
@@ -60,7 +65,7 @@ flowchart TB
     classDef l3 fill:#ffe6cc,stroke:#d79b00
     classDef ext fill:#f8cecc,stroke:#b85450
     class U l1
-    class NGX,WebFE,AdmFE,FA,SCH,DB,PKG,OL,OWUI l2
+    class NGX,WebFE,AdmFE,FA,SCH,DB,PKG,OL,OWUI,CS l2
     class EXT ext
     class WK,NV,DC,STG l3
 ```
@@ -69,6 +74,109 @@ flowchart TB
 - GPU 節點 **Pull**（主動領取）→ 無需開放對外 port、藏在 NAT 後仍可用
 - 服務層**沒有**GPU 節點的 SSH 私鑰 → 服務層被駭頂多塞惡意任務、不能登入 GPU 機
 - 訓練容器都是 `--rm` → 結束即清空、惡意腳本最多污染 container 不污染 host
+
+---
+
+## 1.5 服務層模組分布與交互（Component Map）
+
+> 服務層（Job Scheduler）內部分層「routers（HTTP 端點）→ services（商業邏輯）→ crud（ORM）→ SQLite」，
+> 以及與 AI 推理、GPU 節點、per-user Lab 容器的互動。是「各模組分布與交互」的總覽。
+
+```mermaid
+flowchart TB
+    subgraph CLI["前端 SPA（Nginx 靜態）"]
+        WUI["web-ui<br/>chat · 文書簡報 · Notebook · 設定"]
+        AUI["admin-ui<br/>使用者 · 模型 · Lab · 分析"]
+    end
+
+    subgraph SCHED["Job Scheduler — FastAPI :8002"]
+        direction TB
+        subgraph R["routers/ — HTTP 端點"]
+            rAuth["auth · sso"]
+            rChat["chat (SSE)"]
+            rModels["models（動態清單）"]
+            rJobs["jobs"]
+            rLab["lab"]
+            rSec["secrets"]
+            rAdmin["admin"]
+            rWk["worker (API Token)"]
+            rEtc["announcements · datasets · system"]
+        end
+        subgraph SV["services/ — 商業邏輯"]
+            sDisp["agent_dispatcher<br/>簡報 system prompt + 生成契約"]
+            sDoc["document_generator<br/>spec → .pptx → put_archive"]
+            sLab["lab_manager<br/>code-server 生命週期 + 就緒偵測"]
+            sSec["secrets_service<br/>AES-256-GCM"]
+            sQuota["quota_service"]
+            sStore["storage_lifecycle"]
+            sSched["scheduler<br/>背景：超時 / Lab idle / 儲存"]
+            sMail["email_service"]
+        end
+        CRUD["crud — ORM 封裝"]
+    end
+
+    DB[("SQLite ai_platform.db<br/>users · models · training_jobs<br/>lab_sessions · chat_history<br/>secrets · worker_heartbeats · …")]
+
+    subgraph AIM["AI 推理 — docker-compose.ai-models"]
+        PK["Portkey :8787<br/>(header 路由)"]
+        OLL["Ollama :11434 (GPU)"]
+        EXTA["外部 API（選用）<br/>Anthropic / OpenAI / Google"]
+    end
+
+    subgraph GPUN["GPU 節點 — gpu-worker"]
+        WORK["worker.py<br/>pull + nvidia-smi telemetry"]
+        TRAIN["訓練容器 --gpus<br/>(aibase/* sibling)"]
+    end
+
+    CSV["code-server cs-&lt;uid&gt;<br/>per-user Lab 容器"]
+
+    WUI --> R
+    AUI --> R
+    R --> CRUD
+    CRUD --> DB
+
+    rChat --> sDisp
+    sDisp --> sDoc
+    rChat -->|x-portkey-custom-host| PK
+    sDoc -->|put_archive .pptx| CSV
+    rModels --> CRUD
+    rLab --> sLab
+    sLab -->|Docker SDK run| CSV
+    sLab -.->|就緒探測 :8080| CSV
+    rSec --> sSec
+    rAdmin --> sLab
+    rAdmin --> sStore
+    rAdmin --> sQuota
+    sSched --> CRUD
+
+    PK -->|custom-host| OLL
+    PK -.-> EXTA
+    WORK -->|/worker/take · /heartbeat| rWk
+    WORK -->|docker run --gpus| TRAIN
+
+    classDef fe fill:#dae8fc,stroke:#6c8ebf
+    classDef rt fill:#d5e8d4,stroke:#82b366
+    classDef sv fill:#fff2cc,stroke:#d6b656
+    classDef ext fill:#f8cecc,stroke:#b85450
+    class WUI,AUI fe
+    class rAuth,rChat,rModels,rJobs,rLab,rSec,rAdmin,rWk,rEtc rt
+    class sDisp,sDoc,sLab,sSec,sQuota,sStore,sSched,sMail sv
+    class PK,OLL,EXTA,WORK,TRAIN ext
+```
+
+**模組職責對照**：
+
+| 層 | 模組 | 職責 |
+|---|---|---|
+| routers | `chat` | LLM 對話 SSE 代理；偵測 `tool_type` → 走簡報 dispatch |
+| routers | `models` | `GET /api/v1/models?tool_type=` 動態回傳「公開且適用該工具」的模型 |
+| routers | `lab` | 啟動/停止 code-server、`_authz`（給 nginx auth_request）|
+| routers | `worker` | GPU 節點 pull 任務、回報進度、心跳 + per-GPU telemetry |
+| services | `agent_dispatcher` | 依 tool_type 注入專項 system prompt + 生成契約標記（PPTX_SPEC）|
+| services | `document_generator` | AI spec → python-pptx 渲染 → `put_archive` 進 Lab 容器 `/home/coder/outputs/` |
+| services | `lab_manager` | code-server 容器生命週期、就緒偵測 `_wait_until_ready`（避免開頁 503）|
+| services | `storage_lifecycle` | 使用者儲存 freeze/archive/restore、`list_states` |
+| services | `scheduler` | 背景任務：訓練超時清理、Lab idle 驅逐、儲存生命週期掃描 |
 
 ---
 
@@ -251,6 +359,7 @@ erDiagram
         int     size_bytes
         string  uploaded_by FK
         int     is_public
+        string  tool_types "v2.4 CSV chat,presentation"
         string  api_provider
         string  api_endpoint
         string  api_model_id
@@ -279,6 +388,7 @@ erDiagram
         string  node_id PK
         text    available_gpus "JSON array"
         float   gpu_utilization
+        text    gpus_detail "v2.4 per-GPU name/util/temp/mem JSON"
         datetime last_seen
         int     is_online
     }
@@ -348,9 +458,10 @@ flowchart LR
         direction TB
         N1["ai-platform-nginx<br/>:80 / :8888"]
         N2["ai-platform-scheduler<br/>:8002"]
-        N3["ai-platform-portkey<br/>:8000"]
-        N4["ai-platform-ollama<br/>:11434"]
+        N3["ai-platform-portkey<br/>:8787"]
+        N4["ai-platform-ollama<br/>:11434 (GPU)"]
         N5["ai-platform-webui<br/>(open-webui :3000)"]
+        N6["cs-&lt;uid&gt;<br/>per-user Lab (動態, scheduler 經 docker.sock 建)"]
     end
 
     subgraph Vols["Docker Volumes"]
@@ -366,13 +477,19 @@ flowchart LR
     subgraph Compose["Compose 檔案"]
         C1["docker-compose.yml<br/>(核心)"]
         C2["docker-compose.ai-models.yml<br/>(AI Models)"]
+        C3["docker-compose.ai-models.gpu.yml<br/>(Ollama GPU override, 選用)"]
+        C4["gpu-worker/docker-compose.yml<br/>(GPU 節點, 獨立)"]
     end
+
+    WK2["mcu-gpu-worker<br/>(host.docker.internal:8002)"]
 
     C1 --> N1
     C1 --> N2
     C2 --> N3
     C2 --> N4
     C2 --> N5
+    C3 -. "GPU 疊加" .-> N4
+    C4 --> WK2
 
     N1 --> V2
     N1 --> V3
@@ -381,15 +498,20 @@ flowchart LR
     N5 --> V5
     N4 --> V6
     N3 --> V7
+    N2 -. "docker.sock 建/管" .-> N6
 
     N1 -. "depends_on" .-> N2
     N5 -. "depends_on" .-> N3
     N3 -. "depends_on" .-> N4
+    WK2 -. "pull/heartbeat" .-> N2
 
-    Host(["🖥️ Host: Ubuntu / Windows"]) -->|":80"| N1
+    Host(["🖥️ Host: Ubuntu / Windows + NVIDIA"]) -->|":80"| N1
     Host -->|":8888 Admin"| N1
     Host -->|":3000 Open WebUI"| N5
 ```
+
+> 注意：`gpu-worker` 為**獨立 compose / 獨立網路**，透過 host 的 `:8002`（同機用 `host.docker.internal`）連服務層；
+> 它不在 `ai-platform-net` 內。`cs-<uid>` 由 scheduler 經 `docker.sock` 動態建立並掛 `ai-platform-net`。
 
 ---
 
@@ -415,14 +537,17 @@ flowchart LR
     ChatGrp --> CH1["POST /completions (SSE)"]
     ChatGrp --> CH2["GET /history"]
 
+    API --> ModelsGrp["models/ (v2.4)"]
+    ModelsGrp --> MD1["GET /?tool_type=（動態模型清單）"]
+
     API --> LabGrp["lab/"]
     LabGrp --> LB1["start / stop / status / heartbeat / _authz"]
 
     API --> SecGrp["secrets/"]
     SecGrp --> SC1["CRUD (AES-256-GCM)"]
 
-    API --> NBGrp["notebooks/"]
-    NBGrp --> NB1["GET /mine · PUT /mine · GET /nodes"]
+    API --> AnnGrp["announcements/"]
+    AnnGrp --> AN1["GET（user）· admin CRUD"]
 
     API --> WkGrp["worker/<br/>API Token"]
     WkGrp --> W1["take / jobs/:id/update / heartbeat"]
@@ -439,11 +564,13 @@ flowchart LR
 | `/api/v1/auth/*` | 註冊、登入、登出、forgot-password、me、usage | JWT |
 | `/api/v1/sso/*` | OIDC login/callback、mock login、providers | 無（callback 後簽 JWT） |
 | `/api/v1/jobs/*` | 提交/查/取消 GPU 任務、SSE 進度 | JWT |
-| `/api/v1/chat/*` | LLM 對話、聊天歷史、SSE 串流 | JWT |
+| `/api/v1/chat/*` | LLM 對話、聊天歷史、SSE 串流（含 `tool_type` 簡報 dispatch）| JWT |
+| `/api/v1/models/*` | **(v2.4)** 依 `tool_type` 動態回傳公開模型清單 | JWT |
 | `/api/v1/datasets/*` | 資料集上傳、自動分析 | JWT |
-| `/api/v1/lab/*` | 啟動/停止 lab session、status、heartbeat、`_authz` | JWT / cookie |
+| `/api/v1/lab/*` | 啟動/停止 lab session、status、heartbeat、`_authz`（含就緒偵測）| JWT / cookie |
 | `/api/v1/secrets/*` | 使用者 AES-256-GCM secrets CRUD | JWT |
-| `/api/v1/admin/*` | 使用者管理、配額 grant、storage、audit | JWT (admin) |
+| `/api/v1/announcements/*` | 首頁公告（user 讀）+ admin CRUD | JWT |
+| `/api/v1/admin/*` | 使用者管理、配額、模型(tool_types)、storage、lab/sessions、cluster/stats、audit | JWT (admin) |
 | `/api/v1/worker/*` | Pull 任務、更新進度、heartbeat | API_TOKEN（與 .env 對齊） |
 | `/api/v1/system/*` | 系統設定、健康檢查 | JWT (admin) |
 
@@ -641,7 +768,7 @@ sequenceDiagram
         WK->>API: POST /worker/take
         API->>DB: 原子搶佔 + 節點過濾
         API-->>WK: job_id / code / image
-        WK->>WK: 寫 run.sh → docker run
+        WK->>WK: docker run --gpus + bash -c inline_code
         loop 訓練中
             WK-->>API: PUT update (log, progress)
             API-->>FE: SSE: log / progress
@@ -717,9 +844,24 @@ classDiagram
     class RouterJobs
     class RouterWorker
     class RouterChat
+    class RouterModels
     class RouterAdmin
-    class RouterNotebooks
     class RouterLab
+    class RouterSecrets
+
+    class AgentDispatcher {
+        +is_dispatch_tool()
+        +get_agent_config()
+    }
+    class DocumentGenerator {
+        +generate_presentation()
+    }
+    class LabManager {
+        +start_session()
+        +_wait_until_ready()
+        +list_all_sessions()
+        +stop_session()
+    }
 
     class User {
         +id, username, email
@@ -730,13 +872,17 @@ classDiagram
         +docker_image, inline_code
         +entry_args, preferred_node
     }
-    class Notebook {
-        +id, user_id
-        +cells, environment
+    class Model {
+        +id, name, tool_types
+        +is_public, api_model_id
+    }
+    class LabSession {
+        +user_id, container_name
+        +status, base_image
     }
     class WorkerHeartbeat {
         +node_id, available_gpus
-        +last_seen
+        +gpus_detail, last_seen
     }
 
     FastAPIApp --> Settings : reads
@@ -746,14 +892,19 @@ classDiagram
     FastAPIApp --> RouterWorker : mounts
     FastAPIApp --> RouterChat : mounts
     FastAPIApp --> RouterAdmin : mounts
-    FastAPIApp --> RouterNotebooks : mounts
+    FastAPIApp --> RouterModels : mounts
     FastAPIApp --> RouterLab : mounts
+    FastAPIApp --> RouterSecrets : mounts
     FastAPIApp --> Scheduler : starts
+
+    RouterChat ..> AgentDispatcher : presentation dispatch
+    AgentDispatcher ..> DocumentGenerator : spec → pptx
+    RouterLab ..> LabManager : 容器生命週期 + 就緒偵測
 
     RouterAuth --> CRUD
     RouterJobs --> CRUD
     RouterWorker --> CRUD
-    RouterNotebooks --> CRUD
+    RouterModels --> CRUD
 
     RouterAuth ..> Auth : uses
     RouterJobs ..> Auth : uses
@@ -762,8 +913,9 @@ classDiagram
     CRUD --> Database : Session
     CRUD --> User : ORM
     CRUD --> TrainingJob : ORM
-    CRUD --> Notebook : ORM
+    CRUD --> Model : ORM
     CRUD --> WorkerHeartbeat : ORM
+    LabManager --> LabSession : ORM
 
     Scheduler --> Database : Session
     Scheduler --> TrainingJob : timeout
