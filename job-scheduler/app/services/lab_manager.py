@@ -201,6 +201,27 @@ def get_lifecycle() -> CodeServerLifecycle:
 # EN: High-level API — called by routers & scheduler
 # ==============================================================================
 
+def _wait_until_ready(container_name: str, timeout: float = 25.0, interval: float = 0.7) -> bool:
+    """ZH: 輪詢 code-server(容器:8080) 直到能服務，避免容器剛起、前端就開頁面 → 503。
+       EN: Poll code-server (container:8080) until it serves, so the new tab won't 503.
+       任何 <500 的 HTTP 回應(200/302/401)都代表 code-server 已在服務。"""
+    import time as _time
+    import httpx
+    url = f"http://{container_name}:8080/"
+    deadline = _time.monotonic() + timeout
+    while _time.monotonic() < deadline:
+        try:
+            r = httpx.get(url, timeout=2.0, follow_redirects=False)
+            if r.status_code < 500:
+                logger.info("code-server %s ready (HTTP %d)", container_name, r.status_code)
+                return True
+        except Exception:
+            pass
+        _time.sleep(interval)
+    logger.warning("code-server %s not ready after %.0fs (returning anyway)", container_name, timeout)
+    return False
+
+
 def start_session(db: Session, user_id: str, base_image: Optional[str] = None) -> dict:
     """
     ZH: 啟動使用者的 code-server session（含配額檢查、secrets 注入、DB 紀錄）
@@ -286,6 +307,8 @@ def start_session(db: Session, user_id: str, base_image: Optional[str] = None) -
 
     session.container_id = container_id
     session.container_name = container_name
+    # v2.4: 等 code-server HTTP 就緒再回傳，避免前端開分頁時容器尚未服務 → 503
+    _wait_until_ready(container_name, timeout=25.0)
     session.status = "running"
     session.cpu_quota = cpu_quota
     session.mem_quota_mb = mem_quota

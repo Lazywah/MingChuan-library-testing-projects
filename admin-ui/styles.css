@@ -2602,3 +2602,20 @@ ion-icon {
 #admin-guide-step-body { margin: 0 0 14px; color: var(--text-muted); }
 .tutorial-bubble-actions { display: flex; justify-content: space-between; gap: 8px; }
 .tutorial-bubble-actions button { padding: 6px 14px; font-size: 0.8125rem; margin: 0; }
+
+
+/* v2.4: 非教學彈窗統一為「使用者介面登入彈窗(.form-box)」風格 —
+   2px 邊框 + 20px 圓角 + 玻璃面板；admin 各 modal 套用後與 user 登入彈窗一致。
+   hover 只改 border-color + box-shadow(不動 animation) → 無 fadeIn 重播、不閃爍。 */
+.tutorial-content.login-modal {
+    border: 2px solid var(--border-color);
+    border-radius: 20px;
+    background: var(--bg-panel);
+    -webkit-backdrop-filter: blur(20px);
+    backdrop-filter: blur(20px);
+    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.5);
+}
+.tutorial-content.login-modal:hover {
+    border-color: var(--border-glow-color);
+    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.5), 0 0 22px var(--border-glow-color);
+}

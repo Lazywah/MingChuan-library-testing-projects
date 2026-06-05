@@ -2982,21 +2982,42 @@ const Lab = (() => {
         openBtn.disabled = true;
         _setStatusText(_t('lab_status_starting', '啟動中… Starting…'), 'warn');
 
+        // v2.4: 在「使用者點擊手勢」內先開好分頁(避免被瀏覽器擋彈窗)，顯示啟動中；
+        //       後端會等 code-server 就緒才回傳，回傳後再把此分頁導向 Notebook → 不再 503。
+        const win = window.open('', '_blank');
+        if (win) {
+            try { win.opener = null; } catch (_) {}
+            try {
+                win.document.write('<!doctype html><html><head><meta charset="utf-8"><title>Notebook</title></head>'
+                    + '<body style="margin:0;height:100vh;display:flex;align-items:center;justify-content:center;'
+                    + 'font-family:system-ui,sans-serif;background:#0e032a;color:#fff;">'
+                    + '<div style="text-align:center"><div style="font-size:22px">⏳ Notebook 啟動中…</div>'
+                    + '<div style="opacity:.65;margin-top:10px">容器啟動需數秒，就緒後會自動載入</div></div></body></html>');
+            } catch (_) {}
+        }
+
         try {
             const resp = await _api('/start', {
                 method: 'POST',
                 body: JSON.stringify({ base_image: image }),
             });
             _state = resp.status || 'starting';
-            // ZH: 服務層回傳 code_url 直接跳轉 | EN: Service returned code_url → open
-            if (resp.code_url) {
-                window.open(resp.code_url, '_blank', 'noopener');
-            } else if (userId) {
-                window.open(`/code/${userId}/`, '_blank', 'noopener');
+            const target = resp.code_url || (userId ? `/code/${userId}/` : null);
+            if (win && target) {
+                win.location.replace(target);            // 後端已確認就緒 → 導向，不會 503
+            } else if (target) {
+                window.open(target, '_blank', 'noopener'); // 分頁被擋時退回直接開
+            } else if (win) {
+                win.close();
             }
-            // 啟動後輪詢狀態直到 running
             _startPolling();
         } catch (e) {
+            if (win) {
+                try {
+                    win.document.body.innerHTML = '<div style="text-align:center;font-family:system-ui,sans-serif;color:#fff">'
+                        + '❌ 啟動失敗，請關閉此分頁後重試<br><small style="opacity:.6">' + (e.message || '') + '</small></div>';
+                } catch (_) { try { win.close(); } catch (__) {} }
+            }
             _setStatusText(`${_t('lab_status_error', '啟動失敗 Failed')}: ${e.message}`, 'error');
         } finally {
             openBtn.disabled = false;

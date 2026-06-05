@@ -2883,3 +2883,18 @@ ion-icon {
 [style*="font-size:28px"],[style*="font-size: 28px"]{font-size:1.75rem !important;}
 [style*="font-size:30px"],[style*="font-size: 30px"]{font-size:1.875rem !important;}
 [style*="font-size:48px"],[style*="font-size: 48px"]{font-size:3rem !important;}
+
+
+/* v2.4: 非教學彈窗統一為「使用者介面登入彈窗(.form-box)」風格 —
+   2px 邊框 + 20px 圓角 + 玻璃面板(bg-panel + blur20)。
+   只套用帶 .login-modal 的彈窗(profile/password/job-details)；引導式教學
+   (tutorial center / overlay / 歡迎 modal) 不帶此 class，故不受影響。
+   hover 發光沿用既有 .tutorial-content.form-box-panel:hover 修正(無閃爍)。 */
+.tutorial-content.login-modal {
+    border: 2px solid var(--border-color);
+    border-radius: 20px;
+    background: var(--bg-panel);
+    -webkit-backdrop-filter: blur(20px);
+    backdrop-filter: blur(20px);
+    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.5);
+}
