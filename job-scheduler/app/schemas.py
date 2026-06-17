@@ -428,3 +428,55 @@ class AnnouncementResponse(BaseModel):
     updated_at: Optional[datetime] = None
     is_pinned: int = 0
     is_visible: int = 1
+
+
+# ==============================================================================
+# ZH: 外部 AI 分流 Schema (v2.5) | EN: External AI routing schemas (v2.5)
+# ==============================================================================
+
+class ExternalAiAccountCreate(BaseModel):
+    """ZH: admin 建立對應 (以平台帳號名指定) | EN: Admin create mapping (by platform username)"""
+    platform_username: str
+    vendor_username: str
+    status: Optional[str] = "active"        # active / disabled
+    note: Optional[str] = None
+
+
+class ExternalAiAccountUpdate(BaseModel):
+    """ZH: admin 編輯對應 | EN: Admin update mapping"""
+    vendor_username: Optional[str] = None
+    status: Optional[str] = None
+    note: Optional[str] = None
+
+
+class ExternalAiAccountResponse(BaseModel):
+    """ZH: 對應表列項 (含平台帳號名，由 join 帶出) | EN: Mapping row (platform_username via join)"""
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    user_id: str
+    platform_username: Optional[str] = None
+    vendor_username: str
+    status: str = "active"
+    note: Optional[str] = None
+    updated_at: Optional[datetime] = None
+
+
+class ExternalAiMe(BaseModel):
+    """ZH: 使用者端取得自己的外部 AI 導流資訊 | EN: User-facing external-AI redirect info"""
+    url: str                                # ZH: 外部平台網址 (空=未啟用) | EN: vendor URL (empty=disabled)
+    vendor_username: Optional[str] = None   # ZH: 指派帳號 (未開通為 None) | EN: assigned account (None if not provisioned)
+    status: str                             # active / not_provisioned / disabled
+
+
+class ExternalAiUrl(BaseModel):
+    """ZH: 外部 AI 平台網址設定 | EN: External AI platform URL setting"""
+    url: str
+
+
+class ExternalAiImportResult(BaseModel):
+    """ZH: CSV 匯入結果 | EN: CSV import result"""
+    created: int = 0
+    updated: int = 0
+    skipped: int = 0
+    errors: List[str] = Field(default_factory=list)

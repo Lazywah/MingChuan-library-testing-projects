@@ -235,4 +235,22 @@ def init_db():
     except Exception as e:
         logger.warning(f"Seed default models skipped: {e}")
 
+    # --- v2.5 外部 AI 分流 — Seed external_ai_url 設定鍵（僅當不存在時）---
+    # ZH: 空字串 = 未啟用，使用者端中介頁顯示「即將開放」；admin 於管理頁填入廠商網址後生效。
+    # EN: Empty = disabled (landing shows "coming soon"); admin sets vendor URL to activate.
+    try:
+        from .models import SystemConfig
+        _db = SessionLocal()
+        try:
+            if not _db.query(SystemConfig).filter(SystemConfig.key == "external_ai_url").first():
+                _db.add(SystemConfig(
+                    key="external_ai_url", value="",
+                    description="外部 AI 平台網址（空=未啟用，退回即將開放）",
+                ))
+                _db.commit()
+        finally:
+            _db.close()
+    except Exception as e:
+        logger.warning(f"Seed external_ai_url skipped: {e}")
+
     logger.info(f"ZH: 資料庫初始化完成 ({settings.DATABASE_PATH}) | EN: Database initialized ({settings.DATABASE_PATH})")

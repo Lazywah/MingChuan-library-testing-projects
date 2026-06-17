@@ -371,3 +371,46 @@ class UserSessionUsage(Base):
     __table_args__ = (
         PrimaryKeyConstraint("user_id", "date"),
     )
+
+
+# ==============================================================================
+# ZH: 表 15: ExternalAiAccount - 外部 AI 廠商帳號對應 (v2.5 外部 AI 分流)
+# EN: Table 15: ExternalAiAccount - external AI vendor account mapping
+# ZH: 平台帳號 ↔ 廠商帳號 (myai168) 對應表。廠商無 API/SSO，僅能導流 + 帳號後台造冊，
+#     故由 admin 批次匯入對應。安全原則：只存廠商帳號名，絕不存廠商密碼。
+# EN: Bridges platform user ↔ vendor (myai168) account. Vendor offers no API/SSO,
+#     only redirect + back-office provisioning; admin bulk-imports mappings.
+#     Security: store vendor username only, NEVER the vendor password.
+# ==============================================================================
+class ExternalAiAccount(Base):
+    __tablename__ = "external_ai_accounts"
+
+    id              = Column(String, primary_key=True, default=generate_uuid)
+    user_id         = Column(String, ForeignKey("users.id", ondelete="CASCADE"),
+                             unique=True, index=True, nullable=False)          # ZH: 一位平台使用者一筆 | EN: one row per platform user
+    vendor_username = Column(String, nullable=False)                          # ZH: 廠商端帳號名 (非密碼) | EN: vendor account username (not password)
+    status          = Column(String, default="active", nullable=False)        # ZH: active / disabled | EN: active / disabled
+    note            = Column(Text, nullable=True)                             # ZH: 備註 | EN: note
+    created_at      = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    updated_at      = Column(DateTime, default=lambda: datetime.now(timezone.utc),
+                             onupdate=lambda: datetime.now(timezone.utc))
+
+
+# ==============================================================================
+# ZH: 表 16: KnowledgeChunk - RAG 知識庫片段 (v2.6 客服/導覽助手)
+# EN: Table 16: KnowledgeChunk - RAG knowledge chunks (v2.6 support/guide assistant)
+# ZH: 由 knowledge/*.md 切塊匯入，embedding 以 JSON 陣列字串存放（SQLite 無原生向量型別）。
+#     知識庫規模小，查詢時全載入記憶體做 cosine（見 rag_service 規模備註）。
+# EN: Ingested from knowledge/*.md; embedding stored as a JSON array string
+#     (SQLite has no native vector type). Small KB → load all rows and cosine
+#     in memory at query time (see rag_service scale note).
+# ==============================================================================
+class KnowledgeChunk(Base):
+    __tablename__ = "knowledge_chunks"
+
+    id          = Column(String, primary_key=True, default=generate_uuid)
+    source      = Column(String, nullable=False, index=True)                  # ZH: 來源檔名 (相對 KNOWLEDGE_DIR) | EN: source file (relative to KNOWLEDGE_DIR)
+    heading     = Column(String, default="")                                  # ZH: 最近標題 (引用/定位用) | EN: nearest heading (for citation)
+    content     = Column(Text, nullable=False)                                # ZH: 片段內容 | EN: chunk text
+    embedding   = Column(Text, nullable=False)                                # ZH: 向量 (JSON array string) | EN: vector (JSON array string)
+    created_at  = Column(DateTime, default=lambda: datetime.now(timezone.utc))

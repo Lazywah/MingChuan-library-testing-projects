@@ -150,6 +150,22 @@ async def lifespan(app: FastAPI):
     import os
     os.makedirs("/data/datasets", exist_ok=True)
 
+    # ZH: v2.6 客服助手 — 知識庫若為空則嘗試匯入（需 Ollama 已就緒；失敗不影響啟動）
+    # EN: v2.6 support assistant — ingest KB if empty (needs Ollama; non-fatal on failure)
+    try:
+        from .services import rag_service
+        db = SessionLocal()
+        try:
+            result = await rag_service.ingest_knowledge_base(db, force=False)
+            logger.info("ZH: 知識庫狀態 | EN: KB status: %s", result)
+        finally:
+            db.close()
+    except Exception as e:
+        logger.warning(
+            "ZH: 知識庫匯入略過（Ollama 未就緒？可稍後由 admin 呼叫 /assistant/reindex）"
+            " | EN: KB ingest skipped (Ollama not ready? admin can call /assistant/reindex later): %s", e
+        )
+
     sched_config = SCHEDULER_POLICY.get("scheduling", {})
     logger.info(
         f"ZH: 服務就緒 | EN: Service ready | "
@@ -230,6 +246,8 @@ app.include_router(jobs.router, prefix="/api/v1/jobs")
 # EN: Phase E removed notebooks router (v1 pseudo-Notebook replaced by v2.0 Lab)
 from .routers import chat, admin, datasets, worker, sso, lab, secrets, announcements
 from .routers import models as models_router
+from .routers import external_ai
+from .routers import assistant
 app.include_router(chat.router,      prefix="/api/v1/chat")
 app.include_router(admin.router,     prefix="/api/v1/admin")
 # ZH: 動態模型清單（各 AI 工具的下拉依 tool_type 抓取）| EN: Dynamic model list per tool
@@ -245,6 +263,12 @@ app.include_router(secrets.router,   prefix="/api/v1/secrets")
 # ZH: v2.2 公告（user 看 + admin 編）
 app.include_router(announcements.router,        prefix="/api/v1/announcements")
 app.include_router(announcements.admin_router,  prefix="/api/v1/admin/announcements")
+# ZH: v2.5 外部 AI 分流（使用者導流 + admin 對應表/網址設定）
+# EN: v2.5 External AI routing (user redirect + admin mapping/url settings)
+app.include_router(external_ai.router,          prefix="/api/v1/external-ai")
+# ZH: v2.6 客服／導覽助手（RAG + 本地 Ollama；/ask 公開）
+# EN: v2.6 Support/guide assistant (RAG + local Ollama; /ask public)
+app.include_router(assistant.router,            prefix="/api/v1/assistant")
 
 
 # ==============================================================================

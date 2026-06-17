@@ -677,3 +677,131 @@ def get_online_worker_nodes(db: Session, timeout_seconds: int = 90) -> List[mode
     return db.query(models.WorkerHeartbeat).filter(
         models.WorkerHeartbeat.last_seen >= cutoff
     ).order_by(models.WorkerHeartbeat.node_id).all()
+
+
+# ==============================================================================
+# ZH: SystemConfig 讀寫 | EN: SystemConfig get/set
+# ==============================================================================
+
+def get_system_config(db: Session, key: str, default: str = "") -> str:
+    """ZH: 讀設定值，不存在回 default | EN: Read config value, default if missing"""
+    row = db.query(models.SystemConfig).filter(models.SystemConfig.key == key).first()
+    return row.value if row else default
+
+
+def set_system_config(db: Session, key: str, value: str, description: Optional[str] = None) -> models.SystemConfig:
+    """ZH: 寫設定值 (upsert) | EN: Upsert config value"""
+    row = db.query(models.SystemConfig).filter(models.SystemConfig.key == key).first()
+    if row:
+        row.value = value
+        if description is not None:
+            row.description = description
+    else:
+        row = models.SystemConfig(key=key, value=value, description=description)
+        db.add(row)
+    db.commit()
+    db.refresh(row)
+    return row
+
+
+# ==============================================================================
+# ZH: 外部 AI 帳號對應 CRUD (v2.5) | EN: External AI account mapping CRUD (v2.5)
+# ==============================================================================
+
+def get_external_account_by_user_id(db: Session, user_id: str) -> Optional[models.ExternalAiAccount]:
+    """ZH: 取某使用者的廠商帳號對應 | EN: Get a user's vendor account mapping"""
+    return db.query(models.ExternalAiAccount).filter(
+        models.ExternalAiAccount.user_id == user_id
+    ).first()
+
+
+def list_external_accounts(db: Session) -> List[dict]:
+    """ZH: 列出所有對應 (join users 帶平台帳號名) | EN: List all mappings (join users for username)"""
+    rows = (
+        db.query(models.ExternalAiAccount, models.User.username)
+        .join(models.User, models.User.id == models.ExternalAiAccount.user_id)
+        .order_by(models.User.username.asc())
+        .all()
+    )
+    out: List[dict] = []
+    for acc, username in rows:
+        out.append({
+            "id": acc.id,
+            "user_id": acc.user_id,
+            "platform_username": username,
+            "vendor_username": acc.vendor_username,
+            "status": acc.status,
+            "note": acc.note,
+            "updated_at": acc.updated_at,
+        })
+    return out
+
+
+def create_external_account(
+    db: Session, platform_username: str, vendor_username: str,
+    status: str = "active", note: Optional[str] = None
+) -> models.ExternalAiAccount:
+    """ZH: 以平台帳號名建立對應 (查無使用者或已存在對應則拋 ValueError)
+       EN: Create mapping by platform username (raises ValueError if user missing or mapping exists)"""
+    user = get_user_by_username(db, platform_username)
+    if not user:
+        raise ValueError(f"platform user not found: {platform_username}")
+    if get_external_account_by_user_id(db, user.id):
+        raise ValueError(f"mapping already exists for: {platform_username}")
+    acc = models.ExternalAiAccount(
+        user_id=user.id, vendor_username=vendor_username,
+        status=status or "active", note=note,
+    )
+    db.add(acc)
+    db.commit()
+    db.refresh(acc)
+    return acc
+
+
+def update_external_account(
+    db: Session, account_id: str, vendor_username: Optional[str] = None,
+    status: Optional[str] = None, note: Optional[str] = None
+) -> Optional[models.ExternalAiAccount]:
+    """ZH: 更新對應 | EN: Update mapping"""
+    acc = db.query(models.ExternalAiAccount).filter(models.ExternalAiAccount.id == account_id).first()
+    if not acc:
+        return None
+    if vendor_username is not None:
+        acc.vendor_username = vendor_username
+    if status is not None:
+        acc.status = status
+    if note is not None:
+        acc.note = note
+    db.commit()
+    db.refresh(acc)
+    return acc
+
+
+def delete_external_account(db: Session, account_id: str) -> bool:
+    """ZH: 刪除對應 | EN: Delete mapping"""
+    acc = db.query(models.ExternalAiAccount).filter(models.ExternalAiAccount.id == account_id).first()
+    if not acc:
+        return False
+    db.delete(acc)
+    db.commit()
+    return True
+
+
+def upsert_external_account_by_username(
+    db: Session, platform_username: str, vendor_username: str
+) -> str:
+    """ZH: CSV 匯入用：以平台帳號名 upsert，回傳 'created'/'updated'/'skipped'
+       EN: For CSV import: upsert by platform username, returns 'created'/'updated'/'skipped'"""
+    user = get_user_by_username(db, platform_username)
+    if not user:
+        raise ValueError(f"platform user not found: {platform_username}")
+    acc = get_external_account_by_user_id(db, user.id)
+    if acc:
+        if acc.vendor_username == vendor_username:
+            return "skipped"
+        acc.vendor_username = vendor_username
+        db.commit()
+        return "updated"
+    db.add(models.ExternalAiAccount(user_id=user.id, vendor_username=vendor_username))
+    db.commit()
+    return "created"
