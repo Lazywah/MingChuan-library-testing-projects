@@ -170,6 +170,7 @@ flowchart TB
 |---|---|---|
 | routers | `chat` | LLM 對話 SSE 代理；偵測 `tool_type` → 走簡報 dispatch |
 | routers | `models` | `GET /api/v1/models?tool_type=` 動態回傳「公開且適用該工具」的模型 |
+| routers | `external_ai` | **(v2.5)** 外部 AI 分流：非 admin 導流 `/me`；admin 對應表/網址 `/admin/*`（只存廠商帳號名，不存密碼）|
 | routers | `lab` | 啟動/停止 code-server、`_authz`（給 nginx auth_request）|
 | routers | `worker` | GPU 節點 pull 任務、回報進度、心跳 + per-GPU telemetry |
 | services | `agent_dispatcher` | 依 tool_type 注入專項 system prompt + 生成契約標記（PPTX_SPEC）|
@@ -570,6 +571,7 @@ flowchart LR
 | `/api/v1/lab/*` | 啟動/停止 lab session、status、heartbeat、`_authz`（含就緒偵測）| JWT / cookie |
 | `/api/v1/secrets/*` | 使用者 AES-256-GCM secrets CRUD | JWT |
 | `/api/v1/announcements/*` | 首頁公告（user 讀）+ admin CRUD | JWT |
+| `/api/v1/external-ai/*` | **(v2.5)** 外部 AI 分流：`/me` 導流（非 admin）；`/admin/{url,accounts,import}` 對應表/網址 | JWT（`/admin/*` 需 admin）|
 | `/api/v1/admin/*` | 使用者管理、配額、模型(tool_types)、storage、lab/sessions、cluster/stats、audit | JWT (admin) |
 | `/api/v1/worker/*` | Pull 任務、更新進度、heartbeat | API_TOKEN（與 .env 對齊） |
 | `/api/v1/system/*` | 系統設定、健康檢查 | JWT (admin) |
