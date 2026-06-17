@@ -26,6 +26,10 @@ RUN pip install --no-cache-dir -r requirements.txt
 # ZH: 複製應用程式碼 | EN: Copy application code
 COPY app/ /app/app/
 
+# ZH: 複製 RAG 客服知識庫 (v2.6)；KNOWLEDGE_DIR 解析為 /app/knowledge
+# EN: Copy RAG support knowledge base (v2.6); KNOWLEDGE_DIR resolves to /app/knowledge
+COPY knowledge/ /app/knowledge/
+
 # ZH: 建立 SSH 目錄 | EN: Create SSH directory
 RUN mkdir -p /root/.ssh && chmod 700 /root/.ssh
 

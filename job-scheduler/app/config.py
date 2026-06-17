@@ -108,6 +108,23 @@ class Settings(BaseSettings):
     OLLAMA_BASE_URL: str = "http://ai-platform-ollama:11434"
 
     # ------------------------------------------------------------------
+    # ZH: v2.6 RAG 客服/導覽助手 | EN: v2.6 RAG support/guide assistant
+    # ZH: 直接打 Ollama（不經 Portkey），故需先 `ollama pull` 下列兩個模型：
+    #     - RAG_EMBED_MODEL：產生知識庫與問題的向量
+    #     - RAG_CHAT_MODEL ：生成客服回覆（建議中文能力佳的 instruct 模型）
+    # EN: Talks to Ollama directly (not Portkey); pull both models first:
+    #     - RAG_EMBED_MODEL: embeds KB chunks and the question
+    #     - RAG_CHAT_MODEL : generates the support reply (prefer a strong-Chinese instruct model)
+    # ------------------------------------------------------------------
+    RAG_EMBED_MODEL: str = "nomic-embed-text"
+    RAG_CHAT_MODEL: str = "qwen2.5:7b"
+    # ZH: 知識庫目錄（容器內路徑；隨 image 一起打包）| EN: KB dir (in-container path, bundled with image)
+    KNOWLEDGE_DIR: str = os.path.normpath(os.path.join(os.path.dirname(__file__), "..", "knowledge"))
+    RAG_TOP_K: int = 4                 # ZH: 取前 k 個片段 | EN: top-k chunks
+    RAG_MIN_SCORE: float = 0.2         # ZH: 相似度門檻（低於視為無關）| EN: similarity floor
+    RAG_HISTORY_TURNS: int = 3         # ZH: 帶入最近幾輪對話 | EN: recent turns kept
+
+    # ------------------------------------------------------------------
     # ZH: 任務超時設定 (分鐘) | EN: Job timeout (minutes)
     # ------------------------------------------------------------------
     JOB_TIMEOUT_MINUTES: int = 120
