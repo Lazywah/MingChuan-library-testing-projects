@@ -144,6 +144,9 @@
                 <button id="nav-tab-lab" class="admin-side-tab" onclick="switchAdminMainTab('lab')">
                     <ion-icon name="flask-outline"></ion-icon> <span data-i18n="tab_lab_admin">Lab 管理</span>
                 </button>
+                <button id="nav-tab-external-ai" class="admin-side-tab" onclick="switchAdminMainTab('external-ai')">
+                    <ion-icon name="link-outline"></ion-icon> <span data-i18n="tab_external_ai">外部 AI</span>
+                </button>
             </nav>
 
             <div class="admin-sidebar-footer">
@@ -957,6 +960,85 @@
 
             </div>
         </div> <!-- End of tab-lab -->
+
+        <!-- ZH: v2.5 外部 AI 分流管理 | EN: v2.5 External AI routing admin -->
+        <div id="tab-external-ai" class="admin-tab-content" style="display: none;">
+            <div class="admin-grid">
+
+                <!-- 外部 AI 平台網址設定 -->
+                <section class="widget form-box-panel" style="grid-column: 1 / -1;">
+                    <div class="widget-header">
+                        <h3><ion-icon name="globe-outline" style="margin-right:6px;"></ion-icon>
+                            <span data-i18n="ext_admin_url_title">外部 AI 平台網址</span></h3>
+                    </div>
+                    <p style="color:var(--text-muted); font-size:13px; margin-bottom:12px;" data-i18n="ext_admin_url_hint">
+                        留空 = 未啟用，使用者端顯示「即將開放」；填入後非 admin 使用者點「AI 助手」會被導向此網址。
+                    </p>
+                    <div style="display:flex; gap:8px; flex-wrap:wrap;">
+                        <input type="url" id="ext-ai-url" placeholder="https://www.myai168.com/tw/ai/" style="flex:1; min-width:280px;" />
+                        <button class="ready-btn config-save-btn" onclick="externalAi.saveUrl()" style="width:auto; padding:8px 18px;">
+                            <ion-icon name="save-outline"></ion-icon> <span data-i18n="btn_save">儲存</span>
+                        </button>
+                    </div>
+                    <div id="ext-ai-url-msg" style="margin-top:8px; font-size:13px;"></div>
+                </section>
+
+                <!-- 新增 / 匯入對應 -->
+                <section class="widget form-box-panel" style="grid-column: 1 / 2;">
+                    <div class="widget-header">
+                        <h3><ion-icon name="person-add-outline" style="margin-right:6px;"></ion-icon>
+                            <span data-i18n="ext_admin_add_title">新增單筆對應</span></h3>
+                    </div>
+                    <div style="display:grid; grid-template-columns:1fr 1fr auto; gap:8px;">
+                        <input type="text" id="ext-ai-add-platform" placeholder="平台帳號 platform_username" />
+                        <input type="text" id="ext-ai-add-vendor" placeholder="廠商帳號 vendor_username" />
+                        <button class="ready-btn" onclick="externalAi.addMapping()" style="width:auto; padding:8px 14px; background:rgba(74,222,128,0.15); color:#4ade80;">
+                            <ion-icon name="add-circle-outline"></ion-icon> <span data-i18n="btn_add">新增</span>
+                        </button>
+                    </div>
+                    <div id="ext-ai-add-msg" style="margin-top:8px; font-size:13px;"></div>
+                </section>
+
+                <!-- CSV 批次匯入 -->
+                <section class="widget form-box-panel" style="grid-column: 2 / 3;">
+                    <div class="widget-header">
+                        <h3><ion-icon name="cloud-upload-outline" style="margin-right:6px;"></ion-icon>
+                            <span data-i18n="ext_admin_csv_title">CSV 批次匯入造冊結果</span></h3>
+                    </div>
+                    <p style="color:var(--text-muted); font-size:12px; margin-bottom:8px;" data-i18n="ext_admin_csv_hint">
+                        每行格式：platform_username,vendor_username（可含表頭，重複者更新）。
+                    </p>
+                    <textarea id="ext-ai-csv" rows="5" placeholder="platform_username,vendor_username&#10;student01,vendorA01&#10;student02,vendorA02" style="width:100%; font-family:monospace; font-size:13px;"></textarea>
+                    <div style="display:flex; gap:8px; margin-top:8px;">
+                        <button class="ready-btn config-save-btn" onclick="externalAi.importCsv()" style="width:auto; padding:8px 16px;">
+                            <ion-icon name="cloud-upload-outline"></ion-icon> <span data-i18n="btn_import">匯入</span>
+                        </button>
+                    </div>
+                    <div id="ext-ai-csv-msg" style="margin-top:8px; font-size:13px; white-space:pre-line;"></div>
+                </section>
+
+                <!-- 對應表列表 -->
+                <section class="widget form-box-panel" style="grid-column: 1 / -1;">
+                    <div class="widget-header split">
+                        <h3><ion-icon name="list-outline" style="margin-right:6px;"></ion-icon>
+                            <span data-i18n="ext_admin_list_title">帳號對應表</span></h3>
+                        <ion-icon name="refresh-circle-outline" onclick="externalAi.refresh()" class="refresh-icon" title="Refresh"></ion-icon>
+                    </div>
+                    <div class="admin-table-wrap scrollbar-custom" style="max-height:420px; overflow-y:auto;">
+                        <table class="admin-table" id="ext-ai-accounts-table">
+                            <thead><tr>
+                                <th data-i18n="ext_col_platform">平台帳號</th>
+                                <th data-i18n="ext_col_vendor">廠商帳號</th>
+                                <th data-i18n="col_status">狀態</th>
+                                <th data-i18n="col_actions">操作</th>
+                            </tr></thead>
+                            <tbody><tr><td colspan="4" style="text-align:center; color:var(--text-muted);">Loading…</td></tr></tbody>
+                        </table>
+                    </div>
+                </section>
+
+            </div>
+        </div> <!-- End of tab-external-ai -->
         </main> <!-- End of admin-content -->
     </div> <!-- End of admin-layout -->
 

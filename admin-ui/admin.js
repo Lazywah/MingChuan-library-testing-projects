@@ -28,6 +28,18 @@ const TRANSLATIONS = {
         tab_local_models: "本地模型",
         tab_management: "管理介面",
         tab_analytics: "數據分析",
+        tab_external_ai: "外部 AI",
+        ext_admin_url_title: "外部 AI 平台網址",
+        ext_admin_url_hint: "留空 = 未啟用，使用者端顯示「即將開放」；填入後非 admin 使用者點「AI 助手」會被導向此網址。",
+        ext_admin_add_title: "新增單筆對應",
+        ext_admin_csv_title: "CSV 批次匯入造冊結果",
+        ext_admin_csv_hint: "每行格式：platform_username,vendor_username（可含表頭，重複者更新）。",
+        ext_admin_list_title: "帳號對應表",
+        ext_col_platform: "平台帳號",
+        ext_col_vendor: "廠商帳號",
+        btn_save: "儲存",
+        btn_add: "新增",
+        btn_import: "匯入",
         label_font_size: "字體大小",
         admin_guide: "管理導覽",
         guide_prev: "上一步",
@@ -262,6 +274,18 @@ const TRANSLATIONS = {
         tab_local_models: "Local Models",
         tab_management: "Management",
         tab_analytics: "Analytics",
+        tab_external_ai: "External AI",
+        ext_admin_url_title: "External AI Platform URL",
+        ext_admin_url_hint: "Empty = disabled (users see \"coming soon\"); once set, non-admin users clicking \"AI Assistant\" are redirected here.",
+        ext_admin_add_title: "Add Single Mapping",
+        ext_admin_csv_title: "Bulk Import (CSV)",
+        ext_admin_csv_hint: "Per line: platform_username,vendor_username (header allowed; existing rows updated).",
+        ext_admin_list_title: "Account Mapping Table",
+        ext_col_platform: "Platform Account",
+        ext_col_vendor: "Vendor Account",
+        btn_save: "Save",
+        btn_add: "Add",
+        btn_import: "Import",
         label_font_size: "Font Size",
         admin_guide: "Admin Guide",
         guide_prev: "Back",
@@ -566,9 +590,161 @@ function switchAdminMainTab(tabId) {
             fetchAnalyticsData();
         } else if (tabId === 'lab') {
             adminLab.init();
+        } else if (tabId === 'external-ai') {
+            externalAi.init();
         }
     }
 }
+
+// ============================================================
+// v2.5 外部 AI 分流管理 | External AI routing admin
+// ============================================================
+const externalAi = {
+    _authHeaders() {
+        return { 'Authorization': `Bearer ${authToken}`, 'Content-Type': 'application/json' };
+    },
+    init() {
+        this.loadUrl();
+        this.refresh();
+    },
+    async loadUrl() {
+        try {
+            const res = await fetch(`${API_BASE}/external-ai/admin/url`, { headers: this._authHeaders() });
+            if (!res.ok) throw new Error('load url failed');
+            const data = await res.json();
+            const el = document.getElementById('ext-ai-url');
+            if (el) el.value = data.url || '';
+        } catch (e) { /* 靜默 | silent */ }
+    },
+    async saveUrl() {
+        const el = document.getElementById('ext-ai-url');
+        const msg = document.getElementById('ext-ai-url-msg');
+        try {
+            const res = await fetch(`${API_BASE}/external-ai/admin/url`, {
+                method: 'PUT', headers: this._authHeaders(),
+                body: JSON.stringify({ url: (el.value || '').trim() }),
+            });
+            if (!res.ok) throw new Error('save failed');
+            if (msg) { msg.style.color = '#4ade80'; msg.textContent = '✓ 已儲存'; }
+            showToast('外部 AI 網址已更新');
+        } catch (e) {
+            if (msg) { msg.style.color = '#fb7185'; msg.textContent = '✗ 儲存失敗'; }
+            showToast('儲存失敗', true);
+        }
+    },
+    async refresh() {
+        const tbody = document.querySelector('#ext-ai-accounts-table tbody');
+        try {
+            const res = await fetch(`${API_BASE}/external-ai/admin/accounts`, { headers: this._authHeaders() });
+            if (!res.ok) throw new Error('list failed');
+            const rows = await res.json();
+            if (!rows.length) {
+                tbody.innerHTML = '<tr><td colspan="4" style="text-align:center; color:var(--text-muted);">尚無對應</td></tr>';
+                return;
+            }
+            tbody.innerHTML = rows.map(r => {
+                const active = (r.status || 'active') === 'active';
+                const statusBadge = active
+                    ? '<span style="color:#4ade80;">active</span>'
+                    : '<span style="color:#fb7185;">disabled</span>';
+                const pf = this._esc(r.platform_username || r.user_id);
+                const vd = this._esc(r.vendor_username);
+                return `<tr>
+                    <td>${pf}</td>
+                    <td><code>${vd}</code></td>
+                    <td>${statusBadge}</td>
+                    <td style="white-space:nowrap;">
+                        <button class="ready-btn" style="width:auto;padding:3px 8px;font-size:12px;" onclick="externalAi.editVendor('${r.id}','${vd}')">改帳號</button>
+                        <button class="ready-btn" style="width:auto;padding:3px 8px;font-size:12px;" onclick="externalAi.toggleStatus('${r.id}','${active ? 'disabled' : 'active'}')">${active ? '停用' : '啟用'}</button>
+                        <button class="ready-btn" style="width:auto;padding:3px 8px;font-size:12px;background:rgba(251,113,133,0.12);color:#fb7185;" onclick="externalAi.remove('${r.id}','${pf}')">刪除</button>
+                    </td>
+                </tr>`;
+            }).join('');
+        } catch (e) {
+            tbody.innerHTML = '<tr><td colspan="4" style="text-align:center; color:#fb7185;">載入失敗</td></tr>';
+        }
+    },
+    async addMapping() {
+        const pf = document.getElementById('ext-ai-add-platform');
+        const vd = document.getElementById('ext-ai-add-vendor');
+        const msg = document.getElementById('ext-ai-add-msg');
+        if (!pf.value.trim() || !vd.value.trim()) {
+            if (msg) { msg.style.color = '#fb7185'; msg.textContent = '請填寫平台帳號與廠商帳號'; }
+            return;
+        }
+        try {
+            const res = await fetch(`${API_BASE}/external-ai/admin/accounts`, {
+                method: 'POST', headers: this._authHeaders(),
+                body: JSON.stringify({ platform_username: pf.value.trim(), vendor_username: vd.value.trim() }),
+            });
+            if (!res.ok) {
+                const err = await res.json().catch(() => ({}));
+                throw new Error(err.detail || 'add failed');
+            }
+            if (msg) { msg.style.color = '#4ade80'; msg.textContent = '✓ 已新增'; }
+            pf.value = ''; vd.value = '';
+            this.refresh();
+        } catch (e) {
+            if (msg) { msg.style.color = '#fb7185'; msg.textContent = '✗ ' + e.message; }
+        }
+    },
+    async editVendor(id, current) {
+        const next = prompt('輸入新的廠商帳號名：', current);
+        if (next === null || !next.trim()) return;
+        await this._update(id, { vendor_username: next.trim() });
+    },
+    async toggleStatus(id, status) {
+        await this._update(id, { status });
+    },
+    async _update(id, payload) {
+        try {
+            const res = await fetch(`${API_BASE}/external-ai/admin/accounts/${id}`, {
+                method: 'PUT', headers: this._authHeaders(), body: JSON.stringify(payload),
+            });
+            if (!res.ok) throw new Error('update failed');
+            showToast('已更新');
+            this.refresh();
+        } catch (e) { showToast('更新失敗', true); }
+    },
+    async remove(id, name) {
+        if (!confirm(`確定刪除「${name}」的對應？`)) return;
+        try {
+            const res = await fetch(`${API_BASE}/external-ai/admin/accounts/${id}`, {
+                method: 'DELETE', headers: this._authHeaders(),
+            });
+            if (!res.ok) throw new Error('delete failed');
+            showToast('已刪除');
+            this.refresh();
+        } catch (e) { showToast('刪除失敗', true); }
+    },
+    async importCsv() {
+        const ta = document.getElementById('ext-ai-csv');
+        const msg = document.getElementById('ext-ai-csv-msg');
+        if (!ta.value.trim()) {
+            if (msg) { msg.style.color = '#fb7185'; msg.textContent = '請貼上 CSV 內容'; }
+            return;
+        }
+        try {
+            const res = await fetch(`${API_BASE}/external-ai/admin/import`, {
+                method: 'POST', headers: this._authHeaders(),
+                body: JSON.stringify({ csv: ta.value }),
+            });
+            if (!res.ok) throw new Error('import failed');
+            const r = await res.json();
+            let txt = `新增 ${r.created}、更新 ${r.updated}、略過 ${r.skipped}`;
+            if (r.errors && r.errors.length) txt += '\n錯誤：\n' + r.errors.join('\n');
+            if (msg) { msg.style.color = (r.errors && r.errors.length) ? '#fbbf24' : '#4ade80'; msg.textContent = txt; }
+            this.refresh();
+        } catch (e) {
+            if (msg) { msg.style.color = '#fb7185'; msg.textContent = '✗ 匯入失敗'; }
+        }
+    },
+    _esc(s) {
+        return String(s == null ? '' : s).replace(/[&<>"']/g, c => (
+            { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]
+        ));
+    },
+};
 
 async function fetchAnalyticsData() {
     const dept = document.getElementById('analytics-dept-filter').value || 'all';
