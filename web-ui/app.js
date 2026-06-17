@@ -116,6 +116,14 @@ const TRANSLATIONS = {
         hub_card_kb: "知識庫",
         hub_coming_soon_title: "💡 此功能在規劃中",
         hub_coming_soon_desc: "這是我們正在評估的功能，還沒上線。若你希望優先開發，可到「設定 → 問題回報」告訴我們，學生需求最有說服力。",
+        // v2.5 外部 AI 分流
+        ext_ai_title: "AI 助手",
+        ext_ai_desc: "本平台的 AI 助手由合作夥伴提供，將於新分頁開啟。",
+        ext_ai_account: "你的帳號",
+        ext_ai_go: "前往 AI 助手",
+        ext_ai_no_store_notice: "提醒：對話內容不會儲存在本平台。",
+        ext_ai_not_provisioned: "你的 AI 助手帳號尚未開通，請聯絡管理員。",
+        ext_ai_coming_soon: "AI 助手即將開放，敬請期待。",
         btn_back_hub: "返回大廳",
         // 管理員
         admin_users: "使用者管理",
@@ -471,6 +479,14 @@ const TRANSLATIONS = {
         hub_card_kb: "Knowledge Base",
         hub_coming_soon_title: "💡 Proposed Feature",
         hub_coming_soon_desc: "We are evaluating this feature — not yet shipped. If you want it prioritized, head to Settings → Report Issues and tell us. Student demand is the strongest signal.",
+        // v2.5 External AI routing
+        ext_ai_title: "AI Assistant",
+        ext_ai_desc: "This platform's AI assistant is provided by our partner and opens in a new tab.",
+        ext_ai_account: "Your account",
+        ext_ai_go: "Go to AI Assistant",
+        ext_ai_no_store_notice: "Note: conversations are not stored on this platform.",
+        ext_ai_not_provisioned: "Your AI assistant account is not provisioned yet. Please contact the administrator.",
+        ext_ai_coming_soon: "AI Assistant is coming soon. Stay tuned.",
         btn_back_hub: "Back to Hub",
         // Admin
         admin_users: "User Management",
@@ -829,6 +845,52 @@ function showHub() {
     chatLayout.classList.add('hidden');
     comingSoonLayout.classList.remove('active');
     if (presentationLayout) presentationLayout.classList.add('hidden');
+}
+
+// ZH: v2.5 外部 AI 中介頁 — 隱藏內部 hub、顯示導流卡片並載入指派帳號
+// EN: v2.5 External AI landing — hide internal hub, show redirect card, load assigned account
+function showExternalAiLanding() {
+    if (aiHubContainer) aiHubContainer.classList.remove('active');
+    if (chatLayout) chatLayout.classList.add('hidden');
+    if (comingSoonLayout) comingSoonLayout.classList.remove('active');
+    if (presentationLayout) presentationLayout.classList.add('hidden');
+    const landing = document.getElementById('external-ai-landing');
+    if (landing) landing.classList.add('active');
+    loadExternalAiInfo();
+}
+
+async function loadExternalAiInfo() {
+    const activeBox = document.getElementById('external-ai-active');
+    const emptyBox = document.getElementById('external-ai-empty');
+    const emptyMsg = document.getElementById('external-ai-empty-msg');
+    const accountEl = document.getElementById('external-ai-account');
+    const goBtn = document.getElementById('external-ai-go-btn');
+    if (activeBox) activeBox.classList.add('hidden');
+    if (emptyBox) emptyBox.classList.add('hidden');
+    try {
+        const res = await fetch(`${API_BASE}/external-ai/me`, {
+            headers: { 'Authorization': `Bearer ${authToken}` }
+        });
+        if (!res.ok) throw new Error('fetch /external-ai/me failed');
+        const data = await res.json();
+        const url = (data.url || '').trim();
+        // ZH: url 空 / 未開通 / 停用 → 顯示提示，不顯示前往按鈕
+        if (!url || data.status !== 'active' || !data.vendor_username) {
+            if (emptyMsg) {
+                const key = (url && (data.status === 'not_provisioned' || data.status === 'disabled'))
+                    ? 'ext_ai_not_provisioned' : 'ext_ai_coming_soon';
+                emptyMsg.textContent = t(key);
+            }
+            if (emptyBox) emptyBox.classList.remove('hidden');
+            return;
+        }
+        if (accountEl) accountEl.textContent = data.vendor_username;
+        if (goBtn) goBtn.onclick = () => window.open(url, '_blank', 'noopener');
+        if (activeBox) activeBox.classList.remove('hidden');
+    } catch (e) {
+        if (emptyMsg) emptyMsg.textContent = t('ext_ai_coming_soon');
+        if (emptyBox) emptyBox.classList.remove('hidden');
+    }
 }
 
 // Bind hub card clicks
@@ -1298,7 +1360,16 @@ function switchTab(tabId) {
     });
 
     if (tabId === 'assistant') {
-        renderActiveChat();
+        // ZH: v2.5 外部 AI 分流 — 僅 admin 看內部 hub，其餘角色導向外部中介頁
+        // EN: v2.5 External AI routing — only admin sees internal hub; others → external landing
+        if (window.currentUserRole === 'admin') {
+            const landing = document.getElementById('external-ai-landing');
+            if (landing) landing.classList.remove('active');
+            showHub();
+            renderActiveChat();
+        } else {
+            showExternalAiLanding();
+        }
     }
 }
 

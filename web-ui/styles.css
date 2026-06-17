@@ -1335,6 +1335,90 @@ ion-icon {
     display: block;
 }
 
+/* v2.5 外部 AI 導流中介頁 | External AI redirect landing */
+.external-ai-landing {
+    display: none;
+    width: 100%;
+    height: 100%;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+}
+.external-ai-landing.active {
+    display: flex;
+    animation: fadeIn 0.4s ease forwards;
+}
+.external-ai-card {
+    max-width: 440px;
+    width: 100%;
+    text-align: center;
+    padding: 36px 32px;
+}
+.external-ai-card h2 {
+    margin: 12px 0 8px;
+    color: var(--text-primary);
+}
+.external-ai-icon {
+    font-size: 48px;
+    color: var(--accent-glow, #8b5cf6);
+    line-height: 1;
+}
+.external-ai-desc {
+    color: var(--text-secondary, #9aa0c0);
+    font-size: 0.95rem;
+    margin-bottom: 20px;
+}
+.external-ai-account-row {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    margin-bottom: 14px;
+    flex-wrap: wrap;
+}
+.external-ai-account-label {
+    color: var(--text-secondary, #9aa0c0);
+    font-size: 0.9rem;
+}
+.external-ai-account-row code {
+    background: var(--bg-input, rgba(255,255,255,0.06));
+    border: 1px solid var(--border-color, rgba(255,255,255,0.15));
+    border-radius: 8px;
+    padding: 6px 12px;
+    color: var(--text-primary);
+    font-size: 1rem;
+    font-weight: 600;
+    letter-spacing: 0.3px;
+}
+.external-ai-notice {
+    color: var(--text-secondary, #9aa0c0);
+    font-size: 0.82rem;
+    margin-bottom: 20px;
+}
+.external-ai-go-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    width: 100%;
+    padding: 12px 20px;
+    border: none;
+    border-radius: 12px;
+    background: linear-gradient(135deg, #6366f1, #8b5cf6);
+    color: #fff;
+    font-size: 1rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+.external-ai-go-btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 20px rgba(99, 102, 241, 0.4);
+}
+.external-ai-go-btn ion-icon {
+    font-size: 1.2rem;
+}
+
 .hub-grid {
     display: grid;
     grid-template-columns: repeat(2, 1fr);
@@ -2898,3 +2982,159 @@ ion-icon {
     backdrop-filter: blur(20px);
     box-shadow: 0 20px 40px rgba(0, 0, 0, 0.5);
 }
+
+/* ==========================================================================
+   ZH: v2.6 客服／導覽浮動助手 widget | EN: v2.6 floating support/guide assistant
+   ========================================================================== */
+#aibot-root {
+    position: fixed;
+    right: 24px;
+    bottom: 24px;
+    z-index: 10000;
+    font-family: inherit;
+}
+
+#aibot-fab {
+    width: 60px;
+    height: 60px;
+    border-radius: 50%;
+    border: none;
+    cursor: pointer;
+    background: linear-gradient(135deg, #6366f1, #8b5cf6);
+    color: #fff;
+    box-shadow: 0 8px 24px rgba(99, 102, 241, 0.45);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 26px;
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+#aibot-fab:hover { transform: scale(1.08); }
+#aibot-fab.aibot-open { transform: scale(0.92); opacity: 0.85; }
+
+#aibot-panel {
+    position: absolute;
+    right: 0;
+    bottom: 74px;
+    width: 360px;
+    max-width: calc(100vw - 32px);
+    height: 520px;
+    max-height: calc(100vh - 120px);
+    display: flex;
+    flex-direction: column;
+    background: var(--bg-solid);
+    border: 1px solid var(--border-soft);
+    border-radius: 16px;
+    box-shadow: 0 16px 48px rgba(0, 0, 0, 0.45);
+    overflow: hidden;
+    animation: aibot-pop 0.18s ease-out;
+}
+#aibot-panel.aibot-hidden { display: none; }
+
+@keyframes aibot-pop {
+    from { opacity: 0; transform: translateY(12px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+
+.aibot-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 14px;
+    background: linear-gradient(135deg, #6366f1, #8b5cf6);
+    color: #fff;
+    flex-shrink: 0;
+}
+.aibot-title { display: flex; align-items: center; gap: 10px; }
+.aibot-title strong { display: block; font-size: 15px; line-height: 1.2; }
+.aibot-title small { display: block; font-size: 11px; opacity: 0.85; }
+.aibot-avatar { font-size: 24px; }
+#aibot-close {
+    background: transparent;
+    border: none;
+    color: #fff;
+    font-size: 16px;
+    cursor: pointer;
+    opacity: 0.85;
+    padding: 4px 6px;
+}
+#aibot-close:hover { opacity: 1; }
+
+.aibot-log {
+    flex: 1;
+    overflow-y: auto;
+    padding: 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    background: var(--bg-soft);
+}
+
+.aibot-bubble {
+    max-width: 85%;
+    padding: 9px 12px;
+    border-radius: 14px;
+    font-size: 14px;
+    line-height: 1.55;
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+.aibot-user {
+    align-self: flex-end;
+    background: var(--accent-glow);
+    color: var(--bg-solid);
+    border-bottom-right-radius: 4px;
+}
+.aibot-assistant {
+    align-self: flex-start;
+    background: var(--bg-solid);
+    color: var(--text-primary);
+    border: 1px solid var(--border-soft);
+    border-bottom-left-radius: 4px;
+}
+.aibot-assistant.aibot-typing { color: var(--text-muted); }
+.aibot-assistant.aibot-error { color: #ff4d4f; border-color: rgba(255, 77, 79, 0.4); }
+.aibot-sources {
+    align-self: flex-start;
+    font-size: 11px;
+    color: var(--text-muted);
+    padding: 0 4px;
+    max-width: 90%;
+}
+
+.aibot-form {
+    display: flex;
+    align-items: flex-end;
+    gap: 8px;
+    padding: 10px;
+    border-top: 1px solid var(--border-soft);
+    background: var(--bg-solid);
+    flex-shrink: 0;
+}
+#aibot-input {
+    flex: 1;
+    resize: none;
+    border: 1px solid var(--border-soft);
+    border-radius: 10px;
+    padding: 9px 12px;
+    font-family: inherit;
+    font-size: 14px;
+    line-height: 1.4;
+    background: var(--bg-soft);
+    color: var(--text-primary);
+    outline: none;
+    max-height: 120px;
+}
+#aibot-input:focus { border-color: var(--accent-glow); }
+#aibot-send {
+    width: 38px;
+    height: 38px;
+    flex-shrink: 0;
+    border: none;
+    border-radius: 10px;
+    cursor: pointer;
+    background: linear-gradient(135deg, #6366f1, #8b5cf6);
+    color: #fff;
+    font-size: 16px;
+}
+#aibot-send:disabled { opacity: 0.5; cursor: not-allowed; }

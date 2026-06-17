@@ -825,6 +825,34 @@
                     </div>
                 </div>
 
+                <!-- ZH: v2.5 外部 AI 導流中介頁 (非 admin 角色顯示，預設隱藏) -->
+                <!-- EN: v2.5 External AI redirect landing (shown for non-admin roles, hidden by default) -->
+                <div id="external-ai-landing" class="external-ai-landing">
+                    <div class="external-ai-card login-modal">
+                        <div class="external-ai-icon"><ion-icon name="sparkles-outline"></ion-icon></div>
+                        <h2 data-i18n="ext_ai_title">AI 助手</h2>
+                        <p class="external-ai-desc" data-i18n="ext_ai_desc">本平台的 AI 助手由合作夥伴提供，將於新分頁開啟。</p>
+
+                        <!-- 有指派帳號 | Has assigned account -->
+                        <div id="external-ai-active" class="hidden">
+                            <div class="external-ai-account-row">
+                                <span class="external-ai-account-label" data-i18n="ext_ai_account">你的帳號</span>
+                                <code id="external-ai-account">—</code>
+                            </div>
+                            <p class="external-ai-notice" data-i18n="ext_ai_no_store_notice">提醒：對話內容不會儲存在本平台。</p>
+                            <button id="external-ai-go-btn" class="external-ai-go-btn">
+                                <ion-icon name="open-outline"></ion-icon>
+                                <span data-i18n="ext_ai_go">前往 AI 助手</span>
+                            </button>
+                        </div>
+
+                        <!-- 未開通 / 即將開放 | Not provisioned / coming soon -->
+                        <div id="external-ai-empty" class="hidden">
+                            <p id="external-ai-empty-msg" class="external-ai-notice"></p>
+                        </div>
+                    </div>
+                </div>
+
                 <!-- ZH: 待開發功能佔位版面 (預設隱藏) | EN: Coming Soon Placeholder -->
                 <div id="coming-soon-layout" class="coming-soon-layout hidden">
                     <div class="coming-soon-content form-box-panel">
@@ -1399,6 +1427,8 @@
     <script type="module" src="https://unpkg.com/ionicons@7.1.0/dist/ionicons/ionicons.esm.js"></script>
     <script nomodule src="https://unpkg.com/ionicons@7.1.0/dist/ionicons/ionicons.js"></script>
     <script src="app.js?v=20260601-13"></script>
+    <!-- ZH: v2.6 客服／導覽浮動助手 | EN: v2.6 floating support/guide assistant -->
+    <script src="assistant-widget.js?v=20260601-13"></script>
 </body>
 
 </html>
