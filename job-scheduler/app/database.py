@@ -236,15 +236,17 @@ def init_db():
         logger.warning(f"Seed default models skipped: {e}")
 
     # --- v2.5 外部 AI 分流 — Seed external_ai_url 設定鍵（僅當不存在時）---
-    # ZH: 空字串 = 未啟用，使用者端中介頁顯示「即將開放」；admin 於管理頁填入廠商網址後生效。
-    # EN: Empty = disabled (landing shows "coming soon"); admin sets vendor URL to activate.
+    # ZH: 預設指向 MYAI 教育平台；清空 = 未啟用，使用者端中介頁顯示「即將開放」。
+    #     admin 可於管理頁隨時改網址或清空（總開關/回退）。
+    # EN: Defaults to MYAI Education Platform; empty = disabled (landing shows "coming soon").
+    #     Admin can change/clear the URL anytime in the admin page (kill switch / rollback).
     try:
         from .models import SystemConfig
         _db = SessionLocal()
         try:
             if not _db.query(SystemConfig).filter(SystemConfig.key == "external_ai_url").first():
                 _db.add(SystemConfig(
-                    key="external_ai_url", value="",
+                    key="external_ai_url", value="https://www.myai168.com/tw/ai/",
                     description="外部 AI 平台網址（空=未啟用，退回即將開放）",
                 ))
                 _db.commit()

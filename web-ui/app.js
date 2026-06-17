@@ -118,7 +118,7 @@ const TRANSLATIONS = {
         hub_coming_soon_desc: "這是我們正在評估的功能，還沒上線。若你希望優先開發，可到「設定 → 問題回報」告訴我們，學生需求最有說服力。",
         // v2.5 外部 AI 分流
         ext_ai_title: "AI 助手",
-        ext_ai_desc: "本平台的 AI 助手由合作夥伴提供，將於新分頁開啟。",
+        ext_ai_desc: "本平台的 AI 助手由MYAI教育平台提供，將於新分頁開啟。",
         ext_ai_account: "你的帳號",
         ext_ai_go: "前往 AI 助手",
         ext_ai_no_store_notice: "提醒：對話內容不會儲存在本平台。",
@@ -481,7 +481,7 @@ const TRANSLATIONS = {
         hub_coming_soon_desc: "We are evaluating this feature — not yet shipped. If you want it prioritized, head to Settings → Report Issues and tell us. Student demand is the strongest signal.",
         // v2.5 External AI routing
         ext_ai_title: "AI Assistant",
-        ext_ai_desc: "This platform's AI assistant is provided by our partner and opens in a new tab.",
+        ext_ai_desc: "This platform's AI assistant is provided by MYAI Education Platform and opens in a new tab.",
         ext_ai_account: "Your account",
         ext_ai_go: "Go to AI Assistant",
         ext_ai_no_store_notice: "Note: conversations are not stored on this platform.",
