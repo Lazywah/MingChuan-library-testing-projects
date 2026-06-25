@@ -1095,6 +1095,25 @@ document.addEventListener('DOMContentLoaded', () => {
             if (sideDrawerToggle.contains(e.target)) return;
             sideDrawer.classList.add('closed');
         });
+
+        // v2.7 UX: 滑鼠移到最右邊緣並「停留」→ 自動展開 sidebar
+        // EN: dwell at the right viewport edge → auto-expand the sidebar
+        let _edgeTimer = null;
+        const EDGE_PX = 4;       // ZH: 距右緣多少 px 內算貼邊 | within N px of right edge
+        const DWELL_MS = 140;    // ZH: 需停留多久才展開 | dwell time before expanding
+        document.addEventListener('mousemove', (e) => {
+            const atRightEdge = e.clientX >= (window.innerWidth - EDGE_PX);
+            if (atRightEdge && sideDrawer.classList.contains('closed')) {
+                if (_edgeTimer) return;                         // 已在計時
+                _edgeTimer = setTimeout(() => {
+                    _edgeTimer = null;
+                    sideDrawer.classList.remove('closed');      // 展開
+                }, DWELL_MS);
+            } else if (_edgeTimer) {
+                clearTimeout(_edgeTimer);                       // 離開邊緣 → 取消
+                _edgeTimer = null;
+            }
+        });
     }
 
     // v2.2: 本機帳號 fallback 登入表單
