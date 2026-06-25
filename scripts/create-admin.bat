@@ -24,7 +24,7 @@ if errorlevel 1 (
   echo [錯誤] 容器 "%CONTAINER%" 沒在執行。
   echo        請先在專案根目錄啟動核心服務： docker compose up -d
   echo.
-  pause
+  if /i not "%~1"=="auto" pause
   exit /b 1
 )
 
@@ -37,7 +37,7 @@ if errorlevel 1 (
   echo [錯誤] 建立失敗，請看上面的 Python 錯誤訊息。
   echo        常見原因：scheduler 尚未就緒（稍候重試）、或 .env 機密未設定導致容器起不來。
   echo.
-  pause
+  if /i not "%~1"=="auto" pause
   exit /b 1
 )
 
@@ -51,4 +51,4 @@ echo  ^>^> 請登入後「立即」於平台修改密碼，並妥善保管本檔
 echo ============================================================
 echo.
 endlocal
-pause
+if /i not "%~1"=="auto" pause
