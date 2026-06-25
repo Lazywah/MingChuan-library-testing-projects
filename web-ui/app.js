@@ -250,8 +250,14 @@ const TRANSLATIONS = {
         local_login_failed: "登入失敗：",
         ql_school_title: "學校首頁",
         ql_school_desc: "前往 MCU 官方網站",
+        ql_school_go: "前往",
         ql_support_title: "問題回報",
         ql_support_desc: "回報系統問題與建議",
+        ql_assistant_title: "AI 助手",
+        ql_assistant_desc: "文字聊天、文書簡報等 AI 工具",
+        ql_docs_title: "文件庫",
+        ql_docs_desc: "作品集、問題解法、教學與校網",
+        report_issue_hint: "問題回報功能建置中，目前請洽管理員。",
         compute_high_desc: "高算力佇列 (GPU 處理)",
         compute_midlow_desc: "中低算力佇列 (服務層處理)",
         priority_high_desc: "高算力 GPU 運算",
@@ -617,8 +623,14 @@ const TRANSLATIONS = {
         local_login_failed: "Login failed: ",
         ql_school_title: "School Homepage",
         ql_school_desc: "Visit MCU official website",
+        ql_school_go: "Visit",
         ql_support_title: "Report Issues",
         ql_support_desc: "Report bugs & suggestions",
+        ql_assistant_title: "AI Assistant",
+        ql_assistant_desc: "Chat, slides & other AI tools",
+        ql_docs_title: "Document Library",
+        ql_docs_desc: "Portfolio, solutions, tutorials & school site",
+        report_issue_hint: "Issue reporting is under construction — please contact the administrator for now.",
         compute_high_desc: "High Compute Queue (GPU Processing)",
         compute_midlow_desc: "Mid/Low Compute Queue (Service Layer)",
         priority_high_desc: "High Priority GPU Processing",
@@ -1158,6 +1170,28 @@ document.addEventListener('DOMContentLoaded', () => {
                 const subTab = document.getElementById('sub-tab-notebook');
                 if (subTab) subTab.click();
             }, 100);
+        });
+    }
+
+    // v2.7 Quick Links: AI 助手 / 文件庫
+    const qlAssistantGo = document.getElementById('ql-assistant-go');
+    if (qlAssistantGo) {
+        qlAssistantGo.addEventListener('click', (e) => { e.preventDefault(); switchTab('assistant'); });
+    }
+    const qlDocsGo = document.getElementById('ql-docs-go');
+    if (qlDocsGo) {
+        qlDocsGo.addEventListener('click', (e) => { e.preventDefault(); switchTab('docs'); });
+    }
+
+    // v2.7 問題回報（移到 Side Bar）— 暫無後端回報端點，先以提示引導
+    const navReport = document.getElementById('nav-report-issue');
+    if (navReport) {
+        navReport.addEventListener('click', (e) => {
+            e.preventDefault();
+            const msg = (typeof t === 'function' ? t('report_issue_hint') : null)
+                || '問題回報功能建置中，目前請洽管理員。';
+            if (typeof showToast === 'function') showToast(msg, 'info');
+            else alert(msg);
         });
     }
 

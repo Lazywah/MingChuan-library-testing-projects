@@ -16,7 +16,7 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
     <!-- ZH: 引入主任務面板樣式 | EN: Import main stylesheet -->
-    <link rel="stylesheet" href="styles.css?v=20260625-1">
+    <link rel="stylesheet" href="styles.css?v=20260625-2">
 
     <!-- ZH: 引入 Google Material Icons | EN: Import Google Material Icons -->
     <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
@@ -253,6 +253,10 @@
             <button class="drawer-info-btn toggle-lang-btn" data-i18n-title="tooltip_toggle_lang" title="切換語言">
                 <ion-icon name="language-outline"></ion-icon>
             </button>
+            <!-- v2.7: 問題回報移到 Side Bar -->
+            <button class="drawer-info-btn" id="nav-report-issue" data-i18n-title="ql_support_title" title="問題回報">
+                <ion-icon name="help-buoy-outline"></ion-icon>
+            </button>
         </div>
     </div>
 
@@ -331,7 +335,14 @@
                             <h3><ion-icon name="link-outline"></ion-icon> Quick Links</h3>
                         </div>
                         <div class="bottom-quick-links">
-                            <!-- v2.2: JupyterLab → AI Base Lab，連到 Notebook 分頁 -->
+                            <!-- v2.7: Quick Links 改為 AI 助手 / AI Base Lab / 文件庫 -->
+                            <div class="quick-link-card">
+                                <ion-icon name="chatbubbles-outline" class="ql-icon"></ion-icon>
+                                <h4 data-i18n="ql_assistant_title">AI 助手</h4>
+                                <p data-i18n="ql_assistant_desc">文字聊天、文書簡報等 AI 工具</p>
+                                <button class="ready-btn mini-btn" id="ql-assistant-go">Go <ion-icon
+                                        name="arrow-forward-outline"></ion-icon></button>
+                            </div>
                             <div class="quick-link-card">
                                 <ion-icon name="rocket-outline" class="ql-icon"></ion-icon>
                                 <h4 data-i18n="ql_lab_title">AI Base Lab</h4>
@@ -340,18 +351,10 @@
                                         name="arrow-forward-outline"></ion-icon></button>
                             </div>
                             <div class="quick-link-card">
-                                <ion-icon name="globe-outline" class="ql-icon"></ion-icon>
-                                <h4 data-i18n="ql_school_title">學校首頁</h4>
-                                <p data-i18n="ql_school_desc">前往 MCU 官方網站</p>
-                                <button class="ready-btn mini-btn"
-                                    onclick="window.open('https://www.mcu.edu.tw/', '_blank')">Go <ion-icon
-                                        name="arrow-forward-outline"></ion-icon></button>
-                            </div>
-                            <div class="quick-link-card">
-                                <ion-icon name="help-buoy-outline" class="ql-icon"></ion-icon>
-                                <h4 data-i18n="ql_support_title">問題回報</h4>
-                                <p data-i18n="ql_support_desc">回報系統問題與建議</p>
-                                <button class="ready-btn mini-btn">Go <ion-icon
+                                <ion-icon name="library-outline" class="ql-icon"></ion-icon>
+                                <h4 data-i18n="ql_docs_title">文件庫</h4>
+                                <p data-i18n="ql_docs_desc">作品集、問題解法、教學與校網</p>
+                                <button class="ready-btn mini-btn" id="ql-docs-go">Go <ion-icon
                                         name="arrow-forward-outline"></ion-icon></button>
                             </div>
                         </div>
@@ -1038,6 +1041,20 @@
                             <p data-i18n="doc_coming_soon">內容建置中，敬請期待...</p>
                         </div>
                     </section>
+
+                    <!-- v2.7: 學校首頁 移入文件庫 -->
+                    <section class="widget form-box-panel">
+                        <div class="widget-header">
+                            <h3><ion-icon name="globe-outline" style="margin-right:6px;color:#0ea5e9;"></ion-icon>
+                                <span data-i18n="ql_school_title">學校首頁</span>
+                            </h3>
+                        </div>
+                        <p style="color:var(--text-muted);line-height:1.6;" data-i18n="ql_school_desc">前往 MCU 官方網站</p>
+                        <button class="ready-btn mini-btn" style="margin-top:10px;"
+                            onclick="window.open('https://www.mcu.edu.tw/', '_blank')">
+                            <span data-i18n="ql_school_go">前往</span> <ion-icon name="arrow-forward-outline"></ion-icon>
+                        </button>
+                    </section>
                 </div>
             </main>
 
@@ -1463,9 +1480,9 @@
     <!-- ZH: 載入圖標庫與主程式碼 | EN: Load Icon library and Main Logic -->
     <script type="module" src="https://unpkg.com/ionicons@7.1.0/dist/ionicons/ionicons.esm.js"></script>
     <script nomodule src="https://unpkg.com/ionicons@7.1.0/dist/ionicons/ionicons.js"></script>
-    <script src="app.js?v=20260625-1"></script>
+    <script src="app.js?v=20260625-2"></script>
     <!-- ZH: v2.6 客服／導覽浮動助手 | EN: v2.6 floating support/guide assistant -->
-    <script src="assistant-widget.js?v=20260625-1"></script>
+    <script src="assistant-widget.js?v=20260625-2"></script>
 </body>
 
 </html>
