@@ -651,6 +651,12 @@
                                     <ion-icon name="stop-outline"></ion-icon>
                                     <span data-i18n="lab_stop">停止 Session</span>
                                 </button>
+                                <!-- v2.7: 開啟程式家教小基（code 模式，可附 Lab 檔） -->
+                                <button id="lab-tutor-btn" class="lab-btn" type="button"
+                                    onclick="window.AibotWidget && window.AibotWidget.openCodeMode()">
+                                    <ion-icon name="chatbubbles-outline"></ion-icon>
+                                    <span data-i18n="lab_ask_tutor">問程式家教</span>
+                                </button>
                             </div>
 
                             <div class="lab-tips">

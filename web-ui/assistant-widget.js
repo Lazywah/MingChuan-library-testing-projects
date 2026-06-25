@@ -1,45 +1,73 @@
 /*
 ==============================================================================
-ZH: 客服／導覽浮動助手 widget（v2.6）| EN: Floating support/guide assistant (v2.6)
+ZH: 客服／程式家教 浮動助手 widget（v2.6 → v2.7）| Floating support/code-tutor widget
 ==============================================================================
-ZH: 自包含 IIFE：自行建立右下角浮動泡泡 + 對話面板，呼叫 /api/v1/assistant/ask。
-    刻意「公開、不需登入、不扣 Token」，故登入頁也能用；對話僅存在記憶體。
-EN: Self-contained IIFE: builds a bottom-right bubble + chat panel, calls
-    /api/v1/assistant/ask. Public (no login, no token charge) so it works on the
-    login page too; conversation lives in memory only.
+ZH: 自包含 IIFE：右下角浮動泡泡 + 對話面板，呼叫 /api/v1/assistant/ask。
+    兩種模式：
+      - guide（客服）：公開、不需登入、不扣 Token（登入頁也能用）。
+      - code（程式家教）：需登入；可「📎 附加 Lab 檔案」帶入使用者自己的程式碼。
+    對外暴露 window.AibotWidget = { open(), openCodeMode() } 供 Notebook 頁呼叫。
+EN: Self-contained IIFE. Two modes: public "guide" and login-gated "code" tutor
+    (can attach the user's own Lab file). Exposes window.AibotWidget.
 
-ZH: SSE 格式與後端 chat.py 一致：data: {choices:[{delta:{content}}]} / data:[DONE]
-EN: SSE format matches chat.py: data: {choices:[{delta:{content}}]} / data:[DONE]
+ZH: SSE 格式與 chat.py 一致：data: {choices:[{delta:{content}}]} / data:[DONE]
 ==============================================================================
 */
 (function () {
     'use strict';
 
     const ASSIST_BASE = '/api/v1/assistant';
-    // ZH: 本次對話的 session id（僅前端記憶）| EN: per-session id (front-end only)
     const SESSION_ID = (window.crypto && crypto.randomUUID) ? crypto.randomUUID() : 'aibot-' + Date.now();
-    // ZH: 對話歷史（送後端帶上下文）| EN: conversation history (sent for context)
     const messages = [];
     let busy = false;
+    let mode = 'guide';
+    let attachedFile = null;   // ZH: 目前附加的 Lab 檔（相對路徑）| attached lab file (rel path)
+
+    const MODES = {
+        guide: {
+            name: '客服小基', status: '平台操作小幫手',
+            placeholder: '輸入問題，例如：怎麼登入？',
+            greet: '你好，我是平台客服小基 🙂\n我可以幫你解答平台操作問題，例如「怎麼登入」「怎麼提交運算任務」「Lab 怎麼用」。',
+        },
+        code: {
+            name: '程式家教小基', status: 'Notebook 程式輔導',
+            placeholder: '描述你的程式問題，或先附上 Lab 檔…',
+            greet: '嗨，我是程式家教小基 👨‍🏫\n你可以貼上程式碼，或用上方「📎 附加 Lab 檔案」帶入你 Lab 裡的檔，我陪你一起看。',
+        },
+    };
+
+    const getToken = () => localStorage.getItem('ai_hud_token');
 
     // ---- ZH: 建立 DOM | EN: Build DOM ----
     const root = document.createElement('div');
     root.id = 'aibot-root';
     root.innerHTML = `
-        <button id="aibot-fab" aria-label="開啟客服助手" title="平台客服小基">
+        <button id="aibot-fab" aria-label="開啟小基助手" title="小基助手">
             <span class="aibot-fab-icon">💬</span>
         </button>
-        <section id="aibot-panel" class="aibot-hidden" role="dialog" aria-label="客服助手">
+        <section id="aibot-panel" class="aibot-hidden" role="dialog" aria-label="小基助手">
             <header class="aibot-header">
                 <div class="aibot-title">
                     <span class="aibot-avatar">🤖</span>
                     <div>
-                        <strong>客服小基</strong>
+                        <strong id="aibot-name">客服小基</strong>
                         <small id="aibot-status">平台操作小幫手</small>
                     </div>
                 </div>
                 <button id="aibot-close" aria-label="關閉">✕</button>
             </header>
+            <div class="aibot-modes" role="tablist">
+                <button type="button" class="aibot-mode-btn aibot-mode-active" data-mode="guide">客服</button>
+                <button type="button" class="aibot-mode-btn" data-mode="code">程式家教</button>
+            </div>
+            <div id="aibot-attach" class="aibot-attach aibot-hidden">
+                <button type="button" id="aibot-attach-btn">📎 附加 Lab 檔案</button>
+                <span id="aibot-file-chip" class="aibot-file-chip aibot-hidden">
+                    <span id="aibot-file-name"></span>
+                    <button type="button" id="aibot-file-clear" aria-label="移除附檔">✕</button>
+                </span>
+                <div id="aibot-file-list" class="aibot-file-list aibot-hidden"></div>
+            </div>
             <div id="aibot-log" class="aibot-log"></div>
             <form id="aibot-form" class="aibot-form">
                 <textarea id="aibot-input" rows="1" placeholder="輸入問題，例如：怎麼登入？" autocomplete="off"></textarea>
@@ -56,17 +84,120 @@ EN: SSE format matches chat.py: data: {choices:[{delta:{content}}]} / data:[DONE
     const form = root.querySelector('#aibot-form');
     const input = root.querySelector('#aibot-input');
     const sendBtn = root.querySelector('#aibot-send');
+    const nameEl = root.querySelector('#aibot-name');
+    const statusEl = root.querySelector('#aibot-status');
+    const attachBar = root.querySelector('#aibot-attach');
+    const attachBtn = root.querySelector('#aibot-attach-btn');
+    const fileChip = root.querySelector('#aibot-file-chip');
+    const fileNameEl = root.querySelector('#aibot-file-name');
+    const fileClearBtn = root.querySelector('#aibot-file-clear');
+    const fileListEl = root.querySelector('#aibot-file-list');
+    const modeBtns = root.querySelectorAll('.aibot-mode-btn');
 
-    let greeted = false;
+    // ---- ZH: 訊息泡泡 | EN: bubbles ----
+    function addBubble(role, text) {
+        const div = document.createElement('div');
+        div.className = 'aibot-bubble aibot-' + role;
+        div.textContent = text;
+        logEl.appendChild(div);
+        logEl.scrollTop = logEl.scrollHeight;
+        return div;
+    }
+    function addSources(sources) {
+        if (!sources || !sources.length) return;
+        const div = document.createElement('div');
+        div.className = 'aibot-sources';
+        div.textContent = '參考：' + sources.join('、');
+        logEl.appendChild(div);
+        logEl.scrollTop = logEl.scrollHeight;
+    }
+    function showGreeting() {
+        addBubble('assistant', MODES[mode].greet);
+    }
 
+    // ---- ZH: 模式切換 | EN: mode switching ----
+    function setMode(m) {
+        if (!MODES[m]) return;
+        mode = m;
+        const cfg = MODES[m];
+        nameEl.textContent = cfg.name;
+        statusEl.textContent = cfg.status;
+        input.placeholder = cfg.placeholder;
+        modeBtns.forEach(b => b.classList.toggle('aibot-mode-active', b.dataset.mode === m));
+        attachBar.classList.toggle('aibot-hidden', m !== 'code');
+        clearFile();
+        fileListEl.classList.add('aibot-hidden');
+        // ZH: 切模式重置對話，避免兩種人格混在一起 | reset convo on mode switch
+        messages.length = 0;
+        logEl.innerHTML = '';
+        showGreeting();
+    }
+    modeBtns.forEach(b => b.addEventListener('click', () => setMode(b.dataset.mode)));
+
+    // ---- ZH: 附檔挑選器 | EN: file picker ----
+    function showListNotice(text) {
+        fileListEl.innerHTML = '';
+        const d = document.createElement('div');
+        d.className = 'aibot-file-notice';
+        d.textContent = text;
+        fileListEl.appendChild(d);
+        fileListEl.classList.remove('aibot-hidden');
+    }
+    function renderFileList(files) {
+        fileListEl.innerHTML = '';
+        files.forEach(p => {
+            const item = document.createElement('button');
+            item.type = 'button';
+            item.className = 'aibot-file-item';
+            item.textContent = p;
+            item.addEventListener('click', () => pickFile(p));
+            fileListEl.appendChild(item);
+        });
+        fileListEl.classList.remove('aibot-hidden');
+    }
+    function pickFile(p) {
+        attachedFile = p;
+        fileNameEl.textContent = p.split('/').pop();
+        fileChip.classList.remove('aibot-hidden');
+        fileListEl.classList.add('aibot-hidden');
+    }
+    function clearFile() {
+        attachedFile = null;
+        fileNameEl.textContent = '';
+        fileChip.classList.add('aibot-hidden');
+    }
+    fileClearBtn.addEventListener('click', clearFile);
+    attachBtn.addEventListener('click', async () => {
+        // ZH: 已開著清單就收起 | toggle
+        if (!fileListEl.classList.contains('aibot-hidden')) {
+            fileListEl.classList.add('aibot-hidden');
+            return;
+        }
+        const tok = getToken();
+        if (!tok) { showListNotice('請先登入才能讀取你的 Lab 檔案。'); return; }
+        showListNotice('讀取中…');
+        try {
+            const r = await fetch(`${ASSIST_BASE}/lab-files`, { headers: { 'Authorization': 'Bearer ' + tok } });
+            if (!r.ok) throw new Error('HTTP ' + r.status);
+            const data = await r.json();
+            if (!data.running) {
+                showListNotice(data.reason === 'lab_not_running'
+                    ? '你的 Lab 沒在執行，請先到 Notebook 啟動。'
+                    : '你的 Lab 尚未啟動，請先到 Notebook 開啟 Lab。');
+                return;
+            }
+            if (!data.files || !data.files.length) { showListNotice('Lab 裡找不到可附加的程式檔。'); return; }
+            renderFileList(data.files);
+        } catch (e) {
+            showListNotice('讀取檔案清單失敗，請稍後再試。');
+        }
+    });
+
+    // ---- ZH: 開關面板 | EN: open/close ----
     function openPanel() {
         panel.classList.remove('aibot-hidden');
         fab.classList.add('aibot-open');
-        if (!greeted) {
-            greeted = true;
-            addBubble('assistant',
-                '你好，我是平台客服小基 🙂\n我可以幫你解答平台操作問題，例如「怎麼登入」「怎麼提交運算任務」「Lab 怎麼用」。');
-        }
+        if (logEl.children.length === 0) showGreeting();
         setTimeout(() => input.focus(), 50);
     }
     function closePanel() {
@@ -82,34 +213,24 @@ EN: SSE format matches chat.py: data: {choices:[{delta:{content}}]} / data:[DONE
         input.style.height = Math.min(input.scrollHeight, 120) + 'px';
     });
     input.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter' && !e.shiftKey) {
-            e.preventDefault();
-            form.requestSubmit();
-        }
+        if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); form.requestSubmit(); }
     });
 
-    function addBubble(role, text) {
-        const div = document.createElement('div');
-        div.className = 'aibot-bubble aibot-' + role;
-        div.textContent = text;
-        logEl.appendChild(div);
-        logEl.scrollTop = logEl.scrollHeight;
-        return div;
-    }
-
-    function addSources(sources) {
-        if (!sources || !sources.length) return;
-        const div = document.createElement('div');
-        div.className = 'aibot-sources';
-        div.textContent = '參考：' + sources.join('、');
-        logEl.appendChild(div);
-        logEl.scrollTop = logEl.scrollHeight;
-    }
-
+    // ---- ZH: 送出 | EN: submit ----
     form.addEventListener('submit', async (e) => {
         e.preventDefault();
         const text = input.value.trim();
         if (!text || busy) return;
+
+        // ZH: 程式家教需登入 | code-tutor requires login
+        if (mode === 'code' && !getToken()) {
+            addBubble('user', text);
+            const b = addBubble('assistant', '');
+            b.classList.add('aibot-error');
+            b.textContent = '程式家教需要先登入才能使用喔，請先登入後再試。';
+            input.value = ''; input.style.height = 'auto';
+            return;
+        }
 
         input.value = '';
         input.style.height = 'auto';
@@ -122,26 +243,29 @@ EN: SSE format matches chat.py: data: {choices:[{delta:{content}}]} / data:[DONE
         aiBubble.classList.add('aibot-typing');
         aiBubble.textContent = '…';
 
+        const headers = { 'Content-Type': 'application/json' };
+        const payload = { messages, session_id: SESSION_ID, mode };
+        if (mode === 'code') {
+            headers['Authorization'] = 'Bearer ' + getToken();
+            if (attachedFile) payload.file_path = attachedFile;
+        }
+
         let full = '';
         try {
             const resp = await fetch(`${ASSIST_BASE}/ask`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ messages, session_id: SESSION_ID })
+                method: 'POST', headers, body: JSON.stringify(payload)
             });
             if (!resp.ok || !resp.body) throw new Error('HTTP ' + resp.status);
 
             const reader = resp.body.getReader();
             const decoder = new TextDecoder();
             let buffer = '';
-
             while (true) {
                 const { value, done } = await reader.read();
                 if (done) break;
                 buffer += decoder.decode(value, { stream: true });
                 const lines = buffer.split('\n');
-                buffer = lines.pop();  // ZH: 留最後不完整行 | EN: keep last partial line
-
+                buffer = lines.pop();
                 for (const line of lines) {
                     if (!line.startsWith('data: ')) continue;
                     const dataStr = line.slice(6).trim();
@@ -166,7 +290,7 @@ EN: SSE format matches chat.py: data: {choices:[{delta:{content}}]} / data:[DONE
                             aiBubble.textContent = full;
                             logEl.scrollTop = logEl.scrollHeight;
                         }
-                    } catch (_) { /* ZH: 忽略解析不完整片段 | EN: ignore partial */ }
+                    } catch (_) { /* ignore partial */ }
                 }
             }
         } catch (err) {
@@ -180,4 +304,10 @@ EN: SSE format matches chat.py: data: {choices:[{delta:{content}}]} / data:[DONE
             input.focus();
         }
     });
+
+    // ---- ZH: 對外 API（Notebook 頁「問程式家教」呼叫）| EN: public API ----
+    window.AibotWidget = {
+        open() { openPanel(); },
+        openCodeMode() { setMode('code'); openPanel(); },
+    };
 })();

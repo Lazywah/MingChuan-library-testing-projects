@@ -3138,3 +3138,100 @@ ion-icon {
     font-size: 16px;
 }
 #aibot-send:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* v2.7 模式切換 + 程式家教附檔 | mode switch + code-tutor attach */
+.aibot-modes {
+    display: flex;
+    gap: 6px;
+    padding: 8px 10px;
+    background: var(--bg-solid);
+    border-bottom: 1px solid var(--border-soft);
+    flex-shrink: 0;
+}
+.aibot-mode-btn {
+    flex: 1;
+    padding: 6px 10px;
+    border: 1px solid var(--border-soft);
+    border-radius: 8px;
+    background: var(--bg-soft);
+    color: var(--text-muted);
+    font-size: 13px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+.aibot-mode-btn:hover { color: var(--text-primary); }
+.aibot-mode-btn.aibot-mode-active {
+    background: linear-gradient(135deg, #6366f1, #8b5cf6);
+    color: #fff;
+    border-color: transparent;
+}
+
+.aibot-attach {
+    padding: 8px 10px;
+    background: var(--bg-solid);
+    border-bottom: 1px solid var(--border-soft);
+    flex-shrink: 0;
+}
+.aibot-attach.aibot-hidden { display: none; }
+#aibot-attach-btn {
+    border: 1px dashed var(--border-soft);
+    border-radius: 8px;
+    background: var(--bg-soft);
+    color: var(--text-primary);
+    font-size: 13px;
+    padding: 6px 10px;
+    cursor: pointer;
+}
+#aibot-attach-btn:hover { border-color: var(--accent-glow); }
+.aibot-file-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    margin-left: 8px;
+    padding: 4px 8px;
+    border-radius: 999px;
+    background: var(--accent-glow);
+    color: var(--bg-solid);
+    font-size: 12px;
+    max-width: 200px;
+}
+.aibot-file-chip.aibot-hidden { display: none; }
+.aibot-file-chip #aibot-file-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#aibot-file-clear {
+    border: none;
+    background: transparent;
+    color: inherit;
+    cursor: pointer;
+    font-size: 12px;
+    padding: 0;
+    line-height: 1;
+}
+.aibot-file-list {
+    margin-top: 8px;
+    max-height: 160px;
+    overflow-y: auto;
+    border: 1px solid var(--border-soft);
+    border-radius: 8px;
+    background: var(--bg-soft);
+}
+.aibot-file-list.aibot-hidden { display: none; }
+.aibot-file-item {
+    display: block;
+    width: 100%;
+    text-align: left;
+    border: none;
+    border-bottom: 1px solid var(--border-soft);
+    background: transparent;
+    color: var(--text-primary);
+    font-size: 12.5px;
+    font-family: monospace;
+    padding: 7px 10px;
+    cursor: pointer;
+}
+.aibot-file-item:last-child { border-bottom: none; }
+.aibot-file-item:hover { background: var(--bg-solid); }
+.aibot-file-notice {
+    padding: 10px;
+    font-size: 12.5px;
+    color: var(--text-muted);
+}
