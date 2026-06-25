@@ -197,6 +197,101 @@ def get_lifecycle() -> CodeServerLifecycle:
 
 
 # ==============================================================================
+# ZH: v2.6 程式家教讀檔 — 供 assistant「程式家教」模式讀使用者「自己」的 Lab 檔案
+# EN: v2.6 code-tutor file access — read the user's OWN lab files for the assistant
+# ZH: 安全：只讀該使用者自己的 cs-<uid> 容器、路徑限 /home/coder、拒穿越、單檔 size cap
+# ==============================================================================
+
+LAB_HOME = "/home/coder"
+TUTOR_FILE_EXTS = (".py", ".ipynb", ".txt", ".md", ".csv", ".json",
+                   ".js", ".ts", ".java", ".c", ".cpp", ".h", ".sh", ".yaml", ".yml")
+_MAX_TUTOR_FILE_BYTES = 64 * 1024  # ZH: 單檔最多讀 64KB（超過截斷）
+
+
+def list_user_files(user_id: str, limit: int = 200) -> dict:
+    """ZH: 列出使用者自己容器內 /home/coder 下可挑選的檔（相對路徑）。
+       EN: List selectable files under /home/coder in the user's OWN container.
+       回傳 {"running": bool, "files": [rel_path], "reason": str|None}"""
+    lc = get_lifecycle()
+    name = lc._container_name(user_id)
+    try:
+        c = lc.client.containers.get(name)
+    except NotFound:
+        return {"running": False, "files": [], "reason": "lab_not_started"}
+    if c.status != "running":
+        return {"running": False, "files": [], "reason": "lab_not_running"}
+
+    name_expr = " -o ".join([f"-name '*{e}'" for e in TUTOR_FILE_EXTS])
+    cmd = (
+        f"sh -c \"find {LAB_HOME} -type f \\( {name_expr} \\) "
+        f"-not -path '*/.*' -not -path '*/node_modules/*' -not -path '*/__pycache__/*' "
+        f"2>/dev/null | head -n {int(limit)}\""
+    )
+    try:
+        res = c.exec_run(cmd)
+        out = res.output.decode("utf-8", errors="replace") if res.output else ""
+    except APIError as e:
+        logger.warning("list_user_files exec failed for %s: %s", name, e)
+        return {"running": True, "files": [], "reason": "exec_failed"}
+
+    files = []
+    for line in out.splitlines():
+        line = line.strip()
+        if line.startswith(LAB_HOME + "/"):
+            files.append(line[len(LAB_HOME) + 1:])
+    files.sort()
+    return {"running": True, "files": files, "reason": None}
+
+
+def read_user_file(user_id: str, rel_path: str) -> dict:
+    """ZH: 讀使用者自己容器內 /home/coder/<rel_path> 的文字（安全檢查 + size cap）。
+       EN: Read text of /home/coder/<rel_path> from the user's OWN container.
+       回傳 {"ok": bool, "content": str, "path": str, "truncated": bool, "reason": str|None}"""
+    import io
+    import tarfile
+    import posixpath
+
+    # ZH: 路徑安全 — 正規化後必須仍落在 /home/coder 下，拒絕 .. 穿越
+    rel = (rel_path or "").lstrip("/")
+    target = posixpath.normpath(posixpath.join(LAB_HOME, rel))
+    if target != LAB_HOME and not target.startswith(LAB_HOME + "/"):
+        return {"ok": False, "content": "", "path": rel_path, "truncated": False, "reason": "path_forbidden"}
+
+    lc = get_lifecycle()
+    name = lc._container_name(user_id)
+    try:
+        c = lc.client.containers.get(name)
+    except NotFound:
+        return {"ok": False, "content": "", "path": rel, "truncated": False, "reason": "lab_not_started"}
+    if c.status != "running":
+        return {"ok": False, "content": "", "path": rel, "truncated": False, "reason": "lab_not_running"}
+
+    try:
+        stream, _stat = c.get_archive(target)
+    except NotFound:
+        return {"ok": False, "content": "", "path": rel, "truncated": False, "reason": "not_found"}
+    except APIError as e:
+        logger.warning("read_user_file get_archive failed for %s:%s: %s", name, target, e)
+        return {"ok": False, "content": "", "path": rel, "truncated": False, "reason": "read_failed"}
+
+    raw = b"".join(stream)  # ZH: get_archive 回 tar 串流 | EN: stream yields a tar archive
+    try:
+        with tarfile.open(fileobj=io.BytesIO(raw)) as tf:
+            member = next((m for m in tf.getmembers() if m.isfile()), None)
+            if member is None:
+                return {"ok": False, "content": "", "path": rel, "truncated": False, "reason": "not_a_file"}
+            fobj = tf.extractfile(member)
+            data = fobj.read(_MAX_TUTOR_FILE_BYTES + 1) if fobj else b""
+    except (tarfile.TarError, OSError) as e:
+        logger.warning("read_user_file tar parse failed: %s", e)
+        return {"ok": False, "content": "", "path": rel, "truncated": False, "reason": "parse_failed"}
+
+    truncated = len(data) > _MAX_TUTOR_FILE_BYTES
+    text = data[:_MAX_TUTOR_FILE_BYTES].decode("utf-8", errors="replace")
+    return {"ok": True, "content": text, "path": rel, "truncated": truncated, "reason": None}
+
+
+# ==============================================================================
 # ZH: 高階 API — 給 router 與 scheduler 呼叫
 # EN: High-level API — called by routers & scheduler
 # ==============================================================================

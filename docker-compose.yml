@@ -79,6 +79,9 @@ services:
     volumes:
       - ./data:/data:rw
       - ./job-scheduler/app:/app/app:rw
+      # ZH: v2.6 RAG 知識庫熱掛載 — 改 knowledge/*.md 後免 rebuild，admin reindex 即生效
+      # EN: v2.6 RAG KB hot-mount — edit knowledge/*.md without rebuild; admin reindex applies
+      - ./job-scheduler/knowledge:/app/knowledge:ro
       # ZH: C4 修復：.env 與 docker-compose.yml 改為唯讀，避免容器 RCE 後可覆寫主機 secrets
       # EN: C4 fix: .env and docker-compose.yml are read-only — prevents RCE→secret-rewrite
       - ./.env:/app/.env:ro

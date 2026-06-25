@@ -37,7 +37,7 @@ from ..auth import get_current_user
 from ..config import settings
 from ..database import get_db
 from ..rate_limit import limiter
-from ..services import rag_service
+from ..services import rag_service, lab_manager
 
 logger = logging.getLogger(__name__)
 
@@ -58,6 +58,10 @@ class AssistantAskRequest(BaseModel):
     messages: list[AssistantMessage] = Field(default_factory=list)
     query: str | None = None
     session_id: str | None = None
+    # ZH: v2.6 模式：guide=平台客服(公開)；code=程式家教(需登入，可附 Lab 檔)
+    # EN: v2.6 mode: guide=public support; code=code-tutor (login required, optional lab file)
+    mode: str = "guide"
+    file_path: str | None = None
 
 
 def _sse(payload: dict) -> str:
@@ -97,17 +101,52 @@ async def ask(
 
     async def gen():
         if not query:
-            yield _delta("你好，我是平台客服小基 🙂 有什麼平台操作上的問題嗎？")
+            if body.mode == "code":
+                yield _delta("嗨，我是程式家教小基 👨‍🏫 你可以貼上程式碼、或附上 Lab 裡的檔，我陪你一起看。")
+            else:
+                yield _delta("你好，我是平台客服小基 🙂 有什麼平台操作上的問題嗎？")
             yield "data: [DONE]\n\n"
             return
 
+        # ZH: 檢索（兩種模式都用 KB 接地操作類問題）| EN: retrieve (both modes use KB)
         try:
             ranked = await rag_service.retrieve(db, query)
         except Exception as e:  # noqa: BLE001 - 檢索失敗不應讓整個請求 500
             logger.error("RAG retrieve failed: %s", e, exc_info=True)
             ranked = []
 
-        messages = rag_service.build_messages(query, ranked, history)
+        if body.mode == "code":
+            # ZH: 程式家教需登入（guide 維持公開）| EN: code-tutor requires login
+            # ZH: 自行從 Authorization header 取 bearer（手動呼叫繞過 oauth2_scheme，
+            #     _extract_token 只認注入值或 cookie，故 header 要自己拆）
+            from fastapi import HTTPException
+            _auth = request.headers.get("Authorization", "")
+            _bearer = _auth[7:].strip() if _auth[:7].lower() == "bearer " else None
+            try:
+                user = await get_current_user(request, _bearer, db)
+            except HTTPException:
+                yield _sse({"error": "程式家教需要先登入才能使用喔，請先登入。"})
+                yield "data: [DONE]\n\n"
+                return
+
+            # ZH: 讀使用者「手動挑選」的檔；失敗則提示後改一般性回答
+            file_excerpt = None
+            if body.file_path:
+                res = lab_manager.read_user_file(user.id, body.file_path)
+                if res.get("ok"):
+                    file_excerpt = res
+                else:
+                    reason_msg = {
+                        "lab_not_started": "（讀不到附檔：你的 Lab 尚未啟動，請先到 Notebook 開啟 Lab）",
+                        "lab_not_running": "（讀不到附檔：你的 Lab 容器不在執行中，請先啟動）",
+                        "not_found": "（讀不到附檔：找不到這個檔案）",
+                        "path_forbidden": "（附檔路徑不被允許）",
+                    }.get(res.get("reason"), "（讀不到附檔，先就你的問題一般性回答）")
+                    yield _delta(reason_msg + "\n\n")
+
+            messages = rag_service.build_code_messages(query, ranked, file_excerpt, history)
+        else:
+            messages = rag_service.build_messages(query, ranked, history)
 
         ollama_url = f"{settings.OLLAMA_BASE_URL.rstrip('/')}/v1/chat/completions"
         payload = {"model": settings.RAG_CHAT_MODEL, "messages": messages, "stream": True}
@@ -172,6 +211,18 @@ def status(db: Session = Depends(get_db)):
         "embed_model": settings.RAG_EMBED_MODEL,
         "chat_model": settings.RAG_CHAT_MODEL,
     }
+
+
+# ==============================================================================
+# ZH: v2.6 程式家教 — 列出使用者自己的 Lab 檔（給前端附檔挑選器，需登入）
+# EN: v2.6 code-tutor — list the user's OWN lab files (file picker, login required)
+# ==============================================================================
+
+@router.get("/lab-files")
+def lab_files(current_user: models.User = Depends(get_current_user)):
+    """ZH: 回傳使用者 cs-<uid> 容器內 /home/coder 下可挑選的檔（相對路徑）。
+       EN: List selectable files under /home/coder in the user's own container."""
+    return lab_manager.list_user_files(current_user.id)
 
 
 # ==============================================================================
