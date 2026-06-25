@@ -572,6 +572,7 @@ flowchart LR
 | `/api/v1/secrets/*` | 使用者 AES-256-GCM secrets CRUD | JWT |
 | `/api/v1/announcements/*` | 首頁公告（user 讀）+ admin CRUD | JWT |
 | `/api/v1/external-ai/*` | **(v2.5)** 外部 AI 分流：`/me` 導流（非 admin）；`/admin/{url,accounts,import}` 對應表/網址 | JWT（`/admin/*` 需 admin）|
+| `/api/v1/assistant/*` | **(v2.6/2.7)** 小基 RAG 助手：`/ask`（guide=公開客服 / code=程式家教 SSE）、`/lab-files`（讀自己 Lab 檔）、`/status`、`/reindex` | guide 公開；code/`/lab-files` 需 JWT；`/reindex` admin |
 | `/api/v1/admin/*` | 使用者管理、配額、模型(tool_types)、storage、lab/sessions、cluster/stats、audit | JWT (admin) |
 | `/api/v1/worker/*` | Pull 任務、更新進度、heartbeat | API_TOKEN（與 .env 對齊） |
 | `/api/v1/system/*` | 系統設定、健康檢查 | JWT (admin) |
