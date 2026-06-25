@@ -309,6 +309,9 @@ const TRANSLATIONS = {
         lab_open: "開啟 Notebook",
         lab_enter: "進入 Notebook",
         lab_ask_tutor: "問程式家教",
+        lab_collapse: "收合",
+        lab_fullscreen: "全螢幕",
+        lab_newtab: "新分頁開啟",
         lab_stop: "停止 Session",
         lab_stop_confirm: "確認停止 Notebook session？檔案會保留。",
         lab_tip_1: "💡 第一次開啟會約 5–10 秒建立容器；之後 idle 30 分鐘自動關閉，檔案永久保留於個人 volume。",
@@ -673,6 +676,9 @@ const TRANSLATIONS = {
         lab_open: "Open Notebook",
         lab_enter: "Enter Notebook",
         lab_ask_tutor: "Ask Code Tutor",
+        lab_collapse: "Collapse",
+        lab_fullscreen: "Fullscreen",
+        lab_newtab: "Open in new tab",
         lab_stop: "Stop Session",
         lab_stop_confirm: "Stop this Notebook session? Your files are preserved.",
         lab_tip_1: "💡 First launch takes ~5–10s; idle 30 min auto-stops, files persist in your volume.",
@@ -3032,20 +3038,59 @@ const Lab = (() => {
         }
     }
 
+    // ZH: v2.7 — 取得 code-server 內嵌目標 URL | EN: build embed target URL
+    function _codeUrl(userId) {
+        return `/code/${userId}/?folder=/home/coder/projects`;
+    }
+
+    // ZH: v2.7 把 code-server 內嵌進頁面（取代開新分頁），小基泡泡會浮在上面
+    // EN: v2.7 embed code-server in-page (replaces new tab); the 小基 widget floats over it
+    function _embedLab(target) {
+        const wrap     = document.getElementById('lab-embed-wrap');
+        const iframe   = document.getElementById('lab-iframe');
+        const launcher = document.querySelector('#compute-notebook-page .lab-launcher');
+        const secrets  = document.getElementById('secrets-section');
+        if (!wrap || !iframe) { window.open(target, '_blank', 'noopener'); return; }  // 退回新分頁
+        if (iframe.getAttribute('src') !== target) iframe.setAttribute('src', target);
+        wrap.dataset.target = target;
+        wrap.classList.remove('hidden');
+        launcher && launcher.classList.add('hidden');
+        secrets && secrets.classList.add('hidden');
+        try { wrap.scrollIntoView({ block: 'start' }); } catch (_) {}
+    }
+
+    // ZH: 收合（不停止 session，保留 iframe 下次直接顯示）| collapse without stopping
+    function _collapseLab() {
+        const wrap     = document.getElementById('lab-embed-wrap');
+        const launcher = document.querySelector('#compute-notebook-page .lab-launcher');
+        const secrets  = document.getElementById('secrets-section');
+        if (wrap) { wrap.classList.remove('lab-embed-fullscreen-on'); wrap.classList.add('hidden'); }
+        launcher && launcher.classList.remove('hidden');
+        secrets && secrets.classList.remove('hidden');
+    }
+
+    function _toggleFullscreen() {
+        document.getElementById('lab-embed-wrap')?.classList.toggle('lab-embed-fullscreen-on');
+    }
+
+    async function _onEmbedStop() {
+        await _onStopClick();                       // 既有：confirm + /stop + refresh（取消則 _state 不變）
+        if (_state === 'stopped') {
+            document.getElementById('lab-iframe')?.removeAttribute('src');
+            _collapseLab();
+        }
+    }
+
     async function _onOpenClick() {
         const openBtn = document.getElementById('lab-open-btn');
-        // v2.2 fix: 之前寫成 window.currentUser?.id（全域沒這個變數），導致 userId 永遠空字串
-        //         → 「進入 Notebook」每次都掉到 _start 分支重啟容器。改用正確的 currentUserData。
+        // v2.2 fix: 用 currentUserData（全域 window.currentUser 不存在）
         const userId  = (window.currentUserData?.id) || localStorage.getItem('user_id') || '';
 
-        // ZH: 若已 running，直接開新 tab 跳轉
-        // EN: If already running, just open new tab
+        // ZH: 若已 running，直接內嵌進入（不再開新分頁）
         if (_state === 'running' && userId) {
-            window.open(`/code/${userId}/`, '_blank', 'noopener');
+            _embedLab(_codeUrl(userId));
             return;
         }
-
-        // v2.2: 若使用者已 running 但 userId 仍取不到（極少見），警告而非重啟
         if (_state === 'running' && !userId) {
             _setStatusText(_t('lab_status_error', '錯誤 Error') + ': user id missing — 請重新登入', 'error');
             return;
@@ -3054,43 +3099,14 @@ const Lab = (() => {
         const image = document.getElementById('lab-image-select')?.value || 'aibase/pytorch:2026-spring';
         openBtn.disabled = true;
         _setStatusText(_t('lab_status_starting', '啟動中… Starting…'), 'warn');
-
-        // v2.4: 在「使用者點擊手勢」內先開好分頁(避免被瀏覽器擋彈窗)，顯示啟動中；
-        //       後端會等 code-server 就緒才回傳，回傳後再把此分頁導向 Notebook → 不再 503。
-        const win = window.open('', '_blank');
-        if (win) {
-            try { win.opener = null; } catch (_) {}
-            try {
-                win.document.write('<!doctype html><html><head><meta charset="utf-8"><title>Notebook</title></head>'
-                    + '<body style="margin:0;height:100vh;display:flex;align-items:center;justify-content:center;'
-                    + 'font-family:system-ui,sans-serif;background:#0e032a;color:#fff;">'
-                    + '<div style="text-align:center"><div style="font-size:22px">⏳ Notebook 啟動中…</div>'
-                    + '<div style="opacity:.65;margin-top:10px">容器啟動需數秒，就緒後會自動載入</div></div></body></html>');
-            } catch (_) {}
-        }
-
         try {
-            const resp = await _api('/start', {
-                method: 'POST',
-                body: JSON.stringify({ base_image: image }),
-            });
+            // ZH: /start 會等 code-server 就緒才回傳，回來再設 iframe.src → 不會 503
+            const resp = await _api('/start', { method: 'POST', body: JSON.stringify({ base_image: image }) });
             _state = resp.status || 'starting';
-            const target = resp.code_url || (userId ? `/code/${userId}/` : null);
-            if (win && target) {
-                win.location.replace(target);            // 後端已確認就緒 → 導向，不會 503
-            } else if (target) {
-                window.open(target, '_blank', 'noopener'); // 分頁被擋時退回直接開
-            } else if (win) {
-                win.close();
-            }
+            const target = resp.code_url || (userId ? _codeUrl(userId) : null);
+            if (target) _embedLab(target);
             _startPolling();
         } catch (e) {
-            if (win) {
-                try {
-                    win.document.body.innerHTML = '<div style="text-align:center;font-family:system-ui,sans-serif;color:#fff">'
-                        + '❌ 啟動失敗，請關閉此分頁後重試<br><small style="opacity:.6">' + (e.message || '') + '</small></div>';
-                } catch (_) { try { win.close(); } catch (__) {} }
-            }
             _setStatusText(`${_t('lab_status_error', '啟動失敗 Failed')}: ${e.message}`, 'error');
         } finally {
             openBtn.disabled = false;
@@ -3122,10 +3138,23 @@ const Lab = (() => {
         if (_pollTimer) { clearInterval(_pollTimer); _pollTimer = null; }
     }
 
+    let _inited = false;
     function init() {
         if (!document.getElementById('lab-open-btn')) return;
-        document.getElementById('lab-open-btn').addEventListener('click', _onOpenClick);
-        document.getElementById('lab-stop-btn').addEventListener('click', _onStopClick);
+        if (!_inited) {
+            _inited = true;   // ZH: 事件只綁一次（init 每次切分頁都會被呼叫）
+            const byId = (id) => document.getElementById(id);
+            byId('lab-open-btn').addEventListener('click', _onOpenClick);
+            byId('lab-stop-btn').addEventListener('click', _onStopClick);
+            // v2.7 內嵌檢視控制
+            byId('lab-embed-collapse')?.addEventListener('click', _collapseLab);
+            byId('lab-embed-fullscreen')?.addEventListener('click', _toggleFullscreen);
+            byId('lab-embed-newtab')?.addEventListener('click', () => {
+                const t = byId('lab-embed-wrap')?.dataset.target;
+                if (t) window.open(t, '_blank', 'noopener');
+            });
+            byId('lab-embed-stop')?.addEventListener('click', _onEmbedStop);
+        }
         _refreshStatus();
         _startPolling();
     }
