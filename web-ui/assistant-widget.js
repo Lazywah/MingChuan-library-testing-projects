@@ -18,10 +18,33 @@ ZH: SSE 格式與 chat.py 一致：data: {choices:[{delta:{content}}]} / data:[D
 
     const ASSIST_BASE = '/api/v1/assistant';
     const SESSION_ID = (window.crypto && crypto.randomUUID) ? crypto.randomUUID() : 'aibot-' + Date.now();
-    const messages = [];
-    let busy = false;
+    // ZH: v2.7 每個模式各自一間「聊天室」，切換模式 = 切換聊天室（不清空）
+    // EN: v2.7 one chat room per mode; switching mode swaps rooms (no wipe)
+    const histories = { guide: [], code: [] };
     let mode = 'guide';
+    let messages = histories[mode];   // ZH: 指向目前模式的對話 | points at current room
+    let busy = false;
     let attachedFile = null;   // ZH: 目前附加的 Lab 檔（相對路徑）| attached lab file (rel path)
+
+    // ZH: 短暫記憶（單次登入）— 存 sessionStorage，並以 token 簽章；換登入/換人即失效
+    // EN: short-term memory (per login) — sessionStorage, signed by token; new login invalidates
+    const STORE_KEY = 'aibot_histories';
+    const _sig = () => (localStorage.getItem('ai_hud_token') || 'anon');
+    function _saveHistories() {
+        try { sessionStorage.setItem(STORE_KEY, JSON.stringify({ sig: _sig(), histories })); } catch (_) {}
+    }
+    function _loadHistories() {
+        try {
+            const raw = sessionStorage.getItem(STORE_KEY);
+            if (!raw) return;
+            const obj = JSON.parse(raw);
+            if (obj && obj.sig === _sig() && obj.histories) {
+                histories.guide = Array.isArray(obj.histories.guide) ? obj.histories.guide : [];
+                histories.code  = Array.isArray(obj.histories.code)  ? obj.histories.code  : [];
+                messages = histories[mode];
+            }
+        } catch (_) {}
+    }
 
     const MODES = {
         guide: {
@@ -115,10 +138,19 @@ ZH: SSE 格式與 chat.py 一致：data: {choices:[{delta:{content}}]} / data:[D
         addBubble('assistant', MODES[mode].greet);
     }
 
-    // ---- ZH: 模式切換 | EN: mode switching ----
+    // ZH: 依目前聊天室重畫對話（空房顯示問候語）| re-render the current room
+    function _renderLog() {
+        logEl.innerHTML = '';
+        if (!messages.length) { showGreeting(); return; }
+        messages.forEach(m => addBubble(m.role === 'user' ? 'user' : 'assistant', m.content));
+        logEl.scrollTop = logEl.scrollHeight;
+    }
+
+    // ---- ZH: 模式切換 = 切換聊天室（保留各自對話）| switch chat room ----
     function setMode(m) {
-        if (!MODES[m]) return;
+        if (!MODES[m] || m === mode) return;   // ZH: 同模式不動作，避免清空 | no-op on same mode
         mode = m;
+        messages = histories[m];               // ZH: 指向該聊天室 | point at that room
         const cfg = MODES[m];
         nameEl.textContent = cfg.name;
         statusEl.textContent = cfg.status;
@@ -127,10 +159,7 @@ ZH: SSE 格式與 chat.py 一致：data: {choices:[{delta:{content}}]} / data:[D
         attachBar.classList.toggle('aibot-hidden', m !== 'code');
         clearFile();
         fileListEl.classList.add('aibot-hidden');
-        // ZH: 切模式重置對話，避免兩種人格混在一起 | reset convo on mode switch
-        messages.length = 0;
-        logEl.innerHTML = '';
-        showGreeting();
+        _renderLog();                          // ZH: 切到該聊天室並重畫 | swap & re-render
     }
     modeBtns.forEach(b => b.addEventListener('click', () => setMode(b.dataset.mode)));
 
@@ -197,7 +226,7 @@ ZH: SSE 格式與 chat.py 一致：data: {choices:[{delta:{content}}]} / data:[D
     function openPanel() {
         panel.classList.remove('aibot-hidden');
         fab.classList.add('aibot-open');
-        if (logEl.children.length === 0) showGreeting();
+        if (logEl.children.length === 0) _renderLog();
         setTimeout(() => input.focus(), 50);
     }
     function closePanel() {
@@ -299,15 +328,27 @@ ZH: SSE 格式與 chat.py 一致：data: {choices:[{delta:{content}}]} / data:[D
             aiBubble.textContent = '連線失敗，請稍後再試。(' + err.message + ')';
         } finally {
             if (full) messages.push({ role: 'assistant', content: full });
+            _saveHistories();   // ZH: 寫入短暫記憶（單次登入）| persist room (per login)
             busy = false;
             sendBtn.disabled = false;
             input.focus();
         }
     });
 
+    // ZH: 啟動時還原本次登入的聊天室記憶 | restore this-login rooms on start
+    _loadHistories();
+
     // ---- ZH: 對外 API（Notebook 頁「問程式家教」呼叫）| EN: public API ----
     window.AibotWidget = {
         open() { openPanel(); },
         openCodeMode() { setMode('code'); openPanel(); },
+        // ZH: 登出時清空（app.js 登出處呼叫）| clear on logout
+        reset() {
+            histories.guide.length = 0;
+            histories.code.length = 0;
+            try { sessionStorage.removeItem(STORE_KEY); } catch (_) {}
+            logEl.innerHTML = '';
+            showGreeting();
+        },
     };
 })();

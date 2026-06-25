@@ -994,6 +994,8 @@ document.addEventListener('DOMContentLoaded', () => {
             }
             authToken = null;
             localStorage.removeItem('ai_hud_token');
+            // v2.7: 登出清空小基聊天室記憶（客服/家教兩室）
+            if (window.AibotWidget && typeof window.AibotWidget.reset === 'function') window.AibotWidget.reset();
             if (pollInterval) clearInterval(pollInterval);
             // Close dropdown if open
             const menu = document.getElementById('user-dropdown-menu');
