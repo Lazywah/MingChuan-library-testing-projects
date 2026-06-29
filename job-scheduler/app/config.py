@@ -125,6 +125,18 @@ class Settings(BaseSettings):
     RAG_HISTORY_TURNS: int = 3         # ZH: 帶入最近幾輪對話 | EN: recent turns kept
 
     # ------------------------------------------------------------------
+    # ZH: v2.8 MYAI 廠商平台 headless 同步（唯讀）| EN: v2.8 MYAI vendor headless sync (read-only)
+    # ZH: 以管理者帳密 headless 登入 → 匯出使用者清單(含 Token 點數) → 同步顯示。
+    #     帳密由 .env 提供(MYAI_ADMIN_EMAIL / MYAI_ADMIN_PASSWORD)，程式不存明文。
+    # EN: Headless-login with admin creds → export user list (incl. token points) → display.
+    # ------------------------------------------------------------------
+    MYAI_BASE_URL: str = "https://www.myai168.com"
+    MYAI_LOGIN_PATH: str = "/mcu/ai/user/login_info"
+    MYAI_EXPORT_PATH: str = "/mcu/gt_sdk/admin_168/user/export_user_list"
+    MYAI_ADMIN_EMAIL: str = ""         # ZH: 由 .env 提供 | EN: from .env
+    MYAI_ADMIN_PASSWORD: str = ""      # ZH: 由 .env 提供 | EN: from .env
+
+    # ------------------------------------------------------------------
     # ZH: 任務超時設定 (分鐘) | EN: Job timeout (minutes)
     # ------------------------------------------------------------------
     JOB_TIMEOUT_MINUTES: int = 120

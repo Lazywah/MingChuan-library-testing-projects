@@ -9,7 +9,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Playpen+Sans:wght@400;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="styles.css?v=20260629-1">
     <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
@@ -1037,6 +1037,36 @@
                     </div>
                 </section>
 
+                <!-- v2.8 廠商 Token 同步（唯讀，headless 從 myai168 匯出） -->
+                <section class="widget form-box-panel" style="grid-column: 1 / -1;">
+                    <div class="widget-header split">
+                        <h3><ion-icon name="sync-outline" style="margin-right:6px;"></ion-icon>
+                            <span data-i18n="myai_sync_title">廠商 Token 同步（myai168）</span></h3>
+                        <div style="display:flex; gap:10px; align-items:center;">
+                            <span id="myai-synced-at" style="font-size:12px; color:var(--text-muted);"></span>
+                            <button class="ready-btn config-save-btn" onclick="externalAi.syncMyai()" style="width:auto; padding:6px 14px;">
+                                <ion-icon name="sync-outline"></ion-icon> <span data-i18n="myai_sync_now">立即同步</span>
+                            </button>
+                        </div>
+                    </div>
+                    <p style="color:var(--text-muted); font-size:12px; margin-bottom:10px;" data-i18n="myai_sync_hint">
+                        以管理者帳密（.env）headless 登入 myai168 → 匯出使用者清單 → 顯示每人 Token 點數。唯讀，不回寫廠商。
+                    </p>
+                    <div id="myai-sync-msg" style="margin-bottom:8px; font-size:13px;"></div>
+                    <div class="admin-table-wrap scrollbar-custom" style="max-height:420px; overflow-y:auto;">
+                        <table class="admin-table" id="myai-accounts-table">
+                            <thead><tr>
+                                <th data-i18n="ext_col_vendor">名稱</th>
+                                <th data-i18n="admin_col_email">電子郵件</th>
+                                <th data-i18n="myai_col_points">Token 點數</th>
+                                <th data-i18n="myai_col_expiry">有效期間</th>
+                                <th data-i18n="col_status">狀態</th>
+                            </tr></thead>
+                            <tbody><tr><td colspan="5" style="text-align:center; color:var(--text-muted);">尚未同步</td></tr></tbody>
+                        </table>
+                    </div>
+                </section>
+
             </div>
         </div> <!-- End of tab-external-ai -->
         </main> <!-- End of admin-content -->
@@ -1069,7 +1099,7 @@
     <script type="module" src="https://unpkg.com/ionicons@7.1.0/dist/ionicons/ionicons.esm.js"></script>
     <script nomodule src="https://unpkg.com/ionicons@7.1.0/dist/ionicons/ionicons.js"></script>
     <!-- 載入 Admin 邏輯 -->
-    <script src="admin.js"></script>
+    <script src="admin.js?v=20260629-1"></script>
 </body>
 
 </html>

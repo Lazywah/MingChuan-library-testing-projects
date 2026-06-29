@@ -24,6 +24,7 @@ import io
 from .. import crud, schemas, models
 from ..auth import get_current_user
 from ..database import get_db
+from ..services import myai_sync
 
 router = APIRouter(tags=["外部 AI External-AI"])
 
@@ -186,3 +187,48 @@ def import_accounts_csv(
         except ValueError as e:
             result.errors.append(f"第 {idx} 行: {e}")
     return result
+
+
+# ==============================================================================
+# ZH: v2.8 MYAI 廠商平台 headless 同步（唯讀）| EN: v2.8 MYAI headless sync (read-only)
+# ==============================================================================
+
+@router.post("/admin/sync-myai")
+async def sync_myai(
+    db: Session = Depends(get_db),
+    _: models.User = Depends(require_admin),
+) -> Any:
+    """ZH: 立即 headless 登入廠商 → 匯出使用者(含 Token 點數) → 同步進 myai_accounts。
+       EN: Trigger headless login → export → upsert into myai_accounts."""
+    try:
+        return await myai_sync.sync(db)
+    except myai_sync.MyaiSyncError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:  # noqa: BLE001
+        raise HTTPException(status_code=500, detail=f"同步失敗：{e}")
+
+
+@router.get("/admin/myai-accounts")
+def list_myai_accounts(
+    db: Session = Depends(get_db),
+    _: models.User = Depends(require_admin),
+) -> Any:
+    """ZH: 列出已同步的廠商帳號/Token（供 admin 顯示）| EN: list synced MYAI accounts."""
+    rows = (
+        db.query(models.MyaiAccount)
+        .order_by(models.MyaiAccount.points.desc())
+        .all()
+    )
+    last = max((r.synced_at for r in rows), default=None)
+    return {
+        "synced_at": last.isoformat() if last else None,
+        "count": len(rows),
+        "accounts": [
+            {
+                "vendor_sn": r.vendor_sn, "email": r.email, "name": r.name,
+                "user_type": r.user_type, "points": r.points, "expiry": r.expiry,
+                "status": r.status, "newsletter": r.newsletter, "note": r.note,
+            }
+            for r in rows
+        ],
+    }

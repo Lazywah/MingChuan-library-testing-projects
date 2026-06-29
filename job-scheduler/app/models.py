@@ -414,3 +414,28 @@ class KnowledgeChunk(Base):
     content     = Column(Text, nullable=False)                                # ZH: 片段內容 | EN: chunk text
     embedding   = Column(Text, nullable=False)                                # ZH: 向量 (JSON array string) | EN: vector (JSON array string)
     created_at  = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+
+
+# ==============================================================================
+# ZH: 表 17: MyaiAccount - MYAI 廠商平台帳號/點數同步快取 (v2.8 唯讀同步)
+# EN: Table 17: MyaiAccount - cached MYAI vendor account/credit sync (v2.8, read-only)
+# ZH: headless 登入廠商管理後台 → 匯出使用者清單 → 存進此表供平台顯示。
+#     以 email 對應到本平台使用者；只同步顯示，不回寫廠商。
+# EN: Headless-login to vendor admin → export users → cache here for display.
+#     Keyed by email; display-only, never written back to vendor.
+# ==============================================================================
+class MyaiAccount(Base):
+    __tablename__ = "myai_accounts"
+
+    id         = Column(String, primary_key=True, default=generate_uuid)
+    vendor_sn  = Column(String, unique=True, index=True, nullable=False)       # ZH: 廠商編號 | EN: vendor user id (編號)
+    email      = Column(String, index=True, nullable=True)                     # ZH: 對應本平台使用者的鍵 | EN: join key to our users
+    name       = Column(String, nullable=True)                                 # ZH: 名稱 | EN: name
+    user_type  = Column(String, nullable=True)                                 # ZH: 類型 (超級管理員/使用者) | EN: type
+    points     = Column(Integer, default=0)                                    # ZH: 點數 = Token 餘額 | EN: credits (token balance)
+    expiry     = Column(String, nullable=True)                                 # ZH: 有效期間 (原字串) | EN: expiry (raw string)
+    status     = Column(String, nullable=True)                                 # ZH: 狀態 | EN: status
+    newsletter = Column(String, nullable=True)                                 # ZH: 電子報 | EN: newsletter
+    note       = Column(Text, nullable=True)                                   # ZH: 備註 | EN: note
+    synced_at  = Column(DateTime, default=lambda: datetime.now(timezone.utc),
+                        onupdate=lambda: datetime.now(timezone.utc))           # ZH: 最後同步時間 | EN: last sync time

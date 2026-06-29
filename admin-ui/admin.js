@@ -35,6 +35,12 @@ const TRANSLATIONS = {
         ext_admin_csv_title: "CSV 批次匯入造冊結果",
         ext_admin_csv_hint: "每行格式：platform_username,vendor_username（可含表頭，重複者更新）。",
         ext_admin_list_title: "帳號對應表",
+        myai_sync_title: "廠商 Token 同步（myai168）",
+        myai_sync_now: "立即同步",
+        myai_sync_hint: "以管理者帳密（.env）headless 登入 myai168 → 匯出使用者清單 → 顯示每人 Token 點數。唯讀，不回寫廠商。",
+        myai_col_points: "Token 點數",
+        myai_col_expiry: "有效期間",
+        admin_col_email: "電子郵件",
         ext_col_platform: "平台帳號",
         ext_col_vendor: "廠商帳號",
         btn_save: "儲存",
@@ -281,6 +287,12 @@ const TRANSLATIONS = {
         ext_admin_csv_title: "Bulk Import (CSV)",
         ext_admin_csv_hint: "Per line: platform_username,vendor_username (header allowed; existing rows updated).",
         ext_admin_list_title: "Account Mapping Table",
+        myai_sync_title: "Vendor Token Sync (myai168)",
+        myai_sync_now: "Sync now",
+        myai_sync_hint: "Headless-login to myai168 with admin creds (.env) → export users → show each user's token points. Read-only.",
+        myai_col_points: "Token Points",
+        myai_col_expiry: "Expiry",
+        admin_col_email: "Email",
         ext_col_platform: "Platform Account",
         ext_col_vendor: "Vendor Account",
         btn_save: "Save",
@@ -606,6 +618,50 @@ const externalAi = {
     init() {
         this.loadUrl();
         this.refresh();
+        this.loadMyai();
+    },
+    // v2.8 廠商 Token 同步（唯讀）
+    async loadMyai() {
+        try {
+            const res = await fetch(`${API_BASE}/external-ai/admin/myai-accounts`, { headers: this._authHeaders() });
+            if (!res.ok) throw new Error('load failed');
+            const data = await res.json();
+            this._renderMyai(data);
+        } catch (e) { /* 靜默 */ }
+    },
+    _renderMyai(data) {
+        const at = document.getElementById('myai-synced-at');
+        if (at) at.textContent = data.synced_at ? ('上次同步：' + new Date(data.synced_at).toLocaleString()) : '尚未同步';
+        const tbody = document.querySelector('#myai-accounts-table tbody');
+        if (!tbody) return;
+        const rows = data.accounts || [];
+        if (!rows.length) {
+            tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; color:var(--text-muted);">尚未同步</td></tr>';
+            return;
+        }
+        tbody.innerHTML = rows.map(r => {
+            const ok = (r.status || '') === '確定' || (r.status || '').toLowerCase() === 'active';
+            return `<tr>
+                <td>${this._esc(r.name)}</td>
+                <td>${this._esc(r.email)}</td>
+                <td style="font-family:monospace;">${Number(r.points || 0).toLocaleString()}</td>
+                <td>${this._esc(r.expiry)}</td>
+                <td style="color:${ok ? '#4ade80' : 'var(--text-muted)'};">${this._esc(r.status)}</td>
+            </tr>`;
+        }).join('');
+    },
+    async syncMyai() {
+        const msg = document.getElementById('myai-sync-msg');
+        if (msg) { msg.style.color = 'var(--text-muted)'; msg.textContent = '同步中…（headless 登入廠商，請稍候）'; }
+        try {
+            const res = await fetch(`${API_BASE}/external-ai/admin/sync-myai`, { method: 'POST', headers: this._authHeaders() });
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) throw new Error(data.detail || ('HTTP ' + res.status));
+            if (msg) { msg.style.color = '#4ade80'; msg.textContent = `✓ 同步完成：共 ${data.total}（新增 ${data.created}、更新 ${data.updated}）`; }
+            this.loadMyai();
+        } catch (e) {
+            if (msg) { msg.style.color = '#fb7185'; msg.textContent = '✗ 同步失敗：' + e.message; }
+        }
     },
     async loadUrl() {
         try {
