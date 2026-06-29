@@ -9,7 +9,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Playpen+Sans:wght@400;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="styles.css?v=20260629-1">
+    <link rel="stylesheet" href="styles.css?v=20260629-2">
     <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
@@ -1056,13 +1056,15 @@
                     <div class="admin-table-wrap scrollbar-custom" style="max-height:420px; overflow-y:auto;">
                         <table class="admin-table" id="myai-accounts-table">
                             <thead><tr>
-                                <th data-i18n="ext_col_vendor">名稱</th>
+                                <th data-i18n="myai_col_sn">編號</th>
+                                <th data-i18n="myai_col_type">身分</th>
+                                <th data-i18n="myai_col_name">名稱</th>
                                 <th data-i18n="admin_col_email">電子郵件</th>
                                 <th data-i18n="myai_col_points">Token 點數</th>
                                 <th data-i18n="myai_col_expiry">有效期間</th>
                                 <th data-i18n="col_status">狀態</th>
                             </tr></thead>
-                            <tbody><tr><td colspan="5" style="text-align:center; color:var(--text-muted);">尚未同步</td></tr></tbody>
+                            <tbody><tr><td colspan="7" style="text-align:center; color:var(--text-muted);">尚未同步</td></tr></tbody>
                         </table>
                     </div>
                 </section>
@@ -1099,7 +1101,7 @@
     <script type="module" src="https://unpkg.com/ionicons@7.1.0/dist/ionicons/ionicons.esm.js"></script>
     <script nomodule src="https://unpkg.com/ionicons@7.1.0/dist/ionicons/ionicons.js"></script>
     <!-- 載入 Admin 邏輯 -->
-    <script src="admin.js?v=20260629-1"></script>
+    <script src="admin.js?v=20260629-2"></script>
 </body>
 
 </html>

@@ -38,6 +38,9 @@ const TRANSLATIONS = {
         myai_sync_title: "廠商 Token 同步（myai168）",
         myai_sync_now: "立即同步",
         myai_sync_hint: "以管理者帳密（.env）headless 登入 myai168 → 匯出使用者清單 → 顯示每人 Token 點數。唯讀，不回寫廠商。",
+        myai_col_sn: "編號",
+        myai_col_type: "身分",
+        myai_col_name: "名稱",
         myai_col_points: "Token 點數",
         myai_col_expiry: "有效期間",
         admin_col_email: "電子郵件",
@@ -290,6 +293,9 @@ const TRANSLATIONS = {
         myai_sync_title: "Vendor Token Sync (myai168)",
         myai_sync_now: "Sync now",
         myai_sync_hint: "Headless-login to myai168 with admin creds (.env) → export users → show each user's token points. Read-only.",
+        myai_col_sn: "ID",
+        myai_col_type: "Role",
+        myai_col_name: "Name",
         myai_col_points: "Token Points",
         myai_col_expiry: "Expiry",
         admin_col_email: "Email",
@@ -636,12 +642,14 @@ const externalAi = {
         if (!tbody) return;
         const rows = data.accounts || [];
         if (!rows.length) {
-            tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; color:var(--text-muted);">尚未同步</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="7" style="text-align:center; color:var(--text-muted);">尚未同步</td></tr>';
             return;
         }
         tbody.innerHTML = rows.map(r => {
             const ok = (r.status || '') === '確定' || (r.status || '').toLowerCase() === 'active';
             return `<tr>
+                <td style="font-family:monospace;">${this._esc(r.vendor_sn)}</td>
+                <td>${this._esc(r.user_type)}</td>
                 <td>${this._esc(r.name)}</td>
                 <td>${this._esc(r.email)}</td>
                 <td style="font-family:monospace;">${Number(r.points || 0).toLocaleString()}</td>
