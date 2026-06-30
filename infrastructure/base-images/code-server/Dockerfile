@@ -20,9 +20,14 @@ COPY vscode-extension/aibase-runner/ ./aibase-runner/
 WORKDIR /build/aibase-runner
 
 # 安裝依賴與 vsce 打包工具
+# v2.8 修正：原 .vscodeignore 排除 node_modules，但 tsc 編譯不打包 require('node-fetch')，
+#   導致 extension 執行期 Cannot find module 'node-fetch'。改為：編譯後 prune 掉 devDeps
+#   （只留 node-fetch 等 production 依賴），並讓 .vscodeignore 不再排除 node_modules，
+#   使 vsce 把 production node_modules 一併打包進 .vsix。
 RUN npm install \
     && npm install -g @vscode/vsce \
     && npm run compile \
+    && npm prune --production \
     && vsce package --no-yarn -o /build/aibase-runner.vsix
 
 # ============ Stage 2: Code-server runtime ============

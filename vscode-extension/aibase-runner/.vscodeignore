@@ -5,6 +5,5 @@ src/**
 tsconfig.json
 **/*.ts
 **/*.map
-node_modules/**
 .DS_Store
 .git/**
