@@ -137,6 +137,14 @@ class Settings(BaseSettings):
     MYAI_ADMIN_PASSWORD: str = ""      # ZH: 由 .env 提供 | EN: from .env
     MYAI_SYNC_INTERVAL_HOURS: int = 6  # ZH: 自動同步間隔(小時)；0=關閉自動 | EN: auto-sync interval (h); 0=off
 
+    # ZH: v2.8 內部 Token 計量開關。False = 平台不計算/不扣 Token、不擋配額；
+    #     使用者端 Token 面板改顯示「外部 AI(myai) 剩餘點數」(見 web-ui)。
+    #     小基(assistant)本就公開不計量。日後要恢復內部計量改 True 即可。
+    # EN: Internal token accounting switch. False = platform does not meter/charge
+    #     tokens nor enforce quota; the user-facing token panel shows external
+    #     (myai) remaining credits instead. Set True to restore internal metering.
+    INTERNAL_TOKEN_ACCOUNTING: bool = False
+
     # ------------------------------------------------------------------
     # ZH: 任務超時設定 (分鐘) | EN: Job timeout (minutes)
     # ------------------------------------------------------------------

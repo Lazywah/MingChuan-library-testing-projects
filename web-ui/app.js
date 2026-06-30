@@ -32,9 +32,9 @@ const TRANSLATIONS = {
         nav_admin: "管理中心",
         // 儀表板
         token_overview: "代幣資源概況",
-        token_used: "已使用",
-        token_limit: "總配額",
-        token_reset: "重置日期",
+        token_used: "剩餘",
+        token_limit: "有效至",
+        token_reset: "備註",
         job_compose: "建立新任務",
         label_job_name: "任務名稱",
         label_model_name: "模型辨識碼",
@@ -233,7 +233,7 @@ const TRANSLATIONS = {
         nav_home: "首頁",
         nav_docs: "文件庫",
         drawer_title: "資訊面板",
-        drawer_token: "Token 用量",
+        drawer_token: "外部 AI 點數",
         drawer_features: "可用功能",
         drawer_announcements: "公告與更新",
         feat_1: "高算力 GPU",
@@ -369,7 +369,7 @@ const TRANSLATIONS = {
         settings_profile: "我的帳號資訊",
         profile_basic: "基本資訊",
         profile_auth: "認證與登入",
-        profile_usage: "Token 用量",
+        profile_usage: "外部 AI 點數",
         profile_editable: "變更個人資訊",
         label_role: "角色",
         label_department: "學系",
@@ -409,9 +409,9 @@ const TRANSLATIONS = {
         nav_admin: "Admin",
         // Dashboard
         token_overview: "Token Resources",
-        token_used: "Used",
-        token_limit: "Limit",
-        token_reset: "Reset Date",
+        token_used: "Remaining",
+        token_limit: "Valid until",
+        token_reset: "Note",
         job_compose: "New Task",
         label_job_name: "Job Name",
         label_model_name: "Model Identifier",
@@ -610,7 +610,7 @@ const TRANSLATIONS = {
         nav_home: "Home",
         nav_docs: "Documents",
         drawer_title: "Info Board",
-        drawer_token: "Token Usage",
+        drawer_token: "External AI Credits",
         drawer_features: "Available Features",
         drawer_announcements: "Announcements & Updates",
         feat_1: "High Compute GPU",
@@ -746,7 +746,7 @@ const TRANSLATIONS = {
         settings_profile: "My Account",
         profile_basic: "Basic Info",
         profile_auth: "Authentication",
-        profile_usage: "Token Usage",
+        profile_usage: "External AI Credits",
         profile_editable: "Edit Profile",
         label_role: "Role",
         label_department: "Department",
@@ -2220,96 +2220,39 @@ async function fetchUserProfile() {
     }
 }
 
+// v2.8: Token 面板改顯示「外部 AI(myai) 剩餘點數」；內部 Token 計量已停用。
 async function fetchTokenUsage() {
+    if (!authToken) return;
     try {
-        const res = await fetch(`${API_BASE}/auth/usage`, { headers: { 'Authorization': `Bearer ${authToken}` } });
-        if (res.ok) {
-            const data = await res.json();
-            console.log('Token usage data:', data);
-            updateTokenDisplay(data);
-        } else {
-            console.error('Token usage API error:', res.status);
-            // Use cached/local token tracking as fallback
-            updateTokenDisplayFromLocal();
-        }
+        const res = await fetch(`${API_BASE}/external-ai/me`, { headers: { 'Authorization': `Bearer ${authToken}` } });
+        updateExternalTokenDisplay(res.ok ? await res.json() : null);
     } catch (e) {
-        console.error('Error fetching token usage:', e);
-        updateTokenDisplayFromLocal();
+        updateExternalTokenDisplay(null);
     }
 }
 
-function updateTokenDisplay(data) {
-    // Handle both percentage formats (0.1 or 10%)
-    const usagePercentage = data.usage_percentage;
-    const percentage = usagePercentage > 1 ? usagePercentage : (usagePercentage * 100).toFixed(1);
-
-    if (tokenPercent) tokenPercent.textContent = `${percentage}%`;
-    if (tokenUsed) tokenUsed.textContent = (data.tokens_used || 0).toLocaleString();
-    if (tokenLimit) tokenLimit.textContent = (data.tokens_limit || 0).toLocaleString();
-    if (tokenReset) tokenReset.textContent = formatDate(data.reset_date);
-
-    // Update progress ring - handle both percentage formats
-    const normalizedPercentage = usagePercentage > 1 ? usagePercentage / 100 : usagePercentage;
-    if (tokenRingFill) tokenRingFill.style.strokeDashoffset = 314 - (314 * normalizedPercentage);
-
-    // Store in localStorage for offline tracking
-    localStorage.setItem('token_usage_data', JSON.stringify(data));
-
-    // Update Side Drawer Token Stats
-    const drawerTokenUsed = document.getElementById('drawer-token-used');
-    const drawerTokenLimit = document.getElementById('drawer-token-limit');
-    if (drawerTokenUsed) drawerTokenUsed.textContent = String(data.tokens_used || 0).padStart(8, ' ');
-    if (drawerTokenLimit) drawerTokenLimit.textContent = String(data.tokens_limit || 0).padStart(8, ' ');
-
-    // Update drawer donut chart
-    const drawerTokenRing = document.getElementById('drawer-token-ring');
-    const drawerTokenPercent = document.getElementById('drawer-token-percent');
-    if (drawerTokenRing) drawerTokenRing.style.strokeDashoffset = 100 - (100 * normalizedPercentage);
-    if (drawerTokenPercent) drawerTokenPercent.textContent = `${percentage}%`;
-
-    console.log('Token display updated:', {
-        percentage,
-        tokens_used: data.tokens_used,
-        tokens_limit: data.tokens_limit,
-        reset_date: data.reset_date,
-        normalizedPercentage
-    });
+// v2.8: 外部 AI 剩餘點數（右側抽屜 + 設定頁兩個面板共用）。pts=null → 顯示「—」(未綁定/無資料)
+function updateExternalTokenDisplay(data) {
+    const pts = (data && data.myai_points != null) ? data.myai_points : null;
+    const remainTxt = (pts != null) ? Number(pts).toLocaleString() : '—';
+    const expiryTxt = (data && data.myai_expiry) ? data.myai_expiry : '—';
+    const set = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
+    const ring = (id, has, circ) => { const el = document.getElementById(id); if (el) el.style.strokeDashoffset = has ? 0 : circ; };
+    // 設定頁面板
+    set('token-used', remainTxt); set('token-limit', expiryTxt);
+    set('token-percent', pts != null ? '💎' : '—'); set('token-reset', '—');
+    ring('token-ring-fill', pts != null, 314);
+    // 右側抽屜面板
+    set('drawer-token-used', remainTxt); set('drawer-token-limit', expiryTxt);
+    set('drawer-token-percent', pts != null ? '💎' : '—');
+    ring('drawer-token-ring', pts != null, 100);
 }
 
-function updateTokenDisplayFromLocal() {
-    const localData = localStorage.getItem('token_usage_data');
-    if (localData) {
-        try {
-            const data = JSON.parse(localData);
-            updateTokenDisplay(data);
-        } catch (e) {
-            console.error('Error parsing local token data:', e);
-            // Set default values
-            if (tokenPercent) tokenPercent.textContent = '0%';
-            if (tokenUsed) tokenUsed.textContent = '0';
-            if (tokenLimit) tokenLimit.textContent = '10000';
-            if (tokenReset) tokenReset.textContent = '--';
-            if (tokenRingFill) tokenRingFill.style.strokeDashoffset = 314;
-        }
-    }
-}
-
-function trackTokenUsage(messageTokens, isUser = true) {
-    // Simple token estimation (rough approximation: 1 token ≈ 4 characters for English, 2-3 for Chinese)
-    const estimatedTokens = Math.ceil(messageTokens.length / 3);
-
-    const localData = localStorage.getItem('token_usage_data');
-    if (localData) {
-        try {
-            const data = JSON.parse(localData);
-            data.tokens_used = (data.tokens_used || 0) + estimatedTokens;
-            data.usage_percentage = Math.min(data.tokens_used / data.tokens_limit, 1);
-            updateTokenDisplay(data);
-        } catch (e) {
-            console.error('Error updating local token tracking:', e);
-        }
-    }
-}
+// v2.8: 內部 Token 計量已停用 —— 以下保留為 no-op，避免既有呼叫端報錯。
+// 顯示一律走 updateExternalTokenDisplay()（外部 AI 剩餘點數）。
+function updateTokenDisplay() { /* deprecated: internal metering off */ }
+function updateTokenDisplayFromLocal() { /* deprecated: internal metering off */ }
+function trackTokenUsage() { /* deprecated: internal metering off */ }
 
 function formatDate(dateStr) {
     if (!dateStr) return '--';

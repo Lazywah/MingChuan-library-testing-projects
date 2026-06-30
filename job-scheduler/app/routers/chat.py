@@ -73,12 +73,13 @@ async def chat_completions(
 ):
     """ZH: AI 聊天串流代理 | EN: AI Chat SSE proxy"""
 
-    # ZH: 配額前置檢查 | EN: Upfront quota check
-    usage = crud.get_token_usage(db, current_user.id)
-    if usage and usage.tokens_used >= usage.tokens_limit:
-        async def quota_exceeded():
-            yield f"data: {json.dumps({'error': 'Token quota exceeded'}, ensure_ascii=False)}\n\n"
-        return StreamingResponse(quota_exceeded(), media_type="text/event-stream")
+    # ZH: 配額前置檢查（v2.8：內部計量關閉時不擋）| EN: Upfront quota check (skipped when internal accounting off)
+    if settings.INTERNAL_TOKEN_ACCOUNTING:
+        usage = crud.get_token_usage(db, current_user.id)
+        if usage and usage.tokens_used >= usage.tokens_limit:
+            async def quota_exceeded():
+                yield f"data: {json.dumps({'error': 'Token quota exceeded'}, ensure_ascii=False)}\n\n"
+            return StreamingResponse(quota_exceeded(), media_type="text/event-stream")
 
     # ZH: v2.3 P1 — 專項生成 agent（文書簡報等）走獨立 dispatch 流程，
     #     不影響既有純 chat 行為（tool_type 為空/"chat" 時走下方原邏輯）
@@ -189,18 +190,20 @@ async def chat_completions(
 
             # ZH: 以 SQL UPDATE 直接做加法，避免 read-modify-write 競爭條件
             # EN: Use SQL UPDATE for arithmetic to avoid read-modify-write race
-            db.execute(
-                _sa_update(models.TokenUsage)
-                .where(models.TokenUsage.user_id == current_user.id)
-                .values(tokens_used=models.TokenUsage.tokens_used + estimated)
-                .execution_options(synchronize_session=False)
-            )
-            db.execute(
-                _sa_update(models.User)
-                .where(models.User.id == current_user.id)
-                .values(lifetime_tokens_used=models.User.lifetime_tokens_used + estimated)
-                .execution_options(synchronize_session=False)
-            )
+            # ZH: v2.8 — 內部計量關閉時不累計（不扣 Token）| EN: skip metering when off
+            if settings.INTERNAL_TOKEN_ACCOUNTING:
+                db.execute(
+                    _sa_update(models.TokenUsage)
+                    .where(models.TokenUsage.user_id == current_user.id)
+                    .values(tokens_used=models.TokenUsage.tokens_used + estimated)
+                    .execution_options(synchronize_session=False)
+                )
+                db.execute(
+                    _sa_update(models.User)
+                    .where(models.User.id == current_user.id)
+                    .values(lifetime_tokens_used=models.User.lifetime_tokens_used + estimated)
+                    .execution_options(synchronize_session=False)
+                )
             db.commit()
         except Exception as e:
             logger.error(f"Failed to save chat history: {e}", exc_info=True)
@@ -378,18 +381,20 @@ async def _dispatch_stream_generator(
             role="assistant", content=assistant_text,
             tool_type=request.tool_type or "presentation", tokens_used=estimated,
         ))
-        db.execute(
-            _sa_update(models.TokenUsage)
-            .where(models.TokenUsage.user_id == user_id)
-            .values(tokens_used=models.TokenUsage.tokens_used + estimated)
-            .execution_options(synchronize_session=False)
-        )
-        db.execute(
-            _sa_update(models.User)
-            .where(models.User.id == user_id)
-            .values(lifetime_tokens_used=models.User.lifetime_tokens_used + estimated)
-            .execution_options(synchronize_session=False)
-        )
+        # ZH: v2.8 — 內部計量關閉時不累計（不扣 Token）| EN: skip metering when off
+        if settings.INTERNAL_TOKEN_ACCOUNTING:
+            db.execute(
+                _sa_update(models.TokenUsage)
+                .where(models.TokenUsage.user_id == user_id)
+                .values(tokens_used=models.TokenUsage.tokens_used + estimated)
+                .execution_options(synchronize_session=False)
+            )
+            db.execute(
+                _sa_update(models.User)
+                .where(models.User.id == user_id)
+                .values(lifetime_tokens_used=models.User.lifetime_tokens_used + estimated)
+                .execution_options(synchronize_session=False)
+            )
         db.commit()
     except Exception as e:
         logger.error(f"Failed to save dispatch chat history: {e}", exc_info=True)
