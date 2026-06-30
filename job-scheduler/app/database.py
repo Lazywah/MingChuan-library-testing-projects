@@ -204,6 +204,11 @@ def init_db():
             try: conn.execute(text("ALTER TABLE users ADD COLUMN last_activity DATETIME"))
             except Exception: pass
 
+            # --- v2.8 MYAI 綁定：external_ai_accounts 加廠商穩定鍵 ---
+            # EN: v2.8 MYAI binding: add stable vendor key to external_ai_accounts
+            try: conn.execute(text("ALTER TABLE external_ai_accounts ADD COLUMN myai_vendor_sn VARCHAR"))
+            except Exception: pass
+
     except Exception as e:
         logger.warning(f"Manual DB migration skipped or partially failed: {e}")
 

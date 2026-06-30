@@ -160,10 +160,53 @@ async def sync(db: Session) -> dict:
             created += 1
     db.commit()
     logger.info("MYAI sync: total=%d created=%d updated=%d", len(records), created, updated)
+
+    # ZH: 同步後自動以 email 配對綁定 | EN: auto-bind by email after sync
+    match = auto_match(db)
     return {
         "status": "ok",
         "total": len(records),
         "created": created,
         "updated": updated,
+        "matched_created": match["matched_created"],
+        "backfilled": match["backfilled"],
         "synced_at": now.isoformat(),
     }
+
+
+def auto_match(db: Session) -> dict:
+    """ZH: 以 email 自動配對「myai 帳號 ↔ 平台使用者」，建立/回填 external_ai_accounts 綁定。
+       規則：myai.email == user.email(不分大小寫) 且該使用者尚未綁定 → 自動建綁定
+       (vendor_username=email, myai_vendor_sn=vendor_sn)；已綁且 email 相符但缺 sn → 回填 sn。
+       只寫本平台 DB；絕不碰廠商。回傳 {matched_created, backfilled}。
+       EN: Auto-bind myai accounts to platform users by email. Writes our DB only."""
+    created = backfilled = 0
+    myai_rows = (
+        db.query(models.MyaiAccount)
+        .filter(models.MyaiAccount.email.isnot(None))
+        .all()
+    )
+    for m in myai_rows:
+        email = (m.email or "").strip()
+        if not email:
+            continue
+        user = db.query(models.User).filter(models.User.email.ilike(email)).first()
+        if not user:
+            continue  # ZH: 廠商端帳號在平台無對應使用者(如純管理員) | no platform user
+        acc = (
+            db.query(models.ExternalAiAccount)
+            .filter(models.ExternalAiAccount.user_id == user.id)
+            .first()
+        )
+        if not acc:
+            db.add(models.ExternalAiAccount(
+                user_id=user.id, vendor_username=email,
+                myai_vendor_sn=m.vendor_sn, status="active", note="auto-matched",
+            ))
+            created += 1
+        elif not acc.myai_vendor_sn and (acc.vendor_username or "").strip().lower() == email.lower():
+            acc.myai_vendor_sn = m.vendor_sn  # ZH: 既有綁定回填穩定鍵 | backfill stable key
+            backfilled += 1
+    db.commit()
+    logger.info("MYAI auto-match: created=%d backfilled=%d", created, backfilled)
+    return {"matched_created": created, "backfilled": backfilled}

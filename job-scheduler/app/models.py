@@ -388,7 +388,8 @@ class ExternalAiAccount(Base):
     id              = Column(String, primary_key=True, default=generate_uuid)
     user_id         = Column(String, ForeignKey("users.id", ondelete="CASCADE"),
                              unique=True, index=True, nullable=False)          # ZH: 一位平台使用者一筆 | EN: one row per platform user
-    vendor_username = Column(String, nullable=False)                          # ZH: 廠商端帳號名 (非密碼) | EN: vendor account username (not password)
+    vendor_username = Column(String, nullable=False)                          # ZH: 廠商端帳號 = myai email (非密碼) | EN: vendor account = myai email (not password)
+    myai_vendor_sn  = Column(String, nullable=True, index=True)                # ZH: v2.8 對應 myai_accounts.vendor_sn 的穩定鍵 (email 改了也追得到) | EN: stable FK to myai_accounts.vendor_sn
     status          = Column(String, default="active", nullable=False)        # ZH: active / disabled | EN: active / disabled
     note            = Column(Text, nullable=True)                             # ZH: 備註 | EN: note
     created_at      = Column(DateTime, default=lambda: datetime.now(timezone.utc))

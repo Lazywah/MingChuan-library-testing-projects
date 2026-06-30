@@ -51,17 +51,6 @@ def get_my_external_ai(
        EN: Get my external-AI redirect info (url + assigned account + status)"""
     url = crud.get_system_config(db, EXTERNAL_AI_URL_KEY, "")
 
-    # v2.8 廠商 Token 餘額：以 email 對應 myai_accounts（不分大小寫）
-    myai_points = myai_expiry = myai_status = None
-    if current_user.email:
-        m = (
-            db.query(models.MyaiAccount)
-            .filter(models.MyaiAccount.email.ilike(current_user.email))
-            .first()
-        )
-        if m:
-            myai_points, myai_expiry, myai_status = m.points, m.expiry, m.status
-
     acc = crud.get_external_account_by_user_id(db, current_user.id)
     if not acc:
         vendor, status = None, "not_provisioned"
@@ -69,6 +58,32 @@ def get_my_external_ai(
         vendor, status = acc.vendor_username, "disabled"
     else:
         vendor, status = acc.vendor_username, "active"
+
+    # v2.8 廠商 Token 餘額：顯式串接 綁定 → myai_accounts（穩定 sn 優先，退而 email）。
+    # 尚無綁定者退回直接以 email 比對，確保 auto-match 跑之前也不會空白。
+    myai_points = myai_expiry = myai_status = None
+    myai_row = None
+    if acc:
+        if acc.myai_vendor_sn:
+            myai_row = (
+                db.query(models.MyaiAccount)
+                .filter(models.MyaiAccount.vendor_sn == acc.myai_vendor_sn)
+                .first()
+            )
+        if not myai_row and acc.vendor_username:
+            myai_row = (
+                db.query(models.MyaiAccount)
+                .filter(models.MyaiAccount.email.ilike(acc.vendor_username))
+                .first()
+            )
+    if not myai_row and current_user.email:
+        myai_row = (
+            db.query(models.MyaiAccount)
+            .filter(models.MyaiAccount.email.ilike(current_user.email))
+            .first()
+        )
+    if myai_row:
+        myai_points, myai_expiry, myai_status = myai_row.points, myai_row.expiry, myai_row.status
 
     return schemas.ExternalAiMe(
         url=url, vendor_username=vendor, status=status,
@@ -249,4 +264,105 @@ def list_myai_accounts(
             }
             for r in rows
         ],
+    }
+
+
+# ==============================================================================
+# ZH: v2.8 MYAI email 綁定管理（自動配對 / 綁定清單 / 未配對）— 只寫本平台 DB
+# EN: v2.8 MYAI email-binding management (auto-match / bindings / unmatched)
+# ==============================================================================
+
+@router.post("/admin/auto-match")
+def auto_match_bindings(
+    db: Session = Depends(get_db),
+    _: models.User = Depends(require_admin),
+) -> Any:
+    """ZH: 以 email 自動配對 myai 帳號 ↔ 平台使用者，建立/回填綁定（不碰廠商）。
+       EN: Auto-bind myai accounts to platform users by email (our DB only)."""
+    return myai_sync.auto_match(db)
+
+
+@router.get("/admin/bindings")
+def list_bindings(
+    db: Session = Depends(get_db),
+    _: models.User = Depends(require_admin),
+) -> Any:
+    """ZH: 綁定清單：平台帳號 ↔ myai email ↔ 點數/狀態（join 同步快取）。
+       EN: Binding list: platform user ↔ myai email ↔ points/status."""
+    rows = (
+        db.query(models.ExternalAiAccount, models.User.username, models.User.email)
+        .join(models.User, models.User.id == models.ExternalAiAccount.user_id)
+        .order_by(models.User.username.asc())
+        .all()
+    )
+    # ZH: 預載 myai 快取，避免逐筆查 | preload myai cache
+    myai_by_sn = {m.vendor_sn: m for m in db.query(models.MyaiAccount).all()}
+    myai_by_email = {(m.email or "").strip().lower(): m for m in myai_by_sn.values() if m.email}
+    out = []
+    for acc, username, user_email in rows:
+        m = None
+        if acc.myai_vendor_sn:
+            m = myai_by_sn.get(acc.myai_vendor_sn)
+        if not m and acc.vendor_username:
+            m = myai_by_email.get(acc.vendor_username.strip().lower())
+        out.append({
+            "id": acc.id,
+            "user_id": acc.user_id,
+            "platform_username": username,
+            "platform_email": user_email,
+            "myai_email": acc.vendor_username,
+            "myai_vendor_sn": acc.myai_vendor_sn,
+            "status": acc.status,
+            "note": acc.note,
+            "points": (m.points if m else None),
+            "myai_status": (m.status if m else None),
+            "synced": bool(m),  # ZH: 是否對得上同步快取 | matched to sync cache
+            "updated_at": acc.updated_at.isoformat() if acc.updated_at else None,
+        })
+    return {"count": len(out), "bindings": out}
+
+
+@router.get("/admin/unmatched")
+def list_unmatched(
+    db: Session = Depends(get_db),
+    _: models.User = Depends(require_admin),
+) -> Any:
+    """ZH: 兩邊未配對：① 平台未綁定使用者(標註是否有同 email 的 myai 帳號)
+            ② myai 帳號未被任何綁定指向(標註是否有同 email 的平台使用者)。
+       EN: Unmatched on both sides for admin follow-up."""
+    accs = db.query(models.ExternalAiAccount).all()
+    bound_user_ids = {a.user_id for a in accs}
+    bound_sns = {a.myai_vendor_sn for a in accs if a.myai_vendor_sn}
+    bound_emails = {(a.vendor_username or "").strip().lower() for a in accs if a.vendor_username}
+
+    myai_rows = db.query(models.MyaiAccount).all()
+    myai_emails = {(m.email or "").strip().lower() for m in myai_rows if m.email}
+
+    # ① 平台未綁定使用者 | platform users without a binding
+    users = db.query(models.User).all()
+    unmatched_users = [
+        {
+            "user_id": u.id, "username": u.username, "email": u.email,
+            "has_myai_match": bool(u.email and u.email.strip().lower() in myai_emails),
+        }
+        for u in users if u.id not in bound_user_ids
+    ]
+
+    # ② myai 帳號未被綁定指向 | myai accounts not targeted by any binding
+    platform_emails = {(u.email or "").strip().lower() for u in users if u.email}
+    unmatched_myai = [
+        {
+            "vendor_sn": m.vendor_sn, "email": m.email, "name": m.name,
+            "user_type": m.user_type, "points": m.points, "status": m.status,
+            "has_platform_user": bool(m.email and m.email.strip().lower() in platform_emails),
+        }
+        for m in myai_rows
+        if m.vendor_sn not in bound_sns
+        and (m.email or "").strip().lower() not in bound_emails
+    ]
+    return {
+        "unmatched_users": unmatched_users,
+        "unmatched_myai": unmatched_myai,
+        "unmatched_user_count": len(unmatched_users),
+        "unmatched_myai_count": len(unmatched_myai),
     }

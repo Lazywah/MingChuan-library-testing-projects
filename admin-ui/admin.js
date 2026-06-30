@@ -44,6 +44,15 @@ const TRANSLATIONS = {
         myai_col_points: "Token 點數",
         myai_col_expiry: "有效期間",
         admin_col_email: "電子郵件",
+        myai_bind_title: "Email 綁定管理",
+        myai_bind_automatch: "一鍵 Email 配對",
+        myai_bind_hint: "以 email 對應「平台使用者 ↔ myai 帳號」。一鍵配對會把 email 相同且尚未綁定者自動建立綁定（只寫本平台、不碰廠商）。",
+        myai_bind_user: "平台帳號",
+        myai_bind_email: "myai Email",
+        myai_bind_unmatched_users: "未綁定的平台使用者",
+        myai_bind_unmatched_myai: "未配對的 myai 帳號",
+        myai_bind_match: "可配對",
+        col_actions: "操作",
         ext_col_platform: "平台帳號",
         ext_col_vendor: "廠商帳號",
         btn_save: "儲存",
@@ -299,6 +308,15 @@ const TRANSLATIONS = {
         myai_col_points: "Token Points",
         myai_col_expiry: "Expiry",
         admin_col_email: "Email",
+        myai_bind_title: "Email Binding",
+        myai_bind_automatch: "Auto-match by Email",
+        myai_bind_hint: "Map platform users to myai accounts by email. Auto-match binds same-email users that aren't bound yet (writes our DB only; never touches the vendor).",
+        myai_bind_user: "Platform Account",
+        myai_bind_email: "myai Email",
+        myai_bind_unmatched_users: "Unbound platform users",
+        myai_bind_unmatched_myai: "Unmatched myai accounts",
+        myai_bind_match: "Matchable",
+        col_actions: "Actions",
         ext_col_platform: "Platform Account",
         ext_col_vendor: "Vendor Account",
         btn_save: "Save",
@@ -625,6 +643,7 @@ const externalAi = {
         this.loadUrl();
         this.refresh();
         this.loadMyai();
+        this.loadBindings();
     },
     // v2.8 廠商 Token 同步（唯讀）
     async loadMyai() {
@@ -665,11 +684,101 @@ const externalAi = {
             const res = await fetch(`${API_BASE}/external-ai/admin/sync-myai`, { method: 'POST', headers: this._authHeaders() });
             const data = await res.json().catch(() => ({}));
             if (!res.ok) throw new Error(data.detail || ('HTTP ' + res.status));
-            if (msg) { msg.style.color = '#4ade80'; msg.textContent = `✓ 同步完成：共 ${data.total}（新增 ${data.created}、更新 ${data.updated}）`; }
+            if (msg) {
+                msg.style.color = '#4ade80';
+                const bind = (data.matched_created != null) ? `，自動綁定 ${data.matched_created}` : '';
+                msg.textContent = `✓ 同步完成：共 ${data.total}（新增 ${data.created}、更新 ${data.updated}${bind}）`;
+            }
             this.loadMyai();
+            this.loadBindings();
         } catch (e) {
             if (msg) { msg.style.color = '#fb7185'; msg.textContent = '✗ 同步失敗：' + e.message; }
         }
+    },
+
+    // ============================================================
+    // v2.8 Email 綁定管理（平台帳號 ↔ myai email ↔ 點數）
+    // ============================================================
+    async loadBindings() {
+        try {
+            const [bRes, uRes] = await Promise.all([
+                fetch(`${API_BASE}/external-ai/admin/bindings`, { headers: this._authHeaders() }),
+                fetch(`${API_BASE}/external-ai/admin/unmatched`, { headers: this._authHeaders() }),
+            ]);
+            if (bRes.ok) this._renderBindings(await bRes.json());
+            if (uRes.ok) this._renderUnmatched(await uRes.json());
+        } catch (e) { /* 靜默 */ }
+    },
+    _renderBindings(data) {
+        const tbody = document.querySelector('#myai-bindings-table tbody');
+        if (!tbody) return;
+        const rows = data.bindings || [];
+        if (!rows.length) {
+            tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; color:var(--text-muted);">尚無綁定</td></tr>';
+            return;
+        }
+        tbody.innerHTML = rows.map(r => {
+            const active = (r.status || 'active') === 'active';
+            const pts = (r.points == null) ? '—' : Number(r.points).toLocaleString();
+            const warn = r.synced ? '' : ' <span style="color:#fbbf24;" title="對不到同步快取，請先同步或檢查 email">⚠</span>';
+            return `<tr>
+                <td>${this._esc(r.platform_username)}</td>
+                <td style="font-family:monospace; font-size:12px;">${this._esc(r.myai_email)}${warn}</td>
+                <td style="font-family:monospace;">${pts}</td>
+                <td style="color:${active ? '#4ade80' : 'var(--text-muted)'};">${active ? '啟用' : '停用'}</td>
+                <td><button onclick="externalAi.unbind('${r.id}','${encodeURIComponent(r.platform_username || '')}')" title="解綁"
+                        style="background:none; border:none; color:#fb7185; cursor:pointer; font-size:16px;">
+                    <ion-icon name="unlink-outline"></ion-icon></button></td>
+            </tr>`;
+        }).join('');
+    },
+    _renderUnmatched(data) {
+        const uc = document.getElementById('myai-unmatched-users-count');
+        const mc = document.getElementById('myai-unmatched-myai-count');
+        if (uc) uc.textContent = data.unmatched_user_count || 0;
+        if (mc) mc.textContent = data.unmatched_myai_count || 0;
+        const ut = document.querySelector('#myai-unmatched-users-table tbody');
+        if (ut) {
+            const rows = data.unmatched_users || [];
+            ut.innerHTML = rows.length ? rows.map(u => `<tr>
+                <td>${this._esc(u.username)}</td>
+                <td style="font-size:12px;">${this._esc(u.email)}</td>
+                <td>${u.has_myai_match ? '<span style="color:#4ade80;">✓ 可</span>' : '—'}</td>
+            </tr>`).join('') : '<tr><td colspan="3" style="text-align:center; color:var(--text-muted);">（無）</td></tr>';
+        }
+        const mt = document.querySelector('#myai-unmatched-myai-table tbody');
+        if (mt) {
+            const rows = data.unmatched_myai || [];
+            mt.innerHTML = rows.length ? rows.map(m => `<tr>
+                <td style="font-size:12px;">${this._esc(m.email)}</td>
+                <td>${this._esc(m.name)}</td>
+                <td style="font-family:monospace;">${Number(m.points || 0).toLocaleString()}</td>
+            </tr>`).join('') : '<tr><td colspan="3" style="text-align:center; color:var(--text-muted);">（無）</td></tr>';
+        }
+    },
+    async autoMatch() {
+        const msg = document.getElementById('myai-bind-msg');
+        if (msg) { msg.style.color = 'var(--text-muted)'; msg.textContent = '配對中…'; }
+        try {
+            const res = await fetch(`${API_BASE}/external-ai/admin/auto-match`, { method: 'POST', headers: this._authHeaders() });
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) throw new Error(data.detail || ('HTTP ' + res.status));
+            if (msg) { msg.style.color = '#4ade80'; msg.textContent = `✓ 配對完成：新增綁定 ${data.matched_created}、回填 ${data.backfilled}`; }
+            this.loadBindings();
+        } catch (e) {
+            if (msg) { msg.style.color = '#fb7185'; msg.textContent = '✗ 配對失敗：' + e.message; }
+        }
+    },
+    async unbind(id, usernameEnc) {
+        const username = decodeURIComponent(usernameEnc || '');
+        if (!confirm(`確定解除「${username}」的 myai 綁定？(只移除對應關係，不影響該帳號本身)`)) return;
+        try {
+            const res = await fetch(`${API_BASE}/external-ai/admin/accounts/${id}`, { method: 'DELETE', headers: this._authHeaders() });
+            if (!res.ok) throw new Error('delete failed');
+            showToast('已解除綁定');
+            this.loadBindings();
+            this.refresh();
+        } catch (e) { showToast('解綁失敗', true); }
     },
     async loadUrl() {
         try {
