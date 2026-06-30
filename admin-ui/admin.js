@@ -55,6 +55,7 @@ const TRANSLATIONS = {
         col_actions: "操作",
         ext_col_platform: "平台帳號",
         ext_col_vendor: "廠商帳號",
+        ext_ai_logout_label: "廠商登出網址（共用機台換手用）",
         btn_save: "儲存",
         btn_add: "新增",
         btn_import: "匯入",
@@ -319,6 +320,7 @@ const TRANSLATIONS = {
         col_actions: "Actions",
         ext_col_platform: "Platform Account",
         ext_col_vendor: "Vendor Account",
+        ext_ai_logout_label: "Vendor logout URL (for shared-machine handoff)",
         btn_save: "Save",
         btn_add: "Add",
         btn_import: "Import",
@@ -787,15 +789,21 @@ const externalAi = {
             const data = await res.json();
             const el = document.getElementById('ext-ai-url');
             if (el) el.value = data.url || '';
+            const lo = document.getElementById('ext-ai-logout-url');
+            if (lo) lo.value = data.logout_url || '';
         } catch (e) { /* 靜默 | silent */ }
     },
     async saveUrl() {
         const el = document.getElementById('ext-ai-url');
+        const lo = document.getElementById('ext-ai-logout-url');
         const msg = document.getElementById('ext-ai-url-msg');
         try {
             const res = await fetch(`${API_BASE}/external-ai/admin/url`, {
                 method: 'PUT', headers: this._authHeaders(),
-                body: JSON.stringify({ url: (el.value || '').trim() }),
+                body: JSON.stringify({
+                    url: (el.value || '').trim(),
+                    logout_url: lo ? (lo.value || '').trim() : null,
+                }),
             });
             if (!res.ok) throw new Error('save failed');
             if (msg) { msg.style.color = '#4ade80'; msg.textContent = '✓ 已儲存'; }

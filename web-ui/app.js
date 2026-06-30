@@ -887,6 +887,7 @@ function showExternalAiLanding() {
     loadExternalAiInfo();
 }
 
+let externalAiLogoutUrl = null;  // v2.8 廠商登出網址（由 /external-ai/me 提供）
 async function loadExternalAiInfo() {
     const activeBox = document.getElementById('external-ai-active');
     const emptyBox = document.getElementById('external-ai-empty');
@@ -914,6 +915,8 @@ async function loadExternalAiInfo() {
                 balBox.classList.add('hidden');
             }
         }
+        // v2.8 廠商登出網址（「結束使用」會開它殺掉 myai session）
+        externalAiLogoutUrl = (data.logout_url || '').trim() || null;
         const url = (data.url || '').trim();
         // ZH: url 空 / 未開通 / 停用 → 顯示提示，不顯示前往按鈕
         if (!url || data.status !== 'active' || !data.vendor_username) {
@@ -1034,6 +1037,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const extLogoutBtn = document.getElementById('external-ai-logout-btn');
     if (extLogoutBtn) {
         extLogoutBtn.addEventListener('click', async () => {
+            // 先開廠商登出頁殺掉 myai session，再登出本平台
+            if (externalAiLogoutUrl) window.open(externalAiLogoutUrl, '_blank', 'noopener');
             await doLogout();
             alert(t('ext_ai_end_session_alert'));
         });

@@ -29,6 +29,9 @@ from ..services import myai_sync
 router = APIRouter(tags=["外部 AI External-AI"])
 
 EXTERNAL_AI_URL_KEY = "external_ai_url"
+EXTERNAL_AI_LOGOUT_KEY = "external_ai_logout_url"
+# ZH: 已實測的 myai 登出端點（GET 導向即清 session）| EN: verified myai logout endpoint
+DEFAULT_MYAI_LOGOUT_URL = "https://www.myai168.com/mcu/ai/user/logout_info"
 
 
 def require_admin(current_user: models.User = Depends(get_current_user)) -> models.User:
@@ -85,9 +88,11 @@ def get_my_external_ai(
     if myai_row:
         myai_points, myai_expiry, myai_status = myai_row.points, myai_row.expiry, myai_row.status
 
+    logout_url = crud.get_system_config(db, EXTERNAL_AI_LOGOUT_KEY, DEFAULT_MYAI_LOGOUT_URL)
     return schemas.ExternalAiMe(
         url=url, vendor_username=vendor, status=status,
         myai_points=myai_points, myai_expiry=myai_expiry, myai_status=myai_status,
+        logout_url=(logout_url or None),
     )
 
 
@@ -100,7 +105,10 @@ def get_external_url(
     db: Session = Depends(get_db),
     _: models.User = Depends(require_admin),
 ) -> Any:
-    return schemas.ExternalAiUrl(url=crud.get_system_config(db, EXTERNAL_AI_URL_KEY, ""))
+    return schemas.ExternalAiUrl(
+        url=crud.get_system_config(db, EXTERNAL_AI_URL_KEY, ""),
+        logout_url=crud.get_system_config(db, EXTERNAL_AI_LOGOUT_KEY, DEFAULT_MYAI_LOGOUT_URL),
+    )
 
 
 @router.put("/admin/url", response_model=schemas.ExternalAiUrl)
@@ -113,7 +121,15 @@ def set_external_url(
         db, EXTERNAL_AI_URL_KEY, payload.url.strip(),
         description="外部 AI 平台網址（空=未啟用，退回即將開放）",
     )
-    return schemas.ExternalAiUrl(url=crud.get_system_config(db, EXTERNAL_AI_URL_KEY, ""))
+    if payload.logout_url is not None:
+        crud.set_system_config(
+            db, EXTERNAL_AI_LOGOUT_KEY, payload.logout_url.strip(),
+            description="外部 AI 廠商登出網址（共用機台『結束使用』會開它殺掉廠商 session）",
+        )
+    return schemas.ExternalAiUrl(
+        url=crud.get_system_config(db, EXTERNAL_AI_URL_KEY, ""),
+        logout_url=crud.get_system_config(db, EXTERNAL_AI_LOGOUT_KEY, DEFAULT_MYAI_LOGOUT_URL),
+    )
 
 
 # ==============================================================================

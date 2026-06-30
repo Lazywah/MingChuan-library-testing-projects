@@ -471,11 +471,14 @@ class ExternalAiMe(BaseModel):
     myai_points: Optional[int] = None       # ZH: AI 點數餘額 | EN: vendor token balance
     myai_expiry: Optional[str] = None       # ZH: 有效期間 | EN: expiry
     myai_status: Optional[str] = None       # ZH: 廠商端狀態 | EN: vendor account status
+    # v2.8 共用機台換手：廠商登出網址（前端「結束使用」會開它殺掉 myai session）
+    logout_url: Optional[str] = None        # ZH: 廠商登出 URL | EN: vendor logout URL
 
 
 class ExternalAiUrl(BaseModel):
     """ZH: 外部 AI 平台網址設定 | EN: External AI platform URL setting"""
     url: str
+    logout_url: Optional[str] = None        # ZH: v2.8 廠商登出網址 | EN: vendor logout URL
 
 
 class ExternalAiImportResult(BaseModel):
