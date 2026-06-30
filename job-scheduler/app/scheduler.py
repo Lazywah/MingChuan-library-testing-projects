@@ -22,6 +22,7 @@ _scheduler_running = False
 _scheduler_task = None
 _lab_scan_task = None        # v2.0: 每分鐘掃描 lab session idle/hard-limit
 _storage_scan_task = None    # v2.0: 每日 03:00 執行儲存生命週期掃描
+_myai_sync_task = None       # v2.8: 每 N 小時 headless 同步 myai168 帳號/Token
 
 # H-1: ZH: 從 scheduler_policy.yaml 讀取間隔，YAML 未設定則預設 300 秒
 # EN: Read interval from scheduler_policy.yaml; default 300 s if not configured
@@ -176,23 +177,64 @@ async def _storage_lifecycle_loop():
 
 
 # ==============================================================================
+# ZH: v2.8 MYAI 廠商平台自動同步迴圈（每 N 小時，唯讀）
+# EN: v2.8 MYAI vendor auto-sync loop (every N hours, read-only)
+# ==============================================================================
+
+async def _myai_sync_loop():
+    """ZH: 每 MYAI_SYNC_INTERVAL_HOURS 小時 headless 同步 myai168 帳號/Token。
+       帳密未設或間隔<=0 則不啟用。失敗只記 log，不影響其他排程。"""
+    from .config import settings
+    if not (settings.MYAI_ADMIN_EMAIL and settings.MYAI_ADMIN_PASSWORD) or settings.MYAI_SYNC_INTERVAL_HOURS <= 0:
+        logger.info("ZH: MYAI 自動同步未啟用（帳密未設或 MYAI_SYNC_INTERVAL_HOURS=0）")
+        return
+    interval = settings.MYAI_SYNC_INTERVAL_HOURS * 3600
+    logger.info(f"ZH: MYAI 自動同步迴圈啟動 (每 {settings.MYAI_SYNC_INTERVAL_HOURS}h)")
+    from .services import myai_sync
+
+    # ZH: 開機先等服務穩定再首次同步 | EN: initial delay so services settle
+    try:
+        await asyncio.sleep(60)
+    except asyncio.CancelledError:
+        return
+
+    while _scheduler_running:
+        try:
+            db = SessionLocal()
+            try:
+                res = await myai_sync.sync(db)
+                logger.info(f"ZH: MYAI 自動同步完成 | EN: MYAI auto-sync done: {res}")
+            finally:
+                db.close()
+        except Exception as e:  # noqa: BLE001
+            logger.error(f"ZH: MYAI 自動同步錯誤 | EN: MYAI auto-sync error: {e}")
+        try:
+            await asyncio.sleep(interval)
+        except asyncio.CancelledError:
+            break
+
+    logger.info("ZH: MYAI 自動同步迴圈已停止")
+
+
+# ==============================================================================
 # ZH: 排程器生命週期控制
 # EN: Scheduler lifecycle control
 # ==============================================================================
 
 async def start_scheduler():
-    global _scheduler_task, _lab_scan_task, _storage_scan_task, _scheduler_running
+    global _scheduler_task, _lab_scan_task, _storage_scan_task, _myai_sync_task, _scheduler_running
     _scheduler_running = True
     _scheduler_task    = asyncio.create_task(_timeout_cleanup_loop())
     _lab_scan_task     = asyncio.create_task(_lab_session_scan_loop())
     _storage_scan_task = asyncio.create_task(_storage_lifecycle_loop())
-    logger.info("ZH: 排程器背景工作已啟動 (timeout + lab + storage) | EN: Scheduler started (3 tasks)")
+    _myai_sync_task    = asyncio.create_task(_myai_sync_loop())
+    logger.info("ZH: 排程器背景工作已啟動 (timeout + lab + storage + myai) | EN: Scheduler started (4 tasks)")
 
 
 async def stop_scheduler():
-    global _scheduler_task, _lab_scan_task, _storage_scan_task, _scheduler_running
+    global _scheduler_task, _lab_scan_task, _storage_scan_task, _myai_sync_task, _scheduler_running
     _scheduler_running = False
-    for task in (_scheduler_task, _lab_scan_task, _storage_scan_task):
+    for task in (_scheduler_task, _lab_scan_task, _storage_scan_task, _myai_sync_task):
         if task:
             task.cancel()
             try:

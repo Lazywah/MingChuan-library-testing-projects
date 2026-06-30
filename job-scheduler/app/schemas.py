@@ -467,6 +467,10 @@ class ExternalAiMe(BaseModel):
     url: str                                # ZH: 外部平台網址 (空=未啟用) | EN: vendor URL (empty=disabled)
     vendor_username: Optional[str] = None   # ZH: 指派帳號 (未開通為 None) | EN: assigned account (None if not provisioned)
     status: str                             # active / not_provisioned / disabled
+    # v2.8 廠商 Token 餘額（以 email 對應 myai_accounts；無資料為 None）
+    myai_points: Optional[int] = None       # ZH: AI 點數餘額 | EN: vendor token balance
+    myai_expiry: Optional[str] = None       # ZH: 有效期間 | EN: expiry
+    myai_status: Optional[str] = None       # ZH: 廠商端狀態 | EN: vendor account status
 
 
 class ExternalAiUrl(BaseModel):

@@ -50,12 +50,30 @@ def get_my_external_ai(
     """ZH: 取得自己的外部 AI 導流資訊（網址 + 指派帳號 + 狀態）
        EN: Get my external-AI redirect info (url + assigned account + status)"""
     url = crud.get_system_config(db, EXTERNAL_AI_URL_KEY, "")
+
+    # v2.8 廠商 Token 餘額：以 email 對應 myai_accounts（不分大小寫）
+    myai_points = myai_expiry = myai_status = None
+    if current_user.email:
+        m = (
+            db.query(models.MyaiAccount)
+            .filter(models.MyaiAccount.email.ilike(current_user.email))
+            .first()
+        )
+        if m:
+            myai_points, myai_expiry, myai_status = m.points, m.expiry, m.status
+
     acc = crud.get_external_account_by_user_id(db, current_user.id)
     if not acc:
-        return schemas.ExternalAiMe(url=url, vendor_username=None, status="not_provisioned")
-    if (acc.status or "active") != "active":
-        return schemas.ExternalAiMe(url=url, vendor_username=acc.vendor_username, status="disabled")
-    return schemas.ExternalAiMe(url=url, vendor_username=acc.vendor_username, status="active")
+        vendor, status = None, "not_provisioned"
+    elif (acc.status or "active") != "active":
+        vendor, status = acc.vendor_username, "disabled"
+    else:
+        vendor, status = acc.vendor_username, "active"
+
+    return schemas.ExternalAiMe(
+        url=url, vendor_username=vendor, status=status,
+        myai_points=myai_points, myai_expiry=myai_expiry, myai_status=myai_status,
+    )
 
 
 # ==============================================================================

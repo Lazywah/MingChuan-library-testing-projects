@@ -16,7 +16,7 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
     <!-- ZH: 引入主任務面板樣式 | EN: Import main stylesheet -->
-    <link rel="stylesheet" href="styles.css?v=20260625-4">
+    <link rel="stylesheet" href="styles.css?v=20260630-1">
 
     <!-- ZH: 引入 Google Material Icons | EN: Import Google Material Icons -->
     <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
@@ -873,6 +873,14 @@
                         <h2 data-i18n="ext_ai_title">AI 助手</h2>
                         <p class="external-ai-desc" data-i18n="ext_ai_desc">本平台的 AI 助手由MYAI教育平台提供，將於新分頁開啟。</p>
 
+                        <!-- v2.8 廠商 Token 餘額（以 email 對應，有資料才顯示） -->
+                        <div id="external-ai-balance" class="external-ai-balance hidden">
+                            <ion-icon name="diamond-outline"></ion-icon>
+                            <span data-i18n="ext_ai_balance">AI 點數餘額</span>
+                            <b id="external-ai-points">—</b>
+                            <span id="external-ai-balance-expiry" class="external-ai-balance-expiry"></span>
+                        </div>
+
                         <!-- 有指派帳號 | Has assigned account -->
                         <div id="external-ai-active" class="hidden">
                             <div class="external-ai-account-row">
@@ -1480,7 +1488,7 @@
     <!-- ZH: 載入圖標庫與主程式碼 | EN: Load Icon library and Main Logic -->
     <script type="module" src="https://unpkg.com/ionicons@7.1.0/dist/ionicons/ionicons.esm.js"></script>
     <script nomodule src="https://unpkg.com/ionicons@7.1.0/dist/ionicons/ionicons.js"></script>
-    <script src="app.js?v=20260625-4"></script>
+    <script src="app.js?v=20260630-1"></script>
     <!-- ZH: v2.6 客服／導覽浮動助手 | EN: v2.6 floating support/guide assistant -->
     <script src="assistant-widget.js?v=20260625-4"></script>
 </body>

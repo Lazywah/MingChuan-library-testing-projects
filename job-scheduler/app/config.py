@@ -135,6 +135,7 @@ class Settings(BaseSettings):
     MYAI_EXPORT_PATH: str = "/mcu/gt_sdk/admin_168/user/export_user_list"
     MYAI_ADMIN_EMAIL: str = ""         # ZH: 由 .env 提供 | EN: from .env
     MYAI_ADMIN_PASSWORD: str = ""      # ZH: 由 .env 提供 | EN: from .env
+    MYAI_SYNC_INTERVAL_HOURS: int = 6  # ZH: 自動同步間隔(小時)；0=關閉自動 | EN: auto-sync interval (h); 0=off
 
     # ------------------------------------------------------------------
     # ZH: 任務超時設定 (分鐘) | EN: Job timeout (minutes)

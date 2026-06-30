@@ -120,6 +120,7 @@ const TRANSLATIONS = {
         ext_ai_title: "AI 助手",
         ext_ai_desc: "本平台的 AI 助手由MYAI教育平台提供，將於新分頁開啟。",
         ext_ai_account: "你的帳號",
+        ext_ai_balance: "AI 點數餘額",
         ext_ai_go: "前往 AI 助手",
         ext_ai_no_store_notice: "提醒：對話內容不會儲存在本平台。",
         ext_ai_not_provisioned: "你的 AI 助手帳號尚未開通，請聯絡管理員。",
@@ -493,6 +494,7 @@ const TRANSLATIONS = {
         ext_ai_title: "AI Assistant",
         ext_ai_desc: "This platform's AI assistant is provided by MYAI Education Platform and opens in a new tab.",
         ext_ai_account: "Your account",
+        ext_ai_balance: "AI credits",
         ext_ai_go: "Go to AI Assistant",
         ext_ai_no_store_notice: "Note: conversations are not stored on this platform.",
         ext_ai_not_provisioned: "Your AI assistant account is not provisioned yet. Please contact the administrator.",
@@ -893,6 +895,19 @@ async function loadExternalAiInfo() {
         });
         if (!res.ok) throw new Error('fetch /external-ai/me failed');
         const data = await res.json();
+        // v2.8 廠商 Token 餘額（以 email 對應，有資料才顯示）
+        const balBox = document.getElementById('external-ai-balance');
+        if (balBox) {
+            if (data.myai_points != null) {
+                const ptsEl = document.getElementById('external-ai-points');
+                const expEl = document.getElementById('external-ai-balance-expiry');
+                if (ptsEl) ptsEl.textContent = Number(data.myai_points).toLocaleString();
+                if (expEl) expEl.textContent = data.myai_expiry ? `（有效至 ${data.myai_expiry}）` : '';
+                balBox.classList.remove('hidden');
+            } else {
+                balBox.classList.add('hidden');
+            }
+        }
         const url = (data.url || '').trim();
         // ZH: url 空 / 未開通 / 停用 → 顯示提示，不顯示前往按鈕
         if (!url || data.status !== 'active' || !data.vendor_username) {
