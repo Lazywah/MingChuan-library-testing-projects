@@ -2343,7 +2343,7 @@ function renderJobs(jobs) {
             card.querySelector('button.ready-btn').addEventListener('click', () => openJobDetails(jobId));
             container.appendChild(card);
         });
-        applyTranslations(); // Translate the newly added buttons
+        applyLanguage(currentLang); // Translate the newly added buttons（修正：原呼叫未定義的 applyTranslations）
     }
 
     renderToContainer(jobListHigh, highJobs);
