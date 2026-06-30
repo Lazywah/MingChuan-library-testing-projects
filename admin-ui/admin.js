@@ -199,12 +199,12 @@ const TRANSLATIONS = {
         ua_tokens: "Tokens",
         toast_analytics_failed: "載入分析資料失敗",
         // Analytics tab headers & stat cards
-        analytics_overview: "數據總覽",
-        stat_total_users: "總帳號數",
-        stat_total_logins: "總登入次數",
-        stat_total_tokens: "總消耗 Tokens",
-        chart_dept_usage: "各系所 Token 用量",
-        chart_tool_usage: "工具使用佔比",
+        analytics_overview: "數據總覽（外部 AI / myai）",
+        stat_total_users: "廠商帳號數",
+        stat_total_logins: "總剩餘點數",
+        stat_total_tokens: "平均點數/帳號",
+        chart_dept_usage: "點數 Top 10 帳號",
+        chart_tool_usage: "帳號狀態分佈",
         btn_export_chart: "匯出圖表",
         filter_dept: "學系",
         opt_dept_all: "全校",
@@ -464,12 +464,12 @@ const TRANSLATIONS = {
         ua_tokens: "Tokens",
         toast_analytics_failed: "Failed to load analytics",
         // Analytics tab headers & stat cards
-        analytics_overview: "Data Overview",
-        stat_total_users: "Total Accounts",
-        stat_total_logins: "Total Logins",
-        stat_total_tokens: "Total Tokens Used",
-        chart_dept_usage: "Token Usage by Department",
-        chart_tool_usage: "Tool Usage Distribution",
+        analytics_overview: "Data Overview (External AI / myai)",
+        stat_total_users: "Vendor Accounts",
+        stat_total_logins: "Total Remaining Credits",
+        stat_total_tokens: "Avg Credits / Account",
+        chart_dept_usage: "Top 10 Accounts by Credits",
+        chart_tool_usage: "Account Status Distribution",
         btn_export_chart: "Export Charts",
         filter_dept: "Department",
         opt_dept_all: "All Schools",
@@ -931,20 +931,15 @@ const externalAi = {
     },
 };
 
+// v2.8: 數據分析改吃外部廠商(myai)資料 —— 從 /external-ai/admin/myai-accounts 聚合。
 async function fetchAnalyticsData() {
-    const dept = document.getElementById('analytics-dept-filter').value || 'all';
     try {
-        const res = await fetch(`${API_BASE}/admin/analytics?department=${dept}`, {
+        const res = await fetch(`${API_BASE}/external-ai/admin/myai-accounts`, {
             headers: { 'Authorization': `Bearer ${authToken}` }
         });
-        if (res.status === 401) {
-            handleAuthError();
-            return;
-        }
+        if (res.status === 401) { handleAuthError(); return; }
         if (!res.ok) throw new Error('Failed to fetch analytics data');
-        
-        const data = await res.json();
-        renderAnalyticsUI(data);
+        renderAnalyticsUI(await res.json());
     } catch (e) {
         console.error(e);
         showToast(TRANSLATIONS[currentLang]?.error_loading_analytics || 'Error loading analytics data', true);
@@ -952,106 +947,55 @@ async function fetchAnalyticsData() {
 }
 
 function renderAnalyticsUI(data) {
-    // 1. Render Stats
-    let totalUsers = 0, totalLogins = 0, totalTokens = 0;
-    
-    // Check if we need to populate department filter (only once when 'all' is selected and options are few)
-    const select = document.getElementById('analytics-dept-filter');
-    if (data.department_filter === 'all' && select.options.length === 1) {
-        data.department_stats.forEach(stat => {
-            if (stat.department && stat.department !== 'Unknown') {
-                const opt = document.createElement('option');
-                opt.value = stat.department;
-                opt.textContent = stat.department;
-                select.appendChild(opt);
-            }
-        });
-    }
+    const txtColor = getComputedStyle(document.body).getPropertyValue('--text-primary') || '#888';
+    const rows = (data && data.accounts) || [];
 
-    data.department_stats.forEach(s => {
-        totalUsers += s.user_count;
-        totalLogins += s.total_logins;
-        totalTokens += s.total_tokens;
-    });
+    // 1) 總覽：廠商帳號數 / 總剩餘點數 / 平均點數
+    const count = rows.length;
+    const totalPoints = rows.reduce((a, r) => a + (Number(r.points) || 0), 0);
+    const avg = count ? Math.round(totalPoints / count) : 0;
+    document.getElementById('stat-total-users').textContent = count.toLocaleString();
+    document.getElementById('stat-total-logins').textContent = totalPoints.toLocaleString();
+    document.getElementById('stat-total-tokens').textContent = avg.toLocaleString();
+    const at = document.getElementById('analytics-synced-at');
+    if (at) at.textContent = data.synced_at ? ('上次同步：' + new Date(data.synced_at).toLocaleString()) : '尚未同步';
 
-    document.getElementById('stat-total-users').textContent = totalUsers.toLocaleString();
-    document.getElementById('stat-total-logins').textContent = totalLogins.toLocaleString();
-    document.getElementById('stat-total-tokens').textContent = totalTokens.toLocaleString();
-
-    // 2. Render Dept Usage Chart (Bar)
-    const deptLabels = data.department_stats.map(s => s.department || 'Unknown');
-    const deptTokens = data.department_stats.map(s => s.total_tokens);
+    // 2) 長條圖：點數 Top 10 帳號
+    const top = [...rows].sort((a, b) => (Number(b.points) || 0) - (Number(a.points) || 0)).slice(0, 10);
+    const barLabels = top.map(r => r.name || r.email || r.vendor_sn || '?');
+    const barData = top.map(r => Number(r.points) || 0);
     const deptCtx = document.getElementById('deptUsageChart').getContext('2d');
-    
-    if (deptChartInstance) {
-        deptChartInstance.destroy();
-    }
-    
+    if (deptChartInstance) deptChartInstance.destroy();
     deptChartInstance = new Chart(deptCtx, {
         type: 'bar',
-        data: {
-            labels: deptLabels,
-            datasets: [{
-                label: TRANSLATIONS[currentLang]?.chart_label_total_tokens || 'Token Usage',
-                data: deptTokens,
-                backgroundColor: 'rgba(56, 189, 248, 0.7)',
-                borderColor: 'rgba(56, 189, 248, 1)',
-                borderWidth: 1,
-                borderRadius: 4
-            }]
-        },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            plugins: {
-                legend: { labels: { color: getComputedStyle(document.body).getPropertyValue('--text-primary') || '#888' } }
-            },
+        data: { labels: barLabels, datasets: [{
+            label: TRANSLATIONS[currentLang]?.chart_dept_usage || 'Top accounts',
+            data: barData,
+            backgroundColor: 'rgba(56, 189, 248, 0.7)', borderColor: 'rgba(56, 189, 248, 1)',
+            borderWidth: 1, borderRadius: 4 }] },
+        options: { responsive: true, maintainAspectRatio: false,
+            plugins: { legend: { labels: { color: txtColor } } },
             scales: {
-                x: { ticks: { color: getComputedStyle(document.body).getPropertyValue('--text-primary') || '#888' }, grid: { color: 'rgba(128,128,128,0.2)' } },
-                y: { ticks: { color: getComputedStyle(document.body).getPropertyValue('--text-primary') || '#888' }, grid: { color: 'rgba(128,128,128,0.2)' }, beginAtZero: true }
-            }
-        }
+                x: { ticks: { color: txtColor }, grid: { color: 'rgba(128,128,128,0.2)' } },
+                y: { ticks: { color: txtColor }, grid: { color: 'rgba(128,128,128,0.2)' }, beginAtZero: true }
+            } }
     });
 
-    // 3. Render Tool Usage Chart (Pie)
-    const toolLabels = data.tools_breakdown.map(t => {
-        const tr = t.tool_type;
-        const tl = TRANSLATIONS[currentLang] || {};
-        return tr === 'chat' ? (tl.tool_chat || 'Chat')
-             : tr === 'video_gen' ? (tl.tool_video_gen || 'Video Gen')
-             : tr === 'writing' ? (tl.tool_writing || 'Writing')
-             : tr;
-    });
-    const toolCounts = data.tools_breakdown.map(t => t.usage_count);
+    // 3) 圓餅圖：帳號狀態分佈
+    const statusMap = {};
+    rows.forEach(r => { const s = (r.status || '未知'); statusMap[s] = (statusMap[s] || 0) + 1; });
+    const pieLabels = Object.keys(statusMap);
+    const pieData = pieLabels.map(k => statusMap[k]);
     const toolCtx = document.getElementById('toolUsageChart').getContext('2d');
-    
-    if (toolChartInstance) {
-        toolChartInstance.destroy();
-    }
-    
+    if (toolChartInstance) toolChartInstance.destroy();
     toolChartInstance = new Chart(toolCtx, {
         type: 'pie',
-        data: {
-            labels: toolLabels,
-            datasets: [{
-                data: toolCounts,
-                backgroundColor: [
-                    'rgba(244, 114, 182, 0.8)', // pink
-                    'rgba(56, 189, 248, 0.8)',  // blue
-                    'rgba(250, 204, 21, 0.8)',  // yellow
-                    'rgba(167, 139, 250, 0.8)'  // purple
-                ],
-                borderWidth: 1,
-                borderColor: '#1e293b'
-            }]
-        },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            plugins: {
-                legend: { position: 'right', labels: { color: getComputedStyle(document.body).getPropertyValue('--text-primary') || '#888' } }
-            }
-        }
+        data: { labels: pieLabels, datasets: [{
+            data: pieData,
+            backgroundColor: ['rgba(74,222,128,0.8)','rgba(56,189,248,0.8)','rgba(250,204,21,0.8)','rgba(244,114,182,0.8)','rgba(167,139,250,0.8)'],
+            borderWidth: 1, borderColor: '#1e293b' }] },
+        options: { responsive: true, maintainAspectRatio: false,
+            plugins: { legend: { position: 'right', labels: { color: txtColor } } } }
     });
 }
 
@@ -1507,11 +1451,11 @@ function renderAdminUsers(users) {
                 <td>${u.last_login_ip || 'N/A'}</td>
                 <td>${loginStr}</td>
                 <td>${createdStr}</td>
-                <td>${tokensStr}</td>
+                <td style="display:none;">${tokensStr}</td>
                 <td>
                         <div style="display:flex; gap:4px; flex-wrap:wrap;">
                             <button class="ready-btn" style="width:auto; padding:4px 12px; margin:0; font-size:12px; min-width:auto;" onclick="openEditUser('${u.id}')" data-i18n="btn_edit">${TRANSLATIONS[currentLang]?.btn_edit || 'Edit'}</button>
-                            <button class="ready-btn" style="width:auto; padding:4px 12px; margin:0; font-size:12px; min-width:auto; border-color:#a78bfa; color:#a78bfa; background:rgba(167,139,250,0.08);" onclick="openUserAnalytics('${u.id}')" data-i18n="btn_analytics">${TRANSLATIONS[currentLang]?.btn_analytics || 'Analytics'}</button>
+                            <button class="ready-btn" style="display:none; width:auto; padding:4px 12px; margin:0; font-size:12px; min-width:auto; border-color:#a78bfa; color:#a78bfa; background:rgba(167,139,250,0.08);" onclick="openUserAnalytics('${u.id}')" data-i18n="btn_analytics">${TRANSLATIONS[currentLang]?.btn_analytics || 'Analytics'}</button>
                             <button class="ready-btn" style="width:auto; padding:4px 12px; margin:0; font-size:12px; min-width:auto; border-color:#f59e0b; color:#f59e0b;" onclick="resetUser('${u.id}', '${u.username}')" data-i18n="btn_reset">${TRANSLATIONS[currentLang]?.btn_reset || 'Initialize'}</button>
                         </div>
                     </td>

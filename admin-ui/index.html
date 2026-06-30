@@ -9,7 +9,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Playpen+Sans:wght@400;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="styles.css?v=20260630-3">
+    <link rel="stylesheet" href="styles.css?v=20260630-4">
     <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
@@ -241,19 +241,19 @@
                                 <th data-i18n="th_last_ip">Last IP</th>
                                 <th data-i18n="th_last_login">Last Login</th>
                                 <th data-i18n="th_created_at">Created At</th>
-                                <th data-i18n="th_tokens">Tokens</th>
+                                <th data-i18n="th_tokens" style="display:none;">Tokens</th>
                                 <th data-i18n="th_actions">Actions</th>
                             </tr>
                         </thead>
                         <tbody id="admin-users-body"><!-- JS --></tbody>
                     </table>
                 </div>
-                <!-- Batch Token Limit Update -->
+                <!-- Batch Token Limit Update（v2.8：內部 Token 計量已停用，整組隱藏） -->
                 <div style="padding: 10px 15px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
-                    <span style="font-size: 13px; color: var(--text-muted);" data-i18n="batch_token_label">Batch set all users' token limit:</span>
-                    <input type="number" id="batch-token-limit" class="config-select" style="width: 160px; padding: 6px 10px; border-radius: 8px;" data-i18n="placeholder_batch_token" placeholder="e.g. 5000000" value="100000">
-                    <button id="btn-batch-tokens" class="ready-btn config-save-btn" style="width: auto; padding: 6px 16px; font-size: 13px;" data-i18n="btn_batch_apply">Apply to All</button>
-                    <button id="btn-batch-reset-usage" class="ready-btn" style="width: auto; padding: 6px 16px; font-size: 13px; border-color: var(--neon-yellow); color: var(--neon-yellow); background: rgba(250,204,21,0.08);" data-i18n="btn_reset_all_usage">
+                    <span style="font-size: 13px; color: var(--text-muted); display:none;" data-i18n="batch_token_label">Batch set all users' token limit:</span>
+                    <input type="number" id="batch-token-limit" class="config-select" style="width: 160px; padding: 6px 10px; border-radius: 8px; display:none;" data-i18n="placeholder_batch_token" placeholder="e.g. 5000000" value="100000">
+                    <button id="btn-batch-tokens" class="ready-btn config-save-btn" style="width: auto; padding: 6px 16px; font-size: 13px; display:none;" data-i18n="btn_batch_apply">Apply to All</button>
+                    <button id="btn-batch-reset-usage" class="ready-btn" style="width: auto; padding: 6px 16px; font-size: 13px; border-color: var(--neon-yellow); color: var(--neon-yellow); background: rgba(250,204,21,0.08); display:none;" data-i18n="btn_reset_all_usage">
                         <ion-icon name="refresh-outline" style="margin-right:4px; vertical-align:middle;"></ion-icon>Reset All Usage
                     </button>
                     <div style="flex-grow:1;"></div>
@@ -415,11 +415,12 @@
                                 </select>
                             </div>
                         </div>
-                        <div class="input-wrap">
+                        <!-- v2.8：內部 Token 計量已停用，編輯視窗的 Token 上限/用量整組隱藏 -->
+                        <div class="input-wrap" style="display:none;">
                             <ion-icon name="wallet-outline"></ion-icon>
                             <input type="number" id="edit-tokens-limit" disabled data-i18n="edit_tokens_limit" placeholder="Token Monthly Limit">
                         </div>
-                        <div style="display: flex; gap: 10px; margin-top: 5px; align-items: center;">
+                        <div style="display: none; gap: 10px; margin-top: 5px; align-items: center;">
                             <div style="flex: 1; font-size: 13px; color: var(--text-muted);">
                                 <span data-i18n="edit_tokens_used">Used</span>: <strong id="edit-tokens-used-display">0</strong>
                             </div>
@@ -799,27 +800,24 @@
             <div class="admin-grid">
                 <section class="widget form-box-panel" style="grid-column: 1 / -1;">
                     <div class="widget-header split">
-                        <h3><ion-icon name="stats-chart-outline" style="margin-right:6px;"></ion-icon> <span data-i18n="analytics_overview">數據總覽</span></h3>
+                        <h3><ion-icon name="stats-chart-outline" style="margin-right:6px;"></ion-icon> <span data-i18n="analytics_overview">數據總覽（外部 AI / myai）</span></h3>
                         <div style="display:flex; gap:10px; align-items:center;">
-                            <span data-i18n="filter_dept" style="font-size: 14px; color: var(--text-muted);">學系:</span>
-                            <select id="analytics-dept-filter" class="config-select" style="padding: 4px 10px; border-radius: 8px;" onchange="fetchAnalyticsData()">
-                                <option value="all" data-i18n="opt_dept_all">全校</option>
-                            </select>
+                            <span id="analytics-synced-at" style="font-size:12px; color:var(--text-muted);"></span>
                             <button class="ready-btn config-save-btn" onclick="exportAnalyticsCharts()" style="padding: 4px 12px; font-size: 13px; width: auto;" data-i18n="btn_export_chart"><ion-icon name="download-outline" style="margin-right: 4px;"></ion-icon>匯出圖表</button>
                             <ion-icon name="refresh-circle-outline" onclick="fetchAnalyticsData()" class="refresh-icon" title="Refresh"></ion-icon>
                         </div>
                     </div>
                     <div id="analytics-stats-container" class="cluster-stats-grid">
                         <div class="stat-card">
-                            <h4 data-i18n="stat_total_users">總帳號數</h4>
+                            <h4 data-i18n="stat_total_users">廠商帳號數</h4>
                             <div class="stat-row" style="font-size: 1.8em; font-weight: bold; color: var(--text-primary);" id="stat-total-users">-</div>
                         </div>
                         <div class="stat-card">
-                            <h4 data-i18n="stat_total_logins">總登入次數</h4>
+                            <h4 data-i18n="stat_total_logins">總剩餘點數</h4>
                             <div class="stat-row" style="font-size: 1.8em; font-weight: bold; color: var(--text-primary);" id="stat-total-logins">-</div>
                         </div>
                         <div class="stat-card">
-                            <h4 data-i18n="stat_total_tokens">總消耗 Tokens</h4>
+                            <h4 data-i18n="stat_total_tokens">平均點數/帳號</h4>
                             <div class="stat-row" style="font-size: 1.8em; font-weight: bold; color: var(--text-primary);" id="stat-total-tokens">-</div>
                         </div>
                     </div>
@@ -827,7 +825,7 @@
                 
                 <section class="widget form-box-panel" style="grid-column: 1 / 2;">
                     <div class="widget-header">
-                        <h3><ion-icon name="bar-chart-outline" style="margin-right:6px;"></ion-icon> <span data-i18n="chart_dept_usage">各系所 Token 用量</span></h3>
+                        <h3><ion-icon name="bar-chart-outline" style="margin-right:6px;"></ion-icon> <span data-i18n="chart_dept_usage">點數 Top 10 帳號</span></h3>
                     </div>
                     <div style="padding: 20px; background: rgba(128,128,128,0.1); border-radius: 8px; position: relative;">
                         <canvas id="deptUsageChart"></canvas>
@@ -836,7 +834,7 @@
                 
                 <section class="widget form-box-panel" style="grid-column: 2 / 3;">
                     <div class="widget-header">
-                        <h3><ion-icon name="pie-chart-outline" style="margin-right:6px;"></ion-icon> <span data-i18n="chart_tool_usage">工具使用佔比</span></h3>
+                        <h3><ion-icon name="pie-chart-outline" style="margin-right:6px;"></ion-icon> <span data-i18n="chart_tool_usage">帳號狀態分佈</span></h3>
                     </div>
                     <div style="padding: 20px; background: rgba(128,128,128,0.1); border-radius: 8px; display:flex; justify-content:center; position: relative;">
                         <canvas id="toolUsageChart" style="max-height: 300px;"></canvas>
@@ -1169,7 +1167,7 @@
     <script type="module" src="https://unpkg.com/ionicons@7.1.0/dist/ionicons/ionicons.esm.js"></script>
     <script nomodule src="https://unpkg.com/ionicons@7.1.0/dist/ionicons/ionicons.js"></script>
     <!-- 載入 Admin 邏輯 -->
-    <script src="admin.js?v=20260630-3"></script>
+    <script src="admin.js?v=20260630-4"></script>
 </body>
 
 </html>
