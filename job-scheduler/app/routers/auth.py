@@ -179,11 +179,12 @@ async def login(
         data={"sub": user.username, "role": user.role}
     )
     # v2.1: 設 HttpOnly cookie，讓瀏覽器導航 /code/ 時 nginx auth_request 能讀到
-    # SPA 仍從 JSON response 拿 token 存 localStorage 給 fetch 用，兩條路平行
+    # SPA 仍從 JSON response 拿 token 存 sessionStorage 給 fetch 用，兩條路平行
+    # v2.8 共用機台安全：不設 max_age → session cookie，關閉瀏覽器即失效（避免換手延續）。
+    #      JWT 本身仍有 exp(ACCESS_TOKEN_EXPIRE_MINUTES) 把關過期。
     response.set_cookie(
         key="ai_hud_token",
         value=access_token,
-        max_age=7200,
         httponly=True,
         samesite="lax",
         path="/",

@@ -2,7 +2,10 @@
 // ZH: 系統狀態與設定 | EN: State & Configuration
 // =========================
 const API_BASE = '/api/v1';
-let authToken = localStorage.getItem('ai_hud_token') || null;
+// v2.8 共用機台安全：登入憑證改存 sessionStorage（關閉瀏覽器即失效，不跨重開保留）。
+//      清掉舊版可能殘留在 localStorage 的 token，避免換手延續。
+try { localStorage.removeItem('ai_hud_token'); } catch (e) {}
+let authToken = sessionStorage.getItem('ai_hud_token') || null;
 let uploadedDatasetPath = null;
 let pollInterval = null;
 
@@ -951,7 +954,7 @@ async function doLogout() {
         }
     }
     authToken = null;
-    localStorage.removeItem('ai_hud_token');
+    sessionStorage.removeItem('ai_hud_token');
     // 清 /code/ 認證 cookie（換手用；與後端 set-cookie 同名）
     document.cookie = 'ai_hud_token=; path=/; max-age=0; SameSite=Lax';
     // v2.7: 登出清空小基聊天室記憶（客服/家教兩室）
@@ -1189,7 +1192,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     throw new Error(err.detail || 'login failed');
                 }
                 const data = await res.json();
-                localStorage.setItem('ai_hud_token', data.access_token);
+                sessionStorage.setItem('ai_hud_token', data.access_token);
                 authToken = data.access_token;
                 if (passwordInput) passwordInput.value = '';
 
@@ -3065,7 +3068,7 @@ const Lab = (() => {
 
     async function _api(path, opts = {}) {
         // v2.1 修正：使用 ai_hud_token (與 app.js 其他地方一致)，舊版誤用 'jwt' 導致永遠 401
-        const token = localStorage.getItem('ai_hud_token');
+        const token = sessionStorage.getItem('ai_hud_token');
         if (!token) throw new Error('Not authenticated');
         const resp = await fetch(`/api/v1/lab${path}`, {
             ...opts,
@@ -3294,7 +3297,7 @@ const Secrets = (() => {
     }
 
     async function _api(path, opts = {}) {
-        const token = localStorage.getItem('ai_hud_token');
+        const token = sessionStorage.getItem('ai_hud_token');
         if (!token) throw new Error('Not authenticated');
         const resp = await fetch(`/api/v1/secrets${path}`, {
             ...opts,
@@ -3437,7 +3440,7 @@ window.Lab = Lab;
     const params = new URLSearchParams(window.location.search);
     const ssoToken = params.get('sso_token');
     if (ssoToken) {
-        localStorage.setItem('ai_hud_token', ssoToken);
+        sessionStorage.setItem('ai_hud_token', ssoToken);
         authToken = ssoToken;
         // 清掉 URL 參數，避免 token 留在瀏覽歷史
         window.history.replaceState({}, document.title, window.location.pathname);
