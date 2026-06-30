@@ -865,6 +865,7 @@ const externalAi = {
             if (msg) { msg.style.color = '#4ade80'; msg.textContent = '✓ 已新增'; }
             pf.value = ''; vd.value = '';
             this.refresh();
+            this.loadBindings();  // v2.8 同步刷新綁定/未配對面板
         } catch (e) {
             if (msg) { msg.style.color = '#fb7185'; msg.textContent = '✗ ' + e.message; }
         }
@@ -885,6 +886,7 @@ const externalAi = {
             if (!res.ok) throw new Error('update failed');
             showToast('已更新');
             this.refresh();
+            this.loadBindings();  // v2.8 同步刷新綁定/未配對面板
         } catch (e) { showToast('更新失敗', true); }
     },
     async remove(id, name) {
@@ -896,6 +898,7 @@ const externalAi = {
             if (!res.ok) throw new Error('delete failed');
             showToast('已刪除');
             this.refresh();
+            this.loadBindings();  // v2.8 同步刷新綁定/未配對面板
         } catch (e) { showToast('刪除失敗', true); }
     },
     async importCsv() {
@@ -916,6 +919,7 @@ const externalAi = {
             if (r.errors && r.errors.length) txt += '\n錯誤：\n' + r.errors.join('\n');
             if (msg) { msg.style.color = (r.errors && r.errors.length) ? '#fbbf24' : '#4ade80'; msg.textContent = txt; }
             this.refresh();
+            this.loadBindings();  // v2.8 同步刷新綁定/未配對面板
         } catch (e) {
             if (msg) { msg.style.color = '#fb7185'; msg.textContent = '✗ 匯入失敗'; }
         }
