@@ -123,6 +123,9 @@ const TRANSLATIONS = {
         ext_ai_balance: "AI 點數餘額",
         ext_ai_go: "前往 AI 助手",
         ext_ai_no_store_notice: "提醒：對話內容不會儲存在本平台。",
+        ext_ai_shared_notice: "共用電腦提醒：用完請按「結束使用」登出本平台，並關閉 MYAI 分頁，避免下一位使用者進到你的帳號。",
+        ext_ai_end_session: "結束使用 / 換人",
+        ext_ai_end_session_alert: "已登出本平台。\n\n為保護你的 MYAI 帳號，請務必『關閉所有 MYAI 分頁』（或在 MYAI 內按登出）。\n共用電腦建議使用無痕／訪客視窗。",
         ext_ai_not_provisioned: "你的 AI 助手帳號尚未開通，請聯絡管理員。",
         ext_ai_coming_soon: "AI 助手即將開放，敬請期待。",
         btn_back_hub: "返回大廳",
@@ -497,6 +500,9 @@ const TRANSLATIONS = {
         ext_ai_balance: "AI credits",
         ext_ai_go: "Go to AI Assistant",
         ext_ai_no_store_notice: "Note: conversations are not stored on this platform.",
+        ext_ai_shared_notice: "Shared computer? When done, click \"End session\" to log out here, and close the MYAI tab so the next user can't reach your account.",
+        ext_ai_end_session: "End session / switch user",
+        ext_ai_end_session_alert: "Signed out of this platform.\n\nTo protect your MYAI account, please CLOSE all MYAI tabs (or log out inside MYAI).\nOn shared computers, use a private/guest window.",
         ext_ai_not_provisioned: "Your AI assistant account is not provisioned yet. Please contact the administrator.",
         ext_ai_coming_soon: "AI Assistant is coming soon. Stay tuned.",
         btn_back_hub: "Back to Hub",
@@ -928,6 +934,31 @@ async function loadExternalAiInfo() {
     }
 }
 
+// v2.8 共用機台安全：可重用登出。清掉 token(localStorage) + /code/ 認證 cookie + 小基記憶，
+// 確保共用機台換手時下一位使用者不會延續上一位的登入狀態。
+async function doLogout() {
+    if (authToken) {
+        try {
+            await fetch(`${API_BASE}/auth/logout`, {
+                method: 'POST',
+                headers: { 'Authorization': `Bearer ${authToken}` }
+            });
+        } catch (e) {
+            console.error('Logout API failed', e);
+        }
+    }
+    authToken = null;
+    localStorage.removeItem('ai_hud_token');
+    // 清 /code/ 認證 cookie（換手用；與後端 set-cookie 同名）
+    document.cookie = 'ai_hud_token=; path=/; max-age=0; SameSite=Lax';
+    // v2.7: 登出清空小基聊天室記憶（客服/家教兩室）
+    if (window.AibotWidget && typeof window.AibotWidget.reset === 'function') window.AibotWidget.reset();
+    if (pollInterval) clearInterval(pollInterval);
+    const menu = document.getElementById('user-dropdown-menu');
+    if (menu) menu.style.display = 'none';
+    switchToLogin();
+}
+
 // Bind hub card clicks
 hubSubCards.forEach(card => {
     card.addEventListener('click', () => showHubView(card.getAttribute('data-target')));
@@ -996,28 +1027,17 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     document.querySelectorAll('#logout-btn').forEach(btn => {
-        btn.addEventListener('click', async () => {
-            if (authToken) {
-                try {
-                    await fetch(`${API_BASE}/auth/logout`, {
-                        method: 'POST',
-                        headers: { 'Authorization': `Bearer ${authToken}` }
-                    });
-                } catch (e) {
-                    console.error('Logout API failed', e);
-                }
-            }
-            authToken = null;
-            localStorage.removeItem('ai_hud_token');
-            // v2.7: 登出清空小基聊天室記憶（客服/家教兩室）
-            if (window.AibotWidget && typeof window.AibotWidget.reset === 'function') window.AibotWidget.reset();
-            if (pollInterval) clearInterval(pollInterval);
-            // Close dropdown if open
-            const menu = document.getElementById('user-dropdown-menu');
-            if (menu) menu.style.display = 'none';
-            switchToLogin();
-        });
+        btn.addEventListener('click', () => doLogout());
     });
+
+    // v2.8 共用機台換手：結束使用 = 登出本平台 + 清除憑證 + 提醒關閉 MYAI 分頁
+    const extLogoutBtn = document.getElementById('external-ai-logout-btn');
+    if (extLogoutBtn) {
+        extLogoutBtn.addEventListener('click', async () => {
+            await doLogout();
+            alert(t('ext_ai_end_session_alert'));
+        });
+    }
 
     // ZH: 使用者下拉選單切換 | EN: User dropdown toggle
     const userDropdownToggle = document.getElementById('user-dropdown-toggle');
