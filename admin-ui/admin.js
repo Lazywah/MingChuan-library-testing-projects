@@ -200,9 +200,9 @@ const TRANSLATIONS = {
         toast_analytics_failed: "載入分析資料失敗",
         // Analytics tab headers & stat cards
         analytics_overview: "數據總覽（外部 AI / myai）",
-        stat_total_users: "廠商帳號數",
-        stat_total_logins: "總剩餘點數",
-        stat_total_tokens: "平均點數/帳號",
+        stat_total_users: "管理者帳號",
+        stat_total_logins: "使用者帳號",
+        stat_total_tokens: "總剩餘點數",
         chart_dept_usage: "點數 Top 10 帳號",
         chart_tool_usage: "帳號狀態分佈",
         consumption_title: "點數消耗分析",
@@ -485,9 +485,9 @@ const TRANSLATIONS = {
         toast_analytics_failed: "Failed to load analytics",
         // Analytics tab headers & stat cards
         analytics_overview: "Data Overview (External AI / myai)",
-        stat_total_users: "Vendor Accounts",
-        stat_total_logins: "Total Remaining Credits",
-        stat_total_tokens: "Avg Credits / Account",
+        stat_total_users: "Admin Accounts",
+        stat_total_logins: "User Accounts",
+        stat_total_tokens: "Total Remaining Credits",
         chart_dept_usage: "Top 10 Accounts by Credits",
         chart_tool_usage: "Account Status Distribution",
         consumption_title: "Credit Consumption",
@@ -1116,13 +1116,14 @@ function renderAnalyticsUI(data) {
     const txtColor = getComputedStyle(document.body).getPropertyValue('--text-primary') || '#888';
     const rows = (data && data.accounts) || [];
 
-    // 1) 總覽：廠商帳號數 / 總剩餘點數 / 平均點數
-    const count = rows.length;
+    // 1) 總覽：管理者帳號數 / 使用者帳號數 / 總剩餘點數（依 myai user_type 分類）
+    const isAdmin = (r) => /管理|admin/i.test(r.user_type || '');
+    const adminCount = rows.filter(isAdmin).length;
+    const userCount = rows.length - adminCount;
     const totalPoints = rows.reduce((a, r) => a + (Number(r.points) || 0), 0);
-    const avg = count ? Math.round(totalPoints / count) : 0;
-    document.getElementById('stat-total-users').textContent = count.toLocaleString();
-    document.getElementById('stat-total-logins').textContent = totalPoints.toLocaleString();
-    document.getElementById('stat-total-tokens').textContent = avg.toLocaleString();
+    document.getElementById('stat-total-users').textContent = adminCount.toLocaleString();
+    document.getElementById('stat-total-logins').textContent = userCount.toLocaleString();
+    document.getElementById('stat-total-tokens').textContent = totalPoints.toLocaleString();
     const at = document.getElementById('analytics-synced-at');
     if (at) at.textContent = data.synced_at ? ('上次同步：' + new Date(data.synced_at).toLocaleString()) : '尚未同步';
 
