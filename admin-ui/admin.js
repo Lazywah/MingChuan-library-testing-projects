@@ -213,6 +213,12 @@ const TRANSLATIONS = {
         consumption_trend: "每日消耗趨勢",
         consumption_top: "Top 消耗者",
         consumption_models: "模型／工具別用量（消耗點數）",
+        pie_view_status: "帳號狀態",
+        pie_view_model: "工具／模型",
+        pie_view_role: "師生用量",
+        pie_title_status: "帳號狀態分佈",
+        pie_title_model: "工具／模型使用比例",
+        pie_title_role: "師生 Token 用量",
         consumption_7d: "近 7 天",
         consumption_30d: "近 30 天",
         consumption_90d: "近 90 天",
@@ -489,6 +495,12 @@ const TRANSLATIONS = {
         consumption_trend: "Daily consumption",
         consumption_top: "Top consumers",
         consumption_models: "Usage by model/tool (points)",
+        pie_view_status: "Status",
+        pie_view_model: "Tools/Models",
+        pie_view_role: "Teacher/Student",
+        pie_title_status: "Account Status",
+        pie_title_model: "Usage Ratio by Model/Tool",
+        pie_title_role: "Token Usage by Role",
         consumption_7d: "Last 7 days",
         consumption_30d: "Last 30 days",
         consumption_90d: "Last 90 days",
@@ -992,6 +1004,12 @@ function renderConsumptionUI(data) {
     set('consumption-accounts', Number(data.total_uses || 0).toLocaleString());   // AI 使用次數
     set('consumption-snapshots', Number(data.total_logins || 0).toLocaleString()); // 登入次數
 
+    // 供可切換圓餅圖使用：工具/模型 比例 + 師生用量
+    const roleName = (r) => ({ student: '學生', teacher: '教師', admin: '管理員', unbound: '未綁定', unknown: '未知' }[r] || r);
+    _pieData.model = { labels: (data.models || []).map(m => m.model), data: (data.models || []).map(m => m.points) };
+    _pieData.role = { labels: (data.by_role || []).map(r => roleName(r.role)), data: (data.by_role || []).map(r => r.consumed) };
+    if (_pieMode !== 'status') renderPie();
+
     // 每日消耗趨勢（line）
     const series = data.series || [];
     const trendCtx = document.getElementById('consumptionTrendChart').getContext('2d');
@@ -1087,22 +1105,38 @@ function renderAnalyticsUI(data) {
             } }
     });
 
-    // 3) 圓餅圖：帳號狀態分佈
+    // 3) 圓餅圖資料（帳號狀態）—— 存起來，交給可切換的 renderPie()
     const statusMap = {};
     rows.forEach(r => { const s = (r.status || '未知'); statusMap[s] = (statusMap[s] || 0) + 1; });
-    const pieLabels = Object.keys(statusMap);
-    const pieData = pieLabels.map(k => statusMap[k]);
-    const toolCtx = document.getElementById('toolUsageChart').getContext('2d');
+    _pieData.status = { labels: Object.keys(statusMap), data: Object.keys(statusMap).map(k => statusMap[k]) };
+    renderPie();
+}
+
+// v2.8 可切換圓餅圖：帳號狀態 / 工具·模型 / 師生用量
+let _pieMode = 'status';
+const _pieData = { status: { labels: [], data: [] }, model: { labels: [], data: [] }, role: { labels: [], data: [] } };
+function switchPieView(mode) { _pieMode = mode || 'status'; renderPie(); }
+function renderPie() {
+    const txtColor = getComputedStyle(document.body).getPropertyValue('--text-primary') || '#888';
+    const d = _pieData[_pieMode] || { labels: [], data: [] };
+    const ctx = document.getElementById('toolUsageChart');
+    if (!ctx) return;
     if (toolChartInstance) toolChartInstance.destroy();
-    toolChartInstance = new Chart(toolCtx, {
+    toolChartInstance = new Chart(ctx.getContext('2d'), {
         type: 'pie',
-        data: { labels: pieLabels, datasets: [{
-            data: pieData,
-            backgroundColor: ['rgba(74,222,128,0.8)','rgba(56,189,248,0.8)','rgba(250,204,21,0.8)','rgba(244,114,182,0.8)','rgba(167,139,250,0.8)'],
+        data: { labels: d.labels, datasets: [{
+            data: d.data,
+            backgroundColor: ['rgba(74,222,128,0.8)','rgba(56,189,248,0.8)','rgba(250,204,21,0.8)','rgba(244,114,182,0.8)','rgba(167,139,250,0.8)','rgba(52,211,153,0.8)','rgba(251,146,60,0.8)','rgba(148,163,184,0.8)'],
             borderWidth: 1, borderColor: '#1e293b' }] },
         options: { responsive: true, maintainAspectRatio: false,
             plugins: { legend: { position: 'right', labels: { color: txtColor } } } }
     });
+    const titleEl = document.getElementById('pie-view-title');
+    const tl = TRANSLATIONS[currentLang] || {};
+    if (titleEl) titleEl.textContent = { status: tl.pie_title_status || '帳號狀態分佈',
+        model: tl.pie_title_model || '工具／模型使用比例', role: tl.pie_title_role || '師生 Token 用量' }[_pieMode];
+    const sel = document.getElementById('pie-view-select');
+    if (sel && sel.value !== _pieMode) sel.value = _pieMode;
 }
 
 function exportAnalyticsCharts() {

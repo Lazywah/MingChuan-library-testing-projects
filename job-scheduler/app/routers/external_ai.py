@@ -417,8 +417,14 @@ def consumption_analytics(
         .filter(models.MyaiTransaction.occurred_at >= since)
         .all()
     )
+    # ZH: email → 平台身分(role)，用來拆「師生用量」| email → platform role
+    role_map = {
+        (u.email or "").strip().lower(): (u.role or "unknown")
+        for u in db.query(models.User).all() if u.email
+    }
     per: dict = {}      # ZH: sn → 每生統計
     model_agg: dict = {}
+    role_agg: dict = {}
     daily: dict = {}
     total = total_uses = total_logins = 0
     for t in txs:
@@ -436,10 +442,15 @@ def consumption_analytics(
                 mm["count"] += 1; mm["points"] += c
                 d = t.occurred_at.date().isoformat() if t.occurred_at else "unknown"
                 daily[d] = daily.get(d, 0) + c
+                # 師生用量：以 email 對應平台 role；對不到 = 未綁定
+                role = role_map.get((t.email or "").strip().lower(), "unbound")
+                ra = role_agg.setdefault(role, {"role": role, "consumed": 0, "uses": 0})
+                ra["consumed"] += c; ra["uses"] += 1
         elif t.event_type == "login":
             p["logins"] += 1; total_logins += 1
     accounts = sorted(per.values(), key=lambda x: x["consumed"], reverse=True)
     model_list = sorted(model_agg.values(), key=lambda x: x["points"], reverse=True)
+    by_role = sorted(role_agg.values(), key=lambda x: x["consumed"], reverse=True)
     series = [{"date": d, "consumed": daily[d]} for d in sorted(daily.keys())]
     return {
         "days": days,
@@ -451,5 +462,6 @@ def consumption_analytics(
         "top": accounts[:10],
         "accounts": accounts,
         "models": model_list,
+        "by_role": by_role,
         "series": series,
     }
