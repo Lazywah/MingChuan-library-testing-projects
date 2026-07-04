@@ -205,6 +205,17 @@ const TRANSLATIONS = {
         stat_total_tokens: "平均點數/帳號",
         chart_dept_usage: "點數 Top 10 帳號",
         chart_tool_usage: "帳號狀態分佈",
+        consumption_title: "點數消耗分析",
+        consumption_hint: "資料來源：廠商「交易日誌」逐筆事件（含使用的模型/工具）。消耗＝AI 使用的扣點加總；不儲存 IP。",
+        consumption_total: "期間總消耗點數",
+        consumption_accounts: "AI 使用次數",
+        consumption_snapshots: "登入次數",
+        consumption_trend: "每日消耗趨勢",
+        consumption_top: "Top 消耗者",
+        consumption_models: "模型／工具別用量（消耗點數）",
+        consumption_7d: "近 7 天",
+        consumption_30d: "近 30 天",
+        consumption_90d: "近 90 天",
         btn_export_chart: "匯出圖表",
         filter_dept: "學系",
         opt_dept_all: "全校",
@@ -470,6 +481,17 @@ const TRANSLATIONS = {
         stat_total_tokens: "Avg Credits / Account",
         chart_dept_usage: "Top 10 Accounts by Credits",
         chart_tool_usage: "Account Status Distribution",
+        consumption_title: "Credit Consumption",
+        consumption_hint: "Source: vendor per-event transaction log (incl. model/tool used). Consumption = sum of AI-usage point deductions; IP not stored.",
+        consumption_total: "Total consumed (period)",
+        consumption_accounts: "AI uses",
+        consumption_snapshots: "Logins",
+        consumption_trend: "Daily consumption",
+        consumption_top: "Top consumers",
+        consumption_models: "Usage by model/tool (points)",
+        consumption_7d: "Last 7 days",
+        consumption_30d: "Last 30 days",
+        consumption_90d: "Last 90 days",
         btn_export_chart: "Export Charts",
         filter_dept: "Department",
         opt_dept_all: "All Schools",
@@ -609,6 +631,9 @@ function handleAuthError() {
 // ==========================================
 let deptChartInstance = null;
 let toolChartInstance = null;
+let consumptionTrendInstance = null;   // v2.8 消耗趨勢
+let topConsumersInstance = null;       // v2.8 Top 消耗者
+let modelBreakdownInstance = null;     // v2.8 模型/工具別用量
 
 function switchAdminMainTab(tabId) {
     document.querySelectorAll('.admin-side-tab').forEach(btn => btn.classList.remove('active'));
@@ -940,10 +965,91 @@ async function fetchAnalyticsData() {
         if (res.status === 401) { handleAuthError(); return; }
         if (!res.ok) throw new Error('Failed to fetch analytics data');
         renderAnalyticsUI(await res.json());
+        fetchConsumptionData();   // v2.8 消耗分析一併載入
     } catch (e) {
         console.error(e);
         showToast(TRANSLATIONS[currentLang]?.error_loading_analytics || 'Error loading analytics data', true);
     }
+}
+
+// v2.8: 點數消耗分析（以快照差 Δ 推算；廠商不給逐筆消耗）
+async function fetchConsumptionData() {
+    const sel = document.getElementById('consumption-days');
+    const days = sel ? (sel.value || 30) : 30;
+    try {
+        const res = await fetch(`${API_BASE}/external-ai/admin/consumption?days=${days}`, {
+            headers: { 'Authorization': `Bearer ${authToken}` }
+        });
+        if (!res.ok) return;
+        renderConsumptionUI(await res.json());
+    } catch (e) { console.error(e); }
+}
+
+function renderConsumptionUI(data) {
+    const txtColor = getComputedStyle(document.body).getPropertyValue('--text-primary') || '#888';
+    const set = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
+    set('consumption-total', Number(data.total_consumed || 0).toLocaleString());
+    set('consumption-accounts', Number(data.total_uses || 0).toLocaleString());   // AI 使用次數
+    set('consumption-snapshots', Number(data.total_logins || 0).toLocaleString()); // 登入次數
+
+    // 每日消耗趨勢（line）
+    const series = data.series || [];
+    const trendCtx = document.getElementById('consumptionTrendChart').getContext('2d');
+    if (consumptionTrendInstance) consumptionTrendInstance.destroy();
+    consumptionTrendInstance = new Chart(trendCtx, {
+        type: 'line',
+        data: { labels: series.map(s => s.date), datasets: [{
+            label: TRANSLATIONS[currentLang]?.consumption_trend || 'Daily consumption',
+            data: series.map(s => s.consumed),
+            borderColor: 'rgba(244,114,182,1)', backgroundColor: 'rgba(244,114,182,0.15)',
+            fill: true, tension: 0.25, pointRadius: 3 }] },
+        options: { responsive: true, maintainAspectRatio: false,
+            plugins: { legend: { labels: { color: txtColor } } },
+            scales: {
+                x: { ticks: { color: txtColor }, grid: { color: 'rgba(128,128,128,0.2)' } },
+                y: { ticks: { color: txtColor }, grid: { color: 'rgba(128,128,128,0.2)' }, beginAtZero: true }
+            } }
+    });
+
+    // Top 消耗者（bar，只取有消耗的）
+    const top = (data.top || []).filter(a => (a.consumed || 0) > 0).slice(0, 10);
+    const barCtx = document.getElementById('topConsumersChart').getContext('2d');
+    if (topConsumersInstance) topConsumersInstance.destroy();
+    topConsumersInstance = new Chart(barCtx, {
+        type: 'bar',
+        data: { labels: top.map(a => a.name || a.email || a.vendor_sn), datasets: [{
+            label: TRANSLATIONS[currentLang]?.consumption_top || 'Top consumers',
+            data: top.map(a => a.consumed),
+            backgroundColor: 'rgba(250,204,21,0.7)', borderColor: 'rgba(250,204,21,1)',
+            borderWidth: 1, borderRadius: 4 }] },
+        options: { responsive: true, maintainAspectRatio: false, indexAxis: 'y',
+            plugins: { legend: { labels: { color: txtColor } } },
+            scales: {
+                x: { ticks: { color: txtColor }, grid: { color: 'rgba(128,128,128,0.2)' }, beginAtZero: true },
+                y: { ticks: { color: txtColor }, grid: { color: 'rgba(128,128,128,0.2)' } }
+            } }
+    });
+
+    // 模型/工具別用量（bar：消耗點數；tooltip 帶次數）
+    const mdl = (data.models || []).slice(0, 15);
+    const mCtx = document.getElementById('modelBreakdownChart').getContext('2d');
+    if (modelBreakdownInstance) modelBreakdownInstance.destroy();
+    modelBreakdownInstance = new Chart(mCtx, {
+        type: 'bar',
+        data: { labels: mdl.map(m => m.model), datasets: [{
+            label: TRANSLATIONS[currentLang]?.consumption_models || 'Usage by model',
+            data: mdl.map(m => m.points),
+            backgroundColor: 'rgba(167,139,250,0.7)', borderColor: 'rgba(167,139,250,1)',
+            borderWidth: 1, borderRadius: 4,
+            _counts: mdl.map(m => m.count) }] },
+        options: { responsive: true, maintainAspectRatio: false, indexAxis: 'y',
+            plugins: { legend: { labels: { color: txtColor } },
+                tooltip: { callbacks: { afterLabel: (ctx) => '次數：' + (ctx.dataset._counts?.[ctx.dataIndex] ?? '-') } } },
+            scales: {
+                x: { ticks: { color: txtColor }, grid: { color: 'rgba(128,128,128,0.2)' }, beginAtZero: true },
+                y: { ticks: { color: txtColor }, grid: { color: 'rgba(128,128,128,0.2)' } }
+            } }
+    });
 }
 
 function renderAnalyticsUI(data) {

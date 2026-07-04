@@ -9,7 +9,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Playpen+Sans:wght@400;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="styles.css?v=20260630-4">
+    <link rel="stylesheet" href="styles.css?v=20260630-6">
     <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
@@ -840,6 +840,53 @@
                         <canvas id="toolUsageChart" style="max-height: 300px;"></canvas>
                     </div>
                 </section>
+
+                <!-- v2.8 點數消耗分析（以快照差 Δ 推算，廠商不給逐筆消耗） -->
+                <section class="widget form-box-panel" style="grid-column: 1 / -1;">
+                    <div class="widget-header split">
+                        <h3><ion-icon name="trending-down-outline" style="margin-right:6px;"></ion-icon>
+                            <span data-i18n="consumption_title">點數消耗分析</span></h3>
+                        <div style="display:flex; gap:10px; align-items:center;">
+                            <select id="consumption-days" class="config-select" style="padding:4px 10px; border-radius:8px;" onchange="fetchConsumptionData()">
+                                <option value="7" data-i18n="consumption_7d">近 7 天</option>
+                                <option value="30" selected data-i18n="consumption_30d">近 30 天</option>
+                                <option value="90" data-i18n="consumption_90d">近 90 天</option>
+                            </select>
+                            <ion-icon name="refresh-circle-outline" onclick="fetchConsumptionData()" class="refresh-icon" title="Refresh"></ion-icon>
+                        </div>
+                    </div>
+                    <p style="color:var(--text-muted); font-size:12px; margin-bottom:10px;" data-i18n="consumption_hint">
+                        資料來源：廠商「交易日誌」逐筆事件（含使用的模型/工具）。消耗＝AI 使用的扣點加總；不儲存 IP。
+                    </p>
+                    <div class="cluster-stats-grid" style="margin-bottom:14px;">
+                        <div class="stat-card"><h4 data-i18n="consumption_total">期間總消耗點數</h4>
+                            <div class="stat-row" style="font-size:1.8em; font-weight:bold; color:var(--text-primary);" id="consumption-total">-</div></div>
+                        <div class="stat-card"><h4 data-i18n="consumption_accounts">AI 使用次數</h4>
+                            <div class="stat-row" style="font-size:1.8em; font-weight:bold; color:var(--text-primary);" id="consumption-accounts">-</div></div>
+                        <div class="stat-card"><h4 data-i18n="consumption_snapshots">登入次數</h4>
+                            <div class="stat-row" style="font-size:1.8em; font-weight:bold; color:var(--text-primary);" id="consumption-snapshots">-</div></div>
+                    </div>
+                    <div style="display:grid; grid-template-columns: 1fr 1fr; gap:16px;">
+                        <div>
+                            <h4 style="font-size:13px; margin:0 0 6px;" data-i18n="consumption_trend">每日消耗趨勢</h4>
+                            <div style="padding:16px; background:rgba(128,128,128,0.1); border-radius:8px; position:relative;">
+                                <canvas id="consumptionTrendChart"></canvas>
+                            </div>
+                        </div>
+                        <div>
+                            <h4 style="font-size:13px; margin:0 0 6px;" data-i18n="consumption_top">Top 消耗者</h4>
+                            <div style="padding:16px; background:rgba(128,128,128,0.1); border-radius:8px; position:relative;">
+                                <canvas id="topConsumersChart"></canvas>
+                            </div>
+                        </div>
+                    </div>
+                    <div style="margin-top:16px;">
+                        <h4 style="font-size:13px; margin:0 0 6px;" data-i18n="consumption_models">模型／工具別用量（消耗點數）</h4>
+                        <div style="padding:16px; background:rgba(128,128,128,0.1); border-radius:8px; position:relative;">
+                            <canvas id="modelBreakdownChart" style="max-height:320px;"></canvas>
+                        </div>
+                    </div>
+                </section>
             </div>
         </div> <!-- End of tab-analytics -->
 
@@ -1167,7 +1214,7 @@
     <script type="module" src="https://unpkg.com/ionicons@7.1.0/dist/ionicons/ionicons.esm.js"></script>
     <script nomodule src="https://unpkg.com/ionicons@7.1.0/dist/ionicons/ionicons.js"></script>
     <!-- 載入 Admin 邏輯 -->
-    <script src="admin.js?v=20260630-4"></script>
+    <script src="admin.js?v=20260630-6"></script>
 </body>
 
 </html>

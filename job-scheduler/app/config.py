@@ -136,6 +136,7 @@ class Settings(BaseSettings):
     MYAI_ADMIN_EMAIL: str = ""         # ZH: 由 .env 提供 | EN: from .env
     MYAI_ADMIN_PASSWORD: str = ""      # ZH: 由 .env 提供 | EN: from .env
     MYAI_SYNC_INTERVAL_HOURS: int = 6  # ZH: 自動同步間隔(小時)；0=關閉自動 | EN: auto-sync interval (h); 0=off
+    MYAI_TX_SYNC_DAYS: int = 90         # ZH: 交易日誌每次同步回溯天數 | EN: tx-log lookback days per sync
 
     # ZH: v2.8 內部 Token 計量開關。False = 平台不計算/不扣 Token、不擋配額；
     #     使用者端 Token 面板改顯示「外部 AI(myai) 剩餘點數」(見 web-ui)。

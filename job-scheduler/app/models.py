@@ -440,3 +440,29 @@ class MyaiAccount(Base):
     note       = Column(Text, nullable=True)                                   # ZH: 備註 | EN: note
     synced_at  = Column(DateTime, default=lambda: datetime.now(timezone.utc),
                         onupdate=lambda: datetime.now(timezone.utc))           # ZH: 最後同步時間 | EN: last sync time
+
+
+# ==============================================================================
+# ZH: 表 18: MyaiTransaction - 廠商交易日誌逐筆 (v2.8 消耗/工具別分析)
+# EN: Table 18: MyaiTransaction - per-event vendor transaction log
+# ZH: 來源：admin 專屬 /mcu/ai/admin/transaction（全體、逐筆）。每筆含事件(備註)、
+#     點數變化、餘額、模型名。**不存 IP**（隱私）。以 dedup_key 去重（可重複同步）。
+#     event_type：login / ai_usage(扣點) / transfer(配點) / other。
+# EN: Sourced from the admin transaction log (all users, per event). Stores the
+#     event/model, point delta, balance. **No IP stored**. Dedup via dedup_key.
+# ==============================================================================
+class MyaiTransaction(Base):
+    __tablename__ = "myai_transactions"
+
+    id           = Column(String, primary_key=True, default=generate_uuid)
+    occurred_at  = Column(DateTime, index=True, nullable=True)                 # ZH: 事件時間(備註「時間」)| EN: event time
+    vendor_sn    = Column(String, index=True, nullable=True)                   # ZH: 序號 | EN: vendor user id
+    email        = Column(String, index=True, nullable=True)                  # ZH: 帳號 | EN: account email
+    name         = Column(String, nullable=True)                              # ZH: 顯示名稱 | EN: display name
+    points_delta = Column(Integer, default=0)                                 # ZH: 點數變化(負=消耗) | EN: point delta
+    balance      = Column(Integer, default=0)                                 # ZH: 事件後餘額 | EN: balance after
+    note         = Column(Text, nullable=True)                                # ZH: 備註原文(事件/模型名) | EN: raw note
+    event_type   = Column(String, index=True, nullable=True)                  # ZH: login/ai_usage/transfer/other
+    model        = Column(String, index=True, nullable=True)                  # ZH: 使用的模型(ai_usage 才有) | EN: model used
+    dedup_key    = Column(String, unique=True, index=True, nullable=False)    # ZH: 去重鍵 | EN: 時間|序號|Δ|備註
+    synced_at    = Column(DateTime, default=lambda: datetime.now(timezone.utc))

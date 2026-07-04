@@ -22,7 +22,8 @@ from __future__ import annotations
 
 import io
 import logging
-from datetime import datetime, timezone
+import re
+from datetime import datetime, timedelta, timezone
 
 import httpx
 from sqlalchemy.orm import Session
@@ -31,6 +32,21 @@ from .. import models
 from ..config import settings
 
 logger = logging.getLogger(__name__)
+
+# ZH: admin 交易日誌路徑（全體、逐筆、含備註/模型；filter: date_start/date_end/keyword）
+ADMIN_TX_PATH = "/mcu/ai/admin/transaction"
+
+# ZH: 交易列解析 —— 頁面為 server-render 的 <b>欄位：</b>值 形式（不取 IP）
+TX_ROW = re.compile(
+    r"<b>時間：</b>\s*(?P<time>.*?)\s*"
+    r"<b>點數：</b>\s*(?P<pts>-?\d+)\s*"
+    r"<b>餘額：</b>\s*(?P<bal>\d+)\s*"
+    r"<b>備註：</b>\s*(?P<note>.*?)\s*"
+    r"<b>帳號：</b>\s*(?P<email>\S+?)\s*"
+    r"<b>顯示名稱：</b>\s*(?P<name>.*?)\s*"
+    r"<b>\s*序號：</b>\s*(?P<sn>\d+)",
+    re.S,
+)
 
 
 class MyaiSyncError(Exception):
@@ -163,6 +179,15 @@ async def sync(db: Session) -> dict:
 
     # ZH: 同步後自動以 email 配對綁定 | EN: auto-bind by email after sync
     match = auto_match(db)
+
+    # ZH: 交易日誌同步（逐筆、含模型；失敗不影響帳號同步）
+    # EN: also sync the per-event transaction log (best-effort)
+    tx = {"fetched": 0, "created": 0}
+    try:
+        tx = await sync_transactions(db, days=settings.MYAI_TX_SYNC_DAYS)
+    except Exception as e:  # noqa: BLE001
+        logger.warning("MYAI tx-sync skipped: %s", e)
+
     return {
         "status": "ok",
         "total": len(records),
@@ -170,6 +195,8 @@ async def sync(db: Session) -> dict:
         "updated": updated,
         "matched_created": match["matched_created"],
         "backfilled": match["backfilled"],
+        "tx_fetched": tx.get("fetched", 0),
+        "tx_created": tx.get("created", 0),
         "synced_at": now.isoformat(),
     }
 
@@ -210,3 +237,103 @@ def auto_match(db: Session) -> dict:
     db.commit()
     logger.info("MYAI auto-match: created=%d backfilled=%d", created, backfilled)
     return {"matched_created": created, "backfilled": backfilled}
+
+
+# ==============================================================================
+# ZH: v2.8 交易日誌同步 —— 逐筆(全體、含模型)；不存 IP
+# EN: v2.8 transaction-log sync — per event (all users, incl. model); no IP
+# ==============================================================================
+def _classify(note: str, pts: int) -> tuple[str, str | None]:
+    """ZH: 由備註判斷事件類型與模型 | EN: classify event/model from note."""
+    low = (note or "").lower()
+    if "login" in low:
+        return "login", None
+    if note.startswith("Transfer"):
+        return "transfer", None
+    if pts < 0:
+        return "ai_usage", note.strip() or None
+    return "other", None
+
+
+def parse_transactions(html: str) -> list[dict]:
+    """ZH: 解析交易日誌 HTML → list[dict]（不含 IP）| EN: parse tx log HTML."""
+    out: list[dict] = []
+    for m in TX_ROW.finditer(html):
+        t = (m.group("time") or "").strip()
+        try:
+            pts = int(m.group("pts"))
+        except (TypeError, ValueError):
+            pts = 0
+        try:
+            bal = int(m.group("bal"))
+        except (TypeError, ValueError):
+            bal = 0
+        note = (m.group("note") or "").strip()
+        email = (m.group("email") or "").strip()
+        name = (m.group("name") or "").strip()
+        sn = (m.group("sn") or "").strip()
+        try:
+            occ = datetime.strptime(t, "%Y-%m-%d %H:%M:%S")
+        except ValueError:
+            occ = None
+        ev, model = _classify(note, pts)
+        out.append({
+            "occurred_at": occ, "vendor_sn": sn, "email": email, "name": name,
+            "points_delta": pts, "balance": bal, "note": note,
+            "event_type": ev, "model": model,
+            "dedup_key": f"{t}|{sn}|{pts}|{note}",   # ZH: 去重鍵（不含 IP）
+        })
+    return out
+
+
+async def fetch_transactions_html(date_start: str, date_end: str) -> str:
+    """ZH: headless 登入 → GET admin 交易日誌(日期範圍) → 回 HTML。唯讀。
+       EN: headless-login then GET the admin transaction log for a date range."""
+    if not settings.MYAI_ADMIN_EMAIL or not settings.MYAI_ADMIN_PASSWORD:
+        raise MyaiSyncError("MYAI_ADMIN_EMAIL / MYAI_ADMIN_PASSWORD 未設定（請填入 .env）")
+    base = settings.MYAI_BASE_URL.rstrip("/")
+    login_page = settings.MYAI_LOGIN_PATH.rsplit("/", 1)[0] + "/login"
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+                      "(KHTML, like Gecko) Chrome/149.0 Safari/537.36",
+        "Referer": base + login_page, "Origin": base,
+        "X-Requested-With": "XMLHttpRequest", "Accept": "text/html, */*",
+    }
+    async with httpx.AsyncClient(base_url=base, follow_redirects=True,
+                                 timeout=httpx.Timeout(30.0), headers=headers) as client:
+        try:
+            await client.get(login_page)
+            await client.post(settings.MYAI_LOGIN_PATH, data={
+                "email": settings.MYAI_ADMIN_EMAIL, "password": settings.MYAI_ADMIN_PASSWORD})
+        except httpx.HTTPError as e:
+            raise MyaiSyncError(f"登入請求失敗：{e}")
+        try:
+            r = await client.get(ADMIN_TX_PATH, params={"date_start": date_start, "date_end": date_end})
+        except httpx.HTTPError as e:
+            raise MyaiSyncError(f"交易日誌請求失敗：{e}")
+        if r.status_code != 200:
+            raise MyaiSyncError(f"交易日誌回應 {r.status_code}（可能登入失敗或權限不足）")
+        return r.text
+
+
+async def sync_transactions(db: Session, days: int = 90) -> dict:
+    """ZH: 抓近 N 天交易日誌 → 解析 → 去重 upsert（不存 IP）。回統計。
+       EN: fetch last N days of the tx log, parse, dedup-insert (no IP)."""
+    days = max(1, min(int(days or 90), 730))
+    end = datetime.now()
+    start = end - timedelta(days=days)
+    html = await fetch_transactions_html(start.strftime("%Y-%m-%d"), end.strftime("%Y-%m-%d"))
+    rows = parse_transactions(html)
+    existing = {k for (k,) in db.query(models.MyaiTransaction.dedup_key).all()}
+    now = datetime.now(timezone.utc)
+    created = 0
+    for r in rows:
+        if r["dedup_key"] in existing:
+            continue
+        db.add(models.MyaiTransaction(synced_at=now, **r))
+        existing.add(r["dedup_key"])
+        created += 1
+    db.commit()
+    logger.info("MYAI tx-sync: fetched=%d created=%d (days=%d)", len(rows), created, days)
+    return {"status": "ok", "fetched": len(rows), "created": created,
+            "skipped": len(rows) - created, "days": days}

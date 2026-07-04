@@ -382,3 +382,74 @@ def list_unmatched(
         "unmatched_user_count": len(unmatched_users),
         "unmatched_myai_count": len(unmatched_myai),
     }
+
+
+@router.post("/admin/sync-transactions")
+async def sync_transactions_endpoint(
+    days: int = 90,
+    db: Session = Depends(get_db),
+    _: models.User = Depends(require_admin),
+) -> Any:
+    """ZH: 立即同步廠商交易日誌（逐筆、含模型；不存 IP）| EN: sync tx log now."""
+    try:
+        return await myai_sync.sync_transactions(db, days=days)
+    except myai_sync.MyaiSyncError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:  # noqa: BLE001
+        raise HTTPException(status_code=500, detail=f"交易同步失敗：{e}")
+
+
+@router.get("/admin/consumption")
+def consumption_analytics(
+    days: int = 30,
+    db: Session = Depends(get_db),
+    _: models.User = Depends(require_admin),
+) -> Any:
+    """ZH: 消耗分析 —— 以廠商「交易日誌」逐筆(含模型)計算：期間總消耗、每生消耗、
+            Top 消耗者、模型/工具別用量、每日趨勢、登入數。
+       EN: Consumption analytics from the per-event transaction log (real model)."""
+    from datetime import datetime, timedelta
+    days = max(1, min(int(days or 30), 365))
+    since = datetime.now() - timedelta(days=days)   # ZH: occurred_at 為廠商當地時間(naive)
+    txs = (
+        db.query(models.MyaiTransaction)
+        .filter(models.MyaiTransaction.occurred_at.isnot(None))
+        .filter(models.MyaiTransaction.occurred_at >= since)
+        .all()
+    )
+    per: dict = {}      # ZH: sn → 每生統計
+    model_agg: dict = {}
+    daily: dict = {}
+    total = total_uses = total_logins = 0
+    for t in txs:
+        p = per.setdefault(t.vendor_sn, {
+            "vendor_sn": t.vendor_sn, "name": t.name, "email": t.email,
+            "consumed": 0, "uses": 0, "logins": 0,
+        })
+        if t.event_type == "ai_usage":
+            c = -(t.points_delta or 0)
+            if c > 0:
+                p["consumed"] += c; p["uses"] += 1
+                total += c; total_uses += 1
+                m = t.model or "unknown"
+                mm = model_agg.setdefault(m, {"model": m, "count": 0, "points": 0})
+                mm["count"] += 1; mm["points"] += c
+                d = t.occurred_at.date().isoformat() if t.occurred_at else "unknown"
+                daily[d] = daily.get(d, 0) + c
+        elif t.event_type == "login":
+            p["logins"] += 1; total_logins += 1
+    accounts = sorted(per.values(), key=lambda x: x["consumed"], reverse=True)
+    model_list = sorted(model_agg.values(), key=lambda x: x["points"], reverse=True)
+    series = [{"date": d, "consumed": daily[d]} for d in sorted(daily.keys())]
+    return {
+        "days": days,
+        "tx_count": len(txs),
+        "total_consumed": total,
+        "total_uses": total_uses,
+        "total_logins": total_logins,
+        "accounts_with_data": sum(1 for a in accounts if a["uses"] > 0),
+        "top": accounts[:10],
+        "accounts": accounts,
+        "models": model_list,
+        "series": series,
+    }
