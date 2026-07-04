@@ -9,7 +9,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Playpen+Sans:wght@400;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="styles.css?v=20260630-7">
+    <link rel="stylesheet" href="styles.css?v=20260630-9">
     <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
@@ -836,11 +836,17 @@
                     <div class="widget-header split">
                         <h3><ion-icon name="pie-chart-outline" style="margin-right:6px;"></ion-icon>
                             <span id="pie-view-title" data-i18n="chart_tool_usage">帳號狀態分佈</span></h3>
-                        <select id="pie-view-select" class="config-select" style="padding:3px 8px; border-radius:8px; font-size:12px; width:auto;" onchange="switchPieView(this.value)">
-                            <option value="status" data-i18n="pie_view_status">帳號狀態</option>
-                            <option value="model" data-i18n="pie_view_model">工具／模型</option>
-                            <option value="role" data-i18n="pie_view_role">師生用量</option>
-                        </select>
+                        <div style="display:flex; gap:6px; align-items:center;">
+                            <select id="pie-view-select" class="config-select" style="padding:3px 8px; border-radius:8px; font-size:12px; width:auto;" onchange="switchPieView(this.value)">
+                                <option value="status" data-i18n="pie_view_status">帳號狀態</option>
+                                <option value="model" data-i18n="pie_view_model">工具／模型</option>
+                                <option value="role" data-i18n="pie_view_role">師生用量</option>
+                            </select>
+                            <select id="pie-metric-select" class="config-select" style="padding:3px 8px; border-radius:8px; font-size:12px; width:auto;" onchange="switchPieMetric(this.value)" title="僅工具／模型視角適用">
+                                <option value="points" data-i18n="metric_points">Token 點數</option>
+                                <option value="count" data-i18n="metric_count">呼叫次數</option>
+                            </select>
+                        </div>
                     </div>
                     <div style="padding: 20px; background: rgba(128,128,128,0.1); border-radius: 8px; display:flex; justify-content:center; position: relative;">
                         <canvas id="toolUsageChart" style="max-height: 300px;"></canvas>
@@ -887,7 +893,13 @@
                         </div>
                     </div>
                     <div style="margin-top:16px;">
-                        <h4 style="font-size:13px; margin:0 0 6px;" data-i18n="consumption_models">模型／工具別用量（消耗點數）</h4>
+                        <div style="display:flex; justify-content:space-between; align-items:center; margin:0 0 6px;">
+                            <h4 style="font-size:13px; margin:0;" data-i18n="consumption_models">模型／工具別用量</h4>
+                            <select id="model-metric-select" class="config-select" style="padding:2px 8px; border-radius:8px; font-size:12px; width:auto;" onchange="switchModelMetric(this.value)">
+                                <option value="points" data-i18n="metric_points">Token 點數</option>
+                                <option value="count" data-i18n="metric_count">呼叫次數</option>
+                            </select>
+                        </div>
                         <div style="padding:16px; background:rgba(128,128,128,0.1); border-radius:8px; position:relative;">
                             <canvas id="modelBreakdownChart" style="max-height:320px;"></canvas>
                         </div>
@@ -1220,7 +1232,7 @@
     <script type="module" src="https://unpkg.com/ionicons@7.1.0/dist/ionicons/ionicons.esm.js"></script>
     <script nomodule src="https://unpkg.com/ionicons@7.1.0/dist/ionicons/ionicons.js"></script>
     <!-- 載入 Admin 邏輯 -->
-    <script src="admin.js?v=20260630-7"></script>
+    <script src="admin.js?v=20260630-9"></script>
 </body>
 
 </html>

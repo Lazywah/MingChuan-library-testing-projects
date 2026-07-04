@@ -219,6 +219,8 @@ const TRANSLATIONS = {
         pie_title_status: "帳號狀態分佈",
         pie_title_model: "工具／模型使用比例",
         pie_title_role: "師生 Token 用量",
+        metric_points: "Token 點數",
+        metric_count: "呼叫次數",
         consumption_7d: "近 7 天",
         consumption_30d: "近 30 天",
         consumption_90d: "近 90 天",
@@ -501,6 +503,8 @@ const TRANSLATIONS = {
         pie_title_status: "Account Status",
         pie_title_model: "Usage Ratio by Model/Tool",
         pie_title_role: "Token Usage by Role",
+        metric_points: "Token points",
+        metric_count: "Call count",
         consumption_7d: "Last 7 days",
         consumption_30d: "Last 30 days",
         consumption_90d: "Last 90 days",
@@ -646,6 +650,9 @@ let toolChartInstance = null;
 let consumptionTrendInstance = null;   // v2.8 消耗趨勢
 let topConsumersInstance = null;       // v2.8 Top 消耗者
 let modelBreakdownInstance = null;     // v2.8 模型/工具別用量
+let _pieMetric = 'points';             // v2.8 圓餅(工具/模型)度量：points / count
+let _barMetric = 'points';             // v2.8 長條(模型別用量)度量：points / count（與圓餅獨立）
+let _modelsRaw = [];                   // v2.8 原始模型聚合(供切換度量重繪)
 
 function switchAdminMainTab(tabId) {
     document.querySelectorAll('.admin-side-tab').forEach(btn => btn.classList.remove('active'));
@@ -1006,7 +1013,8 @@ function renderConsumptionUI(data) {
 
     // 供可切換圓餅圖使用：工具/模型 比例 + 師生用量
     const roleName = (r) => ({ student: '學生', teacher: '教師', admin: '管理員', unbound: '未綁定', unknown: '未知' }[r] || r);
-    _pieData.model = { labels: (data.models || []).map(m => m.model), data: (data.models || []).map(m => m.points) };
+    _modelsRaw = data.models || [];
+    _buildModelPieData();
     _pieData.role = { labels: (data.by_role || []).map(r => roleName(r.role)), data: (data.by_role || []).map(r => r.consumed) };
     if (_pieMode !== 'status') renderPie();
 
@@ -1048,26 +1056,58 @@ function renderConsumptionUI(data) {
             } }
     });
 
-    // 模型/工具別用量（bar：消耗點數；tooltip 帶次數）
-    const mdl = (data.models || []).slice(0, 15);
-    const mCtx = document.getElementById('modelBreakdownChart').getContext('2d');
+    // 模型/工具別用量（依 _modelMetric：Token 點數 或 呼叫次數）
+    renderModelBar();
+}
+
+// v2.8 依「圓餅度量」(points/count)建工具/模型圓餅資料
+function _buildModelPieData() {
+    const useCount = _pieMetric === 'count';
+    _pieData.model = {
+        labels: _modelsRaw.map(m => m.model),
+        data: _modelsRaw.map(m => useCount ? (m.count || 0) : (m.points || 0)),
+    };
+}
+
+// v2.8 依度量繪「模型/工具別用量」長條；tooltip 帶另一度量
+function renderModelBar() {
+    const txtColor = getComputedStyle(document.body).getPropertyValue('--text-primary') || '#888';
+    const tl = TRANSLATIONS[currentLang] || {};
+    const useCount = _barMetric === 'count';
+    const mdl = _modelsRaw.slice(0, 15);
+    const el = document.getElementById('modelBreakdownChart');
+    if (!el) return;
     if (modelBreakdownInstance) modelBreakdownInstance.destroy();
-    modelBreakdownInstance = new Chart(mCtx, {
+    modelBreakdownInstance = new Chart(el.getContext('2d'), {
         type: 'bar',
         data: { labels: mdl.map(m => m.model), datasets: [{
-            label: TRANSLATIONS[currentLang]?.consumption_models || 'Usage by model',
-            data: mdl.map(m => m.points),
+            label: useCount ? (tl.metric_count || 'Calls') : (tl.metric_points || 'Points'),
+            data: mdl.map(m => useCount ? (m.count || 0) : (m.points || 0)),
             backgroundColor: 'rgba(167,139,250,0.7)', borderColor: 'rgba(167,139,250,1)',
             borderWidth: 1, borderRadius: 4,
-            _counts: mdl.map(m => m.count) }] },
+            _other: mdl.map(m => useCount ? (m.points || 0) : (m.count || 0)) }] },
         options: { responsive: true, maintainAspectRatio: false, indexAxis: 'y',
             plugins: { legend: { labels: { color: txtColor } },
-                tooltip: { callbacks: { afterLabel: (ctx) => '次數：' + (ctx.dataset._counts?.[ctx.dataIndex] ?? '-') } } },
+                tooltip: { callbacks: { afterLabel: (ctx) =>
+                    (useCount ? (tl.metric_points || 'Points') : (tl.metric_count || 'Calls')) + '：' + (ctx.dataset._other?.[ctx.dataIndex] ?? '-') } } },
             scales: {
                 x: { ticks: { color: txtColor }, grid: { color: 'rgba(128,128,128,0.2)' }, beginAtZero: true },
                 y: { ticks: { color: txtColor }, grid: { color: 'rgba(128,128,128,0.2)' } }
             } }
     });
+}
+
+// v2.8 切換「長條」度量（獨立，只影響模型別用量長條）
+function switchModelMetric(v) {
+    _barMetric = v || 'points';
+    renderModelBar();
+}
+
+// v2.8 切換「圓餅」度量（獨立，只影響工具/模型圓餅）
+function switchPieMetric(v) {
+    _pieMetric = v || 'points';
+    _buildModelPieData();
+    if (_pieMode === 'model') renderPie();
 }
 
 function renderAnalyticsUI(data) {
