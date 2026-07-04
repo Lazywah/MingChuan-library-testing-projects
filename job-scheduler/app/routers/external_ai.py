@@ -409,14 +409,13 @@ def consumption_analytics(
             Top 消耗者、模型/工具別用量、每日趨勢、登入數。
        EN: Consumption analytics from the per-event transaction log (real model)."""
     from datetime import datetime, timedelta
-    days = max(1, min(int(days or 30), 365))
-    since = datetime.now() - timedelta(days=days)   # ZH: occurred_at 為廠商當地時間(naive)
-    txs = (
-        db.query(models.MyaiTransaction)
-        .filter(models.MyaiTransaction.occurred_at.isnot(None))
-        .filter(models.MyaiTransaction.occurred_at >= since)
-        .all()
-    )
+    days = int(days or 30)   # ZH: days<=0 代表「全部」(不設下界，即從最早一筆起)
+    q = db.query(models.MyaiTransaction).filter(models.MyaiTransaction.occurred_at.isnot(None))
+    if days > 0:
+        days = min(days, 3650)
+        since = datetime.now() - timedelta(days=days)   # ZH: occurred_at 為廠商當地時間(naive)
+        q = q.filter(models.MyaiTransaction.occurred_at >= since)
+    txs = q.all()
     # ZH: email → 平台身分(role)，用來拆「師生用量」| email → platform role
     role_map = {
         (u.email or "").strip().lower(): (u.role or "unknown")
