@@ -9,7 +9,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Playpen+Sans:wght@400;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="styles.css?v=20260630-11">
+    <link rel="stylesheet" href="styles.css?v=20260630-12">
     <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
@@ -1151,7 +1151,7 @@
                         以 email 對應「平台使用者 ↔ myai 帳號」。一鍵配對會把 email 相同且尚未綁定者自動建立綁定（只寫本平台、不碰廠商）。
                     </p>
                     <div id="myai-bind-msg" style="margin-bottom:8px; font-size:13px;"></div>
-                    <div class="admin-table-wrap scrollbar-custom" style="max-height:360px; overflow-y:auto;">
+                    <div class="admin-table-wrap scrollbar-custom" style="max-height:360px; overflow:auto;">
                         <table class="admin-table" id="myai-bindings-table">
                             <thead><tr>
                                 <th data-i18n="myai_bind_user">平台帳號</th>
@@ -1165,13 +1165,13 @@
                     </div>
 
                     <!-- 未配對清單 -->
-                    <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-top:16px;">
-                        <div>
+                    <div style="display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:16px; margin-top:16px;">
+                        <div style="min-width:0;">
                             <h4 style="font-size:13px; margin:0 0 6px;">
                                 <span data-i18n="myai_bind_unmatched_users">未綁定的平台使用者</span>
                                 <span id="myai-unmatched-users-count" class="badge" style="margin-left:6px;">0</span>
                             </h4>
-                            <div class="admin-table-wrap scrollbar-custom" style="max-height:240px; overflow-y:auto;">
+                            <div class="admin-table-wrap scrollbar-custom" style="max-height:240px; overflow:auto;">
                                 <table class="admin-table" id="myai-unmatched-users-table">
                                     <thead><tr>
                                         <th data-i18n="myai_bind_user">平台帳號</th>
@@ -1182,12 +1182,12 @@
                                 </table>
                             </div>
                         </div>
-                        <div>
+                        <div style="min-width:0;">
                             <h4 style="font-size:13px; margin:0 0 6px;">
                                 <span data-i18n="myai_bind_unmatched_myai">未配對的 myai 帳號</span>
                                 <span id="myai-unmatched-myai-count" class="badge" style="margin-left:6px;">0</span>
                             </h4>
-                            <div class="admin-table-wrap scrollbar-custom" style="max-height:240px; overflow-y:auto;">
+                            <div class="admin-table-wrap scrollbar-custom" style="max-height:240px; overflow:auto;">
                                 <table class="admin-table" id="myai-unmatched-myai-table">
                                     <thead><tr>
                                         <th data-i18n="admin_col_email">電子郵件</th>
@@ -1233,7 +1233,7 @@
     <script type="module" src="https://unpkg.com/ionicons@7.1.0/dist/ionicons/ionicons.esm.js"></script>
     <script nomodule src="https://unpkg.com/ionicons@7.1.0/dist/ionicons/ionicons.js"></script>
     <!-- 載入 Admin 邏輯 -->
-    <script src="admin.js?v=20260630-11"></script>
+    <script src="admin.js?v=20260630-12"></script>
 </body>
 
 </html>
