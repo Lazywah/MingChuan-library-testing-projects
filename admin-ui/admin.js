@@ -46,6 +46,8 @@ const TRANSLATIONS = {
         admin_col_email: "電子郵件",
         myai_bind_title: "Email 綁定管理",
         myai_bind_automatch: "一鍵 Email 配對",
+        myai_bind_add: "新增綁定",
+        myai_bind_add_hint: "手動綁定：平台帳號 ↔ myai Email（用於兩邊 email 不同、需手動指定時）。",
         myai_bind_hint: "以 email 對應「平台使用者 ↔ myai 帳號」。一鍵配對會把 email 相同且尚未綁定者自動建立綁定（只寫本平台、不碰廠商）。",
         myai_bind_user: "平台帳號",
         myai_bind_email: "myai Email",
@@ -336,6 +338,8 @@ const TRANSLATIONS = {
         admin_col_email: "Email",
         myai_bind_title: "Email Binding",
         myai_bind_automatch: "Auto-match by Email",
+        myai_bind_add: "Add Binding",
+        myai_bind_add_hint: "Manual binding: platform account ↔ myai email (when the two emails differ).",
         myai_bind_hint: "Map platform users to myai accounts by email. Auto-match binds same-email users that aren't bound yet (writes our DB only; never touches the vendor).",
         myai_bind_user: "Platform Account",
         myai_bind_email: "myai Email",
@@ -693,6 +697,23 @@ function switchAdminMainTab(tabId) {
 // ============================================================
 // v2.5 外部 AI 分流管理 | External AI routing admin
 // ============================================================
+// v2.8 「新增綁定」Modal（在 Email 綁定管理區）
+function openAddBindingModal() {
+    const m = document.getElementById('add-binding-modal');
+    if (!m) return;
+    const pf = document.getElementById('ext-ai-add-platform');
+    const vd = document.getElementById('ext-ai-add-vendor');
+    const msg = document.getElementById('ext-ai-add-msg');
+    if (pf) pf.value = '';
+    if (vd) vd.value = '';
+    if (msg) msg.textContent = '';
+    m.classList.remove('hidden');
+    if (pf) pf.focus();
+}
+function closeAddBindingModal() {
+    document.getElementById('add-binding-modal')?.classList.add('hidden');
+}
+
 const externalAi = {
     _authHeaders() {
         return { 'Authorization': `Bearer ${authToken}`, 'Content-Type': 'application/json' };
@@ -922,6 +943,7 @@ const externalAi = {
             pf.value = ''; vd.value = '';
             this.refresh();
             this.loadBindings();  // v2.8 同步刷新綁定/未配對面板
+            setTimeout(() => { if (typeof closeAddBindingModal === 'function') closeAddBindingModal(); }, 700);
         } catch (e) {
             if (msg) { msg.style.color = '#fb7185'; msg.textContent = '✗ ' + e.message; }
         }

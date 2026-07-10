@@ -9,7 +9,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Playpen+Sans:wght@400;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="styles.css?v=20260630-13">
+    <link rel="stylesheet" href="styles.css?v=20260630-17">
     <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
@@ -1073,24 +1073,8 @@
                     <div id="ext-ai-url-msg" style="margin-top:8px; font-size:13px;"></div>
                 </section>
 
-                <!-- 新增 / 匯入對應 -->
-                <section class="widget form-box-panel" style="grid-column: 1 / 2;">
-                    <div class="widget-header">
-                        <h3><ion-icon name="person-add-outline" style="margin-right:6px;"></ion-icon>
-                            <span data-i18n="ext_admin_add_title">新增單筆對應</span></h3>
-                    </div>
-                    <div style="display:grid; grid-template-columns:1fr 1fr auto; gap:8px;">
-                        <input type="text" id="ext-ai-add-platform" placeholder="平台帳號 platform_username" />
-                        <input type="text" id="ext-ai-add-vendor" placeholder="廠商帳號 vendor_username" />
-                        <button class="ready-btn" onclick="externalAi.addMapping()" style="width:auto; padding:8px 14px; background:rgba(74,222,128,0.15); color:#4ade80;">
-                            <ion-icon name="add-circle-outline"></ion-icon> <span data-i18n="btn_add">新增</span>
-                        </button>
-                    </div>
-                    <div id="ext-ai-add-msg" style="margin-top:8px; font-size:13px;"></div>
-                </section>
-
-                <!-- CSV 批次匯入 -->
-                <section class="widget form-box-panel" style="grid-column: 2 / 3;">
+                <!-- CSV 批次匯入（新增單筆對應已移至下方「Email 綁定管理」的「新增綁定」按鈕） -->
+                <section class="widget form-box-panel" style="grid-column: 1 / -1;">
                     <div class="widget-header">
                         <h3><ion-icon name="cloud-upload-outline" style="margin-right:6px;"></ion-icon>
                             <span data-i18n="ext_admin_csv_title">CSV 批次匯入造冊結果</span></h3>
@@ -1165,6 +1149,9 @@
                         <h3><ion-icon name="link-outline" style="margin-right:6px;"></ion-icon>
                             <span data-i18n="myai_bind_title">Email 綁定管理</span></h3>
                         <div style="display:flex; gap:10px; align-items:center;">
+                            <button class="ready-btn" onclick="openAddBindingModal()" style="width:auto; padding:6px 14px; border-color:#4ade80; color:#4ade80; background:rgba(74,222,128,0.1);">
+                                <ion-icon name="add-circle-outline"></ion-icon> <span data-i18n="myai_bind_add">新增綁定</span>
+                            </button>
                             <button class="ready-btn config-save-btn" onclick="externalAi.autoMatch()" style="width:auto; padding:6px 14px;">
                                 <ion-icon name="git-compare-outline"></ion-icon> <span data-i18n="myai_bind_automatch">一鍵 Email 配對</span>
                             </button>
@@ -1229,6 +1216,38 @@
         </main> <!-- End of admin-content -->
     </div> <!-- End of admin-layout -->
 
+    <!-- v2.8 新增 Email 綁定 Modal（平台帳號 ↔ myai Email）；置於頂層避免被隱藏分頁 display:none 連帶隱藏 -->
+    <div id="add-binding-modal" class="tutorial-modal hidden">
+        <div class="tutorial-backdrop" id="add-binding-modal-backdrop" onclick="closeAddBindingModal()"></div>
+        <div class="tutorial-content login-modal" style="max-width: 460px; padding: 30px;">
+            <button class="tutorial-close" onclick="closeAddBindingModal()"><ion-icon name="close-outline"></ion-icon></button>
+            <h2 style="margin-bottom: 8px; display: flex; align-items: center; gap: 8px;">
+                <ion-icon name="link-outline"></ion-icon>
+                <span data-i18n="myai_bind_add">新增綁定</span>
+            </h2>
+            <p style="color:var(--text-muted); font-size:13px; margin-bottom:20px;" data-i18n="myai_bind_add_hint">手動綁定：平台帳號 ↔ myai Email（用於兩邊 email 不同、需手動指定時）。</p>
+            <form onsubmit="externalAi.addMapping(); return false;" style="display:flex; flex-direction:column; gap:15px;">
+                <div class="input-wrap">
+                    <ion-icon name="person-outline"></ion-icon>
+                    <input type="text" id="ext-ai-add-platform" placeholder="平台帳號 platform_username" />
+                </div>
+                <div class="input-wrap">
+                    <ion-icon name="mail-outline"></ion-icon>
+                    <input type="text" id="ext-ai-add-vendor" placeholder="myai Email（廠商帳號）" />
+                </div>
+                <div id="ext-ai-add-msg" style="font-size:13px;"></div>
+                <div style="display:flex; gap:10px; justify-content:flex-end; align-items:center; margin-top:4px;">
+                    <button type="button" class="ready-btn" onclick="closeAddBindingModal()" style="width:auto; min-width:auto; margin:0; padding:8px 18px; font-size:0.9rem; border-radius:10px;">
+                        <span data-i18n="btn_cancel">取消</span>
+                    </button>
+                    <button type="submit" class="ready-btn" style="width:auto; min-width:auto; margin:0; padding:8px 18px; font-size:0.9rem; border-radius:10px; background:#10b981; border-color:#10b981; color:#fff;">
+                        <ion-icon name="checkmark-circle-outline"></ion-icon> <span data-i18n="btn_add">新增</span>
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
     <!-- v2.3: 管理者引導式教學（overlay + 高亮框 + 氣泡；原使用者介面 Unit 6 移入，從 Side Bar ⓘ 導覽開啟） -->
     <div id="admin-guide-ring" class="tutorial-highlight-ring hidden"></div>
     <div id="admin-guide-overlay" class="tutorial-overlay hidden" role="dialog" aria-modal="false">
@@ -1256,7 +1275,7 @@
     <script type="module" src="https://unpkg.com/ionicons@7.1.0/dist/ionicons/ionicons.esm.js"></script>
     <script nomodule src="https://unpkg.com/ionicons@7.1.0/dist/ionicons/ionicons.js"></script>
     <!-- 載入 Admin 邏輯 -->
-    <script src="admin.js?v=20260630-13"></script>
+    <script src="admin.js?v=20260630-17"></script>
 </body>
 
 </html>
