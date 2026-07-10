@@ -9,7 +9,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Playpen+Sans:wght@400;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="styles.css?v=20260630-12">
+    <link rel="stylesheet" href="styles.css?v=20260630-13">
     <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
@@ -841,6 +841,7 @@
                                 <option value="status" data-i18n="pie_view_status">帳號狀態</option>
                                 <option value="model" data-i18n="pie_view_model">工具／模型</option>
                                 <option value="role" data-i18n="pie_view_role">師生用量</option>
+                                <option value="dept" data-i18n="pie_view_dept">學系用量</option>
                             </select>
                             <select id="pie-metric-select" class="config-select" style="padding:3px 8px; border-radius:8px; font-size:12px; width:auto;" onchange="switchPieMetric(this.value)" title="僅工具／模型視角適用">
                                 <option value="points" data-i18n="metric_points">Token 點數</option>
@@ -904,6 +905,28 @@
                         <div style="padding:16px; background:rgba(128,128,128,0.1); border-radius:8px; position:relative;">
                             <canvas id="modelBreakdownChart" style="max-height:320px;"></canvas>
                         </div>
+                    </div>
+                </section>
+
+                <!-- v2.8 個人查詢：搜尋某人的使用明細 -->
+                <section class="widget form-box-panel" style="grid-column: 1 / -1;">
+                    <div class="widget-header split">
+                        <h3><ion-icon name="person-circle-outline" style="margin-right:6px;"></ion-icon>
+                            <span data-i18n="user_query_title">個人查詢</span></h3>
+                        <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+                            <input type="text" id="user-query-input" class="config-select" placeholder="姓名 / Email / 序號" style="padding:4px 10px; border-radius:8px; width:220px;" onkeydown="if(event.key==='Enter')queryUserConsumption()">
+                            <select id="user-query-days" class="config-select" style="padding:4px 8px; border-radius:8px; font-size:12px; width:auto;">
+                                <option value="0" data-i18n="consumption_all">全部</option>
+                                <option value="30" data-i18n="consumption_30d">近 30 天</option>
+                                <option value="90" data-i18n="consumption_90d">近 90 天</option>
+                            </select>
+                            <button class="ready-btn config-save-btn" style="width:auto; padding:5px 14px;" onclick="queryUserConsumption()">
+                                <ion-icon name="search-outline"></ion-icon> <span data-i18n="user_query_btn">查詢</span>
+                            </button>
+                        </div>
+                    </div>
+                    <div id="user-query-result" style="margin-top:6px;">
+                        <p style="color:var(--text-muted); font-size:12px;" data-i18n="user_query_hint">輸入姓名、Email 或序號查詢某人的使用明細（消耗、模型別、逐筆事件）。</p>
                     </div>
                 </section>
             </div>
@@ -1233,7 +1256,7 @@
     <script type="module" src="https://unpkg.com/ionicons@7.1.0/dist/ionicons/ionicons.esm.js"></script>
     <script nomodule src="https://unpkg.com/ionicons@7.1.0/dist/ionicons/ionicons.js"></script>
     <!-- 載入 Admin 邏輯 -->
-    <script src="admin.js?v=20260630-12"></script>
+    <script src="admin.js?v=20260630-13"></script>
 </body>
 
 </html>

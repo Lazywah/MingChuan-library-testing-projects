@@ -216,9 +216,14 @@ const TRANSLATIONS = {
         pie_view_status: "帳號狀態",
         pie_view_model: "工具／模型",
         pie_view_role: "師生用量",
+        pie_view_dept: "學系用量",
         pie_title_status: "帳號狀態分佈",
         pie_title_model: "工具／模型使用比例",
         pie_title_role: "師生 Token 用量",
+        pie_title_dept: "學系 Token 用量",
+        user_query_title: "個人查詢",
+        user_query_btn: "查詢",
+        user_query_hint: "輸入姓名、Email 或序號查詢某人的使用明細（消耗、模型別、逐筆事件）。",
         metric_points: "Token 點數",
         metric_count: "呼叫次數",
         consumption_7d: "近 7 天",
@@ -501,9 +506,14 @@ const TRANSLATIONS = {
         pie_view_status: "Status",
         pie_view_model: "Tools/Models",
         pie_view_role: "Teacher/Student",
+        pie_view_dept: "Department",
         pie_title_status: "Account Status",
         pie_title_model: "Usage Ratio by Model/Tool",
         pie_title_role: "Token Usage by Role",
+        pie_title_dept: "Token Usage by Department",
+        user_query_title: "User Lookup",
+        user_query_btn: "Search",
+        user_query_hint: "Search by name, email, or ID to see one person's usage detail (consumption, models, events).",
         metric_points: "Token points",
         metric_count: "Call count",
         consumption_7d: "Last 7 days",
@@ -1018,6 +1028,7 @@ function renderConsumptionUI(data) {
     _modelsRaw = data.models || [];
     _buildModelPieData();
     _pieData.role = { labels: (data.by_role || []).map(r => roleName(r.role)), data: (data.by_role || []).map(r => r.consumed) };
+    _pieData.dept = { labels: (data.by_department || []).map(r => r.department), data: (data.by_department || []).map(r => r.consumed) };
     if (_pieMode !== 'status') renderPie();
 
     // 每日消耗趨勢（line）
@@ -1112,6 +1123,62 @@ function switchPieMetric(v) {
     if (_pieMode === 'model') renderPie();
 }
 
+// v2.8 個人查詢：以 email/名稱/序號搜尋某人的交易明細
+async function queryUserConsumption() {
+    const q = (document.getElementById('user-query-input')?.value || '').trim();
+    const days = document.getElementById('user-query-days')?.value || 0;
+    const box = document.getElementById('user-query-result');
+    if (!box) return;
+    if (!q) { box.innerHTML = '<p style="color:var(--text-muted);font-size:12px;">請輸入查詢字串</p>'; return; }
+    box.innerHTML = '<p style="color:var(--text-muted);font-size:12px;">查詢中…</p>';
+    try {
+        const res = await fetch(`${API_BASE}/external-ai/admin/user-consumption?q=${encodeURIComponent(q)}&days=${days}`,
+            { headers: { 'Authorization': `Bearer ${authToken}` } });
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        renderUserQuery(await res.json());
+    } catch (e) { box.innerHTML = '<p style="color:#fb7185;font-size:12px;">查詢失敗：' + e.message + '</p>'; }
+}
+
+function renderUserQuery(d) {
+    const box = document.getElementById('user-query-result');
+    if (!box) return;
+    const esc = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+    if (!d.matches || !d.matches.length) { box.innerHTML = '<p style="color:var(--text-muted);font-size:13px;">查無符合的帳號。</p>'; return; }
+    const roleName = (r) => ({ student: '學生', teacher: '教師', admin: '管理員' }[r] || (r || '未綁定'));
+    const cards = d.matches.map(m => `
+        <div style="border:1px solid var(--border-color,rgba(255,255,255,0.15)); border-radius:10px; padding:10px 14px; font-size:13px;">
+            <div style="font-weight:600; margin-bottom:4px;">${esc(m.name)} <span style="color:var(--text-muted); font-weight:400;">#${esc(m.vendor_sn)}</span></div>
+            <div style="color:var(--text-muted); font-family:monospace; font-size:12px;">${esc(m.email)}</div>
+            <div style="margin-top:6px; display:flex; gap:14px; flex-wrap:wrap;">
+                <span>身分：${esc(roleName(m.role))}</span>
+                <span>學系：${esc(m.department || '—')}</span>
+                <span>餘額：${Number(m.current_points || 0).toLocaleString()}</span>
+                <span>有效至：${esc(m.expiry || '—')}</span>
+                <span>狀態：${esc(m.status || '—')}</span>
+            </div>
+        </div>`).join('');
+    const s = d.summary || {};
+    const summary = `<div style="display:flex; gap:24px; flex-wrap:wrap; margin:12px 0;">
+        <div><div style="font-size:12px;color:var(--text-muted);">消耗點數</div><div style="font-size:1.5em;font-weight:bold;">${Number(s.consumed || 0).toLocaleString()}</div></div>
+        <div><div style="font-size:12px;color:var(--text-muted);">AI 使用次數</div><div style="font-size:1.5em;font-weight:bold;">${Number(s.uses || 0).toLocaleString()}</div></div>
+        <div><div style="font-size:12px;color:var(--text-muted);">登入次數</div><div style="font-size:1.5em;font-weight:bold;">${Number(s.logins || 0).toLocaleString()}</div></div>
+    </div>`;
+    const models = (d.models || []).length
+        ? ('<div style="margin-bottom:10px;"><div style="font-size:12px;color:var(--text-muted);margin-bottom:4px;">模型／工具別</div>'
+           + d.models.map(m => `<span style="display:inline-block; margin:2px 6px 2px 0; padding:2px 8px; border-radius:999px; background:rgba(167,139,250,0.15); font-size:12px;">${esc(m.model)}：${Number(m.points).toLocaleString()} 點 / ${m.count} 次</span>`).join('')
+           + '</div>') : '';
+    const rows = (d.recent || []).map(r => {
+        const ev = r.event === 'login' ? '登入' : (r.event === 'ai_usage' ? '使用 ' + esc(r.model || '') : (r.event === 'transfer' ? '配點' : esc(r.event)));
+        const pts = (r.points > 0 ? '+' : '') + (r.points ?? 0);
+        return `<tr><td style="font-size:12px;">${esc((r.time || '').replace('T', ' ').slice(0, 19))}</td><td>${ev}</td><td style="font-family:monospace;">${pts}</td><td style="font-family:monospace;">${Number(r.balance || 0).toLocaleString()}</td></tr>`;
+    }).join('');
+    const table = `<div style="font-size:12px;color:var(--text-muted);margin-bottom:4px;">近期事件（最多 40 筆）</div>
+        <div class="admin-table-wrap scrollbar-custom" style="max-height:300px; overflow:auto;">
+        <table class="admin-table"><thead><tr><th>時間</th><th>事件</th><th>點數</th><th>餘額</th></tr></thead>
+        <tbody>${rows || '<tr><td colspan="4" style="text-align:center;color:var(--text-muted);">無</td></tr>'}</tbody></table></div>`;
+    box.innerHTML = `<div style="display:flex; flex-direction:column; gap:8px;">${cards}</div>${summary}${models}${table}`;
+}
+
 function renderAnalyticsUI(data) {
     const txtColor = getComputedStyle(document.body).getPropertyValue('--text-primary') || '#888';
     const rows = (data && data.accounts) || [];
@@ -1157,7 +1224,7 @@ function renderAnalyticsUI(data) {
 
 // v2.8 可切換圓餅圖：帳號狀態 / 工具·模型 / 師生用量
 let _pieMode = 'status';
-const _pieData = { status: { labels: [], data: [] }, model: { labels: [], data: [] }, role: { labels: [], data: [] } };
+const _pieData = { status: { labels: [], data: [] }, model: { labels: [], data: [] }, role: { labels: [], data: [] }, dept: { labels: [], data: [] } };
 function switchPieView(mode) { _pieMode = mode || 'status'; renderPie(); }
 function renderPie() {
     const txtColor = getComputedStyle(document.body).getPropertyValue('--text-primary') || '#888';
@@ -1177,7 +1244,8 @@ function renderPie() {
     const titleEl = document.getElementById('pie-view-title');
     const tl = TRANSLATIONS[currentLang] || {};
     if (titleEl) titleEl.textContent = { status: tl.pie_title_status || '帳號狀態分佈',
-        model: tl.pie_title_model || '工具／模型使用比例', role: tl.pie_title_role || '師生 Token 用量' }[_pieMode];
+        model: tl.pie_title_model || '工具／模型使用比例', role: tl.pie_title_role || '師生 Token 用量',
+        dept: tl.pie_title_dept || '學系 Token 用量' }[_pieMode];
     const sel = document.getElementById('pie-view-select');
     if (sel && sel.value !== _pieMode) sel.value = _pieMode;
 }

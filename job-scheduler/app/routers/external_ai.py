@@ -416,14 +416,18 @@ def consumption_analytics(
         since = datetime.now() - timedelta(days=days)   # ZH: occurred_at 為廠商當地時間(naive)
         q = q.filter(models.MyaiTransaction.occurred_at >= since)
     txs = q.all()
-    # ZH: email → 平台身分(role)，用來拆「師生用量」| email → platform role
-    role_map = {
-        (u.email or "").strip().lower(): (u.role or "unknown")
-        for u in db.query(models.User).all() if u.email
-    }
+    # ZH: email → 平台身分(role) / 學系(department)，用來分群 | email → role / department
+    role_map: dict = {}
+    dept_map: dict = {}
+    for u in db.query(models.User).all():
+        if u.email:
+            k = u.email.strip().lower()
+            role_map[k] = u.role or "unknown"
+            dept_map[k] = u.department or None
     per: dict = {}      # ZH: sn → 每生統計
     model_agg: dict = {}
     role_agg: dict = {}
+    dept_agg: dict = {}
     daily: dict = {}
     total = total_uses = total_logins = 0
     for t in txs:
@@ -441,15 +445,21 @@ def consumption_analytics(
                 mm["count"] += 1; mm["points"] += c
                 d = t.occurred_at.date().isoformat() if t.occurred_at else "unknown"
                 daily[d] = daily.get(d, 0) + c
-                # 師生用量：以 email 對應平台 role；對不到 = 未綁定
-                role = role_map.get((t.email or "").strip().lower(), "unbound")
+                ek = (t.email or "").strip().lower()
+                # 師生用量：email → 平台 role；對不到 = 未綁定
+                role = role_map.get(ek, "unbound")
                 ra = role_agg.setdefault(role, {"role": role, "consumed": 0, "uses": 0})
                 ra["consumed"] += c; ra["uses"] += 1
+                # 學系用量：email → 平台 department；無則「未綁定」
+                dept = dept_map.get(ek) or ("未設定" if ek in dept_map else "未綁定")
+                da = dept_agg.setdefault(dept, {"department": dept, "consumed": 0, "uses": 0})
+                da["consumed"] += c; da["uses"] += 1
         elif t.event_type == "login":
             p["logins"] += 1; total_logins += 1
     accounts = sorted(per.values(), key=lambda x: x["consumed"], reverse=True)
     model_list = sorted(model_agg.values(), key=lambda x: x["points"], reverse=True)
     by_role = sorted(role_agg.values(), key=lambda x: x["consumed"], reverse=True)
+    by_department = sorted(dept_agg.values(), key=lambda x: x["consumed"], reverse=True)
     series = [{"date": d, "consumed": daily[d]} for d in sorted(daily.keys())]
     return {
         "days": days,
@@ -462,5 +472,70 @@ def consumption_analytics(
         "accounts": accounts,
         "models": model_list,
         "by_role": by_role,
+        "by_department": by_department,
         "series": series,
+    }
+
+
+@router.get("/admin/user-consumption")
+def user_consumption(
+    q: str = "",
+    days: int = 0,
+    db: Session = Depends(get_db),
+    _: models.User = Depends(require_admin),
+) -> Any:
+    """ZH: 個人查詢 —— 以 email/名稱/序號 搜尋 myai 帳號，回傳該人交易明細
+            (消耗/使用/登入、模型別、近期逐筆)。days<=0 = 全部。
+       EN: Per-person lookup from the transaction log (by email/name/sn)."""
+    from datetime import datetime, timedelta
+    q = (q or "").strip()
+    empty = {"q": q, "matches": [], "summary": {}, "models": [], "recent": []}
+    if not q:
+        return empty
+    ql = q.lower()
+    accts = db.query(models.MyaiAccount).all()
+    matched = [m for m in accts
+               if ql in (m.email or "").lower() or ql in (m.name or "").lower() or q == (m.vendor_sn or "")]
+    if not matched:
+        return empty
+    sns = {m.vendor_sn for m in matched}
+    umap = {(u.email or "").strip().lower(): u for u in db.query(models.User).all() if u.email}
+
+    def _meta(m):
+        u = umap.get((m.email or "").strip().lower())
+        return {
+            "vendor_sn": m.vendor_sn, "name": m.name, "email": m.email,
+            "current_points": m.points, "expiry": m.expiry, "status": m.status,
+            "role": (u.role if u else None), "department": (u.department if u else None),
+        }
+
+    matches = [_meta(m) for m in matched]
+    days = int(days or 0)
+    tq = db.query(models.MyaiTransaction).filter(models.MyaiTransaction.vendor_sn.in_(sns))
+    if days > 0:
+        since = datetime.now() - timedelta(days=min(days, 3650))
+        tq = tq.filter(models.MyaiTransaction.occurred_at >= since)
+    txs = tq.order_by(models.MyaiTransaction.occurred_at.desc()).all()
+
+    consumed = uses = logins = 0
+    model_agg: dict = {}
+    for t in txs:
+        if t.event_type == "ai_usage":
+            c = -(t.points_delta or 0)
+            if c > 0:
+                consumed += c; uses += 1
+                mm = model_agg.setdefault(t.model or "unknown", {"model": t.model or "unknown", "count": 0, "points": 0})
+                mm["count"] += 1; mm["points"] += c
+        elif t.event_type == "login":
+            logins += 1
+    recent = [{
+        "time": (t.occurred_at.isoformat() if t.occurred_at else None),
+        "event": t.event_type, "model": t.model, "points": t.points_delta,
+        "balance": t.balance, "note": t.note,
+    } for t in txs[:40]]
+    return {
+        "q": q, "days": days, "matches": matches,
+        "summary": {"consumed": consumed, "uses": uses, "logins": logins, "tx_count": len(txs)},
+        "models": sorted(model_agg.values(), key=lambda x: x["points"], reverse=True),
+        "recent": recent,
     }
