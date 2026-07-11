@@ -21,7 +21,9 @@ EN: Headless-login to the vendor admin, export the user list (.xlsx incl. token
 from __future__ import annotations
 
 import io
+import json
 import logging
+import os
 import re
 from datetime import datetime, timedelta, timezone
 
@@ -36,17 +38,10 @@ logger = logging.getLogger(__name__)
 # ZH: admin 交易日誌路徑（全體、逐筆、含備註/模型；filter: date_start/date_end/keyword）
 ADMIN_TX_PATH = "/mcu/ai/admin/transaction"
 
-# ZH: 交易列解析 —— 頁面為 server-render 的 <b>欄位：</b>值 形式（不取 IP）
-TX_ROW = re.compile(
-    r"<b>時間：</b>\s*(?P<time>.*?)\s*"
-    r"<b>點數：</b>\s*(?P<pts>-?\d+)\s*"
-    r"<b>餘額：</b>\s*(?P<bal>\d+)\s*"
-    r"<b>備註：</b>\s*(?P<note>.*?)\s*"
-    r"<b>帳號：</b>\s*(?P<email>\S+?)\s*"
-    r"<b>顯示名稱：</b>\s*(?P<name>.*?)\s*"
-    r"<b>\s*序號：</b>\s*(?P<sn>\d+)",
-    re.S,
-)
+# ZH: v2.8 交易列解析改用 lxml —— 廠商已把交易頁從 <b>欄位：</b>值 改版成 CSS grid
+#     （kbx-row / kbx-cell / kbx-dt / kbx-time / kbx-muted…）。實作見 parse_transactions。
+#     欄位（桌面 kbx-dt 依序）：時間 / 點數 / 餘額 / 備註 / 帳號(email + 名稱・sn:序號) / IP。
+#     一律不取、不存 IP（隱私）。
 
 
 class MyaiSyncError(Exception):
@@ -67,19 +62,52 @@ COLUMN_MAP = {
 }
 
 
-async def fetch_export_bytes() -> bytes:
-    """ZH: headless 登入 → 取得 export_user_list 的 .xlsx bytes。失敗拋 MyaiSyncError。
-       EN: headless-login then download export_user_list (.xlsx). Raises on failure."""
-    if not settings.MYAI_ADMIN_EMAIL or not settings.MYAI_ADMIN_PASSWORD:
-        raise MyaiSyncError("MYAI_ADMIN_EMAIL / MYAI_ADMIN_PASSWORD 未設定（請填入 .env）")
+# ── v2.8 Session 快取：登入一次、cookie 重用，只有被導回登入頁(失效)才重登。──
+# ZH: 消除「每次同步都登入」→ 更快，且不再把「Login was success.」洗版進廠商交易紀錄。
+#     cookie 另存到 /data（與 DB 同區、volume 保存）→ 連 scheduler 重啟都免重登。全程唯讀。
+# EN: Cache the vendor session cookie and reuse it across syncs; only re-login when the
+#     response looks like the login page. Persisted next to the DB so it survives restarts.
 
+# ZH: cookie 持久化檔（放 DB 同目錄，通常是 volume 掛載的 /data）
+_COOKIE_FILE = os.path.join(os.path.dirname(settings.DATABASE_PATH) or ".", "myai_session.json")
+
+
+def _save_cookies(cookies) -> None:
+    """ZH: 把 vendor session cookie 存成 JSON（best-effort，失敗不影響同步）。"""
+    try:
+        items = [{"name": c.name, "value": c.value, "domain": c.domain, "path": c.path}
+                 for c in cookies.jar]
+        if not items:
+            return
+        with open(_COOKIE_FILE, "w", encoding="utf-8") as f:
+            json.dump(items, f)
+    except Exception as e:  # noqa: BLE001
+        logger.debug("MYAI cookie 儲存失敗（略過）：%s", e)
+
+
+def _load_cookies():
+    """ZH: 啟動時載入上次的 cookie；沒有或壞掉就回 None（會自動重登）。"""
+    try:
+        if not os.path.exists(_COOKIE_FILE):
+            return None
+        with open(_COOKIE_FILE, "r", encoding="utf-8") as f:
+            items = json.load(f)
+        jar = httpx.Cookies()
+        for it in items:
+            jar.set(it["name"], it["value"], domain=it.get("domain") or "", path=it.get("path") or "/")
+        return jar if len(jar.jar) else None
+    except Exception as e:  # noqa: BLE001
+        logger.debug("MYAI cookie 載入失敗（略過，將重登）：%s", e)
+        return None
+
+
+_MYAI_COOKIES = _load_cookies()  # type: httpx.Cookies | None  # 啟動即載入持久化 cookie
+
+
+def _login_ctx():
+    """ZH: 回 (base, login_page, headers)。廠商防跨站 → 登入 POST 必須帶對的 Referer/Origin。"""
     base = settings.MYAI_BASE_URL.rstrip("/")
     login_page = settings.MYAI_LOGIN_PATH.rsplit("/", 1)[0] + "/login"  # /mcu/ai/user/login
-
-    # ZH: 廠商有防跨站(CSP form-action 'self')→ 登入 POST 必須帶正確 Referer/Origin，
-    #     否則回 200「登入結果」頁卻不發 session cookie。實測加上這組標頭才會成功。
-    # EN: Vendor enforces same-origin form submits; login POST needs matching
-    #     Referer/Origin or no session cookie is issued. These headers are required.
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
                       "(KHTML, like Gecko) Chrome/149.0 Safari/537.36",
@@ -88,36 +116,64 @@ async def fetch_export_bytes() -> bytes:
         "X-Requested-With": "XMLHttpRequest",
         "Accept": "application/json, text/plain, */*",
     }
-    async with httpx.AsyncClient(
-        base_url=base, follow_redirects=True, timeout=httpx.Timeout(30.0), headers=headers,
-    ) as client:
-        # (1) 先 GET 登入頁，讓伺服器發初始 session cookie（無則略過）
-        try:
-            await client.get(login_page)
-        except httpx.HTTPError:
-            pass
+    return base, login_page, headers
 
-        # (2) POST 表單登入（email + password，x-www-form-urlencoded）
+
+async def _session_request(do_fetch, is_valid):
+    """ZH: 帶快取 cookie 送出請求；若被導回登入頁(is_valid=False) 才登入一次再抓。
+           do_fetch(client)->Response、is_valid(Response)->bool。回最終 Response。
+       EN: issue a request with cached cookies; re-login once only if invalid."""
+    global _MYAI_COOKIES
+    if not settings.MYAI_ADMIN_EMAIL or not settings.MYAI_ADMIN_PASSWORD:
+        raise MyaiSyncError("MYAI_ADMIN_EMAIL / MYAI_ADMIN_PASSWORD 未設定（請填入 .env）")
+    base, login_page, headers = _login_ctx()
+    async with httpx.AsyncClient(
+        base_url=base, follow_redirects=True, timeout=httpx.Timeout(30.0),
+        headers=headers, cookies=_MYAI_COOKIES,
+    ) as client:
+        # (1) 先用快取 cookie 直接抓（多數同步不需登入）
+        if _MYAI_COOKIES is not None:
+            try:
+                resp = await do_fetch(client)
+                if is_valid(resp):
+                    _MYAI_COOKIES = client.cookies
+                    _save_cookies(client.cookies)
+                    return resp
+            except httpx.HTTPError:
+                pass  # 落到重新登入
+        # (2) 沒 cookie 或已失效 → 登入一次再抓
         try:
+            await client.get(login_page)  # 讓伺服器發初始 cookie（無則略過）
             await client.post(
                 settings.MYAI_LOGIN_PATH,
                 data={"email": settings.MYAI_ADMIN_EMAIL, "password": settings.MYAI_ADMIN_PASSWORD},
             )
         except httpx.HTTPError as e:
             raise MyaiSyncError(f"登入請求失敗：{e}")
-
-        # (3) 取匯出檔；用「是否為 xlsx(ZIP 魔術數字 PK)」判定登入成功與否
         try:
-            r = await client.get(settings.MYAI_EXPORT_PATH)
+            resp = await do_fetch(client)
         except httpx.HTTPError as e:
-            raise MyaiSyncError(f"匯出請求失敗：{e}")
+            raise MyaiSyncError(f"資料請求失敗：{e}")
+        _MYAI_COOKIES = client.cookies
+        _save_cookies(client.cookies)
+        return resp
 
-        if r.status_code != 200:
-            raise MyaiSyncError(f"匯出回應 {r.status_code}（可能登入失敗或權限不足）")
-        body = r.content
-        if body[:2] != b"PK":  # 非 xlsx → 多半被導回登入頁(HTML)
-            raise MyaiSyncError("匯出內容非 xlsx（多半是帳密錯誤被導回登入頁，請確認 .env）")
-        return body
+
+async def fetch_export_bytes() -> bytes:
+    """ZH: 取得 export_user_list 的 .xlsx bytes（session 快取，失效才登入）。失敗拋 MyaiSyncError。
+       EN: download export_user_list (.xlsx) reusing the cached session. Raises on failure."""
+    async def _do(client):
+        return await client.get(settings.MYAI_EXPORT_PATH)
+
+    def _valid(r):  # 是 xlsx(ZIP 魔術數字 PK) = 登入有效
+        return r.status_code == 200 and r.content[:2] == b"PK"
+
+    r = await _session_request(_do, _valid)
+    if r.status_code != 200:
+        raise MyaiSyncError(f"匯出回應 {r.status_code}（可能登入失敗或權限不足）")
+    if r.content[:2] != b"PK":  # 非 xlsx → 多半被導回登入頁(HTML)
+        raise MyaiSyncError("匯出內容非 xlsx（多半是帳密錯誤被導回登入頁，請確認 .env）")
+    return r.content
 
 
 def parse_xlsx(body: bytes) -> list[dict]:
@@ -255,23 +311,58 @@ def _classify(note: str, pts: int) -> tuple[str, str | None]:
     return "other", None
 
 
+def _to_int(s: str) -> int:
+    """ZH: '2,100,000' / '-1,234' / '0' → int（去掉逗號等非數字字元）。"""
+    try:
+        return int(re.sub(r"[^\d\-]", "", (s or "").strip()) or "0")
+    except ValueError:
+        return 0
+
+
 def parse_transactions(html: str) -> list[dict]:
-    """ZH: 解析交易日誌 HTML → list[dict]（不含 IP）| EN: parse tx log HTML."""
+    """ZH: 解析交易日誌 HTML（廠商新版 kbx-grid 版型）→ list[dict]（不取 IP）。
+       EN: parse the transaction log (vendor's kbx-grid layout). No IP stored."""
+    from lxml import html as lxml_html  # ZH: 延遲匯入 | lazy import
+
+    def _has(el, token: str) -> bool:  # ZH: class 是否含某 token
+        return token in (el.get("class") or "").split()
+
+    try:
+        doc = lxml_html.fromstring(html)
+    except Exception:  # noqa: BLE001
+        return []
+
     out: list[dict] = []
-    for m in TX_ROW.finditer(html):
-        t = (m.group("time") or "").strip()
-        try:
-            pts = int(m.group("pts"))
-        except (TypeError, ValueError):
-            pts = 0
-        try:
-            bal = int(m.group("bal"))
-        except (TypeError, ValueError):
-            bal = 0
-        note = (m.group("note") or "").strip()
-        email = (m.group("email") or "").strip()
-        name = (m.group("name") or "").strip()
-        sn = (m.group("sn") or "").strip()
+    for row in doc.xpath("//div[contains(concat(' ', normalize-space(@class), ' '), ' kbx-row ')]"):
+        grids = row.xpath(".//div[contains(concat(' ', normalize-space(@class), ' '), ' kbx-grid ')]")
+        if not grids:
+            continue
+        grid = grids[0]
+        # ZH: 時間 —— class 恰為 'kbx-time'（IP 欄雖也含 kbx-time 但同時含 kbx-dt，排除）
+        tl = grid.xpath(".//div[normalize-space(@class)='kbx-time']/text()")
+        t = tl[0].strip() if tl else ""
+        # ZH: 桌面欄位（kbx-cell + kbx-dt）依序：點數 / 餘額 / 備註 / 帳號 / IP
+        cells = [c for c in grid.xpath(".//div") if _has(c, "kbx-cell") and _has(c, "kbx-dt")]
+        if len(cells) < 4:
+            continue
+        pts = _to_int(cells[0].text_content())
+        bal = _to_int(cells[1].text_content())
+        note = cells[2].text_content().strip()
+        acct = cells[3]
+        # ZH: 帳號欄 = email 子 div（含 @、非 kbx-muted）＋「名稱・sn:序號」的 kbx-muted 子 div
+        email = ""
+        for d in acct.xpath("./div"):
+            txt = d.text_content().strip()
+            if "@" in txt and not _has(d, "kbx-muted"):
+                email = txt
+                break
+        name, sn = "", ""
+        muted = [d for d in acct.xpath(".//div") if _has(d, "kbx-muted")]
+        if muted:
+            mt = muted[0].text_content().strip()   # ZH: 例："NyaLazy・sn:1003387"
+            msn = re.search(r"sn:(\d+)", mt)
+            sn = msn.group(1) if msn else ""
+            name = re.sub(r"・?\s*sn:\d+\s*$", "", mt).strip()
         try:
             occ = datetime.strptime(t, "%Y-%m-%d %H:%M:%S")
         except ValueError:
@@ -286,34 +377,27 @@ def parse_transactions(html: str) -> list[dict]:
     return out
 
 
+def _tx_logged_in(r) -> bool:
+    """ZH: 交易頁(已登入)含「交易紀錄／備註」；登入頁不含 → 用來判斷 session 是否有效。
+       EN: the logged-in tx page contains these labels; the login page does not."""
+    if r.status_code != 200:
+        return False
+    t = r.text
+    return ("交易紀錄" in t) or ("備註" in t)
+
+
 async def fetch_transactions_html(date_start: str, date_end: str) -> str:
-    """ZH: headless 登入 → GET admin 交易日誌(日期範圍) → 回 HTML。唯讀。
-       EN: headless-login then GET the admin transaction log for a date range."""
-    if not settings.MYAI_ADMIN_EMAIL or not settings.MYAI_ADMIN_PASSWORD:
-        raise MyaiSyncError("MYAI_ADMIN_EMAIL / MYAI_ADMIN_PASSWORD 未設定（請填入 .env）")
-    base = settings.MYAI_BASE_URL.rstrip("/")
-    login_page = settings.MYAI_LOGIN_PATH.rsplit("/", 1)[0] + "/login"
-    headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
-                      "(KHTML, like Gecko) Chrome/149.0 Safari/537.36",
-        "Referer": base + login_page, "Origin": base,
-        "X-Requested-With": "XMLHttpRequest", "Accept": "text/html, */*",
-    }
-    async with httpx.AsyncClient(base_url=base, follow_redirects=True,
-                                 timeout=httpx.Timeout(30.0), headers=headers) as client:
-        try:
-            await client.get(login_page)
-            await client.post(settings.MYAI_LOGIN_PATH, data={
-                "email": settings.MYAI_ADMIN_EMAIL, "password": settings.MYAI_ADMIN_PASSWORD})
-        except httpx.HTTPError as e:
-            raise MyaiSyncError(f"登入請求失敗：{e}")
-        try:
-            r = await client.get(ADMIN_TX_PATH, params={"date_start": date_start, "date_end": date_end})
-        except httpx.HTTPError as e:
-            raise MyaiSyncError(f"交易日誌請求失敗：{e}")
-        if r.status_code != 200:
-            raise MyaiSyncError(f"交易日誌回應 {r.status_code}（可能登入失敗或權限不足）")
-        return r.text
+    """ZH: GET admin 交易日誌(日期範圍) → 回 HTML（session 快取，失效才登入）。唯讀。
+       EN: GET the admin transaction log reusing the cached session. Read-only."""
+    async def _do(client):
+        return await client.get(ADMIN_TX_PATH, params={"date_start": date_start, "date_end": date_end})
+
+    r = await _session_request(_do, _tx_logged_in)
+    if r.status_code != 200:
+        raise MyaiSyncError(f"交易日誌回應 {r.status_code}（可能登入失敗或權限不足）")
+    if not _tx_logged_in(r):
+        raise MyaiSyncError("交易日誌非預期內容（多半被導回登入頁，請確認 .env）")
+    return r.text
 
 
 async def sync_transactions(db: Session, days: int = 90) -> dict:
