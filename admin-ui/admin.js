@@ -44,7 +44,7 @@ const TRANSLATIONS = {
         myai_col_points: "Token 點數",
         myai_col_expiry: "有效期間",
         admin_col_email: "電子郵件",
-        myai_bind_title: "Email 綁定管理",
+        myai_bind_title: "Email 綁定管理（未配對明細）",
         myai_bind_automatch: "一鍵 Email 配對",
         myai_bind_add: "新增綁定",
         myai_bind_add_hint: "手動綁定：平台帳號 ↔ myai Email（用於兩邊 email 不同、需手動指定時）。",
@@ -58,6 +58,18 @@ const TRANSLATIONS = {
         ext_col_platform: "平台帳號",
         ext_col_vendor: "廠商帳號",
         ext_ai_logout_label: "廠商登出網址（共用機台換手用）",
+        tab_accounts: "帳號管理",
+        acct_overview_title: "帳號總覽",
+        acct_search_ph: "搜尋帳號 / Email / 姓名 / 學系…",
+        acct_col_user: "平台帳號",
+        acct_col_role: "角色 · 學系",
+        acct_col_myai: "myai 綁定",
+        acct_total: "共",
+        acct_bound: "已綁定",
+        acct_unbound: "未綁定",
+        acct_unbound_dash: "— 未綁定 —",
+        acct_bind_verb: "綁定",
+        acct_unbind_verb: "解綁",
         btn_save: "儲存",
         btn_add: "新增",
         btn_import: "匯入",
@@ -336,7 +348,7 @@ const TRANSLATIONS = {
         myai_col_points: "Token Points",
         myai_col_expiry: "Expiry",
         admin_col_email: "Email",
-        myai_bind_title: "Email Binding",
+        myai_bind_title: "Email Binding (Unmatched Detail)",
         myai_bind_automatch: "Auto-match by Email",
         myai_bind_add: "Add Binding",
         myai_bind_add_hint: "Manual binding: platform account ↔ myai email (when the two emails differ).",
@@ -350,6 +362,18 @@ const TRANSLATIONS = {
         ext_col_platform: "Platform Account",
         ext_col_vendor: "Vendor Account",
         ext_ai_logout_label: "Vendor logout URL (for shared-machine handoff)",
+        tab_accounts: "Accounts",
+        acct_overview_title: "Account Overview",
+        acct_search_ph: "Search account / email / name / dept…",
+        acct_col_user: "Platform Account",
+        acct_col_role: "Role · Dept",
+        acct_col_myai: "myai Binding",
+        acct_total: "Total",
+        acct_bound: "Bound",
+        acct_unbound: "Unbound",
+        acct_unbound_dash: "— unbound —",
+        acct_bind_verb: "Bind",
+        acct_unbind_verb: "Unbind",
         btn_save: "Save",
         btn_add: "Add",
         btn_import: "Import",
@@ -690,8 +714,189 @@ function switchAdminMainTab(tabId) {
             adminLab.init();
         } else if (tabId === 'external-ai') {
             externalAi.init();
+        } else if (tabId === 'accounts') {
+            initAccountsTab();
         }
     }
+}
+
+// ============================================================
+// v2.8 帳號管理分頁：把既有 section 搬進單一分頁 + 帳號總覽（前端 join）
+// ============================================================
+let _accountsWired = false;
+let _acctUsers = [];              // 全部平台使用者（3 個 auth_source 合併）
+let _acctBindingsByUser = {};     // username(lower) -> binding
+
+// 把既有 section/modal 搬進「帳號管理」分頁的 slot（只做一次）。用搬移而非重寫，
+// 完整保留使用者管理的輪詢、分頁、解鎖編輯、三個 modal 等既有行為。
+function wireAccountsLayout() {
+    if (_accountsWired) return;
+    const put = (id, slotId, hide) => {
+        const el = document.getElementById(id), slot = document.getElementById(slotId);
+        if (el && slot) { slot.appendChild(el); if (hide) el.style.display = 'none'; }
+    };
+    put('sec-users', 'acct-slot-users');                    // 區塊2 使用者操作
+    // 使用者相關 modal 移到 <body> 頂層，才能在任何分頁彈出（position:fixed 不受隱藏分頁影響）
+    ['export-modal', 'provision-modal', 'user-edit-modal'].forEach(mid => {
+        const m = document.getElementById(mid);
+        if (m) document.body.appendChild(m);
+    });
+    put('sec-myai-bind', 'acct-slot-bindings');             // 區塊3 綁定/未配對
+    put('sec-ext-csv', 'acct-slot-bindings');               // 區塊3 CSV
+    put('sec-ext-map', 'acct-slot-bindings', true);         // 對應表：已被總覽取代，隱藏保留（refresh 不報錯）
+    put('sec-myai-sync', 'acct-slot-sync');                 // 區塊4 廠商快取
+
+    // sec-myai-bind 內與「帳號總覽」重複的部分隱藏：頭部按鈕（新增綁定/一鍵配對）、
+    // 綁定表（總覽已逐列顯示）、說明與訊息列；只留「未配對」明細。
+    const bindHead = document.querySelector('#sec-myai-bind .widget-header .split, #sec-myai-bind .widget-header > div:last-child');
+    if (bindHead && bindHead.querySelector('button')) bindHead.style.display = 'none';
+    const bindTbl = document.getElementById('myai-bindings-table');
+    if (bindTbl) { const w = bindTbl.closest('.admin-table-wrap'); if (w) w.style.display = 'none'; }
+    const bindMsg = document.getElementById('myai-bind-msg'); if (bindMsg) bindMsg.style.display = 'none';
+    const bindHint = document.querySelector('#sec-myai-bind [data-i18n="myai_bind_hint"]'); if (bindHint) bindHint.style.display = 'none';
+
+    // 區塊3/4 收合（預設收合，點標題列展開）
+    _makeSectionCollapsible('sec-myai-bind', true);
+    _makeSectionCollapsible('sec-ext-csv', true);
+    _makeSectionCollapsible('sec-myai-sync', true);
+
+    _accountsWired = true;
+}
+
+// 讓某個既有 section 可用「標題列」收合；點按鈕（如立即同步）不觸發收合
+function _makeSectionCollapsible(id, collapsed) {
+    const sec = document.getElementById(id);
+    if (!sec || sec.classList.contains('acct-collapsible')) return;
+    const head = sec.querySelector(':scope > .widget-header');
+    if (!head) return;
+    sec.classList.add('acct-collapsible');
+    if (collapsed) sec.classList.add('collapsed');
+    if (!head.querySelector('.acct-chev')) {
+        const chev = document.createElement('ion-icon');
+        chev.setAttribute('name', 'chevron-down-outline');
+        chev.className = 'acct-chev';
+        head.appendChild(chev);
+    }
+    head.addEventListener('click', (e) => {
+        if (e.target.closest('button, a, input, ion-icon.refresh-icon')) return;
+        sec.classList.toggle('collapsed');
+    });
+}
+
+function initAccountsTab() {
+    wireAccountsLayout();
+    externalAi.loadMyai();
+    externalAi.refresh();
+    externalAi.loadBindings();
+    loadAccountsOverviewData();
+}
+
+async function loadAccountsOverviewData() {
+    const auth = { 'Authorization': `Bearer ${authToken}` };
+    // 全部平台使用者（3 個 auth_source 合併）
+    try {
+        // 後端 limit 上限為 500/來源（超過會 422）。抓每個來源的前 500 供「前 N + 搜尋」用；
+        // DOM 由 RENDER_CAP 控管，只渲染前 N。若單一來源超過 500，需後端分頁才能全載（目前規模用不到）。
+        const lists = await Promise.all(['local', 'sso_oidc', 'sso_mock'].map(src =>
+            fetch(`${API_BASE}/admin/users?auth_source=${src}&limit=500`, { headers: auth })
+                .then(r => r.ok ? r.json() : []).catch(() => [])));
+        _acctUsers = [].concat(...lists);
+    } catch (_) { _acctUsers = (_adminUsersCache || []).slice(); }
+    await _loadAcctBindings(auth);
+    renderAccountsOverview();
+}
+
+async function _loadAcctBindings(auth) {
+    try {
+        const r = await fetch(`${API_BASE}/external-ai/admin/bindings`, { headers: auth || { 'Authorization': `Bearer ${authToken}` } });
+        const rows = r.ok ? ((await r.json()).bindings || []) : [];
+        _acctBindingsByUser = {};
+        rows.forEach(b => { _acctBindingsByUser[(b.platform_username || '').toLowerCase()] = b; });
+    } catch (_) { /* 靜默 */ }
+}
+
+// 綁定變動後（新增/解綁/配對/同步）輕量刷新總覽：只重抓綁定，沿用已快取的使用者清單
+async function refreshOverviewBindings() {
+    const acct = document.getElementById('tab-accounts');
+    if (!acct || acct.style.display === 'none') return;
+    if (!_acctUsers.length) return;   // 尚未載入 → 交給 loadAccountsOverviewData 首次渲染
+    await _loadAcctBindings();
+    renderAccountsOverview();
+}
+
+function _escAcct(s) { return (s == null ? '' : String(s)).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
+function _escAcctAttr(s) { return (s == null ? '' : String(s)).replace(/\\/g, '\\\\').replace(/'/g, "\\'"); }
+
+function renderAccountsOverview() {
+    const tbody = document.querySelector('#acct-overview-table tbody');
+    if (!tbody) return;
+    const tl = TRANSLATIONS[currentLang] || {};
+    const q = (document.getElementById('acct-overview-search')?.value || '').toLowerCase().trim();
+    const total = _acctUsers.length;
+    let bound = 0;
+    _acctUsers.forEach(u => { if (_acctBindingsByUser[(u.username || '').toLowerCase()]) bound++; });
+
+    const RENDER_CAP = 10;   // 預設只渲染前 10 列；其餘靠搜尋（搜尋結果同樣最多 10 列）
+    const filtered = _acctUsers.filter(u => {
+        if (!q) return true;
+        return [u.username, u.email, u.department, u.role].some(v => (v || '').toLowerCase().includes(q));
+    });
+    const shown = filtered.slice(0, RENDER_CAP);
+    const rows = shown.map(u => {
+        const b = _acctBindingsByUser[(u.username || '').toLowerCase()];
+        const roleLabel = tl[`role_${u.role}`] || u.role || '';
+        const dept = u.department ? ` <span style="color:var(--text-muted); font-size:12px;">${_escAcct(u.department)}</span>` : '';
+        const roleCell = `<span class="status-badge ${u.role === 'admin' ? 'running' : 'completed'}">${_escAcct(roleLabel)}</span>${dept}`;
+        let myaiCell, ptsCell, statusCell, actCell;
+        if (b) {
+            const warn = b.synced ? '' : ' <span style="color:#fbbf24;" title="對不到同步快取，請先同步或檢查 email">⚠</span>';
+            myaiCell = `<span style="font-family:monospace; font-size:12px;">${_escAcct(b.myai_email)}</span>${warn}`;
+            ptsCell = `<span style="font-family:monospace;">${b.points == null ? '—' : Number(b.points).toLocaleString()}</span>`;
+            statusCell = !u.is_active
+                ? `<span style="color:var(--neon-pink);">${tl.status_disabled || '停用'}</span>`
+                : `<span style="color:#4ade80; font-weight:600;">${tl.acct_bound || '已綁定'}</span>`;
+            actCell = `<button onclick="externalAi.unbind('${b.id}','${encodeURIComponent(u.username || '')}')" title="${tl.acct_unbind_verb || '解綁'}"
+                        style="background:none; border:none; color:#fb7185; cursor:pointer; font-size:15px;"><ion-icon name="unlink-outline"></ion-icon></button>`;
+        } else {
+            myaiCell = `<span style="color:var(--text-muted);">${tl.acct_unbound_dash || '— 未綁定 —'}</span>`;
+            ptsCell = `<span style="color:var(--text-muted);">—</span>`;
+            statusCell = !u.is_active
+                ? `<span style="color:var(--neon-pink);">${tl.status_disabled || '停用'}</span>`
+                : `<span style="color:#fbbf24;">${tl.acct_unbound || '未綁定'}</span>`;
+            actCell = `<span onclick="acctQuickBind('${_escAcctAttr(u.username)}','${_escAcctAttr(u.email)}')"
+                        style="color:var(--neon-cyan,#22d3ee); cursor:pointer; font-weight:600; font-size:12.5px;">${tl.acct_bind_verb || '綁定'}</span>`;
+        }
+        return `<tr>
+            <td><div style="font-weight:600;">${_escAcct(u.username)}</div></td>
+            <td>${roleCell}</td>
+            <td style="font-family:monospace; font-size:12px;">${_escAcct(u.email)}</td>
+            <td>${myaiCell}</td>
+            <td>${ptsCell}</td>
+            <td>${statusCell}</td>
+            <td>${actCell}</td>
+        </tr>`;
+    }).join('');
+
+    tbody.innerHTML = rows || `<tr><td colspan="7" style="text-align:center; color:var(--text-muted);">（無）</td></tr>`;
+    const stats = document.getElementById('acct-overview-stats');
+    if (stats) {
+        let s = `${tl.acct_total || '共'} ${total} · ${tl.acct_bound || '已綁'} ${bound} · ${tl.acct_unbound || '未綁'} ${total - bound}`;
+        if (filtered.length > shown.length) {
+            s += (currentLang === 'en')
+                ? ` · showing ${shown.length}/${filtered.length} (search to narrow)`
+                : ` · 顯示前 ${shown.length}／共 ${filtered.length} 筆（用搜尋縮小）`;
+        }
+        stats.textContent = s;
+    }
+}
+
+// 未綁定列「綁定」→ 開新增綁定 modal 並預填平台帳號 + 以平台 email 當 myai email 預設（可改）
+function acctQuickBind(username, email) {
+    openAddBindingModal();
+    const pf = document.getElementById('ext-ai-add-platform');
+    const vd = document.getElementById('ext-ai-add-vendor');
+    if (pf) pf.value = username || '';
+    if (vd) { vd.value = email || ''; vd.focus(); }
 }
 
 // ============================================================
@@ -786,6 +991,7 @@ const externalAi = {
             ]);
             if (bRes.ok) this._renderBindings(await bRes.json());
             if (uRes.ok) this._renderUnmatched(await uRes.json());
+            refreshOverviewBindings();   // v2.8 綁定變動 → 同步刷新帳號總覽
         } catch (e) { /* 靜默 */ }
     },
     _renderBindings(data) {
@@ -2181,6 +2387,7 @@ async function deleteModel(modelId, modelName) {
 let _adminRefreshInterval = null;
 
 function initAdminDashboard() {
+    wireAccountsLayout();   // v2.8 立即把使用者/綁定/廠商等 section 搬進「帳號管理」分頁，讓其他分頁瘦身
     fetchClusterStats();
     fetchAdminData();
     applyTranslations();
@@ -2740,6 +2947,7 @@ async function submitProvision(e) {
 }
 
 document.addEventListener('DOMContentLoaded', () => {
+    wireAccountsLayout();   // v2.8 純 DOM 搬移，不需登入即可執行；保證任何進入路徑都會把 section 搬進帳號管理分頁
     const loginForm = document.getElementById('admin-login-form');
     if (loginForm) {
         loginForm.addEventListener('submit', handleAdminLogin);

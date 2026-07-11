@@ -9,7 +9,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Playpen+Sans:wght@400;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="styles.css?v=20260630-17">
+    <link rel="stylesheet" href="styles.css?v=20260630-25">
     <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
@@ -20,6 +20,14 @@
             max-width: 1400px;
             margin: 0 auto;
         }
+
+        /* v2.8 帳號管理：可收合區塊（點標題列展開/收合，預設收合 區塊3/4） */
+        .acct-collapsible > .widget-header { cursor: pointer; display: flex; align-items: center; }
+        .acct-collapsible.collapsed > *:not(.widget-header) { display: none !important; }
+        .acct-collapsible .acct-chev { margin-left: auto; transition: transform .2s ease; }
+        .acct-collapsible.collapsed .acct-chev { transform: rotate(-90deg); }
+        /* slot 內多個 section 之間補間隔（搬進 slot 後失去 admin-grid 的 gap） */
+        #acct-slot-users, #acct-slot-bindings, #acct-slot-sync { display: flex; flex-direction: column; gap: 20px; }
 
         .back-link {
             color: var(--text-primary);
@@ -147,6 +155,9 @@
                 <button id="nav-tab-external-ai" class="admin-side-tab" onclick="switchAdminMainTab('external-ai')">
                     <ion-icon name="link-outline"></ion-icon> <span data-i18n="tab_external_ai">外部 AI</span>
                 </button>
+                <button id="nav-tab-accounts" class="admin-side-tab" onclick="switchAdminMainTab('accounts')">
+                    <ion-icon name="people-circle-outline"></ion-icon> <span data-i18n="tab_accounts">帳號管理</span>
+                </button>
             </nav>
 
             <div class="admin-sidebar-footer">
@@ -196,8 +207,8 @@
                 </div>
             </section>
 
-            <!-- ZH: 使用者管理表格 | EN: User Management Table -->
-            <section class="widget form-box-panel" style="grid-column: 1 / -1;">
+            <!-- ZH: 使用者管理表格 | EN: User Management Table (v2.8: 由 JS 搬入「帳號管理」分頁 #acct-slot-users) -->
+            <section id="sec-users" class="widget form-box-panel" style="grid-column: 1 / -1;">
                 <div class="widget-header split">
                     <h3><ion-icon name="people-outline" style="margin-right:6px;"></ion-icon> <span
                             data-i18n="admin_users">使用者管理</span></h3>
@@ -258,10 +269,10 @@
                     </button>
                     <div style="flex-grow:1;"></div>
                     <!-- v2.2: 匯出 Excel / CSV 按鈕 -->
-                    <button id="btn-export-users" class="ready-btn" style="width: auto; padding: 6px 16px; font-size: 13px; border-color: var(--neon-cyan); color: var(--neon-cyan); background: rgba(34, 211, 238, 0.08);" data-i18n="btn_export_users">
+                    <button id="btn-export-users" class="ready-btn" style="width: auto; margin: 0; padding: 6px 16px; font-size: 13px; border-color: var(--neon-cyan); color: var(--neon-cyan); background: rgba(34, 211, 238, 0.08);" data-i18n="btn_export_users">
                         <ion-icon name="download-outline" style="margin-right:4px; vertical-align:middle;"></ion-icon>匯出 Excel / CSV
                     </button>
-                    <button id="btn-provision-user" class="ready-btn config-save-btn" style="width: auto; padding: 6px 16px; font-size: 13px;" data-i18n="btn_add_test">
+                    <button id="btn-provision-user" class="ready-btn config-save-btn" style="width: auto; margin: 0; padding: 6px 16px; font-size: 13px;" data-i18n="btn_add_test">
                         <ion-icon name="person-add-outline" style="margin-right:4px;"></ion-icon>Provision User
                     </button>
                 </div>
@@ -1073,26 +1084,28 @@
                     <div id="ext-ai-url-msg" style="margin-top:8px; font-size:13px;"></div>
                 </section>
 
-                <!-- CSV 批次匯入（新增單筆對應已移至下方「Email 綁定管理」的「新增綁定」按鈕） -->
-                <section class="widget form-box-panel" style="grid-column: 1 / -1;">
+                <!-- CSV 批次匯入（v2.8：由 JS 搬入「帳號管理」分頁 #acct-slot-bindings） -->
+                <section id="sec-ext-csv" class="widget form-box-panel" style="grid-column: 1 / -1;">
                     <div class="widget-header">
                         <h3><ion-icon name="cloud-upload-outline" style="margin-right:6px;"></ion-icon>
                             <span data-i18n="ext_admin_csv_title">CSV 批次匯入造冊結果</span></h3>
                     </div>
-                    <p style="color:var(--text-muted); font-size:12px; margin-bottom:8px;" data-i18n="ext_admin_csv_hint">
-                        每行格式：platform_username,vendor_username（可含表頭，重複者更新）。
-                    </p>
-                    <textarea id="ext-ai-csv" rows="5" placeholder="platform_username,vendor_username&#10;student01,vendorA01&#10;student02,vendorA02" style="width:100%; font-family:monospace; font-size:13px;"></textarea>
-                    <div style="display:flex; gap:8px; margin-top:8px;">
-                        <button class="ready-btn config-save-btn" onclick="externalAi.importCsv()" style="width:auto; padding:8px 16px;">
-                            <ion-icon name="cloud-upload-outline"></ion-icon> <span data-i18n="btn_import">匯入</span>
-                        </button>
+                    <div style="padding: 14px 15px 16px;">
+                        <p style="color:var(--text-muted); font-size:12px; margin:0 0 8px;" data-i18n="ext_admin_csv_hint">
+                            每行格式：platform_username,vendor_username（可含表頭，重複者更新）。
+                        </p>
+                        <textarea id="ext-ai-csv" rows="5" placeholder="platform_username,vendor_username&#10;student01,vendorA01&#10;student02,vendorA02" style="width:100%; font-family:monospace; font-size:13px;"></textarea>
+                        <div style="display:flex; gap:8px; margin-top:8px;">
+                            <button class="ready-btn config-save-btn" onclick="externalAi.importCsv()" style="width:auto; padding:8px 16px;">
+                                <ion-icon name="cloud-upload-outline"></ion-icon> <span data-i18n="btn_import">匯入</span>
+                            </button>
+                        </div>
+                        <div id="ext-ai-csv-msg" style="margin-top:8px; font-size:13px; white-space:pre-line;"></div>
                     </div>
-                    <div id="ext-ai-csv-msg" style="margin-top:8px; font-size:13px; white-space:pre-line;"></div>
                 </section>
 
-                <!-- 對應表列表 -->
-                <section class="widget form-box-panel" style="grid-column: 1 / -1;">
+                <!-- 對應表列表（v2.8：已由「帳號總覽」取代，JS 搬入 #acct-slot-bindings 並隱藏，保留供 refresh() 不報錯） -->
+                <section id="sec-ext-map" class="widget form-box-panel" style="grid-column: 1 / -1;">
                     <div class="widget-header split">
                         <h3><ion-icon name="list-outline" style="margin-right:6px;"></ion-icon>
                             <span data-i18n="ext_admin_list_title">帳號對應表</span></h3>
@@ -1111,8 +1124,8 @@
                     </div>
                 </section>
 
-                <!-- v2.8 廠商 Token 同步（唯讀，headless 從 myai168 匯出） -->
-                <section class="widget form-box-panel" style="grid-column: 1 / -1;">
+                <!-- v2.8 廠商 Token 同步（唯讀；由 JS 搬入「帳號管理」分頁 #acct-slot-sync） -->
+                <section id="sec-myai-sync" class="widget form-box-panel" style="grid-column: 1 / -1;">
                     <div class="widget-header split">
                         <h3><ion-icon name="sync-outline" style="margin-right:6px;"></ion-icon>
                             <span data-i18n="myai_sync_title">廠商 Token 同步（myai168）</span></h3>
@@ -1143,8 +1156,8 @@
                     </div>
                 </section>
 
-                <!-- v2.8 Email 綁定管理（平台帳號 ↔ myai email ↔ 點數） -->
-                <section class="widget form-box-panel" style="grid-column: 1 / -1;">
+                <!-- v2.8 Email 綁定管理（平台帳號 ↔ myai email ↔ 點數；由 JS 搬入「帳號管理」分頁 #acct-slot-bindings） -->
+                <section id="sec-myai-bind" class="widget form-box-panel" style="grid-column: 1 / -1;">
                     <div class="widget-header split">
                         <h3><ion-icon name="link-outline" style="margin-right:6px;"></ion-icon>
                             <span data-i18n="myai_bind_title">Email 綁定管理</span></h3>
@@ -1213,6 +1226,62 @@
 
             </div>
         </div> <!-- End of tab-external-ai -->
+
+        <!-- v2.8 帳號管理分頁：平台使用者 CRUD + 廠商綁定 + 點數，全部集中一頁。
+             使用者/綁定/廠商同步等既有 section 由 admin.js wireAccountsLayout() 於初始化時搬入下方 slot。 -->
+        <div id="tab-accounts" class="admin-tab-content" style="display: none;">
+            <div class="admin-grid">
+
+                <!-- 區塊 1：帳號總覽（平台 users ⋈ 廠商綁定，前端 join；不加後端端點） -->
+                <section class="widget form-box-panel" style="grid-column: 1 / -1;">
+                    <div class="widget-header split" style="margin-bottom:6px;">
+                        <h3><ion-icon name="people-circle-outline" style="margin-right:6px;"></ion-icon>
+                            <span data-i18n="acct_overview_title">帳號總覽</span></h3>
+                        <span id="acct-overview-stats" style="font-size:12px; color:var(--text-muted);"></span>
+                    </div>
+                    <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap; padding:0 15px 12px;">
+                        <div style="display:flex; align-items:center; gap:8px; background:var(--bg-elevated,rgba(255,255,255,0.05)); border:1px solid var(--border-color); border-radius:9px; padding:6px 12px; flex:1; min-width:220px;">
+                            <ion-icon name="search-outline" style="color:var(--text-muted);"></ion-icon>
+                            <input id="acct-overview-search" oninput="renderAccountsOverview()" data-i18n="acct_search_ph" placeholder="搜尋帳號 / Email / 姓名 / 學系…"
+                                   style="background:none; border:none; outline:none; color:var(--text-primary); width:100%; font-size:13px;">
+                        </div>
+                        <button class="ready-btn" onclick="openAddBindingModal()" style="width:auto; padding:6px 14px; border-color:#4ade80; color:#4ade80; background:rgba(74,222,128,0.1);">
+                            <ion-icon name="add-circle-outline"></ion-icon> <span data-i18n="myai_bind_add">新增綁定</span>
+                        </button>
+                        <button class="ready-btn config-save-btn" onclick="externalAi.autoMatch()" style="width:auto; padding:6px 14px;">
+                            <ion-icon name="git-compare-outline"></ion-icon> <span data-i18n="myai_bind_automatch">一鍵 Email 配對</span>
+                        </button>
+                        <button class="ready-btn" onclick="externalAi.syncMyai()" style="width:auto; padding:6px 14px;">
+                            <ion-icon name="sync-outline"></ion-icon> <span data-i18n="myai_sync_now">立即同步</span>
+                        </button>
+                    </div>
+                    <div class="admin-table-wrap scrollbar-custom" style="max-height:480px; overflow:auto;">
+                        <table class="admin-table" id="acct-overview-table">
+                            <thead><tr>
+                                <th data-i18n="acct_col_user">平台帳號</th>
+                                <th data-i18n="acct_col_role">角色 · 學系</th>
+                                <th data-i18n="admin_col_email">Email</th>
+                                <th data-i18n="acct_col_myai">myai 綁定</th>
+                                <th data-i18n="myai_col_points">點數餘額</th>
+                                <th data-i18n="col_status">狀態</th>
+                                <th data-i18n="col_actions">操作</th>
+                            </tr></thead>
+                            <tbody><tr><td colspan="7" style="text-align:center; color:var(--text-muted);" data-i18n="msg_loading">載入中...</td></tr></tbody>
+                        </table>
+                    </div>
+                </section>
+
+                <!-- 區塊 2：使用者操作（使用者管理 section 由 JS 搬入） -->
+                <div id="acct-slot-users" style="grid-column: 1 / -1;"></div>
+
+                <!-- 區塊 3：綁定細節 · 未配對 · CSV（Email綁定 + CSV section 由 JS 搬入；對應表隱藏保留） -->
+                <div id="acct-slot-bindings" style="grid-column: 1 / -1;"></div>
+
+                <!-- 區塊 4：廠商帳號原始快取（廠商同步 section 由 JS 搬入） -->
+                <div id="acct-slot-sync" style="grid-column: 1 / -1;"></div>
+
+            </div>
+        </div> <!-- End of tab-accounts -->
         </main> <!-- End of admin-content -->
     </div> <!-- End of admin-layout -->
 
@@ -1275,7 +1344,7 @@
     <script type="module" src="https://unpkg.com/ionicons@7.1.0/dist/ionicons/ionicons.esm.js"></script>
     <script nomodule src="https://unpkg.com/ionicons@7.1.0/dist/ionicons/ionicons.js"></script>
     <!-- 載入 Admin 邏輯 -->
-    <script src="admin.js?v=20260630-17"></script>
+    <script src="admin.js?v=20260630-25"></script>
 </body>
 
 </html>
