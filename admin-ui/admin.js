@@ -58,6 +58,10 @@ const TRANSLATIONS = {
         ext_col_platform: "平台帳號",
         ext_col_vendor: "廠商帳號",
         ext_ai_logout_label: "廠商登出網址（共用機台換手用）",
+        alert_cfg_title: "低點數提醒",
+        alert_cfg_hint: "學生外部 AI 剩餘點數低於門檻時，平台內彈窗提醒（每次登入只顯示一次）；可附「申請教學」連結。",
+        alert_cfg_threshold: "低點數門檻",
+        alert_cfg_guide: "申請教學連結",
         tab_accounts: "帳號管理",
         acct_overview_title: "帳號總覽",
         acct_search_ph: "搜尋帳號 / Email / 姓名 / 學系…",
@@ -362,6 +366,10 @@ const TRANSLATIONS = {
         ext_col_platform: "Platform Account",
         ext_col_vendor: "Vendor Account",
         ext_ai_logout_label: "Vendor logout URL (for shared-machine handoff)",
+        alert_cfg_title: "Low-balance alert",
+        alert_cfg_hint: "When a student's external-AI credits fall below the threshold, show an in-platform popup (once per login); an optional \"how to apply\" link can be attached.",
+        alert_cfg_threshold: "Low-balance threshold",
+        alert_cfg_guide: "How-to-apply link",
         tab_accounts: "Accounts",
         acct_overview_title: "Account Overview",
         acct_search_ph: "Search account / email / name / dept…",
@@ -925,6 +933,7 @@ const externalAi = {
     },
     init() {
         this.loadUrl();
+        this.loadAlertConfig();
         this.refresh();
         this.loadMyai();
         this.loadBindings();
@@ -1091,6 +1100,38 @@ const externalAi = {
             if (!res.ok) throw new Error('save failed');
             if (msg) { msg.style.color = '#4ade80'; msg.textContent = '✓ 已儲存'; }
             showToast('外部 AI 網址已更新');
+        } catch (e) {
+            if (msg) { msg.style.color = '#fb7185'; msg.textContent = '✗ 儲存失敗'; }
+            showToast('儲存失敗', true);
+        }
+    },
+    // v2.8 低點數提醒設定（門檻 + 申請教學連結）
+    async loadAlertConfig() {
+        try {
+            const res = await fetch(`${API_BASE}/external-ai/admin/alert-config`, { headers: this._authHeaders() });
+            if (!res.ok) throw new Error('load alert-config failed');
+            const data = await res.json();
+            const th = document.getElementById('ext-ai-lowbal-threshold');
+            const gu = document.getElementById('ext-ai-guide-url');
+            if (th) th.value = (data.low_balance_threshold != null) ? data.low_balance_threshold : '';
+            if (gu) gu.value = data.apply_guide_url || '';
+        } catch (e) { /* 靜默 | silent */ }
+    },
+    async saveAlertConfig() {
+        const th = document.getElementById('ext-ai-lowbal-threshold');
+        const gu = document.getElementById('ext-ai-guide-url');
+        const msg = document.getElementById('ext-ai-alert-msg');
+        try {
+            const res = await fetch(`${API_BASE}/external-ai/admin/alert-config`, {
+                method: 'PUT', headers: this._authHeaders(),
+                body: JSON.stringify({
+                    low_balance_threshold: (th && th.value !== '') ? parseInt(th.value, 10) : null,
+                    apply_guide_url: gu ? (gu.value || '').trim() : null,
+                }),
+            });
+            if (!res.ok) throw new Error('save failed');
+            if (msg) { msg.style.color = '#4ade80'; msg.textContent = '✓ 已儲存'; }
+            showToast('低點數提醒設定已更新');
         } catch (e) {
             if (msg) { msg.style.color = '#fb7185'; msg.textContent = '✗ 儲存失敗'; }
             showToast('儲存失敗', true);

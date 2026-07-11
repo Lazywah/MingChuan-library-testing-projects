@@ -23,6 +23,7 @@ _scheduler_task = None
 _lab_scan_task = None        # v2.0: 每分鐘掃描 lab session idle/hard-limit
 _storage_scan_task = None    # v2.0: 每日 03:00 執行儲存生命週期掃描
 _myai_sync_task = None       # v2.8: 每 N 小時 headless 同步 myai168 帳號/Token
+_myai_balance_task = None    # v2.8: 每 N 分輕量輪詢交易日誌更新餘額（低點數提醒用）
 
 # H-1: ZH: 從 scheduler_policy.yaml 讀取間隔，YAML 未設定則預設 300 秒
 # EN: Read interval from scheduler_policy.yaml; default 300 s if not configured
@@ -216,25 +217,62 @@ async def _myai_sync_loop():
     logger.info("ZH: MYAI 自動同步迴圈已停止")
 
 
+async def _myai_balance_loop():
+    """ZH: 每 MYAI_BALANCE_POLL_MINUTES 分鐘，輕量抓近 MYAI_BALANCE_POLL_DAYS 天交易日誌，
+       更新各人餘額（供低點數提醒即時判斷）。一個請求涵蓋全體、cookie 重用故成本低。
+       帳密未設或間隔<=0 則不啟用。失敗只記 log。"""
+    from .config import settings
+    if not (settings.MYAI_ADMIN_EMAIL and settings.MYAI_ADMIN_PASSWORD) or settings.MYAI_BALANCE_POLL_MINUTES <= 0:
+        logger.info("ZH: MYAI 餘額輪詢未啟用（帳密未設或 MYAI_BALANCE_POLL_MINUTES=0）")
+        return
+    interval = settings.MYAI_BALANCE_POLL_MINUTES * 60
+    days = max(1, settings.MYAI_BALANCE_POLL_DAYS)
+    logger.info(f"ZH: MYAI 餘額輪詢迴圈啟動 (每 {settings.MYAI_BALANCE_POLL_MINUTES}m, 近 {days}d)")
+    from .services import myai_sync
+
+    try:
+        await asyncio.sleep(90)   # 開機後晚一點啟動，錯開首次全量同步
+    except asyncio.CancelledError:
+        return
+
+    while _scheduler_running:
+        try:
+            db = SessionLocal()
+            try:
+                res = await myai_sync.sync_transactions(db, days=days)
+                logger.debug(f"ZH: MYAI 餘額輪詢: {res}")
+            finally:
+                db.close()
+        except Exception as e:  # noqa: BLE001
+            logger.warning(f"ZH: MYAI 餘額輪詢錯誤（略過）: {e}")
+        try:
+            await asyncio.sleep(interval)
+        except asyncio.CancelledError:
+            break
+
+    logger.info("ZH: MYAI 餘額輪詢迴圈已停止")
+
+
 # ==============================================================================
 # ZH: 排程器生命週期控制
 # EN: Scheduler lifecycle control
 # ==============================================================================
 
 async def start_scheduler():
-    global _scheduler_task, _lab_scan_task, _storage_scan_task, _myai_sync_task, _scheduler_running
+    global _scheduler_task, _lab_scan_task, _storage_scan_task, _myai_sync_task, _myai_balance_task, _scheduler_running
     _scheduler_running = True
     _scheduler_task    = asyncio.create_task(_timeout_cleanup_loop())
     _lab_scan_task     = asyncio.create_task(_lab_session_scan_loop())
     _storage_scan_task = asyncio.create_task(_storage_lifecycle_loop())
     _myai_sync_task    = asyncio.create_task(_myai_sync_loop())
-    logger.info("ZH: 排程器背景工作已啟動 (timeout + lab + storage + myai) | EN: Scheduler started (4 tasks)")
+    _myai_balance_task = asyncio.create_task(_myai_balance_loop())
+    logger.info("ZH: 排程器背景工作已啟動 (timeout + lab + storage + myai + myai餘額) | EN: Scheduler started (5 tasks)")
 
 
 async def stop_scheduler():
-    global _scheduler_task, _lab_scan_task, _storage_scan_task, _myai_sync_task, _scheduler_running
+    global _scheduler_task, _lab_scan_task, _storage_scan_task, _myai_sync_task, _myai_balance_task, _scheduler_running
     _scheduler_running = False
-    for task in (_scheduler_task, _lab_scan_task, _storage_scan_task, _myai_sync_task):
+    for task in (_scheduler_task, _lab_scan_task, _storage_scan_task, _myai_sync_task, _myai_balance_task):
         if task:
             task.cancel()
             try:

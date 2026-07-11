@@ -11,6 +11,9 @@
 **/data/*.db-wal
 **/data/*.db-shm
 
+# ZH: MYAI 廠商 session cookie 快取（機敏、執行期產生，勿進版控）| EN: cached vendor session cookie (sensitive, runtime)
+**/data/myai_session.json
+
 # ZH: Python 快取 | EN: Python cache
 __pycache__/
 *.py[cod]

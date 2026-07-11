@@ -9,7 +9,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Playpen+Sans:wght@400;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="styles.css?v=20260630-25">
+    <link rel="stylesheet" href="styles.css?v=20260630-26">
     <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
@@ -1082,6 +1082,28 @@
                     <label style="display:block; margin-top:10px; font-size:12px; color:var(--text-muted);" data-i18n="ext_ai_logout_label">廠商登出網址（共用機台換手用）</label>
                     <input type="url" id="ext-ai-logout-url" placeholder="https://www.myai168.com/mcu/ai/user/logout_info" style="width:100%; margin-top:4px;" />
                     <div id="ext-ai-url-msg" style="margin-top:8px; font-size:13px;"></div>
+
+                    <!-- v2.8 低點數提醒設定 -->
+                    <hr style="border:none; border-top:1px solid var(--border-color); margin:16px 0;">
+                    <h4 style="margin:0 0 8px; font-size:14px;">
+                        <ion-icon name="warning-outline" style="margin-right:6px; color:#fbbf24; vertical-align:middle;"></ion-icon>
+                        <span data-i18n="alert_cfg_title">低點數提醒</span>
+                    </h4>
+                    <p style="color:var(--text-muted); font-size:12px; margin:0 0 10px;" data-i18n="alert_cfg_hint">
+                        學生外部 AI 剩餘點數低於門檻時，平台內彈窗提醒（每次登入只顯示一次）；可附「申請教學」連結。
+                    </p>
+                    <div style="display:grid; grid-template-columns:auto 1fr; gap:10px 12px; align-items:center; max-width:640px;">
+                        <label style="font-size:13px; color:var(--text-muted);" data-i18n="alert_cfg_threshold">低點數門檻</label>
+                        <input type="number" id="ext-ai-lowbal-threshold" min="0" placeholder="500" style="width:160px; padding:6px 10px; border-radius:8px;" />
+                        <label style="font-size:13px; color:var(--text-muted);" data-i18n="alert_cfg_guide">申請教學連結</label>
+                        <input type="url" id="ext-ai-guide-url" placeholder="https://…（可留空，之後再設定）" style="width:100%;" />
+                    </div>
+                    <div style="display:flex; gap:8px; align-items:center; margin-top:10px;">
+                        <button class="ready-btn config-save-btn" onclick="externalAi.saveAlertConfig()" style="width:auto; padding:8px 18px;">
+                            <ion-icon name="save-outline"></ion-icon> <span data-i18n="btn_save">儲存</span>
+                        </button>
+                        <span id="ext-ai-alert-msg" style="font-size:13px;"></span>
+                    </div>
                 </section>
 
                 <!-- CSV 批次匯入（v2.8：由 JS 搬入「帳號管理」分頁 #acct-slot-bindings） -->
@@ -1344,7 +1366,7 @@
     <script type="module" src="https://unpkg.com/ionicons@7.1.0/dist/ionicons/ionicons.esm.js"></script>
     <script nomodule src="https://unpkg.com/ionicons@7.1.0/dist/ionicons/ionicons.js"></script>
     <!-- 載入 Admin 邏輯 -->
-    <script src="admin.js?v=20260630-25"></script>
+    <script src="admin.js?v=20260630-26"></script>
 </body>
 
 </html>

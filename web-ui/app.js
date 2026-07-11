@@ -131,6 +131,12 @@ const TRANSLATIONS = {
         ext_ai_end_session_alert: "已登出本平台。\n\n為保護你的 MYAI 帳號，請務必『關閉所有 MYAI 分頁』（或在 MYAI 內按登出）。\n共用電腦建議使用無痕／訪客視窗。",
         ext_ai_not_provisioned: "你的 AI 助手帳號尚未開通，請聯絡管理員。",
         ext_ai_coming_soon: "AI 助手即將開放，敬請期待。",
+        lowbal_title: "外部 AI 點數偏低",
+        lowbal_desc: "你的外部 AI（MYAI）剩餘點數偏低，可能很快就無法使用。如需繼續使用，請申請加值。",
+        lowbal_remaining: "目前剩餘點數",
+        lowbal_apply: "申請教學",
+        lowbal_goto: "仍要前往",
+        lowbal_ok: "知道了",
         btn_back_hub: "返回大廳",
         // 管理員
         admin_users: "使用者管理",
@@ -508,6 +514,12 @@ const TRANSLATIONS = {
         ext_ai_end_session_alert: "Signed out of this platform.\n\nTo protect your MYAI account, please CLOSE all MYAI tabs (or log out inside MYAI).\nOn shared computers, use a private/guest window.",
         ext_ai_not_provisioned: "Your AI assistant account is not provisioned yet. Please contact the administrator.",
         ext_ai_coming_soon: "AI Assistant is coming soon. Stay tuned.",
+        lowbal_title: "External AI credits are low",
+        lowbal_desc: "Your external AI (MYAI) credits are running low and may stop working soon. Please apply for a top-up to keep using it.",
+        lowbal_remaining: "Remaining credits",
+        lowbal_apply: "How to apply",
+        lowbal_goto: "Go anyway",
+        lowbal_ok: "Got it",
         btn_back_hub: "Back to Hub",
         // Admin
         admin_users: "User Management",
@@ -888,6 +900,8 @@ function showExternalAiLanding() {
     const landing = document.getElementById('external-ai-landing');
     if (landing) landing.classList.add('active');
     loadExternalAiInfo();
+    maybeShowLowBalance();   // v2.8 低點數提醒（本次登入只彈一次）+ 啟動每 5 分輪詢
+    ensureLowBalPolling();
 }
 
 let externalAiLogoutUrl = null;  // v2.8 廠商登出網址（由 /external-ai/me 提供）
@@ -932,13 +946,86 @@ async function loadExternalAiInfo() {
             return;
         }
         if (accountEl) accountEl.textContent = data.vendor_username;
-        if (goBtn) goBtn.onclick = () => window.open(url, '_blank', 'noopener');
+        // v2.8 前往前先看快取餘額：偏低 → 先彈窗（含「仍要前往」），否則直接開廠商分頁
+        if (goBtn) goBtn.onclick = () => {
+            if (_lastBalance && _lastBalance.below) {
+                showLowBalanceModal(_lastBalance, url);
+            } else {
+                window.open(url, '_blank', 'noopener');
+            }
+        };
         if (activeBox) activeBox.classList.remove('hidden');
     } catch (e) {
         if (emptyMsg) emptyMsg.textContent = t('ext_ai_coming_soon');
         if (emptyBox) emptyBox.classList.remove('hidden');
     }
 }
+
+// ==============================================================================
+// v2.8 外部 AI 低點數提醒：查 /my-balance → 偏低就彈窗（本次登入只顯示一次）
+// ==============================================================================
+let _lastBalance = null;                 // 最近一次 my-balance 結果（供前往按鈕同步判斷）
+let _lowBalShownThisSession = false;      // 本次登入是否已彈過
+let _lowBalIntervalStarted = false;
+
+async function refreshMyBalance() {
+    if (!authToken) return null;
+    try {
+        const res = await fetch(`${API_BASE}/external-ai/my-balance`, {
+            headers: { 'Authorization': `Bearer ${authToken}` }
+        });
+        if (!res.ok) return null;
+        _lastBalance = await res.json();
+        return _lastBalance;
+    } catch (e) { return null; }
+}
+
+async function maybeShowLowBalance() {
+    const d = await refreshMyBalance();
+    if (d && d.below && !_lowBalShownThisSession) {
+        _lowBalShownThisSession = true;
+        showLowBalanceModal(d, null);
+    }
+}
+
+// ZH: 登入期間每 5 分輕量再查一次（後端每 5 分已更新餘額）；本次登入仍只彈一次
+function ensureLowBalPolling() {
+    if (_lowBalIntervalStarted) return;
+    _lowBalIntervalStarted = true;
+    setInterval(() => { if (authToken) maybeShowLowBalance(); }, 5 * 60 * 1000);
+}
+
+function showLowBalanceModal(d, gotoUrl) {
+    const modal = document.getElementById('lowbal-modal');
+    if (!modal) return;
+    const ptsEl = document.getElementById('lowbal-points');
+    if (ptsEl) ptsEl.textContent = (d && d.points != null) ? Number(d.points).toLocaleString() : '—';
+    // 申請教學連結（有設定才顯示）；用 inline display 切換（web-ui 的 .hidden 蓋不過 .ready-btn）
+    const guideBtn = document.getElementById('lowbal-guide-btn');
+    if (guideBtn) {
+        if (d && d.apply_guide_url) { guideBtn.href = d.apply_guide_url; guideBtn.style.display = ''; }
+        else guideBtn.style.display = 'none';
+    }
+    // 「仍要前往」只有從『前往 AI 助手』觸發時才顯示
+    const gotoBtn = document.getElementById('lowbal-goto-btn');
+    if (gotoBtn) {
+        if (gotoUrl) {
+            gotoBtn.style.display = '';
+            gotoBtn.onclick = () => { window.open(gotoUrl, '_blank', 'noopener'); closeLowBalanceModal(); };
+        } else {
+            gotoBtn.style.display = 'none';
+        }
+    }
+    modal.classList.remove('hidden');
+}
+
+function closeLowBalanceModal() {
+    document.getElementById('lowbal-modal')?.classList.add('hidden');
+}
+
+document.getElementById('lowbal-close-btn')?.addEventListener('click', closeLowBalanceModal);
+document.getElementById('lowbal-ok-btn')?.addEventListener('click', closeLowBalanceModal);
+document.getElementById('lowbal-backdrop')?.addEventListener('click', closeLowBalanceModal);
 
 // v2.8 共用機台安全：可重用登出。清掉 token(localStorage) + /code/ 認證 cookie + 小基記憶，
 // 確保共用機台換手時下一位使用者不會延續上一位的登入狀態。

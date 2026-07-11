@@ -16,6 +16,7 @@ EN: Purpose: Temporarily route non-admin users to a partner vendor (myai168)
 """
 
 from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from typing import Any
 import csv
@@ -32,6 +33,40 @@ EXTERNAL_AI_URL_KEY = "external_ai_url"
 EXTERNAL_AI_LOGOUT_KEY = "external_ai_logout_url"
 # ZH: 已實測的 myai 登出端點（GET 導向即清 session）| EN: verified myai logout endpoint
 DEFAULT_MYAI_LOGOUT_URL = "https://www.myai168.com/mcu/ai/user/logout_info"
+
+# ZH: v2.8 低點數提醒設定（存 SystemConfig，admin 可調）
+MYAI_LOW_BALANCE_KEY = "myai_low_balance_threshold"   # 低於此絕對點數 → 提醒學生
+MYAI_APPLY_GUIDE_KEY = "myai_apply_guide_url"          # 申請教學連結（可空，之後再設定）
+DEFAULT_LOW_BALANCE = 500
+
+
+class AlertConfig(BaseModel):
+    low_balance_threshold: int | None = None
+    apply_guide_url: str | None = None
+
+
+def _low_balance_threshold(db: Session) -> int:
+    try:
+        return int(crud.get_system_config(db, MYAI_LOW_BALANCE_KEY, str(DEFAULT_LOW_BALANCE)) or DEFAULT_LOW_BALANCE)
+    except (TypeError, ValueError):
+        return DEFAULT_LOW_BALANCE
+
+
+def _current_myai_points(db: Session, current_user: models.User):
+    """ZH: 取登入者當前的 myai 剩餘點數（綁定 sn 優先，退 email）；無則 None。"""
+    acc = crud.get_external_account_by_user_id(db, current_user.id)
+    row = None
+    if acc:
+        if acc.myai_vendor_sn:
+            row = db.query(models.MyaiAccount).filter(
+                models.MyaiAccount.vendor_sn == acc.myai_vendor_sn).first()
+        if not row and acc.vendor_username:
+            row = db.query(models.MyaiAccount).filter(
+                models.MyaiAccount.email.ilike(acc.vendor_username)).first()
+    if not row and current_user.email:
+        row = db.query(models.MyaiAccount).filter(
+            models.MyaiAccount.email.ilike(current_user.email)).first()
+    return row.points if row else None
 
 
 def require_admin(current_user: models.User = Depends(get_current_user)) -> models.User:
@@ -96,6 +131,24 @@ def get_my_external_ai(
     )
 
 
+@router.get("/my-balance")
+def get_my_balance(
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+) -> Any:
+    """ZH: 登入者的外部 AI 剩餘點數 + 是否低於門檻（供前端低點數彈窗判斷）。
+       EN: current user's remaining external-AI points + low-balance flag."""
+    points = _current_myai_points(db, current_user)
+    threshold = _low_balance_threshold(db)
+    guide = crud.get_system_config(db, MYAI_APPLY_GUIDE_KEY, "")
+    return {
+        "points": points,
+        "threshold": threshold,
+        "below": (points is not None and points < threshold),
+        "apply_guide_url": (guide or None),
+    }
+
+
 # ==============================================================================
 # ZH: 管理端 — 廠商網址設定 | EN: Admin — vendor URL setting
 # ==============================================================================
@@ -130,6 +183,40 @@ def set_external_url(
         url=crud.get_system_config(db, EXTERNAL_AI_URL_KEY, ""),
         logout_url=crud.get_system_config(db, EXTERNAL_AI_LOGOUT_KEY, DEFAULT_MYAI_LOGOUT_URL),
     )
+
+
+@router.get("/admin/alert-config")
+def get_alert_config(
+    db: Session = Depends(get_db),
+    _: models.User = Depends(require_admin),
+) -> Any:
+    """ZH: 低點數提醒設定（門檻 + 申請教學連結）。"""
+    return {
+        "low_balance_threshold": _low_balance_threshold(db),
+        "apply_guide_url": crud.get_system_config(db, MYAI_APPLY_GUIDE_KEY, ""),
+    }
+
+
+@router.put("/admin/alert-config")
+def set_alert_config(
+    payload: AlertConfig,
+    db: Session = Depends(get_db),
+    _: models.User = Depends(require_admin),
+) -> Any:
+    if payload.low_balance_threshold is not None:
+        crud.set_system_config(
+            db, MYAI_LOW_BALANCE_KEY, str(max(0, int(payload.low_balance_threshold))),
+            description="外部 AI 低點數提醒門檻（低於此絕對點數 → 提醒學生）",
+        )
+    if payload.apply_guide_url is not None:
+        crud.set_system_config(
+            db, MYAI_APPLY_GUIDE_KEY, payload.apply_guide_url.strip(),
+            description="外部 AI 點數申請教學連結（顯示在低點數彈窗）",
+        )
+    return {
+        "low_balance_threshold": _low_balance_threshold(db),
+        "apply_guide_url": crud.get_system_config(db, MYAI_APPLY_GUIDE_KEY, ""),
+    }
 
 
 # ==============================================================================

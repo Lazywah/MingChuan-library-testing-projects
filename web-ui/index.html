@@ -16,7 +16,7 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
     <!-- ZH: 引入主任務面板樣式 | EN: Import main stylesheet -->
-    <link rel="stylesheet" href="styles.css?v=20260630-6">
+    <link rel="stylesheet" href="styles.css?v=20260630-8">
 
     <!-- ZH: 引入 Google Material Icons | EN: Import Google Material Icons -->
     <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
@@ -1479,6 +1479,36 @@
         </div>
     </div>
 
+    <!-- v2.8 外部 AI 低點數提醒彈窗（登入/進大廳/前往前檢查，本次登入只顯示一次） -->
+    <div id="lowbal-modal" class="tutorial-modal hidden">
+        <div class="tutorial-backdrop" id="lowbal-backdrop"></div>
+        <div class="tutorial-content form-box-panel login-modal" style="max-width: 440px; width: 90%;">
+            <button class="tutorial-close" id="lowbal-close-btn"><ion-icon name="close-outline"></ion-icon></button>
+            <h2 style="margin-bottom: 14px; display:flex; align-items:center; gap:8px;">
+                <ion-icon name="warning-outline" style="color:#fbbf24;"></ion-icon>
+                <span data-i18n="lowbal_title">外部 AI 點數偏低</span>
+            </h2>
+            <p style="color:var(--text-muted); font-size:14px; line-height:1.6; margin:0 0 14px;" data-i18n="lowbal_desc">
+                你的外部 AI（MYAI）剩餘點數偏低，可能很快就無法使用。如需繼續使用，請申請加值。
+            </p>
+            <div style="background:rgba(251,191,36,0.1); border:1px solid rgba(251,191,36,0.35); border-radius:10px; padding:12px 14px; margin-bottom:18px;">
+                <div style="font-size:12px; color:var(--text-muted);" data-i18n="lowbal_remaining">目前剩餘點數</div>
+                <div style="font-size:24px; font-weight:700; font-family:monospace;"><span id="lowbal-points">—</span></div>
+            </div>
+            <div style="display:flex; gap:10px; flex-wrap:wrap;">
+                <a id="lowbal-guide-btn" class="ready-btn" target="_blank" rel="noopener" style="flex:1 1 140px; text-align:center; text-decoration:none; display:none;">
+                    <ion-icon name="school-outline" style="margin-right:6px;"></ion-icon><span data-i18n="lowbal_apply">申請教學</span>
+                </a>
+                <button id="lowbal-goto-btn" class="ready-btn" style="flex:1 1 120px; display:none;">
+                    <ion-icon name="open-outline" style="margin-right:6px;"></ion-icon><span data-i18n="lowbal_goto">仍要前往</span>
+                </button>
+                <button id="lowbal-ok-btn" class="ready-btn" style="flex:1 1 100px;">
+                    <span data-i18n="lowbal_ok">知道了</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
     <!-- ZH: v2.2 概念說明浮動 tooltip | EN: v2.2 concept tooltip popover -->
     <div id="info-tip-popover" class="info-tip-popover hidden" role="dialog" aria-modal="false">
         <div class="info-tip-popover-header">
@@ -1496,7 +1526,7 @@
     <!-- ZH: 載入圖標庫與主程式碼 | EN: Load Icon library and Main Logic -->
     <script type="module" src="https://unpkg.com/ionicons@7.1.0/dist/ionicons/ionicons.esm.js"></script>
     <script nomodule src="https://unpkg.com/ionicons@7.1.0/dist/ionicons/ionicons.js"></script>
-    <script src="app.js?v=20260630-6"></script>
+    <script src="app.js?v=20260630-8"></script>
     <!-- ZH: v2.6 客服／導覽浮動助手 | EN: v2.6 floating support/guide assistant -->
     <script src="assistant-widget.js?v=20260625-4"></script>
 </body>

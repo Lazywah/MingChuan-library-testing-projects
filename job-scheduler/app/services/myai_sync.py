@@ -418,6 +418,33 @@ async def sync_transactions(db: Session, days: int = 90) -> dict:
         existing.add(r["dedup_key"])
         created += 1
     db.commit()
-    logger.info("MYAI tx-sync: fetched=%d created=%d (days=%d)", len(rows), created, days)
+
+    # ZH: v2.8 用本次抓到的「最新一列餘額」更新 myai_accounts.points，讓當前餘額隨交易變新
+    #     （供低點數提醒即時判斷）；只更新本窗口有活動的人，其餘維持不變。
+    bal_updated = _refresh_points_from_tx(db, rows)
+
+    logger.info("MYAI tx-sync: fetched=%d created=%d bal_updated=%d (days=%d)",
+                len(rows), created, bal_updated, days)
     return {"status": "ok", "fetched": len(rows), "created": created,
-            "skipped": len(rows) - created, "days": days}
+            "skipped": len(rows) - created, "balance_updated": bal_updated, "days": days}
+
+
+def _refresh_points_from_tx(db: Session, rows: list[dict]) -> int:
+    """ZH: 以每位使用者(vendor_sn)在本批交易中最新一列的餘額，更新 myai_accounts.points。
+       EN: update myai_accounts.points to each user's latest tx balance in this batch."""
+    latest: dict[str, tuple] = {}   # vendor_sn -> (occurred_at, balance)
+    for r in rows:
+        sn, occ = r.get("vendor_sn"), r.get("occurred_at")
+        if not sn or occ is None:
+            continue
+        if sn not in latest or occ > latest[sn][0]:
+            latest[sn] = (occ, r["balance"])
+    updated = 0
+    for sn, (_occ, bal) in latest.items():
+        acc = db.query(models.MyaiAccount).filter(models.MyaiAccount.vendor_sn == sn).first()
+        if acc and acc.points != bal:
+            acc.points = bal
+            updated += 1
+    if updated:
+        db.commit()
+    return updated
