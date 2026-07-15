@@ -127,6 +127,7 @@ const TRANSLATIONS = {
         ext_ai_go: "前往 AI 助手",
         ext_ai_no_store_notice: "提醒：對話內容不會儲存在本平台。",
         ext_ai_shared_notice: "共用電腦提醒：用完請按「結束使用」登出本平台，並關閉 MYAI 分頁，避免下一位使用者進到你的帳號。",
+        ext_ai_fresh_login_notice: "點「前往」會先登出前一位使用者、再開啟登入頁，請以自己的帳號登入。",
         ext_ai_end_session: "結束使用 / 換人",
         ext_ai_end_session_alert: "已登出本平台。\n\n為保護你的 MYAI 帳號，請務必『關閉所有 MYAI 分頁』（或在 MYAI 內按登出）。\n共用電腦建議使用無痕／訪客視窗。",
         ext_ai_not_provisioned: "你的 AI 助手帳號尚未開通，請聯絡管理員。",
@@ -510,6 +511,7 @@ const TRANSLATIONS = {
         ext_ai_go: "Go to AI Assistant",
         ext_ai_no_store_notice: "Note: conversations are not stored on this platform.",
         ext_ai_shared_notice: "Shared computer? When done, click \"End session\" to log out here, and close the MYAI tab so the next user can't reach your account.",
+        ext_ai_fresh_login_notice: "Clicking \"Go\" signs out the previous user first, then opens the login page — please sign in with your own account.",
         ext_ai_end_session: "End session / switch user",
         ext_ai_end_session_alert: "Signed out of this platform.\n\nTo protect your MYAI account, please CLOSE all MYAI tabs (or log out inside MYAI).\nOn shared computers, use a private/guest window.",
         ext_ai_not_provisioned: "Your AI assistant account is not provisioned yet. Please contact the administrator.",
@@ -946,12 +948,12 @@ async function loadExternalAiInfo() {
             return;
         }
         if (accountEl) accountEl.textContent = data.vendor_username;
-        // v2.8 前往前先看快取餘額：偏低 → 先彈窗（含「仍要前往」），否則直接開廠商分頁
+        // v2.8 前往前先看快取餘額：偏低 → 先彈窗（含「仍要前往」），否則直接前往（登出→登入）
         if (goBtn) goBtn.onclick = () => {
             if (_lastBalance && _lastBalance.below) {
-                showLowBalanceModal(_lastBalance, url);
+                showLowBalanceModal(_lastBalance, true);
             } else {
-                window.open(url, '_blank', 'noopener');
+                openMyaiFreshLogin();
             }
         };
         if (activeBox) activeBox.classList.remove('hidden');
@@ -959,6 +961,28 @@ async function loadExternalAiInfo() {
         if (emptyMsg) emptyMsg.textContent = t('ext_ai_coming_soon');
         if (emptyBox) emptyBox.classList.remove('hidden');
     }
+}
+
+// ==============================================================================
+// v2.8 前往外部 AI：先登出前一位（殺 myai session）→ 約 1 秒後二次跳轉到登入頁
+//      → 使用者以自己帳號登入。取代舊「結束使用 / 換人」按鈕（登出改在使用前自動做）。
+// ==============================================================================
+function _myaiLoginUrl() {
+    // ZH: 從登出網址同源推導登入頁：.../user/logout_info → .../user/login
+    const lo = (externalAiLogoutUrl || '').trim();
+    if (lo) return lo.replace(/\/[^/]*$/, '/login');
+    return 'https://www.myai168.com/mcu/ai/user/login';
+}
+
+function openMyaiFreshLogin() {
+    const logoutUrl = (externalAiLogoutUrl || '').trim() || 'https://www.myai168.com/mcu/ai/user/logout_info';
+    const loginUrl = _myaiLoginUrl();
+    // 不加 noopener → 保留 win 控制權，才能對這個（跨網域）分頁做二次跳轉
+    const win = window.open(logoutUrl, '_blank');
+    if (!win) { window.open(loginUrl, '_blank', 'noopener'); return; }  // 被封鎖 → 退回直接開登入頁
+    setTimeout(() => {
+        try { if (win && !win.closed) win.location.replace(loginUrl); } catch (e) { /* 跨網域寫入被拒則忽略 */ }
+    }, 1000);   // ~1 秒讓登出完成（清 session cookie）再轉登入頁
 }
 
 // ==============================================================================
@@ -984,7 +1008,7 @@ async function maybeShowLowBalance() {
     const d = await refreshMyBalance();
     if (d && d.below && !_lowBalShownThisSession) {
         _lowBalShownThisSession = true;
-        showLowBalanceModal(d, null);
+        showLowBalanceModal(d, false);
     }
 }
 
@@ -995,7 +1019,7 @@ function ensureLowBalPolling() {
     setInterval(() => { if (authToken) maybeShowLowBalance(); }, 5 * 60 * 1000);
 }
 
-function showLowBalanceModal(d, gotoUrl) {
+function showLowBalanceModal(d, withGoto) {
     const modal = document.getElementById('lowbal-modal');
     if (!modal) return;
     const ptsEl = document.getElementById('lowbal-points');
@@ -1006,12 +1030,12 @@ function showLowBalanceModal(d, gotoUrl) {
         if (d && d.apply_guide_url) { guideBtn.href = d.apply_guide_url; guideBtn.style.display = ''; }
         else guideBtn.style.display = 'none';
     }
-    // 「仍要前往」只有從『前往 AI 助手』觸發時才顯示
+    // 「仍要前往」只有從『前往 AI 助手』觸發時才顯示；一樣走登出→登入的新流程
     const gotoBtn = document.getElementById('lowbal-goto-btn');
     if (gotoBtn) {
-        if (gotoUrl) {
+        if (withGoto) {
             gotoBtn.style.display = '';
-            gotoBtn.onclick = () => { window.open(gotoUrl, '_blank', 'noopener'); closeLowBalanceModal(); };
+            gotoBtn.onclick = () => { openMyaiFreshLogin(); closeLowBalanceModal(); };
         } else {
             gotoBtn.style.display = 'none';
         }
@@ -1122,17 +1146,6 @@ document.addEventListener('DOMContentLoaded', () => {
     document.querySelectorAll('#logout-btn').forEach(btn => {
         btn.addEventListener('click', () => doLogout());
     });
-
-    // v2.8 共用機台換手：結束使用 = 登出本平台 + 清除憑證 + 提醒關閉 MYAI 分頁
-    const extLogoutBtn = document.getElementById('external-ai-logout-btn');
-    if (extLogoutBtn) {
-        extLogoutBtn.addEventListener('click', async () => {
-            // 先開廠商登出頁殺掉 myai session，再登出本平台
-            if (externalAiLogoutUrl) window.open(externalAiLogoutUrl, '_blank', 'noopener');
-            await doLogout();
-            alert(t('ext_ai_end_session_alert'));
-        });
-    }
 
     // ZH: 使用者下拉選單切換 | EN: User dropdown toggle
     const userDropdownToggle = document.getElementById('user-dropdown-toggle');
