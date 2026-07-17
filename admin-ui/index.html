@@ -9,7 +9,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Playpen+Sans:wght@400;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="styles.css?v=20260630-26">
+    <link rel="stylesheet" href="styles.css?v=20260630-27">
     <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
@@ -908,14 +908,60 @@
                     <div style="margin-top:16px;">
                         <div style="display:flex; justify-content:space-between; align-items:center; margin:0 0 6px;">
                             <h4 style="font-size:13px; margin:0;" data-i18n="consumption_models">模型／工具別用量</h4>
-                            <select id="model-metric-select" class="config-select" style="padding:2px 8px; border-radius:8px; font-size:12px; width:auto;" onchange="switchModelMetric(this.value)">
-                                <option value="points" data-i18n="metric_points">Token 點數</option>
-                                <option value="count" data-i18n="metric_count">呼叫次數</option>
-                            </select>
+                            <div style="display:flex; gap:8px; align-items:center;">
+                                <!-- v2.9 分群維度：依模型 / 依類別 / 依供應商（來自模型對應表） -->
+                                <select id="model-group-select" class="config-select" style="padding:2px 8px; border-radius:8px; font-size:12px; width:auto;" onchange="switchModelGroup(this.value)">
+                                    <option value="model" data-i18n="group_by_model">依模型</option>
+                                    <option value="category" data-i18n="group_by_category">依類別</option>
+                                    <option value="provider" data-i18n="group_by_provider">依供應商</option>
+                                </select>
+                                <select id="model-metric-select" class="config-select" style="padding:2px 8px; border-radius:8px; font-size:12px; width:auto;" onchange="switchModelMetric(this.value)">
+                                    <option value="points" data-i18n="metric_points">Token 點數</option>
+                                    <option value="count" data-i18n="metric_count">呼叫次數</option>
+                                </select>
+                            </div>
                         </div>
                         <div style="padding:16px; background:rgba(128,128,128,0.1); border-radius:8px; position:relative;">
                             <canvas id="modelBreakdownChart" style="max-height:320px;"></canvas>
                         </div>
+                    </div>
+                </section>
+
+                <!-- v2.9 模型對應表：廠商原始代碼 ↔ 顯示名稱/供應商/類別（可手動編輯、新增） -->
+                <section class="widget form-box-panel" style="grid-column: 1 / -1;">
+                    <div class="widget-header split">
+                        <h3><ion-icon name="swap-horizontal-outline" style="margin-right:6px;"></ion-icon>
+                            <span data-i18n="model_map_title">模型對應表</span></h3>
+                        <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+                            <input type="text" id="model-map-search" class="config-select" placeholder="搜尋代碼／名稱／供應商"
+                                   style="padding:4px 10px; border-radius:8px; width:200px; font-size:12px;" oninput="modelMap.render()">
+                            <button class="ready-btn" style="width:auto; padding:5px 12px; margin:0; font-size:12px;" onclick="modelMap.seed()">
+                                <ion-icon name="sparkles-outline"></ion-icon> <span data-i18n="model_map_seed">自動帶入未對應</span>
+                            </button>
+                            <button class="ready-btn" style="width:auto; padding:5px 12px; margin:0; font-size:12px; background:#10b981;" onclick="modelMap.add()">
+                                <ion-icon name="add-outline"></ion-icon> <span data-i18n="model_map_add">新增代碼</span>
+                            </button>
+                            <ion-icon name="refresh-circle-outline" onclick="modelMap.load()" class="refresh-icon" title="Refresh"></ion-icon>
+                        </div>
+                    </div>
+                    <p style="color:var(--text-muted); font-size:12px; margin:0 0 8px;" data-i18n="model_map_hint">
+                        廠商備註欄給的是原始代碼（如 gpt_5_6_sol）。此表只影響「數據分析的顯示與分群」，不會改寫原始交易紀錄，改錯了隨時改回。紅底＝交易中出現但尚未對應。
+                    </p>
+                    <p id="model-map-stats" style="font-size:12px; margin:0 0 10px; color:var(--text-muted);">-</p>
+                    <div class="admin-table-wrap scrollbar-custom" style="max-height:420px; overflow-y:auto;">
+                        <table class="admin-table">
+                            <thead><tr>
+                                <th data-i18n="model_map_code">廠商原始代碼</th>
+                                <th data-i18n="model_map_name">顯示名稱</th>
+                                <th data-i18n="model_map_provider">供應商</th>
+                                <th data-i18n="model_map_category">類別</th>
+                                <th style="text-align:right;" data-i18n="model_map_tx">交易筆數</th>
+                                <th data-i18n="col_actions">操作</th>
+                            </tr></thead>
+                            <tbody id="model-map-body">
+                                <tr><td colspan="6" style="text-align:center; color:var(--text-muted); padding:14px;">載入中…</td></tr>
+                            </tbody>
+                        </table>
                     </div>
                 </section>
 
@@ -1366,7 +1412,7 @@
     <script type="module" src="https://unpkg.com/ionicons@7.1.0/dist/ionicons/ionicons.esm.js"></script>
     <script nomodule src="https://unpkg.com/ionicons@7.1.0/dist/ionicons/ionicons.js"></script>
     <!-- 載入 Admin 邏輯 -->
-    <script src="admin.js?v=20260630-26"></script>
+    <script src="admin.js?v=20260630-27"></script>
 </body>
 
 </html>

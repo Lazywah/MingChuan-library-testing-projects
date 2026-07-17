@@ -244,6 +244,19 @@ const TRANSLATIONS = {
         user_query_hint: "輸入姓名、Email 或序號查詢某人的使用明細（消耗、模型別、逐筆事件）。",
         metric_points: "Token 點數",
         metric_count: "呼叫次數",
+        // v2.9 模型對應表 + 分群
+        group_by_model: "依模型",
+        group_by_category: "依類別",
+        group_by_provider: "依供應商",
+        model_map_title: "模型對應表",
+        model_map_hint: "廠商備註欄給的是原始代碼（如 gpt_5_6_sol）。此表只影響「數據分析的顯示與分群」，不會改寫原始交易紀錄，改錯了隨時改回。紅底＝交易中出現但尚未對應。",
+        model_map_code: "廠商原始代碼",
+        model_map_name: "顯示名稱",
+        model_map_provider: "供應商",
+        model_map_category: "類別",
+        model_map_tx: "交易筆數",
+        model_map_seed: "自動帶入未對應",
+        model_map_add: "新增代碼",
         consumption_7d: "近 7 天",
         consumption_30d: "近 30 天",
         consumption_90d: "近 90 天",
@@ -552,6 +565,19 @@ const TRANSLATIONS = {
         user_query_hint: "Search by name, email, or ID to see one person's usage detail (consumption, models, events).",
         metric_points: "Token points",
         metric_count: "Call count",
+        // v2.9 model map + grouping
+        group_by_model: "By model",
+        group_by_category: "By category",
+        group_by_provider: "By provider",
+        model_map_title: "Model map",
+        model_map_hint: "The vendor logs raw codes (e.g. gpt_5_6_sol). This table only affects how analytics displays and groups them — raw transactions are never rewritten, so any mistake is reversible. Red rows appear in transactions but are not mapped yet.",
+        model_map_code: "Vendor code",
+        model_map_name: "Display name",
+        model_map_provider: "Provider",
+        model_map_category: "Category",
+        model_map_tx: "Transactions",
+        model_map_seed: "Auto-fill unmapped",
+        model_map_add: "Add code",
         consumption_7d: "Last 7 days",
         consumption_30d: "Last 30 days",
         consumption_90d: "Last 90 days",
@@ -700,7 +726,9 @@ let topConsumersInstance = null;       // v2.8 Top 消耗者
 let modelBreakdownInstance = null;     // v2.8 模型/工具別用量
 let _pieMetric = 'points';             // v2.8 圓餅(工具/模型)度量：points / count
 let _barMetric = 'points';             // v2.8 長條(模型別用量)度量：points / count（與圓餅獨立）
+let _barGroup = 'model';               // v2.9 長條分群維度：model / category / provider
 let _modelsRaw = [];                   // v2.8 原始模型聚合(供切換度量重繪)
+let _modelMapCache = null;             // v2.9 模型對應表(含未對應代碼)
 
 function switchAdminMainTab(tabId) {
     document.querySelectorAll('.admin-side-tab').forEach(btn => btn.classList.remove('active'));
@@ -1265,6 +1293,7 @@ async function fetchAnalyticsData() {
         if (res.status === 401) { handleAuthError(); return; }
         if (!res.ok) throw new Error('Failed to fetch analytics data');
         renderAnalyticsUI(await res.json());
+        modelMap.load();          // v2.9 模型對應表（消耗分析的顯示名稱來源）
         fetchConsumptionData();   // v2.8 消耗分析一併載入
     } catch (e) {
         console.error(e);
@@ -1342,13 +1371,32 @@ function renderConsumptionUI(data) {
     renderModelBar();
 }
 
-// v2.8 依「圓餅度量」(points/count)建工具/模型圓餅資料
+// v2.8 依「圓餅度量」(points/count)建工具/模型圓餅資料（v2.9 標籤改用對應表顯示名稱）
 function _buildModelPieData() {
     const useCount = _pieMetric === 'count';
     _pieData.model = {
-        labels: _modelsRaw.map(m => m.model),
+        labels: _modelsRaw.map(m => m.display_name || m.model),
         data: _modelsRaw.map(m => useCount ? (m.count || 0) : (m.points || 0)),
     };
+}
+
+// v2.9 依 _barGroup 把模型聚合捲成「依模型 / 依類別 / 依供應商」
+//      回 [{label, points, count}]，未對應者標籤加「⚠」提示去補對應表。
+function _groupedModelRows() {
+    if (_barGroup === 'model') {
+        return _modelsRaw.map(m => ({
+            label: (m.display_name || m.model) + (m.mapped ? '' : ' ⚠'),
+            points: m.points || 0, count: m.count || 0,
+        }));
+    }
+    const key = _barGroup === 'category' ? 'category' : 'provider';
+    const agg = {};
+    _modelsRaw.forEach(m => {
+        const k = m[key] || '未對應';
+        const a = agg[k] || (agg[k] = { label: k, points: 0, count: 0 });
+        a.points += (m.points || 0); a.count += (m.count || 0);
+    });
+    return Object.values(agg);
 }
 
 // v2.8 依度量繪「模型/工具別用量」長條；tooltip 帶另一度量
@@ -1356,13 +1404,16 @@ function renderModelBar() {
     const txtColor = getComputedStyle(document.body).getPropertyValue('--text-primary') || '#888';
     const tl = TRANSLATIONS[currentLang] || {};
     const useCount = _barMetric === 'count';
-    const mdl = _modelsRaw.slice(0, 15);
+    // v2.9 依目前分群維度取列，並依當前度量由大到小排序後取前 15
+    const mdl = _groupedModelRows()
+        .sort((a, b) => (useCount ? b.count - a.count : b.points - a.points))
+        .slice(0, 15);
     const el = document.getElementById('modelBreakdownChart');
     if (!el) return;
     if (modelBreakdownInstance) modelBreakdownInstance.destroy();
     modelBreakdownInstance = new Chart(el.getContext('2d'), {
         type: 'bar',
-        data: { labels: mdl.map(m => m.model), datasets: [{
+        data: { labels: mdl.map(m => m.label), datasets: [{
             label: useCount ? (tl.metric_count || 'Calls') : (tl.metric_points || 'Points'),
             data: mdl.map(m => useCount ? (m.count || 0) : (m.points || 0)),
             backgroundColor: 'rgba(167,139,250,0.7)', borderColor: 'rgba(167,139,250,1)',
@@ -1385,12 +1436,154 @@ function switchModelMetric(v) {
     renderModelBar();
 }
 
+// v2.9 切換「長條」分群維度：依模型 / 依類別 / 依供應商
+function switchModelGroup(v) {
+    _barGroup = v || 'model';
+    renderModelBar();
+}
+
 // v2.8 切換「圓餅」度量（獨立，只影響工具/模型圓餅）
 function switchPieMetric(v) {
     _pieMetric = v || 'points';
     _buildModelPieData();
     if (_pieMode === 'model') renderPie();
 }
+
+// ==============================================================================
+// ZH: v2.9 模型對應表 —— 廠商原始代碼 ↔ 顯示名稱/供應商/類別（可手動編輯、新增）
+// EN: v2.9 model map — editable vendor-code ↔ display-name/provider/category table
+// ZH: 只影響「顯示」，原始交易紀錄不動；改錯了改回來即可。
+// ==============================================================================
+const modelMap = {
+    async load() {
+        try {
+            const res = await fetch(`${API_BASE}/external-ai/admin/model-map`, {
+                headers: { 'Authorization': `Bearer ${authToken}` }
+            });
+            if (res.status === 401) { handleAuthError(); return; }
+            if (!res.ok) return;
+            _modelMapCache = await res.json();
+            modelMap.render();
+        } catch (e) { console.error(e); }
+    },
+
+    // ZH: 一列 = 一個代碼；unmapped 的列先不存在 DB（無 id），存檔時才建立
+    _row(r, unmapped) {
+        const d = _modelMapCache || {};
+        const opts = (list, cur) => (list || []).map(o =>
+            `<option value="${o}" ${o === cur ? 'selected' : ''}>${o}</option>`).join('');
+        const esc = (s) => String(s ?? '').replace(/"/g, '&quot;');
+        return `<tr data-code="${esc(r.code)}" data-id="${esc(r.id || '')}"
+                    style="${unmapped ? 'background:rgba(239,68,68,0.08);' : ''}">
+            <td><code style="font-size:12px;">${esc(r.code)}</code>
+                ${unmapped ? '<span style="color:#ef4444; font-size:11px; margin-left:6px;">未對應</span>' : ''}</td>
+            <td><input class="config-select mm-name" value="${esc(r.display_name)}"
+                       style="padding:3px 8px; border-radius:6px; width:100%; font-size:12px;"></td>
+            <td><select class="config-select mm-provider" style="padding:3px 6px; border-radius:6px; font-size:12px;">
+                    <option value="">—</option>${opts(d.providers, r.provider)}</select></td>
+            <td><select class="config-select mm-category" style="padding:3px 6px; border-radius:6px; font-size:12px;">
+                    <option value="">—</option>${opts(d.categories, r.category)}</select></td>
+            <td style="text-align:right;">${Number(r.tx_count || 0).toLocaleString()}</td>
+            <td style="white-space:nowrap;">
+                <ion-icon name="save-outline" title="儲存" class="refresh-icon"
+                          style="cursor:pointer; font-size:18px;" onclick="modelMap.save(this)"></ion-icon>
+                ${r.id ? `<ion-icon name="trash-outline" title="刪除" class="refresh-icon"
+                          style="cursor:pointer; font-size:18px; margin-left:8px; color:#ef4444;"
+                          onclick="modelMap.remove(this)"></ion-icon>` : ''}
+            </td>
+        </tr>`;
+    },
+
+    render() {
+        const d = _modelMapCache; if (!d) return;
+        const body = document.getElementById('model-map-body');
+        const stats = document.getElementById('model-map-stats');
+        if (!body) return;
+        const q = (document.getElementById('model-map-search')?.value || '').trim().toLowerCase();
+        const hit = (r) => !q || (r.code || '').toLowerCase().includes(q) ||
+                           (r.display_name || '').toLowerCase().includes(q) ||
+                           (r.provider || '').toLowerCase().includes(q) ||
+                           (r.category || '').toLowerCase().includes(q);
+        // ZH: 未對應排最前面（要先處理的東西擺上面）
+        const rows = (d.unmapped || []).filter(hit).map(r => modelMap._row(r, true))
+                  .concat((d.items || []).filter(hit).map(r => modelMap._row(r, false)));
+        body.innerHTML = rows.length ? rows.join('')
+            : `<tr><td colspan="6" style="text-align:center; color:var(--text-muted); padding:14px;">沒有符合的代碼</td></tr>`;
+        if (stats) {
+            const un = d.unmapped_count || 0;
+            stats.innerHTML = `共 <b>${d.total_codes || 0}</b> 個代碼出現在交易紀錄；已對應 <b>${d.mapped_count || 0}</b>`
+                + (un ? `，<b style="color:#ef4444;">未對應 ${un}</b>` : '，<b style="color:#10b981;">全部已對應</b>');
+        }
+    },
+
+    async save(el) {
+        const tr = el.closest('tr');
+        const payload = {
+            code: tr.dataset.code,
+            display_name: tr.querySelector('.mm-name').value,
+            provider: tr.querySelector('.mm-provider').value,
+            category: tr.querySelector('.mm-category').value,
+        };
+        try {
+            const res = await fetch(`${API_BASE}/external-ai/admin/model-map`, {
+                method: 'POST',
+                headers: { 'Authorization': `Bearer ${authToken}`, 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+            if (!res.ok) throw new Error((await res.json()).detail || 'save failed');
+            showToast('已儲存對應');
+            await modelMap.load();
+            fetchConsumptionData();      // ZH: 圖表跟著換名稱/分群
+        } catch (e) { showToast(`儲存失敗：${e.message}`, true); }
+    },
+
+    async remove(el) {
+        const tr = el.closest('tr');
+        if (!confirm(`確定刪除「${tr.dataset.code}」的對應？（原始交易紀錄不受影響，之後會顯示為未對應）`)) return;
+        try {
+            const res = await fetch(`${API_BASE}/external-ai/admin/model-map/${tr.dataset.id}`, {
+                method: 'DELETE', headers: { 'Authorization': `Bearer ${authToken}` }
+            });
+            if (!res.ok) throw new Error('delete failed');
+            showToast('已刪除');
+            await modelMap.load();
+            fetchConsumptionData();
+        } catch (e) { showToast(`刪除失敗：${e.message}`, true); }
+    },
+
+    // ZH: 把所有「未對應」代碼用建議值一次帶入（不覆蓋既有列）
+    async seed() {
+        try {
+            const res = await fetch(`${API_BASE}/external-ai/admin/model-map/seed`, {
+                method: 'POST', headers: { 'Authorization': `Bearer ${authToken}` }
+            });
+            if (!res.ok) throw new Error('seed failed');
+            const d = await res.json();
+            showToast(`已帶入 ${d.created} 筆建議對應（請檢查後修正）`);
+            await modelMap.load();
+            fetchConsumptionData();
+        } catch (e) { showToast(`帶入失敗：${e.message}`, true); }
+    },
+
+    // ZH: 手動新增一個代碼（廠商還沒用過、想先建好的情況）
+    async add() {
+        const code = (prompt('要新增對應的「廠商原始代碼」：') || '').trim();
+        if (!code) return;
+        const dup = [...((_modelMapCache?.items) || []), ...((_modelMapCache?.unmapped) || [])]
+            .some(r => r.code === code);
+        if (dup) { showToast('這個代碼已經在表上了', true); return; }
+        try {
+            const res = await fetch(`${API_BASE}/external-ai/admin/model-map`, {
+                method: 'POST',
+                headers: { 'Authorization': `Bearer ${authToken}`, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ code, display_name: code })
+            });
+            if (!res.ok) throw new Error((await res.json()).detail || 'add failed');
+            showToast('已新增，請設定顯示名稱／供應商／類別後儲存');
+            await modelMap.load();
+        } catch (e) { showToast(`新增失敗：${e.message}`, true); }
+    },
+};
 
 // v2.8 個人查詢：以 email/名稱/序號搜尋某人的交易明細
 async function queryUserConsumption() {

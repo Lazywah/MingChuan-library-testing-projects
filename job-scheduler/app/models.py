@@ -466,3 +466,27 @@ class MyaiTransaction(Base):
     model        = Column(String, index=True, nullable=True)                  # ZH: 使用的模型(ai_usage 才有) | EN: model used
     dedup_key    = Column(String, unique=True, index=True, nullable=False)    # ZH: 去重鍵 | EN: 時間|序號|Δ|備註
     synced_at    = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+
+
+# ==============================================================================
+# ZH: 表 19: MyaiModelMap - 廠商模型代碼 ↔ 顯示名稱/供應商/類別 對應表 (v2.9)
+# EN: Table 19: MyaiModelMap - vendor model code ↔ display name / provider / category
+# ZH: 廠商在備註欄給的是原始代碼(如 gpt_5_6_sol、nano_banana_pro)，難讀且對話模型
+#     與工具混在一起。本表由 admin 手動維護，**僅在數據分析「顯示時」套用**，
+#     不改寫 myai_transactions 原始資料 → 對錯了隨時改回，不會污染來源。
+#     對不到的代碼在管理端會標成「未對應」，方便發現廠商新增/改名的模型。
+# EN: Admin-maintained lookup applied at DISPLAY time only; raw tx rows are never
+#     rewritten, so a wrong mapping is always reversible. Unmapped codes are
+#     surfaced in the admin UI to catch new/renamed vendor models.
+# ==============================================================================
+class MyaiModelMap(Base):
+    __tablename__ = "myai_model_map"
+
+    id           = Column(String, primary_key=True, default=generate_uuid)
+    code         = Column(String, unique=True, index=True, nullable=False)     # ZH: 廠商原始代碼 | EN: raw vendor code
+    display_name = Column(String, nullable=True)                               # ZH: 顯示名稱 | EN: friendly name
+    provider     = Column(String, index=True, nullable=True)                   # ZH: 供應商 (Anthropic/OpenAI/…) | EN: provider
+    category     = Column(String, index=True, nullable=True)                   # ZH: 類別 (對話/簡報/文件/…) | EN: category
+    note         = Column(Text, nullable=True)                                 # ZH: 備註(自用) | EN: admin note
+    updated_at   = Column(DateTime, default=lambda: datetime.now(timezone.utc),
+                          onupdate=lambda: datetime.now(timezone.utc))

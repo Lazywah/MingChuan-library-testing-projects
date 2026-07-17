@@ -21,6 +21,7 @@ from sqlalchemy.orm import Session
 from typing import Any
 import csv
 import io
+import re
 
 from .. import crud, schemas, models
 from ..auth import get_current_user
@@ -511,8 +512,12 @@ def consumption_analytics(
             k = u.email.strip().lower()
             role_map[k] = u.role or "unknown"
             dept_map[k] = u.department or None
+    # ZH: v2.9 模型對應表（顯示時套用，不改寫原始交易）| EN: display-time model map
+    mmap = {m.code: m for m in db.query(models.MyaiModelMap).all()}
     per: dict = {}      # ZH: sn → 每生統計
     model_agg: dict = {}
+    cat_agg: dict = {}
+    prov_agg: dict = {}
     role_agg: dict = {}
     dept_agg: dict = {}
     daily: dict = {}
@@ -528,8 +533,20 @@ def consumption_analytics(
                 p["consumed"] += c; p["uses"] += 1
                 total += c; total_uses += 1
                 m = t.model or "unknown"
-                mm = model_agg.setdefault(m, {"model": m, "count": 0, "points": 0})
+                e = mmap.get(m)
+                # ZH: 沒對應到就退回原始代碼並標 mapped=false（前端可提示去補對應表）
+                mm = model_agg.setdefault(m, {
+                    "model": m,
+                    "display_name": (e.display_name if e and e.display_name else m),
+                    "provider": (e.provider if e and e.provider else "未對應"),
+                    "category": (e.category if e and e.category else "未對應"),
+                    "mapped": bool(e), "count": 0, "points": 0,
+                })
                 mm["count"] += 1; mm["points"] += c
+                ca = cat_agg.setdefault(mm["category"], {"category": mm["category"], "consumed": 0, "uses": 0})
+                ca["consumed"] += c; ca["uses"] += 1
+                pa = prov_agg.setdefault(mm["provider"], {"provider": mm["provider"], "consumed": 0, "uses": 0})
+                pa["consumed"] += c; pa["uses"] += 1
                 d = t.occurred_at.date().isoformat() if t.occurred_at else "unknown"
                 daily[d] = daily.get(d, 0) + c
                 ek = (t.email or "").strip().lower()
@@ -545,6 +562,8 @@ def consumption_analytics(
             p["logins"] += 1; total_logins += 1
     accounts = sorted(per.values(), key=lambda x: x["consumed"], reverse=True)
     model_list = sorted(model_agg.values(), key=lambda x: x["points"], reverse=True)
+    by_category = sorted(cat_agg.values(), key=lambda x: x["consumed"], reverse=True)
+    by_provider = sorted(prov_agg.values(), key=lambda x: x["consumed"], reverse=True)
     by_role = sorted(role_agg.values(), key=lambda x: x["consumed"], reverse=True)
     by_department = sorted(dept_agg.values(), key=lambda x: x["consumed"], reverse=True)
     series = [{"date": d, "consumed": daily[d]} for d in sorted(daily.keys())]
@@ -558,6 +577,9 @@ def consumption_analytics(
         "top": accounts[:10],
         "accounts": accounts,
         "models": model_list,
+        "by_category": by_category,
+        "by_provider": by_provider,
+        "unmapped_models": sum(1 for m in model_list if not m["mapped"]),
         "by_role": by_role,
         "by_department": by_department,
         "series": series,
@@ -626,3 +648,172 @@ def user_consumption(
         "models": sorted(model_agg.values(), key=lambda x: x["points"], reverse=True),
         "recent": recent,
     }
+
+
+# ==============================================================================
+# ZH: v2.9 模型對應表 —— 廠商原始代碼 ↔ 顯示名稱/供應商/類別
+# EN: v2.9 model map — vendor raw code ↔ display name / provider / category
+# ZH: 只在顯示時套用，不改寫 myai_transactions；對錯了改一改即可，來源永遠是原始碼。
+# ==============================================================================
+PROVIDERS = ["Anthropic", "OpenAI", "Google", "xAI", "Perplexity", "平台工具", "其他"]
+CATEGORIES = ["對話", "影像", "影音", "搜尋", "簡報", "文件", "程式", "其他"]
+
+# ZH: (代碼前綴, 供應商, 類別) —— 只用來「建議」，admin 可自行改 | EN: guess rules only
+_GUESS_RULES = [
+    ("claude_",        "Anthropic",  "對話"),
+    ("chatgpt_",       "OpenAI",     "對話"),
+    ("gpt_image",      "OpenAI",     "影像"),
+    ("gpt_",           "OpenAI",     "對話"),
+    ("speech_to_text", "OpenAI",     "影音"),
+    ("nano_banana",    "Google",     "影像"),
+    ("gemini_",        "Google",     "對話"),
+    ("grok_",          "xAI",        "對話"),
+    ("perplexity_",    "Perplexity", "搜尋"),
+    ("slide",          "平台工具",    "簡報"),
+    ("speak_",         "平台工具",    "影音"),
+    ("programming",    "平台工具",    "程式"),
+]
+# ZH: 完全比對的平台工具（非模型，廠商自建功能）| EN: exact-match vendor tools
+_GUESS_EXACT = {
+    "editor":               ("平台工具", "文件"),
+    "official_document":    ("平台工具", "文件"),
+    "meeting_minutes":      ("平台工具", "文件"),
+    "writing_optimizer":    ("平台工具", "文件"),
+    "translate_to_english": ("平台工具", "文件"),
+    "gai_article_detector": ("平台工具", "文件"),
+}
+_NAME_FIX = {"gpt": "GPT", "chatgpt": "ChatGPT", "ai": "AI", "gai": "GAI", "xai": "xAI"}
+
+
+def _pretty_name(code: str) -> str:
+    """ZH: 由代碼猜好讀名稱：連續數字段併成版號（claude_opus_4_8 → Claude Opus 4.8）。
+       EN: guess a friendly name; consecutive numeric tokens join as a version."""
+    parts = [p for p in (code or "").replace("-", "_").split("_") if p]
+    out: list[str] = []
+    for p in parts:
+        if p.isdigit() and out and re.fullmatch(r"[\d.]+", out[-1]):
+            out[-1] = f"{out[-1]}.{p}"      # ZH: 4 + 8 → 4.8
+            continue
+        if p.isdigit() or " " in p or any(ch.isupper() for ch in p):
+            out.append(p)                   # ZH: 已含空白/大寫(如 "preprocess (OpenAI)") → 原樣保留
+        else:
+            out.append(_NAME_FIX.get(p.lower(), p.capitalize()))
+    return " ".join(out)
+
+
+def _guess_model_meta(code: str) -> dict:
+    """ZH: 依代碼猜供應商/類別/顯示名稱（僅為建議值，admin 可覆寫）。"""
+    low = (code or "").strip().lower()
+    provider, category = "其他", "其他"
+    if low in _GUESS_EXACT:
+        provider, category = _GUESS_EXACT[low]
+    else:
+        for prefix, prov, cat in _GUESS_RULES:
+            if low.startswith(prefix):
+                provider, category = prov, cat
+                break
+    return {"code": code, "display_name": _pretty_name(code),
+            "provider": provider, "category": category}
+
+
+class ModelMapEntry(BaseModel):
+    code: str
+    display_name: str | None = None
+    provider: str | None = None
+    category: str | None = None
+    note: str | None = None
+
+
+def _model_usage_counts(db: Session) -> dict:
+    """ZH: 每個代碼在交易紀錄中的筆數（給對應表顯示，方便判斷哪些真的在用）。"""
+    from sqlalchemy import func
+    rows = (db.query(models.MyaiTransaction.model, func.count(models.MyaiTransaction.id))
+              .filter(models.MyaiTransaction.event_type == "ai_usage",
+                      models.MyaiTransaction.model.isnot(None))
+              .group_by(models.MyaiTransaction.model).all())
+    return {m: n for m, n in rows if m}
+
+
+@router.get("/admin/model-map")
+def list_model_map(
+    db: Session = Depends(get_db),
+    _: models.User = Depends(require_admin),
+) -> Any:
+    """ZH: 列出對應表 + 交易中出現但「未對應」的代碼（除錯用）。
+       EN: list the map plus codes seen in transactions but not mapped."""
+    counts = _model_usage_counts(db)
+    entries = db.query(models.MyaiModelMap).all()
+    mapped = {(e.code or "") for e in entries}
+    items = [{
+        "id": e.id, "code": e.code, "display_name": e.display_name,
+        "provider": e.provider, "category": e.category, "note": e.note,
+        "tx_count": counts.get(e.code, 0),
+        "seen": e.code in counts,          # ZH: 交易紀錄中是否真的出現過
+    } for e in entries]
+    items.sort(key=lambda x: (-x["tx_count"], x["code"] or ""))
+    # ZH: 未對應 = 交易有、對應表沒有 → 附上建議值，前端可一鍵帶入
+    unmapped = [{**_guess_model_meta(c), "tx_count": n}
+                for c, n in sorted(counts.items(), key=lambda kv: -kv[1]) if c not in mapped]
+    return {
+        "items": items, "unmapped": unmapped,
+        "providers": PROVIDERS, "categories": CATEGORIES,
+        "total_codes": len(counts), "mapped_count": len(items),
+        "unmapped_count": len(unmapped),
+    }
+
+
+@router.post("/admin/model-map")
+def upsert_model_map(
+    entry: ModelMapEntry,
+    db: Session = Depends(get_db),
+    _: models.User = Depends(require_admin),
+) -> Any:
+    """ZH: 新增/更新一列（以 code 為鍵，重複即更新）| EN: upsert one row by code."""
+    code = (entry.code or "").strip()
+    if not code:
+        raise HTTPException(status_code=400, detail="代碼不可空白")
+    row = db.query(models.MyaiModelMap).filter(models.MyaiModelMap.code == code).first()
+    if not row:
+        row = models.MyaiModelMap(code=code)
+        db.add(row)
+    row.display_name = (entry.display_name or "").strip() or None
+    row.provider = (entry.provider or "").strip() or None
+    row.category = (entry.category or "").strip() or None
+    row.note = (entry.note or "").strip() or None
+    db.commit(); db.refresh(row)
+    return {"status": "ok", "id": row.id, "code": row.code}
+
+
+@router.delete("/admin/model-map/{entry_id}")
+def delete_model_map(
+    entry_id: str,
+    db: Session = Depends(get_db),
+    _: models.User = Depends(require_admin),
+) -> Any:
+    """ZH: 刪除一列（原始交易資料不受影響）| EN: delete a row (raw tx unaffected)."""
+    row = db.query(models.MyaiModelMap).filter(models.MyaiModelMap.id == entry_id).first()
+    if not row:
+        raise HTTPException(status_code=404, detail="找不到該對應")
+    db.delete(row); db.commit()
+    return {"status": "ok"}
+
+
+@router.post("/admin/model-map/seed")
+def seed_model_map(
+    db: Session = Depends(get_db),
+    _: models.User = Depends(require_admin),
+) -> Any:
+    """ZH: 把交易中「未對應」的代碼用建議值一次帶入（已存在的列不動，不會覆蓋你的修改）。
+       EN: bulk-insert guessed rows for unmapped codes; never overwrites existing rows."""
+    counts = _model_usage_counts(db)
+    mapped = {c for (c,) in db.query(models.MyaiModelMap.code).all()}
+    created = 0
+    for code in counts:
+        if code in mapped:
+            continue
+        g = _guess_model_meta(code)
+        db.add(models.MyaiModelMap(code=code, display_name=g["display_name"],
+                                   provider=g["provider"], category=g["category"]))
+        created += 1
+    db.commit()
+    return {"status": "ok", "created": created, "skipped": len(counts) - created}
