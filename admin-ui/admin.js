@@ -242,6 +242,26 @@ const TRANSLATIONS = {
         user_query_title: "個人查詢",
         user_query_btn: "查詢",
         user_query_hint: "輸入姓名、Email 或序號查詢某人的使用明細（消耗、模型別、逐筆事件）。",
+        // v3.0 個人查詢圖表 + 三種檢視模式
+        uq_view_compare: "對照全體人均",
+        uq_view_solo: "只看個人",
+        uq_view_focus: "聚焦（同步上方圖表）",
+        uq_trend: "每日消耗趨勢",
+        uq_consumed: "消耗點數",
+        uq_uses: "AI 使用次數",
+        uq_logins: "登入次數",
+        uq_me: "此人",
+        uq_peer_avg: "全體人均",
+        uq_models: "模型／工具別",
+        uq_share_me: "此人佔比 %",
+        uq_share_peer: "全體佔比 %",
+        uq_recent: "近期事件（最多 40 筆）",
+        uq_focus_on: "聚焦中",
+        uq_focus_note: "上方「點數消耗分析」已切換成此人的資料（Top 消耗者維持全體，並高亮此人）。點聚焦標籤或切回其他模式即可返回全體。",
+        uq_rank: "全體排名",
+        uq_times: "×平均",
+        uq_no_peer: "此期間全體無用量，無法對照",
+        uq_multi_match: "命中多個帳號，排名不適用",
         metric_points: "Token 點數",
         metric_count: "呼叫次數",
         // v2.9 模型對應表 + 分群
@@ -563,6 +583,26 @@ const TRANSLATIONS = {
         user_query_title: "User Lookup",
         user_query_btn: "Search",
         user_query_hint: "Search by name, email, or ID to see one person's usage detail (consumption, models, events).",
+        // v3.0 per-user charts + view modes
+        uq_view_compare: "vs. average",
+        uq_view_solo: "This person only",
+        uq_view_focus: "Focus (sync charts above)",
+        uq_trend: "Daily consumption",
+        uq_consumed: "Consumed",
+        uq_uses: "AI uses",
+        uq_logins: "Logins",
+        uq_me: "This person",
+        uq_peer_avg: "Average",
+        uq_models: "By model/tool",
+        uq_share_me: "This person %",
+        uq_share_peer: "All accounts %",
+        uq_recent: "Recent events (up to 40)",
+        uq_focus_on: "Focused",
+        uq_focus_note: "The Credit Consumption section above now shows this person's data (Top consumers stays global, with this person highlighted). Click the focus tag or switch modes to go back.",
+        uq_rank: "Rank",
+        uq_times: "× avg",
+        uq_no_peer: "No usage across accounts in this period — nothing to compare against",
+        uq_multi_match: "Multiple accounts matched — rank not applicable",
         metric_points: "Token points",
         metric_count: "Call count",
         // v2.9 model map + grouping
@@ -727,8 +767,19 @@ let modelBreakdownInstance = null;     // v2.8 模型/工具別用量
 let _pieMetric = 'points';             // v2.8 圓餅(工具/模型)度量：points / count
 let _barMetric = 'points';             // v2.8 長條(模型別用量)度量：points / count（與圓餅獨立）
 let _barGroup = 'model';               // v2.9 長條分群維度：model / category / provider
-let _modelsRaw = [];                   // v2.8 原始模型聚合(供切換度量重繪)
+let _modelsRaw = [];                   // v2.8 原始模型聚合(供切換度量重繪)——圓餅專用，永遠全體
 let _modelMapCache = null;             // v2.9 模型對應表(含未對應代碼)
+// v3.0 個人查詢：三種檢視模式共用同一份已抓到的資料，切換只重繪、不重打 API
+//      （與上方 switchPieView / switchModelGroup 同一套架構）
+let _lastUserQuery = null;             // 最後一次個人查詢結果
+let _uqMode = 'compare';               // compare | solo | focus
+let _uqTrendInstance = null;           // 個人趨勢（迷你）
+let _uqModelInstance = null;           // 個人模型別（迷你）
+// v3.0 聚焦模式：上方「消耗分析」整段改看單一個人。快取全體資料以便還原；
+//      長條的資料源與圓餅拆開（_barModelsRaw），聚焦時才不會連上面的圓餅一起被換掉。
+let _lastConsumptionData = null;
+let _focusUser = null;                 // {name, sn} or null
+let _barModelsRaw = [];                // 長條專用模型聚合（聚焦時＝個人）
 
 function switchAdminMainTab(tabId) {
     document.querySelectorAll('.admin-side-tab').forEach(btn => btn.classList.remove('active'));
@@ -965,6 +1016,7 @@ const externalAi = {
         this.refresh();
         this.loadMyai();
         this.loadBindings();
+        modelMap.load();          // v3.0 模型對應表已搬到本分頁
     },
     // v2.8 廠商 Token 同步（唯讀）
     async loadMyai() {
@@ -1293,7 +1345,8 @@ async function fetchAnalyticsData() {
         if (res.status === 401) { handleAuthError(); return; }
         if (!res.ok) throw new Error('Failed to fetch analytics data');
         renderAnalyticsUI(await res.json());
-        modelMap.load();          // v2.9 模型對應表（消耗分析的顯示名稱來源）
+        // v3.0 模型對應表已移至「外部 AI」分頁，這裡不再載入；
+        //      圖表的顯示名稱是後端套好才回傳的，本頁不需要 _modelMapCache。
         fetchConsumptionData();   // v2.8 消耗分析一併載入
     } catch (e) {
         console.error(e);
@@ -1315,13 +1368,10 @@ async function fetchConsumptionData() {
 }
 
 function renderConsumptionUI(data) {
-    const txtColor = getComputedStyle(document.body).getPropertyValue('--text-primary') || '#888';
-    const set = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
-    set('consumption-total', Number(data.total_consumed || 0).toLocaleString());
-    set('consumption-accounts', Number(data.total_uses || 0).toLocaleString());   // AI 使用次數
-    set('consumption-snapshots', Number(data.total_logins || 0).toLocaleString()); // 登入次數
+    _lastConsumptionData = data;   // v3.0 快取全體資料：聚焦模式要能還原
 
     // 供可切換圓餅圖使用：工具/模型 比例 + 師生用量
+    // v3.0 圓餅永遠吃全體 —— 聚焦只換「消耗分析」的圖，上方帳號視角不跟著跑
     const roleName = (r) => ({ student: '學生', teacher: '教師', admin: '管理員', unbound: '未綁定', unknown: '未知' }[r] || r);
     _modelsRaw = data.models || [];
     _buildModelPieData();
@@ -1329,17 +1379,56 @@ function renderConsumptionUI(data) {
     _pieData.dept = { labels: (data.by_department || []).map(r => r.department), data: (data.by_department || []).map(r => r.consumed) };
     if (_pieMode !== 'status') renderPie();
 
-    // 每日消耗趨勢（line）
-    const series = data.series || [];
+    applyConsumptionView();
+}
+
+// v3.0 依 _focusUser 決定「消耗分析」要畫全體還是單一個人。
+//      聚焦中：統計卡＋趨勢＋模型別 = 該人；Top 消耗者維持全體但高亮該人
+//      （個人的「Top 消耗者」沒有意義，但「他在榜上第幾」很有意義）。
+function applyConsumptionView() {
+    const g = _lastConsumptionData;
+    if (!g) return;
+    const txtColor = getComputedStyle(document.body).getPropertyValue('--text-primary') || '#888';
+    const tl = TRANSLATIONS[currentLang] || {};
+    const set = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
+    const f = _focusUser;                              // 聚焦中的人（null = 全體）
+    const u = f ? _lastUserQuery : null;               // 該人的查詢結果
+    const s = u ? (u.summary || {}) : null;
+
+    set('consumption-total', Number((u ? s.consumed : g.total_consumed) || 0).toLocaleString());
+    set('consumption-accounts', Number((u ? s.uses : g.total_uses) || 0).toLocaleString());
+    set('consumption-snapshots', Number((u ? s.logins : g.total_logins) || 0).toLocaleString());
+
+    // 聚焦提示：chip + 整段粉色外框，避免把個人數字看成全體數字
+    const chip = document.getElementById('consumption-focus-chip');
+    if (chip) {
+        // ZH: 本專案沒有通用的 .hidden 規則（只有 .tutorial-modal.hidden 這種限定版），
+        //     用 class 藏不掉會留下一顆空的粉色小藥丸 → 直接控制 display。
+        chip.style.display = f ? 'inline-block' : 'none';
+        if (f) chip.textContent = `${tl.uq_focus_on || 'Focused'}：${f.name} ✕`;
+    }
+    const sec = document.getElementById('consumption-section');
+    if (sec) sec.style.boxShadow = f ? 'inset 0 0 0 2px rgba(244,114,182,0.55)' : '';
+
+    // 每日消耗趨勢（line）；聚焦時疊「全體人均」灰虛線當對照
+    const series = (u ? u.series : g.series) || [];
+    const ds = [{
+        label: f ? f.name : (tl.consumption_trend || 'Daily consumption'),
+        data: series.map(x => x.consumed),
+        borderColor: 'rgba(244,114,182,1)', backgroundColor: 'rgba(244,114,182,0.15)',
+        fill: true, tension: 0.25, pointRadius: 3,
+    }];
+    if (u) ds.push({
+        label: tl.uq_peer_avg || 'Average',
+        data: series.map(x => x.peer_avg),
+        borderColor: 'rgba(148,163,184,0.9)', borderDash: [5, 4], borderWidth: 2,
+        fill: false, tension: 0.25, pointRadius: 0,
+    });
     const trendCtx = document.getElementById('consumptionTrendChart').getContext('2d');
     if (consumptionTrendInstance) consumptionTrendInstance.destroy();
     consumptionTrendInstance = new Chart(trendCtx, {
         type: 'line',
-        data: { labels: series.map(s => s.date), datasets: [{
-            label: TRANSLATIONS[currentLang]?.consumption_trend || 'Daily consumption',
-            data: series.map(s => s.consumed),
-            borderColor: 'rgba(244,114,182,1)', backgroundColor: 'rgba(244,114,182,0.15)',
-            fill: true, tension: 0.25, pointRadius: 3 }] },
+        data: { labels: series.map(x => x.date), datasets: ds },
         options: { responsive: true, maintainAspectRatio: false,
             plugins: { legend: { labels: { color: txtColor } } },
             scales: {
@@ -1348,16 +1437,19 @@ function renderConsumptionUI(data) {
             } }
     });
 
-    // Top 消耗者（bar，只取有消耗的）
-    const top = (data.top || []).filter(a => (a.consumed || 0) > 0).slice(0, 10);
+    // Top 消耗者（bar，只取有消耗的）—— 永遠全體；聚焦時把該人的長條染成粉色
+    const top = (g.top || []).filter(a => (a.consumed || 0) > 0).slice(0, 10);
+    const hl = f ? new Set(f.sns || []) : null;
+    const isHl = (a) => !!(hl && hl.has(a.vendor_sn));
     const barCtx = document.getElementById('topConsumersChart').getContext('2d');
     if (topConsumersInstance) topConsumersInstance.destroy();
     topConsumersInstance = new Chart(barCtx, {
         type: 'bar',
         data: { labels: top.map(a => a.name || a.email || a.vendor_sn), datasets: [{
-            label: TRANSLATIONS[currentLang]?.consumption_top || 'Top consumers',
+            label: tl.consumption_top || 'Top consumers',
             data: top.map(a => a.consumed),
-            backgroundColor: 'rgba(250,204,21,0.7)', borderColor: 'rgba(250,204,21,1)',
+            backgroundColor: top.map(a => isHl(a) ? 'rgba(244,114,182,0.85)' : 'rgba(250,204,21,0.7)'),
+            borderColor: top.map(a => isHl(a) ? 'rgba(244,114,182,1)' : 'rgba(250,204,21,1)'),
             borderWidth: 1, borderRadius: 4 }] },
         options: { responsive: true, maintainAspectRatio: false, indexAxis: 'y',
             plugins: { legend: { labels: { color: txtColor } } },
@@ -1367,8 +1459,21 @@ function renderConsumptionUI(data) {
             } }
     });
 
-    // 模型/工具別用量（依 _modelMetric：Token 點數 或 呼叫次數）
+    // 模型/工具別用量（依 _barMetric：Token 點數 或 呼叫次數）
+    _barModelsRaw = (u ? u.models : g.models) || [];
     renderModelBar();
+}
+
+// v3.0 離開聚焦：還原成全體檢視（chip 與模式下拉都會回到一致狀態）
+function exitConsumptionFocus() {
+    if (_uqMode === 'focus') {
+        _uqMode = 'compare';
+        const sel = document.getElementById('user-query-view');
+        if (sel) sel.value = 'compare';
+        if (_lastUserQuery) renderUserQuery(_lastUserQuery);
+    }
+    _focusUser = null;
+    applyConsumptionView();
 }
 
 // v2.8 依「圓餅度量」(points/count)建工具/模型圓餅資料（v2.9 標籤改用對應表顯示名稱）
@@ -1383,15 +1488,16 @@ function _buildModelPieData() {
 // v2.9 依 _barGroup 把模型聚合捲成「依模型 / 依類別 / 依供應商」
 //      回 [{label, points, count}]，未對應者標籤加「⚠」提示去補對應表。
 function _groupedModelRows() {
+    // v3.0 長條吃 _barModelsRaw（聚焦時＝個人），與圓餅的 _modelsRaw（永遠全體）分開
     if (_barGroup === 'model') {
-        return _modelsRaw.map(m => ({
+        return _barModelsRaw.map(m => ({
             label: (m.display_name || m.model) + (m.mapped ? '' : ' ⚠'),
             points: m.points || 0, count: m.count || 0,
         }));
     }
     const key = _barGroup === 'category' ? 'category' : 'provider';
     const agg = {};
-    _modelsRaw.forEach(m => {
+    _barModelsRaw.forEach(m => {
         const k = m[key] || '未對應';
         const a = agg[k] || (agg[k] = { label: k, points: 0, count: 0 });
         a.points += (m.points || 0); a.count += (m.count || 0);
@@ -1410,6 +1516,9 @@ function renderModelBar() {
         .slice(0, 15);
     const el = document.getElementById('modelBreakdownChart');
     if (!el) return;
+    // ZH: 列數多時容器要跟著長高，否則 Chart.js 會用 autoSkip 砍掉一半 y 標籤
+    //     → 看得到長條卻不知道是哪個模型（15 個模型只標 7 個）。高度隨列數走 + 關掉 autoSkip。
+    if (el.parentElement) el.parentElement.style.height = Math.max(220, mdl.length * 26 + 56) + 'px';
     if (modelBreakdownInstance) modelBreakdownInstance.destroy();
     modelBreakdownInstance = new Chart(el.getContext('2d'), {
         type: 'bar',
@@ -1425,7 +1534,7 @@ function renderModelBar() {
                     (useCount ? (tl.metric_points || 'Points') : (tl.metric_count || 'Calls')) + '：' + (ctx.dataset._other?.[ctx.dataIndex] ?? '-') } } },
             scales: {
                 x: { ticks: { color: txtColor }, grid: { color: 'rgba(128,128,128,0.2)' }, beginAtZero: true },
-                y: { ticks: { color: txtColor }, grid: { color: 'rgba(128,128,128,0.2)' } }
+                y: { ticks: { color: txtColor, autoSkip: false }, grid: { color: 'rgba(128,128,128,0.2)' } }
             } }
     });
 }
@@ -1591,21 +1700,51 @@ async function queryUserConsumption() {
     const days = document.getElementById('user-query-days')?.value || 0;
     const box = document.getElementById('user-query-result');
     if (!box) return;
-    if (!q) { box.innerHTML = '<p style="color:var(--text-muted);font-size:12px;">請輸入查詢字串</p>'; return; }
+    if (!q) {
+        _destroyUqCharts();
+        _lastUserQuery = null;
+        box.innerHTML = '<p style="color:var(--text-muted);font-size:12px;">請輸入查詢字串</p>';
+        exitConsumptionFocus();          // 清空查詢就不該留著別人的聚焦狀態
+        return;
+    }
     box.innerHTML = '<p style="color:var(--text-muted);font-size:12px;">查詢中…</p>';
     try {
         const res = await fetch(`${API_BASE}/external-ai/admin/user-consumption?q=${encodeURIComponent(q)}&days=${days}`,
             { headers: { 'Authorization': `Bearer ${authToken}` } });
         if (!res.ok) throw new Error('HTTP ' + res.status);
-        renderUserQuery(await res.json());
-    } catch (e) { box.innerHTML = '<p style="color:#fb7185;font-size:12px;">查詢失敗：' + e.message + '</p>'; }
+        _lastUserQuery = await res.json();
+        renderUserQuery(_lastUserQuery);
+    } catch (e) {
+        _destroyUqCharts();
+        box.innerHTML = '<p style="color:#fb7185;font-size:12px;">查詢失敗：' + e.message + '</p>';
+    }
+}
+
+// v3.0 切換個人查詢檢視模式：三模式共用同一份資料，只重繪（同 switchPieView 的作法）
+function switchUserQueryView(v) {
+    _uqMode = v || 'compare';
+    if (_lastUserQuery) { renderUserQuery(_lastUserQuery); return; }
+    _focusUser = null;                   // 還沒查人就切模式：只記住偏好，順手確保上方是全體
+    applyConsumptionView();
+}
+
+// ZH: canvas 被 innerHTML 換掉前必須先 destroy，否則 Chart.js 會留下孤兒實例
+function _destroyUqCharts() {
+    if (_uqTrendInstance) { _uqTrendInstance.destroy(); _uqTrendInstance = null; }
+    if (_uqModelInstance) { _uqModelInstance.destroy(); _uqModelInstance = null; }
 }
 
 function renderUserQuery(d) {
     const box = document.getElementById('user-query-result');
     if (!box) return;
+    _destroyUqCharts();
+    const tl = TRANSLATIONS[currentLang] || {};
     const esc = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
-    if (!d.matches || !d.matches.length) { box.innerHTML = '<p style="color:var(--text-muted);font-size:13px;">查無符合的帳號。</p>'; return; }
+    if (!d.matches || !d.matches.length) {
+        box.innerHTML = '<p style="color:var(--text-muted);font-size:13px;">查無符合的帳號。</p>';
+        _focusUser = null; applyConsumptionView();
+        return;
+    }
     const roleName = (r) => ({ student: '學生', teacher: '教師', admin: '管理員' }[r] || (r || '未綁定'));
     const cards = d.matches.map(m => `
         <div style="border:1px solid var(--border-color,rgba(255,255,255,0.15)); border-radius:10px; padding:10px 14px; font-size:13px;">
@@ -1619,26 +1758,124 @@ function renderUserQuery(d) {
                 <span>狀態：${esc(m.status || '—')}</span>
             </div>
         </div>`).join('');
+
+    // v3.0 對照模式的重點：光看「消耗 1,200」不知道算兇還是正常，要掛上全體人均與排名
     const s = d.summary || {};
-    const summary = `<div style="display:flex; gap:24px; flex-wrap:wrap; margin:12px 0;">
-        <div><div style="font-size:12px;color:var(--text-muted);">消耗點數</div><div style="font-size:1.5em;font-weight:bold;">${Number(s.consumed || 0).toLocaleString()}</div></div>
-        <div><div style="font-size:12px;color:var(--text-muted);">AI 使用次數</div><div style="font-size:1.5em;font-weight:bold;">${Number(s.uses || 0).toLocaleString()}</div></div>
-        <div><div style="font-size:12px;color:var(--text-muted);">登入次數</div><div style="font-size:1.5em;font-weight:bold;">${Number(s.logins || 0).toLocaleString()}</div></div>
+    const peer = d.peer || {};
+    const compare = _uqMode !== 'solo' && !!peer.active_accounts;
+    const ratio = (compare && peer.avg_consumed > 0) ? (s.consumed || 0) / peer.avg_consumed : null;
+    const sub = (txt) => `<div style="font-size:11px;color:var(--text-muted);margin-top:3px;">${txt}</div>`;
+    const consumedSub = !compare ? '' : sub(
+        `${tl.uq_peer_avg || 'Average'}：${Number(peer.avg_consumed || 0).toLocaleString()}`
+        + (ratio != null ? ` · <span style="color:${ratio >= 1 ? '#f472b6' : '#4ade80'};font-weight:600;">${ratio.toFixed(1)}${tl.uq_times || '× avg'}</span>` : '')
+        + (peer.rank ? ` · ${tl.uq_rank || 'Rank'} ${peer.rank}/${peer.active_accounts}`
+                     : (d.matches.length > 1 ? ` · ${tl.uq_multi_match || ''}` : ''))
+    );
+    const usesSub = !compare ? '' : sub(`${tl.uq_peer_avg || 'Average'}：${Number(peer.avg_uses || 0).toLocaleString()}`);
+    const stat = (label, val, extra) =>
+        `<div><div style="font-size:12px;color:var(--text-muted);">${label}</div>
+         <div style="font-size:1.5em;font-weight:bold;">${Number(val || 0).toLocaleString()}</div>${extra || ''}</div>`;
+    const summary = `<div style="display:flex; gap:32px; flex-wrap:wrap; margin:12px 0;">
+        ${stat(tl.uq_consumed || '消耗點數', s.consumed, consumedSub)}
+        ${stat(tl.uq_uses || 'AI 使用次數', s.uses, usesSub)}
+        ${stat(tl.uq_logins || '登入次數', s.logins, '')}
     </div>`;
-    const models = (d.models || []).length
-        ? ('<div style="margin-bottom:10px;"><div style="font-size:12px;color:var(--text-muted);margin-bottom:4px;">模型／工具別</div>'
-           + d.models.map(m => `<span style="display:inline-block; margin:2px 6px 2px 0; padding:2px 8px; border-radius:999px; background:rgba(167,139,250,0.15); font-size:12px;">${esc(m.model)}：${Number(m.points).toLocaleString()} 點 / ${m.count} 次</span>`).join('')
-           + '</div>') : '';
+
     const rows = (d.recent || []).map(r => {
         const ev = r.event === 'login' ? '登入' : (r.event === 'ai_usage' ? '使用 ' + esc(r.model || '') : (r.event === 'transfer' ? '配點' : esc(r.event)));
         const pts = (r.points > 0 ? '+' : '') + (r.points ?? 0);
         return `<tr><td style="font-size:12px;">${esc((r.time || '').replace('T', ' ').slice(0, 19))}</td><td>${ev}</td><td style="font-family:monospace;">${pts}</td><td style="font-family:monospace;">${Number(r.balance || 0).toLocaleString()}</td></tr>`;
     }).join('');
-    const table = `<div style="font-size:12px;color:var(--text-muted);margin-bottom:4px;">近期事件（最多 40 筆）</div>
+    const table = `<div style="font-size:12px;color:var(--text-muted);margin-bottom:4px;">${tl.uq_recent || '近期事件（最多 40 筆）'}</div>
         <div class="admin-table-wrap scrollbar-custom" style="max-height:300px; overflow:auto;">
         <table class="admin-table"><thead><tr><th>時間</th><th>事件</th><th>點數</th><th>餘額</th></tr></thead>
         <tbody>${rows || '<tr><td colspan="4" style="text-align:center;color:var(--text-muted);">無</td></tr>'}</tbody></table></div>`;
-    box.innerHTML = `<div style="display:flex; flex-direction:column; gap:8px;">${cards}</div>${summary}${models}${table}`;
+
+    // 聚焦模式：個人區塊不重複畫圖，改把上方「消耗分析」整段切成這個人
+    if (_uqMode === 'focus') {
+        const m0 = d.matches[0];
+        _focusUser = { name: m0.name || m0.email || m0.vendor_sn, sns: d.matches.map(m => m.vendor_sn) };
+        const note = `<div style="margin:12px 0; padding:10px 14px; border-radius:8px; font-size:12px;
+             background:rgba(244,114,182,0.12); border:1px solid rgba(244,114,182,0.4); color:var(--text-primary);">
+             <ion-icon name="arrow-up-outline" style="vertical-align:-2px;"></ion-icon> ${tl.uq_focus_note || ''}</div>`;
+        box.innerHTML = `<div style="display:flex; flex-direction:column; gap:8px;">${cards}</div>${summary}${note}${table}`;
+        applyConsumptionView();
+        return;
+    }
+
+    // 對照／只看個人：個人自帶迷你圖（高度 180px、兩欄 —— 份量刻意低於上方 320px 的全域大圖）
+    _focusUser = null;
+    applyConsumptionView();                       // 還原上方為全體
+    const pane = (title, id) => `<div>
+        <h4 style="font-size:12px;margin:0 0 6px;color:var(--text-muted);">${title}</h4>
+        <div style="padding:12px; background:rgba(128,128,128,0.1); border-radius:8px; height:200px; position:relative;">
+            <canvas id="${id}"></canvas></div></div>`;
+    const charts = `<div style="display:grid; grid-template-columns:1fr 1fr; gap:16px; margin:12px 0;">
+        ${pane(tl.uq_trend || '每日消耗趨勢', 'uq-trend-chart')}
+        ${pane(tl.uq_models || '模型／工具別', 'uq-model-chart')}
+    </div>`;
+    const noPeer = (_uqMode === 'compare' && !peer.active_accounts)
+        ? `<p style="font-size:11px;color:var(--text-muted);margin:0 0 8px;">${tl.uq_no_peer || ''}</p>` : '';
+    box.innerHTML = `<div style="display:flex; flex-direction:column; gap:8px;">${cards}</div>${summary}${noPeer}${charts}${table}`;
+    _renderUserQueryCharts(d, compare);
+}
+
+// v3.0 個人迷你圖：配色與上方一致（粉＝消耗、紫＝模型），對照基準一律灰虛線
+function _renderUserQueryCharts(d, compare) {
+    const tl = TRANSLATIONS[currentLang] || {};
+    const txtColor = getComputedStyle(document.body).getPropertyValue('--text-primary') || '#888';
+    const mini = {
+        responsive: true, maintainAspectRatio: false,
+        plugins: { legend: { labels: { color: txtColor, boxWidth: 10, font: { size: 10 } } } },
+    };
+    const grid = { color: 'rgba(128,128,128,0.2)' };
+
+    // 每日消耗趨勢：個人粉色實線 + 全體人均灰虛線
+    const series = d.series || [];
+    const tds = [{
+        label: tl.uq_me || 'This person',
+        data: series.map(x => x.consumed),
+        borderColor: 'rgba(244,114,182,1)', backgroundColor: 'rgba(244,114,182,0.15)',
+        fill: true, tension: 0.25, pointRadius: 0, borderWidth: 2,
+    }];
+    if (compare) tds.push({
+        label: tl.uq_peer_avg || 'Average',
+        data: series.map(x => x.peer_avg),
+        borderColor: 'rgba(148,163,184,0.9)', borderDash: [5, 4], borderWidth: 2,
+        fill: false, tension: 0.25, pointRadius: 0,
+    });
+    const tEl = document.getElementById('uq-trend-chart');
+    if (tEl) _uqTrendInstance = new Chart(tEl.getContext('2d'), {
+        type: 'line',
+        data: { labels: series.map(x => x.date), datasets: tds },
+        options: { ...mini, scales: {
+            x: { ticks: { color: txtColor, font: { size: 9 }, maxTicksLimit: 6 }, grid },
+            y: { ticks: { color: txtColor, font: { size: 9 } }, grid, beginAtZero: true } } }
+    });
+
+    // 模型／工具別：對照模式比「佔比 %」而非絕對點數 —— 用量級差 10 倍的兩人才比得起來
+    // ZH: 對照模式一個模型畫兩條，取 8 個就是 16 條擠在 200px，y 標籤會被 autoSkip 砍掉一半
+    //     → 看得到長條卻不知道是哪個模型。故對照取 5、只看個人取 8，並強制每個標籤都畫。
+    const mdl = (d.models || []).slice(0, compare ? 5 : 8);
+    const labels = mdl.map(m => (m.display_name || m.model) + (m.mapped ? '' : ' ⚠'));
+    const mds = compare
+        ? [{ label: tl.uq_share_me || 'This person %', data: mdl.map(m => m.share),
+             backgroundColor: 'rgba(167,139,250,0.8)', borderColor: 'rgba(167,139,250,1)', borderWidth: 1, borderRadius: 3 },
+           { label: tl.uq_share_peer || 'All %', data: mdl.map(m => m.peer_share),
+             backgroundColor: 'rgba(148,163,184,0.45)', borderColor: 'rgba(148,163,184,0.8)', borderWidth: 1, borderRadius: 3 }]
+        : [{ label: tl.metric_points || 'Points', data: mdl.map(m => m.points),
+             backgroundColor: 'rgba(167,139,250,0.8)', borderColor: 'rgba(167,139,250,1)', borderWidth: 1, borderRadius: 3 }];
+    const mEl = document.getElementById('uq-model-chart');
+    if (mEl) _uqModelInstance = new Chart(mEl.getContext('2d'), {
+        type: 'bar',
+        data: { labels, datasets: mds },
+        options: { ...mini, indexAxis: 'y',
+            plugins: { ...mini.plugins, tooltip: { callbacks: { afterLabel: (ctx) =>
+                compare ? '' : `${tl.metric_count || 'Calls'}：${mdl[ctx.dataIndex]?.count ?? '-'}` } } },
+            scales: {
+                x: { ticks: { color: txtColor, font: { size: 9 } }, grid, beginAtZero: true },
+                y: { ticks: { color: txtColor, font: { size: 9 }, autoSkip: false }, grid } } }
+    });
 }
 
 function renderAnalyticsUI(data) {
@@ -1712,21 +1949,27 @@ function renderPie() {
     if (sel && sel.value !== _pieMode) sel.value = _pieMode;
 }
 
+// v3.0 匯出全部圖表 —— 原本只匯出最早那兩張，v2.8 加的消耗分析三張從來沒被帶到。
+//      個人查詢的圖只在「有查詢結果」時才存在，一併帶上（檔名前綴查詢字串，才知道是誰）。
 function exportAnalyticsCharts() {
-    if (!deptChartInstance && !toolChartInstance) return;
-    
-    const downloadCanvas = (chart, filename) => {
-        if (!chart) return;
+    const who = (_lastUserQuery?.q || '').replace(/[^\w.-]+/g, '_');
+    const jobs = [
+        [deptChartInstance, 'department_usage.png'],
+        [toolChartInstance, 'tool_usage.png'],
+        [consumptionTrendInstance, 'consumption_trend.png'],
+        [topConsumersInstance, 'top_consumers.png'],
+        [modelBreakdownInstance, 'model_breakdown.png'],
+        [_uqTrendInstance, `user_${who}_trend.png`],
+        [_uqModelInstance, `user_${who}_models.png`],
+    ].filter(([c]) => c);
+    if (!jobs.length) return;
+    // ZH: 逐張間隔觸發，瀏覽器才不會把連續下載當成濫用而擋掉
+    jobs.forEach(([chart, filename], i) => setTimeout(() => {
         const link = document.createElement('a');
         link.download = filename;
         link.href = chart.toBase64Image();
         link.click();
-    };
-
-    downloadCanvas(deptChartInstance, 'department_usage.png');
-    setTimeout(() => {
-        downloadCanvas(toolChartInstance, 'tool_usage.png');
-    }, 500);
+    }, i * 400));
 }
 
 // ==========================================
@@ -3447,6 +3690,10 @@ document.addEventListener('DOMContentLoaded', () => {
             if (_lastUaData && uaModal && !uaModal.classList.contains('hidden')) {
                 renderUserAnalyticsModal(_lastUaData);
             }
+            // v3.0 圖表標籤是繪製當下寫死的，切語言要用快取重繪才會跟著換
+            // EN: chart labels are baked in at draw time — re-render from cache on language switch
+            if (_lastConsumptionData) applyConsumptionView();
+            if (_lastUserQuery) renderUserQuery(_lastUserQuery);
         });
     });
 

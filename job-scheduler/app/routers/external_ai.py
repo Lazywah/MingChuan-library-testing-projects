@@ -594,11 +594,14 @@ def user_consumption(
     _: models.User = Depends(require_admin),
 ) -> Any:
     """ZH: 個人查詢 —— 以 email/名稱/序號 搜尋 myai 帳號，回傳該人交易明細
-            (消耗/使用/登入、模型別、近期逐筆)。days<=0 = 全部。
-       EN: Per-person lookup from the transaction log (by email/name/sn)."""
+            (消耗/使用/登入、模型別、每日趨勢、近期逐筆) + 同期間「全體人均」對照基準。
+            days<=0 = 全部。
+       EN: Per-person lookup from the transaction log (by email/name/sn),
+            with a same-window all-accounts average as the comparison baseline."""
     from datetime import datetime, timedelta
     q = (q or "").strip()
-    empty = {"q": q, "matches": [], "summary": {}, "models": [], "recent": []}
+    empty = {"q": q, "matches": [], "summary": {}, "models": [], "recent": [],
+             "series": [], "peer": {}}
     if not q:
         return empty
     ql = q.lower()
@@ -620,23 +623,81 @@ def user_consumption(
 
     matches = [_meta(m) for m in matched]
     days = int(days or 0)
+    since = datetime.now() - timedelta(days=min(days, 3650)) if days > 0 else None
     tq = db.query(models.MyaiTransaction).filter(models.MyaiTransaction.vendor_sn.in_(sns))
-    if days > 0:
-        since = datetime.now() - timedelta(days=min(days, 3650))
+    if since:
         tq = tq.filter(models.MyaiTransaction.occurred_at >= since)
     txs = tq.order_by(models.MyaiTransaction.occurred_at.desc()).all()
 
+    # ZH: v2.9 模型對應表 —— 個人查詢也要套，否則這裡顯示 gpt_5_6_sol、上面圖表顯示 GPT-5
+    # EN: apply the display-time model map here too, so names match the global charts
+    mmap = {m.code: m for m in db.query(models.MyaiModelMap).all()}
     consumed = uses = logins = 0
     model_agg: dict = {}
+    daily_me: dict = {}
     for t in txs:
         if t.event_type == "ai_usage":
             c = -(t.points_delta or 0)
             if c > 0:
                 consumed += c; uses += 1
-                mm = model_agg.setdefault(t.model or "unknown", {"model": t.model or "unknown", "count": 0, "points": 0})
+                code = t.model or "unknown"
+                e = mmap.get(code)
+                mm = model_agg.setdefault(code, {
+                    "model": code,
+                    "display_name": (e.display_name if e and e.display_name else code),
+                    "provider": (e.provider if e and e.provider else "未對應"),
+                    "category": (e.category if e and e.category else "未對應"),
+                    "mapped": bool(e), "count": 0, "points": 0,
+                })
                 mm["count"] += 1; mm["points"] += c
+                if t.occurred_at:
+                    d = t.occurred_at.date().isoformat()
+                    daily_me[d] = daily_me.get(d, 0) + c
         elif t.event_type == "login":
             logins += 1
+
+    # ZH: 對照基準 —— 同期間「全體人均」。個人數字沒有基準就沒有意義：看到「消耗 1200」
+    #     不知道算兇還是正常。分母＝期間內真的有用量的帳號數（沒用的人不該稀釋平均）。
+    # EN: baseline = same-window average across accounts that actually had usage.
+    pq = db.query(models.MyaiTransaction).filter(
+        models.MyaiTransaction.event_type == "ai_usage",
+        models.MyaiTransaction.occurred_at.isnot(None),
+    )
+    if since:
+        pq = pq.filter(models.MyaiTransaction.occurred_at >= since)
+    daily_all: dict = {}
+    per_sn: dict = {}
+    model_points_all: dict = {}
+    total_all = uses_all = 0
+    for t in pq.all():
+        c = -(t.points_delta or 0)
+        if c <= 0:
+            continue
+        total_all += c; uses_all += 1
+        per_sn[t.vendor_sn] = per_sn.get(t.vendor_sn, 0) + c
+        code = t.model or "unknown"
+        model_points_all[code] = model_points_all.get(code, 0) + c
+        d = t.occurred_at.date().isoformat()
+        daily_all[d] = daily_all.get(d, 0) + c
+    active = len(per_sn) or 1
+    # ZH: 排名以「單一帳號」為單位；查詢字串命中多個帳號時排名沒有意義 → 不給，別誤導。
+    rank = None
+    if len(sns) == 1 and consumed > 0:
+        rank = 1 + sum(1 for v in per_sn.values() if v > consumed)
+    # ZH: 趨勢軸用「全體有活動的日子」，個人沒用的日子補 0
+    #     —— 這樣才看得出他在整體節奏中的位置，而不是只看到自己的孤島。
+    series = [{
+        "date": d,
+        "consumed": daily_me.get(d, 0),
+        "peer_avg": round(daily_all[d] / active, 1),
+    } for d in sorted(daily_all.keys())]
+
+    model_list = sorted(model_agg.values(), key=lambda x: x["points"], reverse=True)
+    for m in model_list:
+        # ZH: share=個人佔比、peer_share=全體佔比 → 對照模式並排比「這人特別吃哪種模型」
+        m["share"] = round(100 * m["points"] / consumed, 1) if consumed else 0
+        m["peer_share"] = round(100 * model_points_all.get(m["model"], 0) / total_all, 1) if total_all else 0
+
     recent = [{
         "time": (t.occurred_at.isoformat() if t.occurred_at else None),
         "event": t.event_type, "model": t.model, "points": t.points_delta,
@@ -645,7 +706,15 @@ def user_consumption(
     return {
         "q": q, "days": days, "matches": matches,
         "summary": {"consumed": consumed, "uses": uses, "logins": logins, "tx_count": len(txs)},
-        "models": sorted(model_agg.values(), key=lambda x: x["points"], reverse=True),
+        "models": model_list,
+        "series": series,
+        "peer": {
+            "active_accounts": len(per_sn),
+            "total_consumed": total_all,
+            "avg_consumed": round(total_all / active, 1),
+            "avg_uses": round(uses_all / active, 1),
+            "rank": rank,
+        },
         "recent": recent,
     }
 
