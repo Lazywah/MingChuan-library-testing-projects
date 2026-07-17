@@ -2027,6 +2027,25 @@ ion-icon {
     color: var(--accent-glow);
 }
 
+/* ZH: v3.0 Token 區塊可點開「我的使用量」—— 給明確的 hover/focus 回饋，
+       否則使用者不會知道這塊能點 | EN: clickable affordance for the token widget */
+.drawer-token-clickable {
+    border-radius: 10px;
+    padding: 8px;
+    margin: -8px -8px 8px;
+    transition: background 0.2s, box-shadow 0.2s;
+}
+
+.drawer-token-clickable:hover {
+    background: rgba(255, 255, 255, 0.06);
+    box-shadow: inset 0 0 0 1px var(--accent-glow);
+}
+
+.drawer-token-clickable:focus-visible {
+    outline: none;
+    box-shadow: inset 0 0 0 2px var(--accent-glow);
+}
+
 /* Token donut chart layout */
 .drawer-token-visual {
     display: flex;

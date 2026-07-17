@@ -374,6 +374,31 @@ const TRANSLATIONS = {
         toast_sso_password_blocked: "SSO 使用者無法在此變更密碼，請至 IdP 系統變更",
         // v2.1 Profile Modal 豐富資訊版
         settings_profile: "我的帳號資訊",
+        // v3.0 我的使用量（學生端：只看自己 + 全體人均對照）
+        usage_title: "我的使用量",
+        usage_hint: "這裡只顯示你自己的外部 AI 使用紀錄，以及全體的平均值作為對照。看不到其他人的資料。",
+        usage_period: "期間",
+        usage_30d: "近 30 天",
+        usage_90d: "近 90 天",
+        usage_all: "全部",
+        usage_loading: "載入中…",
+        usage_consumed: "消耗點數",
+        usage_uses: "AI 使用次數",
+        usage_logins: "登入次數",
+        usage_avg: "全體人均",
+        usage_times: "×平均",
+        usage_trend: "每日消耗趨勢",
+        usage_me: "我",
+        usage_models: "我用了哪些模型／工具",
+        usage_share_me: "我的佔比 %",
+        usage_share_all: "全體佔比 %",
+        usage_points: "消耗點數",
+        usage_balance: "剩餘點數",
+        usage_expiry: "有效至",
+        usage_unbound: "你的帳號尚未綁定外部 AI 平台，或資料尚未同步。若確定已開通，請聯絡管理員。",
+        usage_nodata: "這段期間還沒有使用紀錄。換個期間看看，或先去用用看 AI 助手。",
+        usage_no_peer: "目前使用人數太少，暫不顯示全體對照（為了避免從平均值反推出特定同學的用量）。你自己的數字不受影響。",
+        usage_failed: "載入失敗，請稍後再試。",
         profile_basic: "基本資訊",
         profile_auth: "認證與登入",
         profile_usage: "外部 AI 點數",
@@ -758,6 +783,31 @@ const TRANSLATIONS = {
         toast_sso_password_blocked: "SSO users cannot change password here — please use the IdP",
         // v2.1 Profile Modal rich info
         settings_profile: "My Account",
+        // v3.0 my usage (student-facing: own data + all-accounts average only)
+        usage_title: "My Usage",
+        usage_hint: "This shows only your own external-AI usage, with the all-accounts average as a reference. You cannot see anyone else's data.",
+        usage_period: "Period",
+        usage_30d: "Last 30 days",
+        usage_90d: "Last 90 days",
+        usage_all: "All time",
+        usage_loading: "Loading…",
+        usage_consumed: "Credits used",
+        usage_uses: "AI uses",
+        usage_logins: "Logins",
+        usage_avg: "Average",
+        usage_times: "× avg",
+        usage_trend: "Daily consumption",
+        usage_me: "Me",
+        usage_models: "Models / tools you used",
+        usage_share_me: "My share %",
+        usage_share_all: "All accounts %",
+        usage_points: "Credits used",
+        usage_balance: "Remaining",
+        usage_expiry: "Valid until",
+        usage_unbound: "Your account isn't linked to the external AI platform yet, or the data hasn't synced. If you believe it's active, please contact an administrator.",
+        usage_nodata: "No usage recorded in this period. Try another period, or go give the AI assistant a try.",
+        usage_no_peer: "Too few people are using it right now, so the all-accounts comparison is hidden (otherwise the average could be used to work out a specific classmate's usage). Your own numbers are unaffected.",
+        usage_failed: "Couldn't load. Please try again later.",
         profile_basic: "Basic Info",
         profile_auth: "Authentication",
         profile_usage: "External AI Credits",
@@ -1177,6 +1227,31 @@ document.addEventListener('DOMContentLoaded', () => {
         });
         document.getElementById('profile-close-btn').addEventListener('click', () => profileModal.classList.add('hidden'));
         document.getElementById('profile-backdrop').addEventListener('click', () => profileModal.classList.add('hidden'));
+    }
+
+    // ZH: v3.0 我的使用量 —— 兩個入口：Header 下拉「我的使用量」+ 右側抽屜的「外部 AI 點數」區塊
+    // EN: v3.0 my-usage modal — two entry points: header dropdown item + drawer token widget
+    const navUsageBtn = document.getElementById('nav-usage-btn');
+    const usageModal = document.getElementById('usage-modal');
+    if (usageModal) {
+        if (navUsageBtn) {
+            navUsageBtn.addEventListener('click', () => {
+                if (userDropdownMenu) userDropdownMenu.style.display = 'none';
+                openMyUsage();
+            });
+        }
+        const tokenWidget = document.getElementById('drawer-token-widget');
+        if (tokenWidget) {
+            tokenWidget.addEventListener('click', () => openMyUsage());
+            // 鍵盤可及：role="button" 就得自己接 Enter/Space
+            tokenWidget.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openMyUsage(); }
+            });
+        }
+        document.getElementById('usage-close-btn').addEventListener('click', closeMyUsage);
+        document.getElementById('usage-backdrop').addEventListener('click', closeMyUsage);
+        const daysSel = document.getElementById('usage-days');
+        if (daysSel) daysSel.addEventListener('change', () => loadMyUsage());
     }
 
     const navPasswordBtn = document.getElementById('nav-password-btn');
@@ -2346,6 +2421,178 @@ function updateExternalTokenDisplay(data) {
     set('drawer-token-used', remainTxt); set('drawer-token-limit', expiryTxt);
     set('drawer-token-percent', pts != null ? '💎' : '—');
     ring('drawer-token-ring', pts != null, 100);
+}
+
+// ==============================================================================
+// ZH: v3.0 我的使用量 —— 學生端只看得到「自己的用量」+「全體人均」對照。
+//     沒有排名、沒有其他人的資料（後端 /my-consumption 也一併保證，不只前端不畫）。
+// EN: v3.0 my-usage modal — own usage + all-accounts average only. No rank, no
+//     other individuals (enforced by the backend too, not just by not drawing it).
+// ==============================================================================
+let _usageTrendChart = null;
+let _usageModelChart = null;
+let _lastUsageData = null;
+
+function openMyUsage() {
+    const m = document.getElementById('usage-modal');
+    if (!m) return;
+    m.classList.remove('hidden');
+    loadMyUsage();
+}
+
+function closeMyUsage() {
+    const m = document.getElementById('usage-modal');
+    if (m) m.classList.add('hidden');
+    _destroyUsageCharts();
+    _lastUsageData = null;
+}
+
+// ZH: canvas 被 innerHTML 換掉前先 destroy，否則 Chart.js 會留下孤兒實例
+function _destroyUsageCharts() {
+    if (_usageTrendChart) { _usageTrendChart.destroy(); _usageTrendChart = null; }
+    if (_usageModelChart) { _usageModelChart.destroy(); _usageModelChart = null; }
+}
+
+async function loadMyUsage() {
+    const box = document.getElementById('usage-body');
+    if (!box) return;
+    const t = TRANSLATIONS[currentLang] || {};
+    const days = document.getElementById('usage-days')?.value ?? 30;
+    _destroyUsageCharts();
+    box.innerHTML = `<p style="color:var(--text-muted); font-size:13px; text-align:center; padding:24px;">${t.usage_loading || '載入中…'}</p>`;
+    try {
+        const res = await fetch(`${API_BASE}/external-ai/my-consumption?days=${days}`, {
+            headers: { 'Authorization': `Bearer ${authToken}` }
+        });
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        _lastUsageData = await res.json();
+        renderMyUsage(_lastUsageData);
+    } catch (e) {
+        console.error('loadMyUsage:', e);
+        box.innerHTML = `<p style="color:#fb7185; font-size:13px; text-align:center; padding:24px;">${t.usage_failed || '載入失敗'}</p>`;
+    }
+}
+
+function renderMyUsage(d) {
+    const box = document.getElementById('usage-body');
+    if (!box) return;
+    const t = TRANSLATIONS[currentLang] || {};
+    _destroyUsageCharts();
+
+    // 餘額列（右上角）—— 這是他自己的帳號資訊
+    const bal = document.getElementById('usage-balance');
+    if (bal) {
+        const a = d.account || {};
+        bal.textContent = (a.points != null)
+            ? `${t.usage_balance || '剩餘點數'}：${Number(a.points).toLocaleString()}`
+              + (a.expiry ? `　${t.usage_expiry || '有效至'}：${a.expiry}` : '')
+            : '';
+    }
+
+    if (!d.bound) {
+        box.innerHTML = `<p style="color:var(--text-muted); font-size:13px; text-align:center; padding:24px; line-height:1.7;">
+            <ion-icon name="link-outline" style="font-size:22px; display:block; margin:0 auto 8px; opacity:0.6;"></ion-icon>
+            ${t.usage_unbound || ''}</p>`;
+        return;
+    }
+
+    const s = d.summary || {};
+    const peer = d.peer || {};
+    const showPeer = !!peer.show;
+
+    if (!(s.uses > 0) && !(s.logins > 0)) {
+        box.innerHTML = `<p style="color:var(--text-muted); font-size:13px; text-align:center; padding:24px;">${t.usage_nodata || ''}</p>`;
+        return;
+    }
+
+    // 三個數字；有對照時各自掛上「全體人均」
+    const ratio = (showPeer && peer.avg_consumed > 0) ? (s.consumed || 0) / peer.avg_consumed : null;
+    const sub = (txt) => `<div style="font-size:11px; color:var(--text-muted); margin-top:3px;">${txt}</div>`;
+    const stat = (label, val, extra) => `<div>
+        <div style="font-size:12px; color:var(--text-muted);">${label}</div>
+        <div style="font-size:1.6em; font-weight:bold;">${Number(val || 0).toLocaleString()}</div>${extra || ''}</div>`;
+    const consumedSub = showPeer ? sub(
+        `${t.usage_avg || '全體人均'}：${Number(peer.avg_consumed || 0).toLocaleString()}`
+        + (ratio != null ? ` · <span style="color:${ratio >= 1 ? '#f472b6' : '#4ade80'}; font-weight:600;">${ratio.toFixed(1)}${t.usage_times || '×平均'}</span>` : '')
+    ) : '';
+    const usesSub = showPeer ? sub(`${t.usage_avg || '全體人均'}：${Number(peer.avg_uses || 0).toLocaleString()}`) : '';
+    const summary = `<div style="display:flex; gap:28px; flex-wrap:wrap; margin-bottom:14px;">
+        ${stat(t.usage_consumed || '消耗點數', s.consumed, consumedSub)}
+        ${stat(t.usage_uses || 'AI 使用次數', s.uses, usesSub)}
+        ${stat(t.usage_logins || '登入次數', s.logins, '')}
+    </div>`;
+
+    // 樣本太少 → 說明為什麼沒有對照（不要讓人以為是壞了）
+    const noPeer = showPeer ? '' : `<p style="font-size:11px; color:var(--text-muted); background:rgba(128,128,128,0.12);
+        border-radius:8px; padding:8px 10px; margin:0 0 12px; line-height:1.6;">
+        <ion-icon name="information-circle-outline" style="vertical-align:-2px; margin-right:4px;"></ion-icon>${t.usage_no_peer || ''}</p>`;
+
+    const pane = (title, id) => `<div>
+        <h4 style="font-size:12px; margin:0 0 6px; color:var(--text-muted);">${title}</h4>
+        <div style="padding:12px; background:rgba(128,128,128,0.1); border-radius:8px; height:190px; position:relative;">
+            <canvas id="${id}"></canvas></div></div>`;
+    const charts = `<div style="display:grid; grid-template-columns:1fr; gap:14px;">
+        ${pane(t.usage_trend || '每日消耗趨勢', 'usage-trend-chart')}
+        ${pane(t.usage_models || '我用了哪些模型／工具', 'usage-model-chart')}
+    </div>`;
+
+    box.innerHTML = summary + noPeer + charts;
+    _renderUsageCharts(d, showPeer);
+}
+
+function _renderUsageCharts(d, showPeer) {
+    const t = TRANSLATIONS[currentLang] || {};
+    const txt = getComputedStyle(document.body).getPropertyValue('--text-color')?.trim() || '#ccc';
+    const grid = { color: 'rgba(128,128,128,0.2)' };
+    const base = {
+        responsive: true, maintainAspectRatio: false,
+        plugins: { legend: { labels: { color: txt, boxWidth: 10, font: { size: 10 } } } },
+    };
+
+    // 趨勢：我＝粉色實線；全體人均＝灰虛線（樣本足夠時才有）
+    const series = d.series || [];
+    const tds = [{
+        label: t.usage_me || '我',
+        data: series.map(x => x.consumed),
+        borderColor: 'rgba(244,114,182,1)', backgroundColor: 'rgba(244,114,182,0.15)',
+        fill: true, tension: 0.25, pointRadius: 0, borderWidth: 2,
+    }];
+    if (showPeer) tds.push({
+        label: t.usage_avg || '全體人均',
+        data: series.map(x => x.peer_avg),
+        borderColor: 'rgba(148,163,184,0.9)', borderDash: [5, 4], borderWidth: 2,
+        fill: false, tension: 0.25, pointRadius: 0,
+    });
+    const te = document.getElementById('usage-trend-chart');
+    if (te) _usageTrendChart = new Chart(te.getContext('2d'), {
+        type: 'line',
+        data: { labels: series.map(x => x.date), datasets: tds },
+        options: { ...base, scales: {
+            x: { ticks: { color: txt, font: { size: 9 }, maxTicksLimit: 6 }, grid },
+            y: { ticks: { color: txt, font: { size: 9 } }, grid, beginAtZero: true } } }
+    });
+
+    // 模型別：有對照時比佔比%（取 5，兩條一組才不會被 autoSkip 砍標籤）；否則直接看點數（取 8）
+    const mdl = (d.models || []).slice(0, showPeer ? 5 : 8);
+    const mds = showPeer
+        ? [{ label: t.usage_share_me || '我的佔比 %', data: mdl.map(m => m.share),
+             backgroundColor: 'rgba(167,139,250,0.8)', borderColor: 'rgba(167,139,250,1)', borderWidth: 1, borderRadius: 3 },
+           { label: t.usage_share_all || '全體佔比 %', data: mdl.map(m => m.peer_share),
+             backgroundColor: 'rgba(148,163,184,0.45)', borderColor: 'rgba(148,163,184,0.8)', borderWidth: 1, borderRadius: 3 }]
+        : [{ label: t.usage_points || '消耗點數', data: mdl.map(m => m.points),
+             backgroundColor: 'rgba(167,139,250,0.8)', borderColor: 'rgba(167,139,250,1)', borderWidth: 1, borderRadius: 3 }];
+    const me = document.getElementById('usage-model-chart');
+    if (me) _usageModelChart = new Chart(me.getContext('2d'), {
+        type: 'bar',
+        data: { labels: mdl.map(m => m.display_name || m.model), datasets: mds },
+        options: { ...base, indexAxis: 'y',
+            plugins: { ...base.plugins, tooltip: { callbacks: { afterLabel: (ctx) =>
+                showPeer ? '' : `${t.usage_uses || '次數'}：${mdl[ctx.dataIndex]?.count ?? '-'}` } } },
+            scales: {
+                x: { ticks: { color: txt, font: { size: 9 } }, grid, beginAtZero: true },
+                // 關掉 autoSkip：列數一多 Chart.js 會砍掉一半標籤，變成有長條卻不知道是哪個模型
+                y: { ticks: { color: txt, font: { size: 9 }, autoSkip: false }, grid } } }
+    });
 }
 
 // v2.8: 內部 Token 計量已停用 —— 以下保留為 no-op，避免既有呼叫端報錯。

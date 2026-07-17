@@ -53,8 +53,12 @@ def _low_balance_threshold(db: Session) -> int:
         return DEFAULT_LOW_BALANCE
 
 
-def _current_myai_points(db: Session, current_user: models.User):
-    """ZH: 取登入者當前的 myai 剩餘點數（綁定 sn 優先，退 email）；無則 None。"""
+def _current_myai_account(db: Session, current_user: models.User):
+    """ZH: 取登入者自己的 myai 帳號列（綁定 sn 優先，退 email）；無則 None。
+            ⚠ 一律由 JWT 的 current_user 推導，絕不接受前端傳來的身分參數
+              —— 這是「使用者只能看自己」的唯一防線。
+       EN: resolve the caller's OWN myai row from the JWT user only (never from
+           client-supplied identity). This is the sole guard for self-only access."""
     acc = crud.get_external_account_by_user_id(db, current_user.id)
     row = None
     if acc:
@@ -67,7 +71,116 @@ def _current_myai_points(db: Session, current_user: models.User):
     if not row and current_user.email:
         row = db.query(models.MyaiAccount).filter(
             models.MyaiAccount.email.ilike(current_user.email)).first()
+    return row
+
+
+def _current_myai_points(db: Session, current_user: models.User):
+    """ZH: 取登入者當前的 myai 剩餘點數（綁定 sn 優先，退 email）；無則 None。"""
+    row = _current_myai_account(db, current_user)
     return row.points if row else None
+
+
+# ZH: 學生端對照的「最小樣本數」。人均 + 活躍人數會反推出個體：
+#     若期間內只有 2 個活躍帳號（我＋另一人），總量＝人均×2，對方＝總量−我的 → 精準洩漏。
+#     3 人以上就無法反推「特定個人」（只能得到其餘人的總和），這裡取 5 更保守。
+#     樣本不足時不給對照（前端顯示說明），只顯示使用者自己的用量。
+# EN: minimum cohort for showing the peer baseline to students. avg × active_accounts
+#     lets a student solve for another individual when active==2. 3 is the mathematical
+#     floor; 5 is the conservative small-cell suppression threshold used here.
+MIN_PEER_COHORT = 5
+
+
+def _peer_baseline(db: Session, since):
+    """ZH: 同期間「全體基準」—— 只回聚合數字，**不含任何個人身分**（無姓名/email/sn 對外）。
+            人均分母＝期間內真的有用量的帳號數（沒用的人不該稀釋平均）。
+            管理端個人查詢與學生端「我的使用量」共用這裡，避免兩份人均邏輯各自漂移。
+       EN: same-window aggregate baseline. Returns aggregates only — no per-person
+           identity ever leaves this function. Shared by admin lookup and the
+           student-facing endpoint so the two can't drift apart."""
+    q = db.query(models.MyaiTransaction).filter(
+        models.MyaiTransaction.event_type == "ai_usage",
+        models.MyaiTransaction.occurred_at.isnot(None),
+    )
+    if since:
+        q = q.filter(models.MyaiTransaction.occurred_at >= since)
+    daily: dict = {}
+    per_sn: dict = {}
+    model_points: dict = {}
+    total = uses = 0
+    for t in q.all():
+        c = -(t.points_delta or 0)
+        if c <= 0:
+            continue
+        total += c
+        uses += 1
+        per_sn[t.vendor_sn] = per_sn.get(t.vendor_sn, 0) + c
+        code = t.model or "unknown"
+        model_points[code] = model_points.get(code, 0) + c
+        d = t.occurred_at.date().isoformat()
+        daily[d] = daily.get(d, 0) + c
+    return {"daily": daily, "per_sn": per_sn, "model_points": model_points,
+            "total": total, "uses": uses, "active": len(per_sn)}
+
+
+def _own_usage(db: Session, sns: set, since, mmap: dict):
+    """ZH: 某組 vendor_sn 的自身用量（消耗/次數/登入、模型別、每日）。
+       EN: own usage for a set of vendor_sn: totals, per-model, per-day."""
+    tq = db.query(models.MyaiTransaction).filter(models.MyaiTransaction.vendor_sn.in_(sns))
+    if since:
+        tq = tq.filter(models.MyaiTransaction.occurred_at >= since)
+    txs = tq.order_by(models.MyaiTransaction.occurred_at.desc()).all()
+    consumed = uses = logins = 0
+    model_agg: dict = {}
+    daily: dict = {}
+    for t in txs:
+        if t.event_type == "ai_usage":
+            c = -(t.points_delta or 0)
+            if c > 0:
+                consumed += c
+                uses += 1
+                code = t.model or "unknown"
+                e = mmap.get(code)
+                mm = model_agg.setdefault(code, {
+                    "model": code,
+                    "display_name": (e.display_name if e and e.display_name else code),
+                    "provider": (e.provider if e and e.provider else "未對應"),
+                    "category": (e.category if e and e.category else "未對應"),
+                    "mapped": bool(e), "count": 0, "points": 0,
+                })
+                mm["count"] += 1
+                mm["points"] += c
+                if t.occurred_at:
+                    d = t.occurred_at.date().isoformat()
+                    daily[d] = daily.get(d, 0) + c
+        elif t.event_type == "login":
+            logins += 1
+    return {"txs": txs, "consumed": consumed, "uses": uses, "logins": logins,
+            "model_agg": model_agg, "daily": daily}
+
+
+def _aligned_series(daily_me: dict, peer: dict):
+    """ZH: 趨勢軸用「全體有活動的日子」，自己沒用的日子補 0
+            —— 這樣才看得出自己在整體節奏中的位置，而不是只看到自己的孤島。
+       EN: align own series onto the all-accounts activity axis; zero-fill own gaps."""
+    active = peer["active"] or 1
+    return [{
+        "date": d,
+        "consumed": daily_me.get(d, 0),
+        "peer_avg": round(peer["daily"][d] / active, 1),
+    } for d in sorted(peer["daily"].keys())]
+
+
+def _ranked_models(model_agg: dict, consumed: int, peer: dict):
+    """ZH: 模型別排序 + 佔比。share=自己佔比、peer_share=全體佔比
+            → 並排比得出「我特別吃哪種模型」（絕對點數量級差太多，比不動）。
+       EN: per-model list with own vs all-accounts share (%), sorted by points."""
+    rows = sorted(model_agg.values(), key=lambda x: x["points"], reverse=True)
+    total_all = peer["total"]
+    for m in rows:
+        m["share"] = round(100 * m["points"] / consumed, 1) if consumed else 0
+        m["peer_share"] = (round(100 * peer["model_points"].get(m["model"], 0) / total_all, 1)
+                           if total_all else 0)
+    return rows
 
 
 def require_admin(current_user: models.User = Depends(get_current_user)) -> models.User:
@@ -147,6 +260,63 @@ def get_my_balance(
         "threshold": threshold,
         "below": (points is not None and points < threshold),
         "apply_guide_url": (guide or None),
+    }
+
+
+@router.get("/my-consumption")
+def get_my_consumption(
+    days: int = 30,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+) -> Any:
+    """ZH: v3.0 學生端「我的使用量」—— 只給**自己的**用量 + **全體聚合**趨勢對照。
+       EN: v3.0 student-facing usage: own usage only, plus aggregate-only baseline.
+
+    ⚠ 隱私邊界（刻意設計，不要放寬）：
+      1. 身分只從 JWT 的 current_user 推導，**不吃任何查詢身分的參數** → 無法查別人。
+      2. 回傳裡**沒有**其他人的姓名/email/序號、沒有 Top 消耗者、沒有逐帳號清單。
+      3. **不給排名**：排名會變成比賽/公審，且隱含他人相對位置。全體只以「人均」出現。
+      4. 對照數字全是聚合值（人均、佔比），單一使用者無法從中反推特定他人。
+    """
+    from datetime import datetime, timedelta
+    row = _current_myai_account(db, current_user)
+    if not row:
+        # ZH: 沒綁定廠商帳號（或還沒同步到）→ 前端顯示友善說明，不是錯誤
+        return {"bound": False, "days": int(days or 30), "summary": {}, "series": [],
+                "models": [], "peer": {}, "account": {}}
+
+    days = int(days or 30)
+    since = datetime.now() - timedelta(days=min(days, 3650)) if days > 0 else None
+    mmap = {m.code: m for m in db.query(models.MyaiModelMap).all()}
+    own = _own_usage(db, {row.vendor_sn}, since, mmap)
+    peer = _peer_baseline(db, since)
+    active = peer["active"]
+    # ZH: 5.「樣本太少就不給對照」—— 見 MIN_PEER_COHORT：人均會反推出特定個人。
+    #     不足時仍完整顯示「自己的」用量，只是拿掉全體對照。
+    show_peer = active >= MIN_PEER_COHORT
+    series = _aligned_series(own["daily"], peer) if show_peer else [
+        {"date": d, "consumed": own["daily"][d]} for d in sorted(own["daily"].keys())
+    ]
+    model_list = _ranked_models(own["model_agg"], own["consumed"], peer)
+    if not show_peer:
+        for m in model_list:
+            m.pop("peer_share", None)     # 全體佔比同樣是對照資料，一併拿掉
+    return {
+        "bound": True,
+        "days": days,
+        # ZH: 只有自己的帳號資訊（餘額/有效期），這本來就是他自己的
+        "account": {"points": row.points, "expiry": row.expiry},
+        "summary": {"consumed": own["consumed"], "uses": own["uses"], "logins": own["logins"]},
+        "series": series,
+        "models": model_list,
+        # ZH: 聚合值 only —— 刻意沒有 rank、沒有逐帳號資訊；樣本不足時連人均都不給。
+        "peer": {
+            "show": show_peer,
+            "active_accounts": active,
+            "min_cohort": MIN_PEER_COHORT,
+            **({"avg_consumed": round(peer["total"] / (active or 1), 1),
+                "avg_uses": round(peer["uses"] / (active or 1), 1)} if show_peer else {}),
+        },
     }
 
 
@@ -624,79 +794,24 @@ def user_consumption(
     matches = [_meta(m) for m in matched]
     days = int(days or 0)
     since = datetime.now() - timedelta(days=min(days, 3650)) if days > 0 else None
-    tq = db.query(models.MyaiTransaction).filter(models.MyaiTransaction.vendor_sn.in_(sns))
-    if since:
-        tq = tq.filter(models.MyaiTransaction.occurred_at >= since)
-    txs = tq.order_by(models.MyaiTransaction.occurred_at.desc()).all()
 
     # ZH: v2.9 模型對應表 —— 個人查詢也要套，否則這裡顯示 gpt_5_6_sol、上面圖表顯示 GPT-5
     # EN: apply the display-time model map here too, so names match the global charts
     mmap = {m.code: m for m in db.query(models.MyaiModelMap).all()}
-    consumed = uses = logins = 0
-    model_agg: dict = {}
-    daily_me: dict = {}
-    for t in txs:
-        if t.event_type == "ai_usage":
-            c = -(t.points_delta or 0)
-            if c > 0:
-                consumed += c; uses += 1
-                code = t.model or "unknown"
-                e = mmap.get(code)
-                mm = model_agg.setdefault(code, {
-                    "model": code,
-                    "display_name": (e.display_name if e and e.display_name else code),
-                    "provider": (e.provider if e and e.provider else "未對應"),
-                    "category": (e.category if e and e.category else "未對應"),
-                    "mapped": bool(e), "count": 0, "points": 0,
-                })
-                mm["count"] += 1; mm["points"] += c
-                if t.occurred_at:
-                    d = t.occurred_at.date().isoformat()
-                    daily_me[d] = daily_me.get(d, 0) + c
-        elif t.event_type == "login":
-            logins += 1
+    own = _own_usage(db, sns, since, mmap)
+    consumed, txs = own["consumed"], own["txs"]
 
     # ZH: 對照基準 —— 同期間「全體人均」。個人數字沒有基準就沒有意義：看到「消耗 1200」
-    #     不知道算兇還是正常。分母＝期間內真的有用量的帳號數（沒用的人不該稀釋平均）。
-    # EN: baseline = same-window average across accounts that actually had usage.
-    pq = db.query(models.MyaiTransaction).filter(
-        models.MyaiTransaction.event_type == "ai_usage",
-        models.MyaiTransaction.occurred_at.isnot(None),
-    )
-    if since:
-        pq = pq.filter(models.MyaiTransaction.occurred_at >= since)
-    daily_all: dict = {}
-    per_sn: dict = {}
-    model_points_all: dict = {}
-    total_all = uses_all = 0
-    for t in pq.all():
-        c = -(t.points_delta or 0)
-        if c <= 0:
-            continue
-        total_all += c; uses_all += 1
-        per_sn[t.vendor_sn] = per_sn.get(t.vendor_sn, 0) + c
-        code = t.model or "unknown"
-        model_points_all[code] = model_points_all.get(code, 0) + c
-        d = t.occurred_at.date().isoformat()
-        daily_all[d] = daily_all.get(d, 0) + c
-    active = len(per_sn) or 1
+    #     不知道算兇還是正常。
+    peer = _peer_baseline(db, since)
+    active = peer["active"] or 1
     # ZH: 排名以「單一帳號」為單位；查詢字串命中多個帳號時排名沒有意義 → 不給，別誤導。
     rank = None
     if len(sns) == 1 and consumed > 0:
-        rank = 1 + sum(1 for v in per_sn.values() if v > consumed)
-    # ZH: 趨勢軸用「全體有活動的日子」，個人沒用的日子補 0
-    #     —— 這樣才看得出他在整體節奏中的位置，而不是只看到自己的孤島。
-    series = [{
-        "date": d,
-        "consumed": daily_me.get(d, 0),
-        "peer_avg": round(daily_all[d] / active, 1),
-    } for d in sorted(daily_all.keys())]
+        rank = 1 + sum(1 for v in peer["per_sn"].values() if v > consumed)
+    series = _aligned_series(own["daily"], peer)
 
-    model_list = sorted(model_agg.values(), key=lambda x: x["points"], reverse=True)
-    for m in model_list:
-        # ZH: share=個人佔比、peer_share=全體佔比 → 對照模式並排比「這人特別吃哪種模型」
-        m["share"] = round(100 * m["points"] / consumed, 1) if consumed else 0
-        m["peer_share"] = round(100 * model_points_all.get(m["model"], 0) / total_all, 1) if total_all else 0
+    model_list = _ranked_models(own["model_agg"], consumed, peer)
 
     recent = [{
         "time": (t.occurred_at.isoformat() if t.occurred_at else None),
@@ -705,14 +820,15 @@ def user_consumption(
     } for t in txs[:40]]
     return {
         "q": q, "days": days, "matches": matches,
-        "summary": {"consumed": consumed, "uses": uses, "logins": logins, "tx_count": len(txs)},
+        "summary": {"consumed": consumed, "uses": own["uses"], "logins": own["logins"],
+                    "tx_count": len(txs)},
         "models": model_list,
         "series": series,
         "peer": {
-            "active_accounts": len(per_sn),
-            "total_consumed": total_all,
-            "avg_consumed": round(total_all / active, 1),
-            "avg_uses": round(uses_all / active, 1),
+            "active_accounts": peer["active"],
+            "total_consumed": peer["total"],
+            "avg_consumed": round(peer["total"] / active, 1),
+            "avg_uses": round(peer["uses"] / active, 1),
             "rank": rank,
         },
         "recent": recent,

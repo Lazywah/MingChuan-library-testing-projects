@@ -16,7 +16,7 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
     <!-- ZH: 引入主任務面板樣式 | EN: Import main stylesheet -->
-    <link rel="stylesheet" href="styles.css?v=20260630-9">
+    <link rel="stylesheet" href="styles.css?v=20260630-10">
 
     <!-- ZH: 引入 Google Material Icons | EN: Import Google Material Icons -->
     <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
@@ -202,8 +202,13 @@
             </div>
 
             <!-- Token Usage Summary with Pie Chart -->
-            <div class="drawer-widget">
-                <h4 data-i18n="drawer_token">Token Usage</h4>
+            <!-- ZH: v3.0 整塊可點 → 開「我的使用量」。用 role/tabindex 讓鍵盤也能觸發（不是只有滑鼠）。 -->
+            <div class="drawer-widget drawer-token-clickable" id="drawer-token-widget"
+                 role="button" tabindex="0" title="查看我的使用量" style="cursor:pointer;">
+                <h4 style="display:flex; align-items:center; gap:6px;">
+                    <span data-i18n="drawer_token">Token Usage</span>
+                    <ion-icon name="stats-chart-outline" style="font-size:14px; opacity:0.75; margin-left:auto;"></ion-icon>
+                </h4>
                 <div class="drawer-token-visual">
                     <svg class="token-donut" viewBox="0 0 36 36" width="80" height="80">
                         <circle class="donut-bg" cx="18" cy="18" r="15.9" fill="none" stroke="rgba(255,255,255,0.1)"
@@ -292,6 +297,11 @@
                                 <button class="dropdown-item-btn" id="nav-profile-btn" style="display: flex; align-items: center; gap: 10px; width: 100%; padding: 12px 16px; background: transparent; border: none; border-bottom: 1px solid rgba(255,255,255,0.05); color: var(--text-color); font-family: inherit; font-size: 14px; cursor: pointer; transition: background 0.2s; text-align: left;" onmouseover="this.style.background='rgba(255,255,255,0.1)'" onmouseout="this.style.background='transparent'">
                                     <ion-icon name="person-outline" style="font-size: 16px;"></ion-icon>
                                     <span data-i18n="settings_profile">User Profile</span>
+                                </button>
+                                <!-- ZH: v3.0 我的使用量（只看自己的 + 全體人均對照） -->
+                                <button class="dropdown-item-btn" id="nav-usage-btn" style="display: flex; align-items: center; gap: 10px; width: 100%; padding: 12px 16px; background: transparent; border: none; border-bottom: 1px solid rgba(255,255,255,0.05); color: var(--text-color); font-family: inherit; font-size: 14px; cursor: pointer; transition: background 0.2s; text-align: left;" onmouseover="this.style.background='rgba(255,255,255,0.1)'" onmouseout="this.style.background='transparent'">
+                                    <ion-icon name="stats-chart-outline" style="font-size: 16px;"></ion-icon>
+                                    <span data-i18n="usage_title">我的使用量</span>
                                 </button>
                                 <!-- Change Password -->
                                 <button class="dropdown-item-btn" id="nav-password-btn" style="display: flex; align-items: center; gap: 10px; width: 100%; padding: 12px 16px; background: transparent; border: none; border-bottom: 1px solid rgba(255,255,255,0.05); color: var(--text-color); font-family: inherit; font-size: 14px; cursor: pointer; transition: background 0.2s; text-align: left;" onmouseover="this.style.background='rgba(255,255,255,0.1)'" onmouseout="this.style.background='transparent'">
@@ -1266,6 +1276,37 @@
 
     <!-- ZH: 個人資訊浮動面板 | EN: Profile Modal -->
     <!-- v2.1 升級：從單一 email 表單擴充為「我的帳號資訊」豐富版 -->
+    <!-- ZH: v3.0 我的使用量 —— 只看得到自己的用量 + 全體「人均」對照（無排名、無他人資訊）。
+             入口：右側抽屜的「外部 AI 點數」區塊、或 Header 使用者下拉的「我的使用量」。 -->
+    <div id="usage-modal" class="tutorial-modal hidden">
+        <div class="tutorial-backdrop" id="usage-backdrop"></div>
+        <div class="tutorial-content form-box-panel login-modal" style="max-width: 720px; width: 94%; max-height: 90vh; overflow-y: auto;">
+            <button class="tutorial-close" id="usage-close-btn"><ion-icon name="close-outline"></ion-icon></button>
+            <h2 style="margin-bottom: 6px;">
+                <ion-icon name="stats-chart-outline" style="margin-right:8px;"></ion-icon>
+                <span data-i18n="usage_title">我的使用量</span>
+            </h2>
+            <p style="color:var(--text-muted); font-size:12px; margin:0 0 16px;" data-i18n="usage_hint">
+                這裡只顯示你自己的外部 AI 使用紀錄，以及全體的平均值作為對照。看不到其他人的資料。
+            </p>
+
+            <!-- 期間切換 -->
+            <div style="display:flex; gap:8px; align-items:center; margin-bottom:14px; flex-wrap:wrap;">
+                <span style="font-size:12px; color:var(--text-muted);" data-i18n="usage_period">期間</span>
+                <select id="usage-days" style="padding:4px 10px; border-radius:8px;">
+                    <option value="30" data-i18n="usage_30d">近 30 天</option>
+                    <option value="90" data-i18n="usage_90d">近 90 天</option>
+                    <option value="0" data-i18n="usage_all">全部</option>
+                </select>
+                <span id="usage-balance" style="margin-left:auto; font-size:12px; color:var(--text-muted);"></span>
+            </div>
+
+            <div id="usage-body">
+                <p style="color:var(--text-muted); font-size:13px; text-align:center; padding:24px;" data-i18n="usage_loading">載入中…</p>
+            </div>
+        </div>
+    </div>
+
     <div id="profile-modal" class="tutorial-modal hidden">
         <div class="tutorial-backdrop" id="profile-backdrop"></div>
         <div class="tutorial-content form-box-panel login-modal" style="max-width: 540px; width: 92%; max-height: 90vh; overflow-y: auto;">
@@ -1522,7 +1563,7 @@
     <!-- ZH: 載入圖標庫與主程式碼 | EN: Load Icon library and Main Logic -->
     <script type="module" src="https://unpkg.com/ionicons@7.1.0/dist/ionicons/ionicons.esm.js"></script>
     <script nomodule src="https://unpkg.com/ionicons@7.1.0/dist/ionicons/ionicons.js"></script>
-    <script src="app.js?v=20260630-9"></script>
+    <script src="app.js?v=20260630-10"></script>
     <!-- ZH: v2.6 客服／導覽浮動助手 | EN: v2.6 floating support/guide assistant -->
     <script src="assistant-widget.js?v=20260625-4"></script>
 </body>
