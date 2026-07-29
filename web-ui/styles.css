@@ -2188,6 +2188,69 @@ ion-icon {
     border-bottom: 3px solid var(--accent-glow);
 }
 
+/* ==========================================================================
+   ZH: v3.0 運算任務分頁的滑鼠停留說明。內容來自 data-tip（由 applyTranslations
+       的 data-i18n-tip 寫入），純 CSS 以 attr() 畫出、不需 JS 定位。
+       用 [data-tip] 限定：i18n 還沒寫入前不會冒出一個空框。
+       :focus-visible 一併支援 —— 需要說明的不會只有滑鼠使用者。
+   EN: v3.0 hover tooltips for the compute sub-tabs. Text comes from data-tip
+       (written by the data-i18n-tip pass); pure CSS via attr(), no JS layout.
+   ========================================================================== */
+.has-tip {
+    position: relative;
+}
+
+/* 「這裡有說明」的提示圖示 —— 沒有它使用者不會知道可以停留 */
+.tip-hint {
+    font-size: 13px;
+    opacity: 0.4;
+    transition: opacity 0.2s;
+}
+
+.has-tip:hover .tip-hint,
+.has-tip:focus-visible .tip-hint {
+    opacity: 0.95;
+}
+
+.has-tip[data-tip]::after {
+    content: attr(data-tip);
+    position: absolute;
+    top: calc(100% + 10px);
+    left: 0;
+    z-index: 60;
+    width: max-content;
+    max-width: min(320px, 78vw);
+    padding: 10px 12px;
+    border-radius: 8px;
+    background: var(--bg-solid, #1a1a24);
+    border: 1px solid var(--accent-glow);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.55);
+    color: var(--text-primary);
+    font-size: 12px;
+    font-weight: 400;
+    line-height: 1.7;
+    text-align: left;
+    white-space: normal;
+    opacity: 0;
+    visibility: hidden;
+    transform: translateY(-4px);
+    transition: opacity 0.18s ease, transform 0.18s ease, visibility 0.18s;
+    pointer-events: none;   /* 說明框本身不擋滑鼠，才不會擋到下面的內容 */
+}
+
+.has-tip[data-tip]:hover::after,
+.has-tip[data-tip]:focus-visible::after {
+    opacity: 1;
+    visibility: visible;
+    transform: translateY(0);
+}
+
+/* 最後一個分頁改成靠右展開，否則說明框會衝出視窗右緣 */
+.compute-sub-tabs .has-tip[data-tip]:last-child::after {
+    left: auto;
+    right: 0;
+}
+
 .sub-page-view {
     display: none;
 }

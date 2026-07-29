@@ -46,8 +46,13 @@ const TRANSLATIONS = {
         label_epochs: "訓練迴圈數",
         label_batch: "批次大小",
         btn_dispatch: "派發任務",
-        compute_high: "大型訓練",
-        compute_mid_low: "快速作業",
+        compute_high: "高階 GPU",
+        compute_mid_low: "本地 GPU",
+        // v3.0 分頁說明（滑鼠移上去浮現）。依規劃目標描述兩種 GPU 的用途取向
+        // （高階＝重量級訓練、本地＝互動式輕量）——分頁名字本身看不出各自適合什麼。
+        compute_high_tip: "高階 GPU 伺服器（急件佇列）。適合模型訓練、微調這類吃顯卡、要跑很久的重量級工作。因為排隊等專用 GPU，開始時間不一定是立刻。",
+        compute_mid_low_tip: "服務層的本地 GPU（一般佇列）。適合互動式試跑、小型推論、快速迭代這種輕量、想馬上看到結果的工作。",
+        compute_notebook_tip: "在瀏覽器裡開一個完整的 VS Code：可以編輯 Notebook、開終端機、管理檔案，需要時再把單一程式送去 GPU 跑。適合邊寫邊試的探索性開發。",
         pipeline_active: "運行管線 / 佇列",
         msg_no_signal: "無訊號 / 佇列空閒",
         btn_view_details: "查看詳情",
@@ -156,7 +161,7 @@ const TRANSLATIONS = {
         btn_reopen_tutorial: "開啟教學",
         tutorial_title: "歡迎來到 AI Base！",
         tutorial_step1_title: "運算任務",
-        tutorial_step1_desc: "提交高算力或中低算力運算任務，並即時監控您的作業佇列。",
+        tutorial_step1_desc: "提交高階 GPU 或本地 GPU 運算任務，並即時監控您的作業佇列。",
         tutorial_step2_title: "AI 助手",
         tutorial_step2_desc: "存取各類 AI 模型進行文字聊天、圖片辨識、搜尋等功能。",
         tutorial_step3_title: "系統設定",
@@ -211,8 +216,8 @@ const TRANSLATIONS = {
         tut_u3_s1_body: "GPU 用在: 深度學習訓練、大量矩陣運算、影像處理。一般作業 (寫 if/for 等基礎程式) CPU 就夠了。GPU 任務會排隊，所以只在需要時才送。",
         tut_u3_s2_title: "Step 2 — 在 VS Code 內送任務",
         tut_u3_s2_body: "在 VS Code 的檔案總管 (左邊樹狀)，右鍵任何 .py 檔 → 選「AI Base: Run on GPU」。平台會把這個檔送到 GPU 工作節點開始執行。",
-        tut_u3_s3_title: "Step 3 — 切到高算力分頁看狀態",
-        tut_u3_s3_body: "「高算力」分頁顯示所有 GPU 任務佇列。狀態: pending (排隊) / running (跑中) / completed (完成) / failed (失敗)。中低算力任務在隔壁分頁。",
+        tut_u3_s3_title: "Step 3 — 切到高階 GPU 分頁看狀態",
+        tut_u3_s3_body: "「高階 GPU」分頁顯示所有 GPU 任務佇列。狀態: pending (排隊) / running (跑中) / completed (完成) / failed (失敗)。本地 GPU 任務在隔壁分頁。",
         tut_u3_s4_title: "🎉 完成",
         tut_u3_s4_body: "點任務看 streaming log。完成後輸出檔案在 /code/<你的id>/outputs/ — 從 VS Code 內可以打開查看。",
         // === Unit 4 steps ===
@@ -243,7 +248,7 @@ const TRANSLATIONS = {
         drawer_token: "外部 AI 點數",
         drawer_features: "可用功能",
         drawer_announcements: "公告與更新",
-        feat_1: "高算力 GPU",
+        feat_1: "高階 GPU",
         feat_2: "AI 文字助手",
         feat_3: "圖片生成 (即將推出)",
         anno_1: "系統升級至 Blackwell 架構完成。",
@@ -272,10 +277,10 @@ const TRANSLATIONS = {
         ql_docs_title: "文件庫",
         ql_docs_desc: "作品集、問題解法、教學與校網",
         report_issue_hint: "問題回報功能建置中，目前請洽管理員。",
-        compute_high_desc: "高算力佇列 (GPU 處理)",
-        compute_midlow_desc: "中低算力佇列 (服務層處理)",
-        priority_high_desc: "高算力 GPU 運算",
-        priority_normal_desc: "一般算力運算",
+        compute_high_desc: "高階 GPU 佇列",
+        compute_midlow_desc: "本地 GPU 佇列 (服務層)",
+        priority_high_desc: "高階 GPU · 急件優先",
+        priority_normal_desc: "本地 GPU · 一般佇列",
         // 文件庫頁面
         doc_lib_title: "文件庫",
         doc_portfolio_title: "未來作品集",
@@ -455,8 +460,13 @@ const TRANSLATIONS = {
         label_epochs: "Epochs",
         label_batch: "Batch Size",
         btn_dispatch: "Dispatch Task",
-        compute_high: "Large Training",
-        compute_mid_low: "Quick Tasks",
+        compute_high: "High-end GPU",
+        compute_mid_low: "Local GPU",
+        // v3.0 sub-tab tooltips — describe the planned purpose of each GPU tier
+        // (high-end = heavyweight training, local = lightweight interactive)
+        compute_high_tip: "High-end GPU server (priority queue). For heavyweight work like model training and fine-tuning that needs serious GPU power and runs a long time. It queues for a dedicated GPU, so it may not start immediately.",
+        compute_mid_low_tip: "Local service-layer GPU (normal queue). For lightweight, interactive work — quick trials, small inference, fast iteration where you want results right away.",
+        compute_notebook_tip: "Opens a full VS Code in your browser: edit notebooks, use a terminal, manage files, and send individual scripts to the GPU when you need to. Best for exploratory, write-and-try development.",
         pipeline_active: "Active Pipeline",
         msg_no_signal: "No Signal / Queue Empty",
         btn_view_details: "View Details",
@@ -565,7 +575,7 @@ const TRANSLATIONS = {
         btn_reopen_tutorial: "Show Tutorial",
         tutorial_title: "Welcome to AI Base!",
         tutorial_step1_title: "Compute Tasks",
-        tutorial_step1_desc: "Submit high or mid/low compute tasks and monitor your job queue in real time.",
+        tutorial_step1_desc: "Submit high-end GPU or local GPU tasks and monitor your job queue in real time.",
         tutorial_step2_title: "AI Assistant",
         tutorial_step2_desc: "Access various AI models for text chat, image recognition, web search and more.",
         tutorial_step3_title: "Settings",
@@ -620,8 +630,8 @@ const TRANSLATIONS = {
         tut_u3_s1_body: "Use GPU for: deep learning training, large matrix ops, image processing. Regular coursework (if/for/loops) runs fine on CPU. GPU jobs queue — only submit when needed.",
         tut_u3_s2_title: "Step 2 — Submit from VS Code",
         tut_u3_s2_body: "In the VS Code file tree (left), right-click any .py → \"AI Base: Run on GPU\". The platform sends it to a GPU worker node.",
-        tut_u3_s3_title: "Step 3 — High-compute tab",
-        tut_u3_s3_body: "\"High Compute\" tab shows the GPU queue. States: pending (queued) / running / completed / failed. Mid/low jobs live in the next tab.",
+        tut_u3_s3_title: "Step 3 — High-end GPU tab",
+        tut_u3_s3_body: "The \"High-end GPU\" tab shows the GPU queue. States: pending (queued) / running / completed / failed. Local GPU jobs live in the next tab.",
         tut_u3_s4_title: "🎉 Done",
         tut_u3_s4_body: "Click a job to see streaming log. After completion, outputs are at /code/<your_id>/outputs/ — viewable from VS Code.",
         // === Unit 4 steps ===
@@ -652,7 +662,7 @@ const TRANSLATIONS = {
         drawer_token: "External AI Credits",
         drawer_features: "Available Features",
         drawer_announcements: "Announcements & Updates",
-        feat_1: "High Compute GPU",
+        feat_1: "High-end GPU",
         feat_2: "AI Text Assistant",
         feat_3: "Image Gen (Soon)",
         anno_1: "System upgraded to Blackwell architecture.",
@@ -681,10 +691,10 @@ const TRANSLATIONS = {
         ql_docs_title: "Document Library",
         ql_docs_desc: "Portfolio, solutions, tutorials & school site",
         report_issue_hint: "Issue reporting is under construction — please contact the administrator for now.",
-        compute_high_desc: "High Compute Queue (GPU Processing)",
-        compute_midlow_desc: "Mid/Low Compute Queue (Service Layer)",
-        priority_high_desc: "High Priority GPU Processing",
-        priority_normal_desc: "Normal Priority Processing",
+        compute_high_desc: "High-end GPU Queue",
+        compute_midlow_desc: "Local GPU Queue (Service Layer)",
+        priority_high_desc: "High-end GPU · Priority",
+        priority_normal_desc: "Local GPU · Normal Queue",
         // Document Library page
         doc_lib_title: "Document Library",
         doc_portfolio_title: "Future Portfolio",
@@ -2187,6 +2197,11 @@ function applyLanguage(lang) {
     document.querySelectorAll('[data-i18n-title]').forEach(el => {
         const key = el.getAttribute('data-i18n-title');
         if (dict[key]) el.setAttribute('title', dict[key]);
+    });
+    // v3.0 自訂 tooltip 的內容（CSS 用 content: attr(data-tip) 畫出來）
+    document.querySelectorAll('[data-i18n-tip]').forEach(el => {
+        const key = el.getAttribute('data-i18n-tip');
+        if (dict[key]) el.setAttribute('data-tip', dict[key]);
     });
 }
 

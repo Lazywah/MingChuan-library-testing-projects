@@ -16,7 +16,7 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
     <!-- ZH: 引入主任務面板樣式 | EN: Import main stylesheet -->
-    <link rel="stylesheet" href="styles.css?v=20260630-10">
+    <link rel="stylesheet" href="styles.css?v=20260630-11">
 
     <!-- ZH: 引入 Google Material Icons | EN: Import Google Material Icons -->
     <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
@@ -377,20 +377,28 @@
 
                 <!-- ZH: 頂部: 新增任務表單 | EN: TOP: Submit New Job -->
                 <!-- ZH: 運算任務分頁 (高算力 / 中低算力 / Notebook) | EN: Compute Task Sub-tabs -->
+                <!-- ZH: v3.0 三個分頁加滑鼠停留說明（data-i18n-tip → data-tip，CSS 以 attr() 畫出）。
+                         說明重點是「用不用 GPU」，因為分頁名字看不出這個差別。 -->
                 <div class="compute-sub-tabs">
-                    <button class="sub-tab-btn active" id="sub-tab-high" data-subtab="compute-high">
+                    <button class="sub-tab-btn active has-tip" id="sub-tab-high" data-subtab="compute-high"
+                            data-i18n-tip="compute_high_tip">
                         <ion-icon name="flash-outline" style="color:#f59e0b;"></ion-icon> <span
                             data-i18n="compute_high">High Compute</span>
+                        <ion-icon name="help-circle-outline" class="tip-hint"></ion-icon>
                     </button>
-                    <button class="sub-tab-btn" id="sub-tab-midlow" data-subtab="compute-midlow">
+                    <button class="sub-tab-btn has-tip" id="sub-tab-midlow" data-subtab="compute-midlow"
+                            data-i18n-tip="compute_mid_low_tip">
                         <ion-icon name="speedometer-outline" style="color:#3b82f6;"></ion-icon> <span
                             data-i18n="compute_mid_low">Mid / Low Compute</span>
+                        <ion-icon name="help-circle-outline" class="tip-hint"></ion-icon>
                     </button>
                     <!-- ZH: v2.0 Lab launcher（沿用既有 sub-tab id 與 i18n 鍵） -->
                     <!-- EN: v2.0 Lab launcher (reuses existing sub-tab id and i18n key) -->
-                    <button class="sub-tab-btn" id="sub-tab-notebook" data-subtab="compute-notebook">
+                    <button class="sub-tab-btn has-tip" id="sub-tab-notebook" data-subtab="compute-notebook"
+                            data-i18n-tip="compute_notebook_tip">
                         <ion-icon name="rocket-outline" style="color:#a78bfa;"></ion-icon> <span
                             data-i18n="compute_notebook">Notebook</span>
+                        <ion-icon name="help-circle-outline" class="tip-hint"></ion-icon>
                     </button>
                 </div>
 
@@ -1563,7 +1571,7 @@
     <!-- ZH: 載入圖標庫與主程式碼 | EN: Load Icon library and Main Logic -->
     <script type="module" src="https://unpkg.com/ionicons@7.1.0/dist/ionicons/ionicons.esm.js"></script>
     <script nomodule src="https://unpkg.com/ionicons@7.1.0/dist/ionicons/ionicons.js"></script>
-    <script src="app.js?v=20260630-10"></script>
+    <script src="app.js?v=20260630-11"></script>
     <!-- ZH: v2.6 客服／導覽浮動助手 | EN: v2.6 floating support/guide assistant -->
     <script src="assistant-widget.js?v=20260625-4"></script>
 </body>
