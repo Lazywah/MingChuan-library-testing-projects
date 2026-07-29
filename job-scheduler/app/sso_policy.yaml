@@ -44,7 +44,7 @@ cas:
 # ==============================================================================
 # OIDC SSO 設定（v2.1 新增 — MCU Microsoft Entra ID）
 # ==============================================================================
-# ZH: 取得 client_id / client_secret 流程：
+# ZH: 取得 client_id / client_secret 流程（完整申請說明見 docs/IT-OIDC-申請信範本.md）：
 #   1. 寄信給 IT，請對方在 Microsoft Entra Admin Center 註冊 App Registration
 #   2. 告知 redirect_uri 須一次申請 dev + prod 兩個
 #   3. IT 回覆後，把真實值填進「根目錄 .env」，重啟 job-scheduler 即生效
