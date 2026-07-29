@@ -64,6 +64,14 @@ services:
       # ZH: CORS 允許來源（逗號分隔，留空允許所有） | EN: CORS origins (comma-sep, empty = allow all)
       CORS_ORIGINS: ${CORS_ORIGINS:-}
 
+      # ZH: v3.0 SSO OIDC 機敏值 — 只放 .env（已 gitignore），不進 sso_policy.yaml。
+      #     留空＝維持 yaml 的 PENDING → OIDC 停用、fallback mock。IT 給憑證後填 .env 再重啟。
+      # EN: v3.0 SSO OIDC secrets — live only in .env (gitignored), never in sso_policy.yaml.
+      #     Empty = keep yaml PENDING (OIDC disabled, mock fallback).
+      OIDC_CLIENT_ID: ${OIDC_CLIENT_ID:-}
+      OIDC_CLIENT_SECRET: ${OIDC_CLIENT_SECRET:-}
+      OIDC_REDIRECT_URI: ${OIDC_REDIRECT_URI:-}
+
       # ZH: Portkey LLM 閘道位址 | EN: Portkey LLM gateway URL
       PORTKEY_URL: ${PORTKEY_URL:-http://ai-platform-portkey:8000/v1/chat/completions}
       PORTKEY_ENABLED: ${PORTKEY_ENABLED:-true}

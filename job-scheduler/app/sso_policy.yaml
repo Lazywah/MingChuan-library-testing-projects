@@ -46,18 +46,25 @@ cas:
 # ==============================================================================
 # ZH: 取得 client_id / client_secret 流程：
 #   1. 寄信給 IT，請對方在 Microsoft Entra Admin Center 註冊 App Registration
-#   2. 告知 redirect_uri 須一次申請 dev + prod 兩個（見 docs/dev/IT-OIDC-申請信範本.md）
-#   3. IT 回覆後將下方 PENDING 替換為真實值
-#   4. 重啟 job-scheduler 即生效
+#   2. 告知 redirect_uri 須一次申請 dev + prod 兩個
+#   3. IT 回覆後，把真實值填進「根目錄 .env」，重啟 job-scheduler 即生效
 #
-# ZH: 若 client_id / client_secret 仍是 "PENDING"，工廠函式會自動 fallback 到 mock
-#     並 warning，服務不會崩潰（v1.1 I7 失敗保險機制）
+# 🔴 v3.0 安全規定：client_id / client_secret 一律放 .env（已 gitignore），
+#    **絕不要填進本檔**（本檔會進版控）。本檔的機敏欄位永遠維持 "PENDING" 佔位，
+#    由 config.py 於啟動時以環境變數 OIDC_CLIENT_ID / OIDC_CLIENT_SECRET / OIDC_REDIRECT_URI 覆寫。
+#    .env 範例（值由 IT 提供）：
+#      OIDC_CLIENT_ID=xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
+#      OIDC_CLIENT_SECRET=（Entra App 的 client secret）
+#      OIDC_REDIRECT_URI=https://<正式網域>/api/v1/sso/oidc/callback
+#
+# ZH: 若 client_id / client_secret 仍是 "PENDING"（且環境變數未設），工廠函式會自動 fallback
+#     到 mock 並 warning，服務不會崩潰（v1.1 I7 失敗保險機制）
 # ==============================================================================
 oidc:
   tenant_id: "30f2f0eb-3fc8-4a5a-94b5-fffa8944532e"   # MCU Microsoft Entra Tenant ID (公開資訊)
-  client_id: "PENDING"          # ⏳ 等 IT 提供
-  client_secret: "PENDING"      # ⏳ 等 IT 提供（敏感，正式環境應改放 .env）
-  redirect_uri: "http://localhost:8002/api/v1/sso/oidc/callback"   # IT 註冊時須登記
+  client_id: "PENDING"          # 🔴 不要填這裡！改填 .env 的 OIDC_CLIENT_ID
+  client_secret: "PENDING"      # 🔴 不要填這裡！改填 .env 的 OIDC_CLIENT_SECRET（機敏，本檔進版控）
+  redirect_uri: "http://localhost:8002/api/v1/sso/oidc/callback"   # 佔位；正式值由 .env 的 OIDC_REDIRECT_URI 覆寫（須與 Entra 註冊一致）
   scopes:
     - "openid"
     - "email"

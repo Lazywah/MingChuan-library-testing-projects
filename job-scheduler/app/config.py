@@ -58,6 +58,26 @@ except Exception as e:
     SSO_POLICY = {"mock_mode": True, "mock": {"users": []}, "cas": {}}
     logger.warning("Failed to load sso_policy.yaml: %s", e)
 
+# ==============================================================================
+# ZH: v3.0 OIDC 機敏值改由環境變數注入（來自 .env，已 gitignore）。
+#     sso_policy.yaml 只保留 PENDING 佔位、可安全進版控；真實 client_id/secret 絕不寫進該檔。
+#     有設環境變數就覆寫，沒設則維持 yaml 的 PENDING（fallback 到 mock，行為不變）。
+#     redirect_uri 非機敏，但一併允許 env 覆寫以便 dev/prod 切換。
+# EN: v3.0 OIDC secrets come from env vars (.env, gitignored); the yaml only holds
+#     PENDING placeholders so it stays safe to commit. Env overrides yaml when present.
+# ==============================================================================
+if isinstance(SSO_POLICY, dict):
+    _oidc_override = SSO_POLICY.setdefault("oidc", {})
+    for _env_key, _cfg_key in (
+        ("OIDC_CLIENT_ID", "client_id"),
+        ("OIDC_CLIENT_SECRET", "client_secret"),
+        ("OIDC_REDIRECT_URI", "redirect_uri"),
+        ("OIDC_TENANT_ID", "tenant_id"),
+    ):
+        _val = os.environ.get(_env_key)
+        if _val:
+            _oidc_override[_cfg_key] = _val
+
 class Settings(BaseSettings):
     """
     ZH: 應用程式基礎設定類別 (僅保留與密碼、路徑相關)
