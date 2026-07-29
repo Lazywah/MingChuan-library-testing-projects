@@ -9,7 +9,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Playpen+Sans:wght@400;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="styles.css?v=20260630-28">
+    <link rel="stylesheet" href="styles.css?v=20260630-29">
     <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
@@ -685,13 +685,13 @@
                 <!-- Tab Buttons -->
                 <div style="display:flex; gap:0; border-bottom: 1px solid var(--border-color); padding: 0 15px;">
                     <button id="tab-high-compute" class="admin-job-tab active" onclick="switchJobTab('high')">
-                        <ion-icon name="flash-outline"></ion-icon> <span data-i18n="tab_high_compute">高算力運算</span>
+                        <ion-icon name="flash-outline"></ion-icon> <span data-i18n="tab_high_compute">高階 GPU</span>
                     </button>
                     <button id="tab-midlow-compute" class="admin-job-tab" onclick="switchJobTab('midlow')">
-                        <ion-icon name="layers-outline"></ion-icon> <span data-i18n="tab_midlow_compute">中低算力運算</span>
+                        <ion-icon name="layers-outline"></ion-icon> <span data-i18n="tab_midlow_compute">本地 GPU</span>
                     </button>
                 </div>
-                <!-- High Compute Table -->
+                <!-- High-end GPU Table -->
                 <div id="admin-jobs-high-panel" class="admin-table-wrap scrollbar-custom" style="max-height: 420px; overflow-y: auto;">
                     <table class="admin-table sticky-header" id="admin-jobs-high-table">
                         <thead>
@@ -707,7 +707,7 @@
                         <tbody id="admin-jobs-high-body"><!-- JS --></tbody>
                     </table>
                 </div>
-                <!-- Mid/Low Compute Table -->
+                <!-- Local GPU Table -->
                 <div id="admin-jobs-midlow-panel" class="admin-table-wrap scrollbar-custom" style="max-height: 420px; overflow-y: auto; display: none;">
                     <table class="admin-table sticky-header" id="admin-jobs-midlow-table">
                         <thead>
@@ -1432,7 +1432,7 @@
     <script type="module" src="https://unpkg.com/ionicons@7.1.0/dist/ionicons/ionicons.esm.js"></script>
     <script nomodule src="https://unpkg.com/ionicons@7.1.0/dist/ionicons/ionicons.js"></script>
     <!-- 載入 Admin 邏輯 -->
-    <script src="admin.js?v=20260630-28"></script>
+    <script src="admin.js?v=20260630-29"></script>
 </body>
 
 </html>
