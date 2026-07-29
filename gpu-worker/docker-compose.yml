@@ -22,7 +22,12 @@ services:
       - POOL_TYPE=${POOL_TYPE:-batch}
       - POLL_INTERVAL=${POLL_INTERVAL:-5}                   # ZH: 領取任務輪詢間隔 (秒)
       - HEARTBEAT_INTERVAL=${HEARTBEAT_INTERVAL:-30}        # ZH: 心跳上報間隔 (秒)
-      - GPU_IDLE_UTIL_THRESHOLD=${GPU_IDLE_UTIL_THRESHOLD:-10}  # ZH: GPU 空閒判定門檻(%)；單機共用 GPU 可調高(如90)
+      # ZH: GPU 空閒判定門檻(%)。預設 90 適合本機/桌機（GPU 與 OS/瀏覽器/Ollama 共用，
+      #     常態就有負載；門檻太低會讓 worker 一直判 GPU「忙」而不領任務、且無聲）。
+      #     接專用 GPU 伺服器時再用 env 覆寫回低值（如 10）。
+      # EN: GPU idle threshold(%). Default 90 suits a shared desktop GPU; a dedicated
+      #     GPU server can override back to a low value (e.g. 10) via env.
+      - GPU_IDLE_UTIL_THRESHOLD=${GPU_IDLE_UTIL_THRESHOLD:-90}
       - STORAGE_MOUNT_PATH=${STORAGE_MOUNT_PATH:-C:\storage} # ZH: 宿主機共享儲存路徑
 
     volumes:
