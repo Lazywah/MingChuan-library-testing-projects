@@ -342,6 +342,18 @@ def try_deduct_tokens(db: Session, user_id: str, tokens: int) -> bool:
 # ZH: 訓練任務 CRUD | EN: Training Job CRUD
 # ==============================================================================
 
+# ZH: v3.0 合法節點池白名單。任何未知值一律當 batch —— batch 是「誰都能領」的安全預設，
+#     不會把任務推進一個沒有 worker 的池而卡死。
+# EN: v3.0 valid node pools. Unknown → batch (the safe "anyone can take it" default).
+VALID_POOLS = ("batch", "interactive")
+
+
+def normalize_pool(value) -> str:
+    """ZH: 正規化 pool_type，非白名單一律回 'batch' | EN: normalize pool, unknown → 'batch'."""
+    v = (value or "batch")
+    return v if v in VALID_POOLS else "batch"
+
+
 def create_job(db: Session, job: schemas.JobCreate, user_id: str) -> models.TrainingJob:
     """
     ZH: 建立新訓練任務 (狀態 = pending)
@@ -353,6 +365,7 @@ def create_job(db: Session, job: schemas.JobCreate, user_id: str) -> models.Trai
         model_name=job.model_name,
         gpu_required=job.gpu_required,
         priority=job.priority,
+        pool_type=normalize_pool(job.pool_type),   # v3.0 目標節點池
         config=json.dumps(job.config) if job.config else None,
         script_path=job.script_path,
         dataset_path=job.dataset_path,
@@ -630,7 +643,7 @@ def estimate_job_tokens(config: Optional[dict]) -> int:
 
 def upsert_worker_heartbeat(
     db: Session, node_id: str, available_gpus: List[str], gpu_utilization: float,
-    gpus_detail: Optional[list] = None
+    gpus_detail: Optional[list] = None, pool_type: Optional[str] = None
 ) -> models.WorkerHeartbeat:
     """ZH: 更新或新增 Worker 節點心跳 | EN: Upsert worker heartbeat record"""
     node = db.query(models.WorkerHeartbeat).filter(
@@ -638,11 +651,13 @@ def upsert_worker_heartbeat(
     ).first()
     now = datetime.now(timezone.utc)
     detail_json = json.dumps(gpus_detail) if gpus_detail is not None else None
+    pool = normalize_pool(pool_type)   # v3.0 節點所屬池（未帶＝batch）
     if node:
         node.available_gpus = json.dumps(available_gpus)
         node.gpu_utilization = gpu_utilization
         if detail_json is not None:
             node.gpus_detail = detail_json
+        node.pool_type = pool
         node.last_seen = now
         node.is_online = True
     else:
@@ -651,6 +666,7 @@ def upsert_worker_heartbeat(
             available_gpus=json.dumps(available_gpus),
             gpu_utilization=gpu_utilization,
             gpus_detail=detail_json if detail_json is not None else "[]",
+            pool_type=pool,
             last_seen=now,
             is_online=True,
         )
@@ -677,6 +693,16 @@ def get_online_worker_nodes(db: Session, timeout_seconds: int = 90) -> List[mode
     return db.query(models.WorkerHeartbeat).filter(
         models.WorkerHeartbeat.last_seen >= cutoff
     ).order_by(models.WorkerHeartbeat.node_id).all()
+
+
+def pool_has_online_worker(db: Session, pool_type: str, timeout_seconds: int = 90) -> bool:
+    """ZH: v3.0 該池是否有在線 worker。派工墊底邏輯用：互動池沒人時，batch 才代領互動任務。
+       EN: v3.0 whether a given pool has any online worker; drives take_job fallback."""
+    pool = normalize_pool(pool_type)
+    return any(
+        normalize_pool(getattr(n, "pool_type", "batch")) == pool
+        for n in get_online_worker_nodes(db, timeout_seconds=timeout_seconds)
+    )
 
 
 # ==============================================================================

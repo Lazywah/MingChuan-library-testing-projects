@@ -2720,6 +2720,8 @@ async function handleJobSubmit(e, priority, formId) {
         model_name: document.getElementById('model-name' + suffix).value,
         gpu_required: priority >= 2 ? 1 : 0,
         priority: priority,
+        // v3.0 目標節點池：高階 GPU→batch（高階伺服器）、本地 GPU→interactive（服務層 GPU）
+        pool_type: formId === 'job-form-high' ? 'batch' : 'interactive',
         dataset_path: uploadedDatasetPath,
         config: {
             epochs: parseInt(document.getElementById('job-epochs' + suffix).value),

@@ -183,6 +183,9 @@ def init_db():
             except Exception: pass
             try: conn.execute(text("ALTER TABLE worker_heartbeats ADD COLUMN gpus_detail TEXT DEFAULT '[]'"))
             except Exception: pass
+            # --- v3.0 本地 GPU 路由分流：任務的目標節點池 | v3.0 job target pool for local-GPU routing ---
+            try: conn.execute(text("ALTER TABLE training_jobs ADD COLUMN pool_type VARCHAR DEFAULT 'batch'"))
+            except Exception: pass
 
             # --- Phase E 清理 v1 Notebook 表 | Phase E drop v1 notebooks table ---
             # ZH: 注意 — 不刪除 training_jobs 的 docker_image/inline_code/entry_args/preferred_node 4 欄位

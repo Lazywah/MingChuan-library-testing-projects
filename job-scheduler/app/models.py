@@ -117,6 +117,10 @@ class TrainingJob(Base):
     status = Column(String, default="pending", index=True)                    # ZH: 任務狀態 | EN: Job status
     gpu_required = Column(Integer, default=1)                                 # ZH: 需要 GPU 數 | EN: Required GPUs
     priority = Column(Integer, default=0)                                     # ZH: 優先級 | EN: Priority
+    # ZH: v3.0 目標節點池 batch(高階 GPU 伺服器) / interactive(本地·服務層 GPU)。
+    #     派工採「首選對應池 + batch 墊底」——見 routers/worker.take_job。舊資料 NULL 視為 batch。
+    # EN: v3.0 target pool: batch(high-end GPU server) / interactive(local service-layer GPU).
+    pool_type = Column(String, default="batch")                              # ZH: 目標節點池 | EN: Target node pool
 
     # ZH: 訓練配置 (JSON 字串) | EN: Training config (JSON string)
     config = Column(Text)                                                     # {"epochs":10, "batch_size":32}

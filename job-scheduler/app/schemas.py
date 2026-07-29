@@ -232,6 +232,9 @@ class JobCreate(BaseModel):
     )
     
     priority: Optional[int] = 0                      # ZH: 優先級 (越大越優先) | EN: Priority
+    # ZH: v3.0 目標節點池：batch(高階 GPU) / interactive(本地 GPU)。只收白名單，其他一律當 batch。
+    # EN: v3.0 target pool: batch(high-end) / interactive(local). Whitelisted; anything else → batch.
+    pool_type: Optional[str] = "batch"
 
     # ZH: Notebook 執行欄位 | EN: Notebook execution fields
     docker_image:   Optional[str]       = None        # ZH: 覆寫預設 Docker Image，空則使用 DEFAULT_IMAGE | EN: Override default image
@@ -378,6 +381,7 @@ class WorkerHeartbeatPayload(BaseModel):
     available_gpus: List[str]
     gpu_utilization: Optional[float] = 0.0  # ZH: GPU 使用率 % | EN: GPU utilization %
     gpus_detail: Optional[List[Dict[str, Any]]] = None  # ZH: 每張 GPU 詳細 | EN: Per-GPU detail
+    pool_type: Optional[str] = "batch"      # ZH: v3.0 此節點所屬池 batch/interactive | EN: node's pool
 
 
 # ZH: Notebook Schema 已於 Phase E 移除 — 被 v2.0 Lab schemas 取代

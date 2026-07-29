@@ -59,6 +59,7 @@ def verify_worker_token(authorization: Optional[str] = Header(None)) -> None:
 class TakeJobRequest(BaseModel):
     node_id: str
     available_gpus: List[str]
+    pool_type: Optional[str] = "batch"   # v3.0 領取端節點所屬池 batch/interactive
 
 
 class TakeJobResponse(BaseModel):
@@ -94,6 +95,24 @@ def take_job(
     if not pending_jobs:
         return {"job": None}
 
+    # ZH: v3.0 本地 GPU 路由分流（首選對應池 + batch 墊底）
+    #   領取端池 = interactive → 只領 interactive 任務（服務層 GPU 不跑重量級 batch 訓練）
+    #   領取端池 = batch        → 一律可領 batch 任務；interactive 任務「只有互動池目前沒有
+    #                             在線 worker 時」才代領（墊底），避免任務卡死也不搶互動池的活
+    # EN: v3.0 local-GPU routing — prefer matching pool, batch backfills interactive
+    #     only when no interactive worker is online. See create_job/pool_has_online_worker.
+    taker_pool = crud.normalize_pool(req.pool_type)
+    interactive_up = crud.pool_has_online_worker(db, "interactive") if taker_pool == "batch" else False
+
+    def _pool_allows(job) -> bool:
+        job_pool = crud.normalize_pool(getattr(job, "pool_type", "batch"))
+        if taker_pool == "interactive":
+            return job_pool == "interactive"
+        # taker_pool == "batch"
+        if job_pool == "interactive":
+            return not interactive_up   # 只在互動池沒人時墊底
+        return True
+
     gpu_id_str = req.available_gpus[0]
     # H-7: ZH: gpu_id 欄位定義為 Integer，存入時轉型，回傳 Worker 時仍用字串
     # EN: Column is Integer; cast before storing, return original string to worker
@@ -102,6 +121,11 @@ def take_job(
     # H-6: ZH: 若第一筆任務已被其他節點搶佔，依序嘗試下一筆，直到搶佔成功或清單用盡
     # EN: If top job was already claimed, walk the list until one succeeds or all are taken
     for job in pending_jobs:
+        # ZH: v3.0 池路由過濾（首選對應池 + batch 墊底）
+        # EN: v3.0 pool routing filter (prefer matching pool, batch backfills)
+        if not _pool_allows(job):
+            continue
+
         # ZH: 若任務指定偏好節點且與當前節點不符則跳過（讓對應節點來領）
         # EN: If job has a preferred_node and it doesn't match this node, skip it
         if job.preferred_node and job.preferred_node != req.node_id:
@@ -207,9 +231,9 @@ def worker_heartbeat(
     """
     crud.upsert_worker_heartbeat(
         db, payload.node_id, payload.available_gpus, payload.gpu_utilization or 0.0,
-        gpus_detail=payload.gpus_detail,
+        gpus_detail=payload.gpus_detail, pool_type=payload.pool_type,
     )
-    logger.debug(f"Heartbeat from {payload.node_id}, gpus={payload.available_gpus}")
+    logger.debug(f"Heartbeat from {payload.node_id}, gpus={payload.available_gpus}, pool={payload.pool_type}")
     return {"status": "ok", "node_id": payload.node_id}
 
 

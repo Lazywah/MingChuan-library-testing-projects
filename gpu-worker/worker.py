@@ -36,6 +36,12 @@ def _busy_gpu_snapshot() -> set:
 SERVICE_LAYER_URL = os.environ.get("SERVICE_LAYER_URL", "http://192.168.1.50:8002")
 API_TOKEN = os.environ.get("API_TOKEN", "mcu-secret-token")
 NODE_ID = os.environ.get("NODE_ID", "gpu-node-01")
+# ZH: v3.0 此節點所屬池 batch(高階 GPU 伺服器) / interactive(本地·服務層 GPU)。
+#     本機/目前部署維持預設 batch；日後在服務層 RTX 5090 起的 worker 設 POOL_TYPE=interactive，
+#     「本地 GPU」任務便會自動改由它領取（不需改任何程式碼）。
+# EN: v3.0 this node's pool. Keep default "batch" for now; a future service-layer
+#     RTX 5090 worker sets POOL_TYPE=interactive and local-GPU jobs route to it — no code change.
+POOL_TYPE = os.environ.get("POOL_TYPE", "batch")
 POLL_INTERVAL = int(os.environ.get("POLL_INTERVAL", "5"))
 STORAGE_MOUNT_PATH = os.environ.get("STORAGE_MOUNT_PATH", "C:\\storage")
 # Heartbeat is sent every HEARTBEAT_INTERVAL polls (default: every 30 s = 6 polls × 5 s)
@@ -143,6 +149,7 @@ def send_heartbeat(available_gpus: list) -> None:
             "available_gpus": available_gpus,
             "gpu_utilization": gpu_util,
             "gpus_detail": get_gpu_details(),
+            "pool_type": POOL_TYPE,
         }
         resp = requests.post(
             f"{SERVICE_LAYER_URL}/api/v1/worker/heartbeat",
@@ -400,7 +407,7 @@ def poll_loop():
             try:
                 response = requests.post(
                     f"{SERVICE_LAYER_URL}/api/v1/worker/take",
-                    json={"node_id": NODE_ID, "available_gpus": available_gpus},
+                    json={"node_id": NODE_ID, "available_gpus": available_gpus, "pool_type": POOL_TYPE},
                     headers=HEADERS,
                     timeout=5,
                 )
