@@ -13,9 +13,11 @@ services:
       - SERVICE_LAYER_URL=${SERVICE_LAYER_URL:-http://ai-platform-scheduler:8000}
 
       # ZH: worker 的 API_TOKEN 必須等於服務層的 WORKER_API_TOKEN，否則 heartbeat/take 全 401（且無聲）。
-      #     以 --env-file ../.env 帶入根目錄 .env 的同一把 token，兩邊自動一致。
-      # EN: worker API_TOKEN must equal the service layer's WORKER_API_TOKEN (else silent 401).
-      - API_TOKEN=${WORKER_API_TOKEN:-mcu-secret-token}
+      #     改用 :? fail-fast：沒帶 --env-file ../.env（＝沒提供 WORKER_API_TOKEN）就「大聲」啟動失敗，
+      #     不再退回不安全的預設值造成靜默 401。請一律用本目錄的 ./start-worker.sh（.bat）啟動，它會自動帶 --env-file。
+      # EN: Fail-fast — starting without --env-file ../.env (no WORKER_API_TOKEN) aborts loudly
+      #     instead of falling back to an insecure default that causes a silent 401. Use ./start-worker.sh.
+      - API_TOKEN=${WORKER_API_TOKEN:?WORKER_API_TOKEN not set - run ./start-worker.sh (bakes in --env-file ../.env) instead of a bare docker compose up}
       - NODE_ID=${NODE_ID:-gpu-node-01}                     # ZH: 此節點名稱（多台時請各自命名）
       # ZH: v3.0 此節點所屬池。本機 4060 維持 batch；日後服務層 RTX 5090 起 worker 設 interactive。
       # EN: v3.0 node pool. Keep batch for the local 4060; set interactive on the future 5090 worker.
