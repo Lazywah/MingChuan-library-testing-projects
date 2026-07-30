@@ -482,7 +482,7 @@ flowchart LR
         C4["gpu-worker/docker-compose.yml<br/>(GPU 節點, 獨立)"]
     end
 
-    WK2["mcu-gpu-worker<br/>(host.docker.internal:8002)"]
+    WK2["mcu-gpu-worker<br/>(SERVICE_LAYER_URL；同機預設 ai-platform-scheduler:8000)"]
 
     C1 --> N1
     C1 --> N2

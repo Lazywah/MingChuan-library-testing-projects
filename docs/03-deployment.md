@@ -36,17 +36,20 @@ docker run --rm --gpus all nvidia/cuda:12.3.0-base-ubuntu22.04 nvidia-smi
 
 ```bash
 cd gpu-worker
-# 編輯 .env（從 setup_env.py 產的那份複製過來，或重跑 setup 選 Mode 2 分機）
-cat > .env << 'EOF'
+# 遠端 GPU 節點：建一份本地 env 檔（用「根 .env.example」的 key 名 —— 注意是 WORKER_API_TOKEN，不是 API_TOKEN）
+cat > worker.env << 'EOF'
 SERVICE_LAYER_URL=http://<服務層真實 IP>:8002    # 例 http://192.168.1.50:8002
-API_TOKEN=<與服務層 .env 的 WORKER_API_TOKEN 完全一致>
+WORKER_API_TOKEN=<與服務層「根 .env」的 WORKER_API_TOKEN 完全一致>
 NODE_ID=gpu-node-01                                # 多節點請各自命名
+POOL_TYPE=batch                                    # 服務層 5090 那台設 interactive
+STORAGE_MOUNT_PATH=/mnt/storage                    # Linux 路徑；Windows 用 C:\storage
+GPU_IDLE_UTIL_THRESHOLD=90
 POLL_INTERVAL=5
 HEARTBEAT_INTERVAL=30
-STORAGE_MOUNT_PATH=C:\storage                      # Win 路徑或 Linux 路徑
 EOF
 
-docker compose up -d --build
+# 用包裝腳本啟動（自動帶 --env-file，避免忘記；Windows 用 start-worker.bat）
+WORKER_ENV_FILE=worker.env ./start-worker.sh up -d --build
 docker logs -f mcu-gpu-worker
 ```
 

@@ -211,7 +211,7 @@ docker volume prune -f         # 移除 dangling volume
 | 某學生濫用 Token | admin UI → 該 user → 調 `tokens_limit` |
 | 學期末清空使用量 | admin UI → 批次選使用者 → Batch Reset Usage |
 | 升級 base image | `docker build ...` 後重新 `docker push`；既有 cs container 不動，下次重啟才換 |
-| 換 GPU 節點 | 新節點上 `docker compose up -d`（gpu-worker），舊節點 `docker compose down` |
+| 換 GPU 節點 | 新節點上 `./start-worker.sh up -d`（gpu-worker，會自動帶 --env-file），舊節點 `./start-worker.sh down` |
 | 切換 SSO provider | 改 `sso_policy.yaml` → `docker compose restart job-scheduler` |
 | 修補 cookie / nginx 設定 | 改 `infrastructure/nginx.conf` → `docker compose exec nginx nginx -s reload` |
 

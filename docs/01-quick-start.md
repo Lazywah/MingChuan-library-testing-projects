@@ -68,7 +68,7 @@ python scripts/setup_env.py
 
 腳本會：
 - 用 `secrets.token_urlsafe()` 生 `JWT_SECRET_KEY` / `WORKER_API_TOKEN` / `WEBUI_SECRET_KEY` / `SECRETS_MASTER_KEY`（v2.0 Lab 用）
-- 寫入 `./.env` 與 `./gpu-worker/.env`（兩邊 token 自動對齊）
+- 寫入 `./.env`（單一來源；gpu-worker 由 `start-worker.sh` 以 `--env-file ../.env` 讀取，不再另寫 `gpu-worker/.env`）
 - 備份既有 `.env` 為 `.env.bak_YYYYMMDD_HHMMSS`
 
 > **已有 .env、只想補新欄位**：`python scripts/setup_env.py --check`（只追加缺漏 key，不覆寫既有值）
