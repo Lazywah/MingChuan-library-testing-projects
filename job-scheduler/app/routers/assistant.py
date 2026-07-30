@@ -32,7 +32,7 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
-from .. import models
+from .. import models, crud
 from ..auth import get_current_user
 from ..config import settings
 from ..database import get_db
@@ -144,9 +144,12 @@ async def ask(
                     }.get(res.get("reason"), "（讀不到附檔，先就你的問題一般性回答）")
                     yield _delta(reason_msg + "\n\n")
 
-            messages = rag_service.build_code_messages(query, ranked, file_excerpt, history)
+            _turns = crud.get_setting(db, "rag_history_turns")   # v3.1 step 6：runtime 值
+            messages = rag_service.build_code_messages(query, ranked, file_excerpt, history,
+                                                       history_turns=_turns)
         else:
-            messages = rag_service.build_messages(query, ranked, history)
+            _turns = crud.get_setting(db, "rag_history_turns")   # v3.1 step 6：runtime 值
+            messages = rag_service.build_messages(query, ranked, history, history_turns=_turns)
 
         ollama_url = f"{settings.OLLAMA_BASE_URL.rstrip('/')}/v1/chat/completions"
         payload = {"model": settings.RAG_CHAT_MODEL, "messages": messages, "stream": True}

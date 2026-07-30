@@ -28,7 +28,7 @@ ZH: 端點清單：
 ==============================================================================
 """
 
-from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, Query
+from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, Query, Body
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 from sqlalchemy import func
@@ -60,6 +60,32 @@ def require_admin(current_user: models.User = Depends(get_current_user)) -> mode
     if current_user.role != "admin":
         raise HTTPException(status_code=403, detail="Forbidden: Admins only")
     return current_user
+
+
+# ==============================================================================
+# ZH: v3.1 step 6 — 系統設定（營運旋鈕，存 SystemConfig，runtime 生效、.env 為 fallback）
+# EN: v3.1 step 6 — system settings (operational knobs; SystemConfig overrides .env at runtime)
+# ==============================================================================
+@router.get("/system-settings", summary="讀取營運型系統設定")
+def get_system_settings(
+    db: Session = Depends(get_db),
+    _admin: models.User = Depends(require_admin),
+):
+    """ZH: 回傳每個旋鈕的 生效值/預設值/範圍/是否已覆寫。"""
+    return {"settings": crud.get_all_settings(db)}
+
+
+@router.put("/system-settings", summary="更新營運型系統設定（值留空＝回退預設）")
+def put_system_settings(
+    payload: dict = Body(..., description="{key: value} 部分更新；值為空＝清除覆寫、回退 .env 預設"),
+    db: Session = Depends(get_db),
+    _admin: models.User = Depends(require_admin),
+):
+    try:
+        updated = crud.set_settings(db, payload)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    return {"settings": updated}
 
 
 # ==============================================================================

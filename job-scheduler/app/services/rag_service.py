@@ -36,7 +36,7 @@ import re
 import httpx
 from sqlalchemy.orm import Session
 
-from .. import models
+from .. import models, crud
 from ..config import settings
 
 logger = logging.getLogger(__name__)
@@ -303,23 +303,30 @@ async def retrieve(db: Session, query: str) -> list[dict]:
         if emb:
             candidates.append((r, emb))
 
-    return rank_chunks(qvec, candidates, settings.RAG_TOP_K, settings.RAG_MIN_SCORE)
+    # v3.1 step 6：top_k / min_score 改 runtime 讀 SystemConfig（admin 可即時調），.env 為 fallback
+    top_k = crud.get_setting(db, "rag_top_k")
+    min_score = crud.get_setting(db, "rag_min_score")
+    return rank_chunks(qvec, candidates, top_k, min_score)
 
 
-def build_messages(query: str, ranked: list[dict], history: list[dict] | None = None) -> list[dict]:
+def build_messages(query: str, ranked: list[dict], history: list[dict] | None = None,
+                   history_turns: int | None = None) -> list[dict]:
     """
     ZH: 組裝送給 Ollama 的 messages：system(含檢索上下文) + (歷史) + 本次提問。
-    EN: Build the messages for Ollama: system(with context) + (history) + question.
+        history_turns 由呼叫端(有 db)傳入 runtime 值；None 時回退 .env 預設。
+    EN: Build the messages for Ollama. history_turns is the runtime value passed by the
+        caller (which has db); falls back to the .env default when None.
     """
     if ranked:
         system = GUIDE_SYSTEM_PROMPT.format(context=build_context_block(ranked))
     else:
         system = GUIDE_NO_CONTEXT_PROMPT
 
+    turns = history_turns if history_turns is not None else settings.RAG_HISTORY_TURNS
     msgs = [{"role": "system", "content": system}]
     if history:
         # ZH: 只保留最近數輪，避免上下文爆量 | EN: keep only recent turns
-        msgs += history[-(settings.RAG_HISTORY_TURNS * 2):]
+        msgs += history[-(turns * 2):]
     msgs.append({"role": "user", "content": query})
     return msgs
 
@@ -329,6 +336,7 @@ def build_code_messages(
     ranked: list[dict],
     file_excerpt: dict | None = None,
     history: list[dict] | None = None,
+    history_turns: int | None = None,
 ) -> list[dict]:
     """
     ZH: 組裝「程式家教」模式的 messages：system(家教人格 + 附檔 + 檢索上下文) + 歷史 + 提問。
@@ -346,8 +354,9 @@ def build_code_messages(
     context = build_context_block(ranked) if ranked else "（無相關平台說明）"
     system = CODE_TUTOR_SYSTEM_PROMPT.format(file_block=file_block, context=context)
 
+    turns = history_turns if history_turns is not None else settings.RAG_HISTORY_TURNS
     msgs = [{"role": "system", "content": system}]
     if history:
-        msgs += history[-(settings.RAG_HISTORY_TURNS * 2):]
+        msgs += history[-(turns * 2):]
     msgs.append({"role": "user", "content": query})
     return msgs

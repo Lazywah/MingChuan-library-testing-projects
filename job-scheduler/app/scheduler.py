@@ -14,7 +14,7 @@ from datetime import datetime, timezone, timedelta
 
 from .config import settings, SCHEDULER_POLICY
 from .database import SessionLocal
-from . import models
+from . import models, crud
 
 logger = logging.getLogger(__name__)
 
@@ -64,7 +64,9 @@ def _cleanup_timed_out_jobs(db=None):
     if _owns_db:
         db = SessionLocal()
     try:
-        cutoff = datetime.now(timezone.utc) - timedelta(minutes=settings.JOB_TIMEOUT_MINUTES)
+        # v3.1 step 6：逾時分鐘改 runtime 讀 SystemConfig（admin 可即時調），.env 為 fallback
+        timeout_min = crud.get_setting(db, "job_timeout_minutes")
+        cutoff = datetime.now(timezone.utc) - timedelta(minutes=timeout_min)
 
         # ZH: SQLite 回傳 naive datetime，統一加 UTC tzinfo 再比較
         # EN: SQLite returns naive datetimes; attach UTC tzinfo before comparing
@@ -89,7 +91,7 @@ def _cleanup_timed_out_jobs(db=None):
         for job in stuck_jobs:
             job.status = "failed"
             job.error_message = (
-                f"Timeout: job exceeded {settings.JOB_TIMEOUT_MINUTES} minutes without completion. "
+                f"Timeout: job exceeded {timeout_min} minutes without completion. "
                 f"Worker may have disconnected."
             )
             job.completed_at = datetime.now(timezone.utc)
@@ -183,15 +185,17 @@ async def _storage_lifecycle_loop():
 # ==============================================================================
 
 async def _myai_sync_loop():
-    """ZH: 每 MYAI_SYNC_INTERVAL_HOURS 小時 headless 同步 myai168 帳號/Token。
-       帳密未設或間隔<=0 則不啟用。失敗只記 log，不影響其他排程。"""
+    """ZH: headless 同步 myai168 帳號/Token。帳密未設則不啟用（帳密是 .env，非 runtime）。
+       v3.1 step 6：同步間隔改由 SystemConfig(myai_sync_interval_hours) 每輪重讀，admin 可即時調；
+       設為 0＝暫停（迴圈仍在，每 5 分鐘回看是否被重新啟用）。失敗只記 log，不影響其他排程。"""
     from .config import settings
-    if not (settings.MYAI_ADMIN_EMAIL and settings.MYAI_ADMIN_PASSWORD) or settings.MYAI_SYNC_INTERVAL_HOURS <= 0:
-        logger.info("ZH: MYAI 自動同步未啟用（帳密未設或 MYAI_SYNC_INTERVAL_HOURS=0）")
+    if not (settings.MYAI_ADMIN_EMAIL and settings.MYAI_ADMIN_PASSWORD):
+        logger.info("ZH: MYAI 自動同步未啟用（帳密未設）")
         return
-    interval = settings.MYAI_SYNC_INTERVAL_HOURS * 3600
-    logger.info(f"ZH: MYAI 自動同步迴圈啟動 (每 {settings.MYAI_SYNC_INTERVAL_HOURS}h)")
+    logger.info("ZH: MYAI 自動同步迴圈啟動（間隔由 SystemConfig 即時控制）")
     from .services import myai_sync
+
+    PAUSE_RECHECK_SECONDS = 300  # ZH: 間隔=0(暫停)時，每 5 分鐘回頭看有沒有被重新啟用
 
     # ZH: 開機先等服務穩定再首次同步 | EN: initial delay so services settle
     try:
@@ -200,17 +204,22 @@ async def _myai_sync_loop():
         return
 
     while _scheduler_running:
+        db = SessionLocal()
         try:
-            db = SessionLocal()
-            try:
-                res = await myai_sync.sync(db)
-                logger.info(f"ZH: MYAI 自動同步完成 | EN: MYAI auto-sync done: {res}")
-            finally:
-                db.close()
-        except Exception as e:  # noqa: BLE001
-            logger.error(f"ZH: MYAI 自動同步錯誤 | EN: MYAI auto-sync error: {e}")
+            interval_hours = crud.get_setting(db, "myai_sync_interval_hours")
+            if interval_hours <= 0:
+                sleep_s = PAUSE_RECHECK_SECONDS   # ZH: 暫停中，稍後回看
+            else:
+                try:
+                    res = await myai_sync.sync(db)
+                    logger.info(f"ZH: MYAI 自動同步完成 | EN: MYAI auto-sync done: {res}")
+                except Exception as e:  # noqa: BLE001
+                    logger.error(f"ZH: MYAI 自動同步錯誤 | EN: MYAI auto-sync error: {e}")
+                sleep_s = interval_hours * 3600
+        finally:
+            db.close()
         try:
-            await asyncio.sleep(interval)
+            await asyncio.sleep(sleep_s)
         except asyncio.CancelledError:
             break
 

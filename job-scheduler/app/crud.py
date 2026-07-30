@@ -109,11 +109,11 @@ def create_user(db: Session, user: schemas.UserCreate) -> models.User:
     db.refresh(db_user)
 
     # ZH: 自動建立 Token 用量記錄 | EN: Auto-create token usage record
-    next_month_reset = _calculate_next_reset_date()
+    next_month_reset = _calculate_next_reset_date(db)
     db_usage = models.TokenUsage(
         user_id=db_user.id,
         tokens_used=0,
-        tokens_limit=settings.DEFAULT_MONTHLY_TOKEN_LIMIT,
+        tokens_limit=get_setting(db, "monthly_token_limit"),
         reset_date=next_month_reset
     )
     db.add(db_usage)
@@ -189,11 +189,11 @@ def create_sso_user(
     db.refresh(db_user)
 
     # 自動建立 Token 用量記錄
-    next_month_reset = _calculate_next_reset_date()
+    next_month_reset = _calculate_next_reset_date(db)
     db_usage = models.TokenUsage(
         user_id=db_user.id,
         tokens_used=0,
-        tokens_limit=settings.DEFAULT_MONTHLY_TOKEN_LIMIT,
+        tokens_limit=get_setting(db, "monthly_token_limit"),
         reset_date=next_month_reset,
     )
     db.add(db_usage)
@@ -239,11 +239,11 @@ def get_token_usage(db: Session, user_id: str) -> Optional[models.TokenUsage]:
 
 def create_token_usage(db: Session, user_id: str) -> models.TokenUsage:
     """ZH: 建立 Token 用量記錄 (若不存在) | EN: Create token usage record (if not exists)"""
-    next_month_reset = _calculate_next_reset_date()
+    next_month_reset = _calculate_next_reset_date(db)
     db_usage = models.TokenUsage(
         user_id=user_id,
         tokens_used=0,
-        tokens_limit=settings.DEFAULT_MONTHLY_TOKEN_LIMIT,
+        tokens_limit=get_setting(db, "monthly_token_limit"),
         reset_date=next_month_reset
     )
     db.add(db_usage)
@@ -270,7 +270,7 @@ def increment_token_usage(db: Session, user_id: str, tokens: int) -> models.Toke
         reset_date = reset_date.replace(tzinfo=timezone.utc)
     if reset_date is None or datetime.now(timezone.utc) >= reset_date:
         usage.tokens_used = 0
-        usage.reset_date = _calculate_next_reset_date()
+        usage.reset_date = _calculate_next_reset_date(db)
 
     usage.tokens_used += tokens
 
@@ -308,7 +308,7 @@ def try_deduct_tokens(db: Session, user_id: str, tokens: int) -> bool:
         reset_date = reset_date.replace(tzinfo=timezone.utc)
     if reset_date is None or datetime.now(timezone.utc) >= reset_date:
         usage.tokens_used = 0
-        usage.reset_date = _calculate_next_reset_date()
+        usage.reset_date = _calculate_next_reset_date(db)
         db.flush()  # Write reset to DB before the UPDATE reads tokens_used
 
     # ZH: 原子性 UPDATE：WHERE 子句同時做配額檢查，避免兩步驟競爭
@@ -564,16 +564,17 @@ def get_queue_position(db: Session, job_id: str) -> Optional[int]:
 # ZH: 工具函式 | EN: Utility functions
 # ==============================================================================
 
-def _calculate_next_reset_date() -> datetime:
+def _calculate_next_reset_date(db: Session = None) -> datetime:
     """
     ZH: 計算下一個 Token 重置日期
     EN: Calculate next token reset date
 
-    ZH: 邏輯：找到下一個每月第 TOKEN_RESET_DAY 天
-    EN: Logic: find the next Nth day of the month
+    ZH: 邏輯：找到下一個每月第 token_reset_day 天。有 db 就讀 runtime 設定，否則回 .env 預設。
+    EN: Find the next Nth day of the month. Reads runtime setting when db given, else .env default.
     """
     now = datetime.now(timezone.utc)
-    reset_day = min(settings.TOKEN_RESET_DAY, 28)  # ZH: 最多 28 避免日期溢出 | EN: Max 28
+    reset_day = get_setting(db, "token_reset_day") if db is not None else settings.TOKEN_RESET_DAY
+    reset_day = min(reset_day, 28)  # ZH: 最多 28 避免日期溢出 | EN: Max 28
 
     if now.day < reset_day:
         # ZH: 本月還沒到重置日 | EN: This month hasn't reached reset day yet
@@ -728,6 +729,92 @@ def set_system_config(db: Session, key: str, value: str, description: Optional[s
     db.commit()
     db.refresh(row)
     return row
+
+
+# ==============================================================================
+# ZH: v3.1 step 6 — 營運型系統設定（可經 admin「系統設定」頁即時調整）
+#     每個 key：型別、預設(讀 .env/Settings)、範圍夾限。SystemConfig 有值就覆寫，否則用預設。
+#     設計原則：只放「非機密 + 非開機必需 + scheduler 端讀 + runtime 可讀」的營運旋鈕。
+# EN: v3.1 step 6 — runtime-tunable operational settings (admin UI). SystemConfig overrides
+#     the .env/Settings default; values are type-checked and clamped to a safe range.
+# ==============================================================================
+SYSTEM_SETTINGS = {
+    "monthly_token_limit":      {"type": "int",   "default": lambda: settings.DEFAULT_MONTHLY_TOKEN_LIMIT, "min": 0,   "max": None, "label": "每月 Token 額度(新帳號預設；改既有帳號用批量設定)"},
+    "token_reset_day":          {"type": "int",   "default": lambda: settings.TOKEN_RESET_DAY,             "min": 1,   "max": 28,   "label": "額度重置日(每月第幾天)"},
+    "job_timeout_minutes":      {"type": "int",   "default": lambda: settings.JOB_TIMEOUT_MINUTES,         "min": 1,   "max": None, "label": "任務逾時(分鐘)"},
+    "myai_sync_interval_hours": {"type": "int",   "default": lambda: settings.MYAI_SYNC_INTERVAL_HOURS,    "min": 0,   "max": 168,  "label": "MYAI 同步間隔(小時, 0=關閉)"},
+    "rag_top_k":                {"type": "int",   "default": lambda: settings.RAG_TOP_K,                   "min": 1,   "max": 20,   "label": "小基 RAG 取回片段數"},
+    "rag_min_score":            {"type": "float", "default": lambda: settings.RAG_MIN_SCORE,               "min": 0.0, "max": 1.0,  "label": "小基 RAG 相似度門檻"},
+    "rag_history_turns":        {"type": "int",   "default": lambda: settings.RAG_HISTORY_TURNS,           "min": 0,   "max": 20,   "label": "小基 RAG 帶入對話輪數"},
+}
+
+
+def _clamp_setting(v, lo, hi):
+    if lo is not None:
+        v = max(lo, v)
+    if hi is not None:
+        v = min(hi, v)
+    return v
+
+
+def get_setting(db: Session, key: str):
+    """
+    ZH: 讀營運設定的「生效值」：SystemConfig 有值優先，否則回 .env/Settings 預設；一律夾範圍。
+    EN: Effective value of an operational setting: SystemConfig override wins, else .env default; clamped.
+    """
+    spec = SYSTEM_SETTINGS[key]
+    default = spec["default"]()
+    raw = get_system_config(db, key, "")
+    if raw is None or raw == "":
+        return default
+    try:
+        v = int(raw) if spec["type"] == "int" else float(raw)
+    except (ValueError, TypeError):
+        return default
+    return _clamp_setting(v, spec["min"], spec["max"])
+
+
+def get_all_settings(db: Session) -> list:
+    """ZH: 給 admin GET — 每個 key 的 生效值/預設值/範圍/是否已覆寫。"""
+    out = []
+    for key, spec in SYSTEM_SETTINGS.items():
+        raw = get_system_config(db, key, "")
+        out.append({
+            "key": key,
+            "label": spec["label"],
+            "type": spec["type"],
+            "value": get_setting(db, key),
+            "default": spec["default"](),
+            "min": spec["min"],
+            "max": spec["max"],
+            "overridden": raw not in (None, ""),
+        })
+    return out
+
+
+def set_settings(db: Session, updates: dict) -> list:
+    """
+    ZH: 給 admin PUT — 逐鍵驗證型別+夾限後 upsert；值為 None/空字串＝清除覆寫(回退預設)。
+        回傳更新後的完整設定表。未知 key 略過。
+    EN: Validate/clamp each key then upsert; empty value clears the override (revert to default).
+    """
+    for key, val in updates.items():
+        if key not in SYSTEM_SETTINGS:
+            continue
+        if val is None or (isinstance(val, str) and val.strip() == ""):
+            row = db.query(models.SystemConfig).filter(models.SystemConfig.key == key).first()
+            if row:
+                db.delete(row)
+                db.commit()
+            continue
+        spec = SYSTEM_SETTINGS[key]
+        try:
+            v = int(val) if spec["type"] == "int" else float(val)
+        except (ValueError, TypeError):
+            raise ValueError(f"設定 {key} 需為 {spec['type']} 型別")
+        v = _clamp_setting(v, spec["min"], spec["max"])
+        set_system_config(db, key, str(v), description=spec["label"])
+    return get_all_settings(db)
 
 
 # ==============================================================================
