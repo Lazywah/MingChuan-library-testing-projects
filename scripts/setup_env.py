@@ -53,6 +53,16 @@ SERVICE_ENV  = ROOT_DIR / ".env"
 WORKER_DIR   = ROOT_DIR / "gpu-worker"
 WORKER_ENV   = WORKER_DIR / ".env"
 
+# v3.1 step 2: .env.example 為單一真相；setup_env 從它衍生題目與寫檔範本。
+ENV_EXAMPLE  = ROOT_DIR / ".env.example"
+# 漂移偵測來源：compose 的 ${VAR} ∪ pydantic Settings 欄位
+COMPOSE_FILES = [
+    ROOT_DIR / "docker-compose.yml",
+    ROOT_DIR / "docker-compose.ai-models.yml",
+    WORKER_DIR / "docker-compose.yml",
+]
+CONFIG_PY = ROOT_DIR / "job-scheduler" / "app" / "config.py"
+
 # ══════════════════════════════════════════════════════════════════════════════
 # ANSI 顏色 / ANSI Colors
 # ══════════════════════════════════════════════════════════════════════════════
@@ -261,40 +271,202 @@ def parse_env_file(path: Path) -> dict:
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# --check 模式：補齊 .env 缺漏 key / Migration: patch missing required keys
+# v3.1 step 2：.env.example 單一真相 — 解析、漂移稽核、範本渲染
+# v3.1 step 2: .env.example single source — parse, drift audit, template render
 # ══════════════════════════════════════════════════════════════════════════════
-def check_and_patch(path: Path) -> int:
+_KEY_LINE = re.compile(r"^([A-Za-z_][A-Za-z0-9_]*)=(.*)$")
+
+
+def parse_env_example(path: Path):
     """
-    ZH: 檢測 .env 缺少哪些必要 key，只追加不覆寫既有值。
-    EN: Detect missing required keys and append only — never overwrite existing.
+    ZH: 解析 .env.example，回傳「有效 key（未被註解）」的順序與預設值。
+        被 # 註解掉的行（含『已停用』區）不算有效 key。
+    EN: Parse .env.example; return active (uncommented) keys in order with defaults.
+
+    Returns:
+        (order: list[str], defaults: dict[str, str])
+    """
+    order, defaults = [], {}
+    if not path.exists():
+        return order, defaults
+    for raw in path.read_text(encoding="utf-8").splitlines():
+        stripped = raw.strip()
+        if not stripped or stripped.startswith("#"):
+            continue
+        m = _KEY_LINE.match(stripped)
+        if not m:
+            continue
+        key, val = m.group(1), m.group(2)
+        # 去掉行內註解（value 後方 空白+# …）；本專案的值不含 '#'，安全
+        val = re.sub(r"\s+#.*$", "", val).strip()
+        if key not in defaults:
+            order.append(key)
+        defaults[key] = val
+    return order, defaults
+
+
+def extract_compose_keys() -> set:
+    """撈出所有 compose 檔引用的 ${VAR} 名稱 / All ${VAR} names referenced by compose."""
+    pat = re.compile(r"\$\{([A-Z_][A-Z0-9_]*)")
+    keys = set()
+    for p in COMPOSE_FILES:
+        if p.exists():
+            keys.update(pat.findall(p.read_text(encoding="utf-8")))
+    return keys
+
+
+def extract_settings_keys() -> set:
+    """
+    ZH: 從 config.py 撈 pydantic Settings 欄位（4 空格縮排的 UPPER: ）
+        + os.environ.get / os.getenv 直接讀的 key（如 OIDC_*）。
+    EN: Settings field annotations + direct os.environ reads from config.py.
+    """
+    keys = set()
+    if not CONFIG_PY.exists():
+        return keys
+    text = CONFIG_PY.read_text(encoding="utf-8")
+    # 只認「4 空格縮排 + 有型別註記」的 Settings 欄位，避免吃到 docstring 的 ZH:/EN:
+    # （型別限 str/int/bool/float；新增其他型別欄位時請一併補進此清單）
+    keys.update(re.findall(
+        r"(?m)^[ \t]{4}([A-Z][A-Z0-9_]*)[ \t]*:[ \t]*(?:str|int|bool|float)\b", text))
+    keys.update(re.findall(
+        r"os\.(?:environ\.get|getenv)\(\s*['\"]([A-Z][A-Z0-9_]*)['\"]", text))
+    return keys
+
+
+# ZH: 刻意不放進 .env.example 的 key（不算漂移）：
+#   KNOWLEDGE_DIR   — 容器內計算路徑，不由 .env 設定
+#   OIDC_TENANT_ID  — config.py 會讀，但 compose 未轉發；tenant_id 放在 sso_policy.yaml（公開）
+_INTENTIONAL_UNDECLARED = {
+    "KNOWLEDGE_DIR": "容器內計算路徑，不經 .env",
+    "OIDC_TENANT_ID": "tenant 放 sso_policy.yaml；compose 未轉發（見待辦）",
+}
+
+
+def audit_drift(example_keys: set):
+    """
+    ZH: 交叉比對 .env.example（宣告）vs compose∪Settings（實際引用）。
+    EN: Cross-check declared (.env.example) vs referenced (compose ∪ Settings).
+
+    Returns:
+        (referenced, missing_from_example, orphan_in_example, intentional)
+    """
+    referenced = extract_compose_keys() | extract_settings_keys()
+    missing_from_example = (referenced - example_keys) - set(_INTENTIONAL_UNDECLARED)
+    intentional = (referenced - example_keys) & set(_INTENTIONAL_UNDECLARED)
+    orphan_in_example = example_keys - referenced
+    return referenced, missing_from_example, orphan_in_example, intentional
+
+
+def render_env_from_example(overlay: dict, note: str) -> str:
+    """
+    ZH: 以 .env.example 為骨架渲染出一份 .env：有效 key 以 overlay 值覆寫（沒給則沿用範本預設），
+        行內註解一律移除（避免 docker-compose/pydantic 把 '# …' 當成值的一部分），
+        全行註解、空行、『已停用』區原樣保留。
+    EN: Render a .env from .env.example skeleton; active keys take overlay value (else the
+        example default), inline comments stripped, full-line comments/blanks preserved.
+    """
+    lines_out = [
+        "# ==============================================================================",
+        f"# {note}",
+        "# ⚠  請勿提交此檔至版本控制 / Do NOT commit this file (.gitignore excludes .env)",
+        "# ==============================================================================",
+        "",
+    ]
+    for raw in ENV_EXAMPLE.read_text(encoding="utf-8").splitlines():
+        stripped = raw.strip()
+        m = _KEY_LINE.match(stripped)
+        if m and not stripped.startswith("#"):
+            key = m.group(1)
+            val = overlay.get(key)
+            if val is None:
+                # 沿用範本預設（去行內註解）
+                val = re.sub(r"\s+#.*$", "", m.group(2)).strip()
+            lines_out.append(f"{key}={val}")
+        else:
+            lines_out.append(raw)
+    return "\n".join(lines_out).rstrip() + "\n"
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# --check 模式：漂移稽核 + 補齊 .env 缺漏 key / Drift audit + patch missing keys
+# ══════════════════════════════════════════════════════════════════════════════
+def print_drift_audit(example_order) -> int:
+    """
+    ZH: 交叉比對 .env.example vs compose∪Settings，印出漂移報告。
+    EN: Print drift report between .env.example and compose ∪ Settings.
+
+    Returns:
+        真漂移數（compose/Settings 有引用、但 .env.example 沒宣告）/ number of real drifts
+    """
+    section("漂移稽核 / Drift Audit（.env.example vs compose ∪ Settings）")
+    if not ENV_EXAMPLE.exists():
+        print(f"  {err('.env.example 不存在 / not found：' + str(ENV_EXAMPLE))}")
+        return -1
+
+    example_keys = set(example_order)
+    referenced, missing_from_example, orphan_in_example, intentional = audit_drift(example_keys)
+
+    print(f"  {dim(f'compose∪Settings 引用 {len(referenced)} 個 key；.env.example 宣告 {len(example_keys)} 個')}")
+
+    if missing_from_example:
+        print()
+        print(f"  {err('漂移：以下 key 有被引用，但 .env.example 沒宣告（換機會漏設）')}")
+        for k in sorted(missing_from_example):
+            print(f"    {red('•')} {cyan(k)}")
+    if orphan_in_example:
+        print()
+        print(f"  {warn('孤兒：.env.example 有宣告，但 compose/Settings 都沒引用（可能已廢棄）')}")
+        for k in sorted(orphan_in_example):
+            print(f"    {yellow('•')} {cyan(k)}")
+    if intentional:
+        print()
+        print(f"  {dim('刻意未宣告（非漂移，供參考）：')}")
+        for k in sorted(intentional):
+            print(f"    {dim('• ' + k + ' — ' + _INTENTIONAL_UNDECLARED[k])}")
+
+    print()
+    if not missing_from_example and not orphan_in_example:
+        print(f"  {bold(green('✅ 無漂移：.env.example 與 compose∪Settings 一致'))}")
+    return len(missing_from_example)
+
+
+def check_and_patch(path: Path, example_order, example_defaults) -> int:
+    """
+    ZH: 以 .env.example 的有效 key 為準，檢測 .env 缺少哪些，只追加不覆寫既有值。
+        缺的是秘鑰（REQUIRED_KEYS）→ 自動生成；其餘 → 沿用 .env.example 預設值。
+    EN: Using .env.example active keys as the reference, detect keys missing from .env
+        and append only. Missing secrets are auto-generated; others copy the example default.
 
     Returns:
         缺失欄位數 / number of missing fields patched
     """
-    section(f"檢查 .env / Checking {path.name}")
+    section(f"檢查 .env 完整性 / Checking {path.name} against .env.example")
     if not path.exists():
         print(f"  {err('.env 不存在 / .env not found：' + str(path))}")
         print(f"  {dim('請先用互動模式建立 / Run setup_env.py without --check first')}")
         return -1
 
     existing = parse_env_file(path)
-    print(f"  {dim(f'已存在欄位 / Existing keys: {len(existing)}')}")
+    print(f"  {dim(f'已存在欄位 / Existing keys: {len(existing)}；範本有效 key: {len(example_order)}')}")
 
     missing = []
-    for key, (gen, desc) in REQUIRED_KEYS.items():
-        if not existing.get(key):
-            missing.append((key, gen(), desc))
-            print(f"  {err('缺失 / Missing')}  {cyan(key.ljust(20))}  {dim(desc)}")
-        else:
-            print(f"  {ok('存在 / OK     ')}  {cyan(key.ljust(20))}  {dim(mask_secret(existing[key]))}")
+    for key in example_order:
+        if key not in existing:
+            if key in REQUIRED_KEYS:
+                val = REQUIRED_KEYS[key][0]()          # 秘鑰自動生成 / auto-gen secret
+            else:
+                val = example_defaults.get(key, "")     # 其餘沿用範本預設 / copy example default
+            missing.append((key, val))
 
     if not missing:
-        print()
-        print(f"  {bold(green('✅ 所有必要 key 都存在 / All required keys present'))}")
+        print(f"  {bold(green('✅ .env 已涵蓋範本所有 key / .env covers all example keys'))}")
         return 0
 
+    for key, _ in missing:
+        print(f"  {err('缺失 / Missing')}  {cyan(key)}")
     print()
-    print(f"  {warn(f'共 {len(missing)} 個欄位缺失，準備追加 / Patching {len(missing)} missing fields')}")
+    print(f"  {warn(f'共 {len(missing)} 個 key 缺失，準備追加 / Patching {len(missing)} missing keys')}")
     if not ask_yes_no("確認追加？/ Confirm append?", default=True):
         print(f"  {dim('已取消 / Cancelled')}")
         return -1
@@ -303,9 +475,9 @@ def check_and_patch(path: Path) -> int:
     now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     with open(path, "a", encoding="utf-8") as f:
         f.write(f"\n# ── Migrated by setup_env.py --check at {now_str} ──\n")
-        for key, val, desc in missing:
-            f.write(f"# {desc}\n{key}={val}\n")
-    print(f"  {ok(f'已補齊 {len(missing)} 個欄位 / Patched {len(missing)} fields → ' + str(path))}")
+        for key, val in missing:
+            f.write(f"{key}={val}\n")
+    print(f"  {ok(f'已補齊 {len(missing)} 個 key / Patched {len(missing)} keys → ' + str(path))}")
     return len(missing)
 
 
@@ -355,19 +527,49 @@ def main() -> None:
         show_existing()
         return
 
-    # ── --check 模式：偵測 .env 缺漏 key，只追加不覆寫 ─────────────────────────
+    # ── --check 模式：漂移稽核 + .env 完整性 + worker token 一致性 ──────────────
     if "--check" in sys.argv:
-        rc1 = check_and_patch(SERVICE_ENV)
-        rc2 = check_and_patch(WORKER_ENV) if WORKER_ENV.exists() else 0
+        example_order, example_defaults = parse_env_example(ENV_EXAMPLE)
+        if not example_order:
+            print(f"  {err('讀不到 .env.example，無法檢查 / cannot read .env.example')}")
+            sys.exit(1)
+
+        drift = print_drift_audit(example_order)
+        rc1 = check_and_patch(SERVICE_ENV, example_order, example_defaults)
+
+        # ── worker token 一致性（不一致 → heartbeat/領工作全 401 且無聲）──────────
+        worker_warn = False
+        if WORKER_ENV.exists():
+            section("GPU Worker Token 一致性 / Worker token consistency")
+            svc = parse_env_file(SERVICE_ENV)
+            wk = parse_env_file(WORKER_ENV)
+            root_token = svc.get("WORKER_API_TOKEN", "")
+            worker_token = wk.get("API_TOKEN", "")
+            if not worker_token:
+                print(f"  {warn('gpu-worker/.env 沒有 API_TOKEN')}")
+                worker_warn = True
+            elif root_token and worker_token != root_token:
+                print(f"  {err('不一致！worker API_TOKEN ≠ 根 .env WORKER_API_TOKEN → 會靜默 401')}")
+                print(f"    {dim('根 .env  WORKER_API_TOKEN = ' + mask_secret(root_token))}")
+                print(f"    {dim('worker   API_TOKEN        = ' + mask_secret(worker_token))}")
+                worker_warn = True
+            else:
+                print(f"  {ok('worker API_TOKEN 與根 .env 一致 / matches root .env')}")
+
         print()
-        if rc1 < 0 or rc2 < 0:
+        if drift < 0 or rc1 < 0:
             print(f"  {warn('部分檢查未完成 / Some checks not completed')}")
             sys.exit(1)
-        if rc1 == 0 and rc2 == 0:
+        if drift == 0 and rc1 == 0 and not worker_warn:
             print(f"  {bold(green('✅ 一切就緒 / Everything in order — 可以 docker compose up -d 了'))}")
         else:
-            print(f"  {bold(yellow('⚠ 已補齊缺漏，請重新啟動容器 / Patched — restart containers:'))}")
-            print(f"     {cyan('docker compose down && docker compose up -d')}")
+            if drift > 0:
+                print(f"  {bold(yellow('⚠ .env.example 有漂移，請先補齊範本（step 1）再重跑 --check'))}")
+            if rc1 > 0:
+                print(f"  {bold(yellow('⚠ 已補齊 .env 缺漏，請重新啟動容器 / Patched — restart containers:'))}")
+                print(f"     {cyan('docker compose down && docker compose up -d')}")
+            if worker_warn:
+                print(f"  {bold(yellow('⚠ 請修正 gpu-worker token 後重啟 worker'))}")
         return
 
     # ── 平台提示 / Platform note ──────────────────────────────────────────────
@@ -516,65 +718,44 @@ def main() -> None:
     # ══════════════════════════════════════════════════════════════════════════
     section("寫入設定檔 / Writing Config Files")
 
-    # ── Service Layer .env ────────────────────────────────────────────────────
+    # ── Service Layer .env（v3.1 step 2：從 .env.example 渲染，不再用寫死範本）──
     backup_if_exists(SERVICE_ENV)
 
-    smtp_block = f"""# ── SMTP 郵件 / SMTP Email ─────────────────────────────────────────────────
-SMTP_SERVER={smtp['SMTP_SERVER']}
-SMTP_PORT={smtp['SMTP_PORT']}
-SMTP_USERNAME={smtp['SMTP_USERNAME']}
-SMTP_PASSWORD={smtp['SMTP_PASSWORD']}
-SMTP_FROM_EMAIL={smtp['SMTP_FROM_EMAIL']}
-"""
+    # 互動答案 + 自動生成秘鑰 → 疊到 .env.example 骨架上；沒被覆寫的 key 沿用範本預設。
+    overlay = dict(gen)  # JWT/WORKER/WEBUI/SECRETS 四把秘鑰
+    overlay.update({
+        "ACCESS_TOKEN_EXPIRE_MINUTES": jwt_expire,
+        "DEFAULT_MONTHLY_TOKEN_LIMIT": token_limit,
+        "JOB_TIMEOUT_MINUTES":         job_timeout,
+        "CORS_ORIGINS":                cors,
+        "LOG_LEVEL":                   log_level,
+        "SMTP_SERVER":                 smtp["SMTP_SERVER"],
+        "SMTP_PORT":                   smtp["SMTP_PORT"],
+        "SMTP_USERNAME":               smtp["SMTP_USERNAME"],
+        "SMTP_PASSWORD":               smtp["SMTP_PASSWORD"],
+        "SMTP_FROM_EMAIL":             smtp["SMTP_FROM_EMAIL"],
+    })
+    if setup_worker:
+        overlay.update({
+            "SERVICE_LAYER_URL":  worker["SERVICE_LAYER_URL"],
+            "NODE_ID":            worker["NODE_ID"],
+            "POLL_INTERVAL":      worker["POLL_INTERVAL"],
+            "HEARTBEAT_INTERVAL": worker["HEARTBEAT_INTERVAL"],
+            "STORAGE_MOUNT_PATH": worker["STORAGE_MOUNT_PATH"],
+        })
 
-    service_content = f"""# ==============================================================================
-# ZH: AI 訓練平台 — 環境變數
-# EN: AI Training Platform — Environment Variables
-#
-# ZH: 由 scripts/setup_env.py 自動生成於 {now_str}
-# EN: Auto-generated by scripts/setup_env.py at {now_str}
-#
-# ⚠  請勿將此檔案提交至版本控制！/ Do NOT commit this file to version control!
-#    .gitignore 已設定排除 .env / .gitignore already excludes .env
-# ==============================================================================
-
-# ── 密鑰（自動生成，請勿手動修改）/ Secrets (auto-generated, do not edit manually)
-JWT_SECRET_KEY={gen['JWT_SECRET_KEY']}
-WORKER_API_TOKEN={gen['WORKER_API_TOKEN']}
-WEBUI_SECRET_KEY={gen['WEBUI_SECRET_KEY']}
-# v2.0 Lab AES-256-GCM 加密主金鑰（變更會讓既有 secrets 全部失效）
-# v2.0 Lab AES-256-GCM master key (changing this invalidates all existing secrets)
-SECRETS_MASTER_KEY={gen['SECRETS_MASTER_KEY']}
-
-# ── JWT 設定 / JWT Configuration
-JWT_ALGORITHM=HS256
-ACCESS_TOKEN_EXPIRE_MINUTES={jwt_expire}
-
-# ── 資料庫 / Database
-DATABASE_PATH=/data/ai_platform.db
-
-# ── Token 額度 / Token Quota
-DEFAULT_MONTHLY_TOKEN_LIMIT={token_limit}
-TOKEN_RESET_DAY=1
-
-# ── Portkey LLM Gateway
-PORTKEY_URL=http://ai-platform-portkey:8000/v1/chat/completions
-PORTKEY_ENABLED=true
-
-# ── 任務超時 / Job Timeout
-JOB_TIMEOUT_MINUTES={job_timeout}
-
-# ── CORS（正式環境填入，開發環境留空=允許所有）
-# ── CORS origins (fill in for production; empty = allow all in dev)
-CORS_ORIGINS={cors}
-
-# ── 日誌 / Logging
-LOG_LEVEL={log_level}
-
-{smtp_block}"""
+    example_order, _example_defaults = parse_env_example(ENV_EXAMPLE)
+    if example_order:
+        service_content = render_env_from_example(
+            overlay, f"由 scripts/setup_env.py 從 .env.example 渲染於 {now_str}"
+        )
+    else:
+        # 保險：讀不到範本時，至少把已知 overlay 寫出去，不中斷部署
+        print(f"  {warn('讀不到 .env.example，改用最小必要集寫入 / example missing, minimal write')}")
+        service_content = "\n".join(f"{k}={v}" for k, v in overlay.items()) + "\n"
 
     SERVICE_ENV.write_text(service_content, encoding="utf-8")
-    print(f"  {ok('服務層 / Service layer .env')} → {bold(str(SERVICE_ENV))}")
+    print(f"  {ok('服務層 / Service layer .env（從 .env.example 渲染）')} → {bold(str(SERVICE_ENV))}")
 
     # ── GPU Worker .env ───────────────────────────────────────────────────────
     if setup_worker:
