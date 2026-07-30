@@ -64,7 +64,7 @@ oidc:
   tenant_id: "30f2f0eb-3fc8-4a5a-94b5-fffa8944532e"   # MCU Microsoft Entra Tenant ID (公開資訊)
   client_id: "PENDING"          # 🔴 不要填這裡！改填 .env 的 OIDC_CLIENT_ID
   client_secret: "PENDING"      # 🔴 不要填這裡！改填 .env 的 OIDC_CLIENT_SECRET（機敏，本檔進版控）
-  redirect_uri: "http://localhost:8002/api/v1/sso/oidc/callback"   # 佔位；正式值由 .env 的 OIDC_REDIRECT_URI 覆寫（須與 Entra 註冊一致）
+  redirect_uri: "http://localhost/api/v1/sso/oidc/callback"   # dev 佔位（走 nginx :80，非 :8002；Entra 對 localhost 允許 http）。正式值由 .env 的 OIDC_REDIRECT_URI 覆寫，prod 須用 https://<主機名>/... 且與 Entra 註冊逐字一致
   scopes:
     - "openid"
     - "email"
