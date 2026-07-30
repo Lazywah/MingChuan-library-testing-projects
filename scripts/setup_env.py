@@ -335,11 +335,9 @@ def extract_settings_keys() -> set:
 
 
 # ZH: 刻意不放進 .env.example 的 key（不算漂移）：
-#   KNOWLEDGE_DIR   — 容器內計算路徑，不由 .env 設定
-#   OIDC_TENANT_ID  — config.py 會讀，但 compose 未轉發；tenant_id 放在 sso_policy.yaml（公開）
+#   KNOWLEDGE_DIR — 容器內計算路徑，不由 .env 設定
 _INTENTIONAL_UNDECLARED = {
     "KNOWLEDGE_DIR": "容器內計算路徑，不經 .env",
-    "OIDC_TENANT_ID": "tenant 放 sso_policy.yaml；compose 未轉發（見待辦）",
 }
 
 
