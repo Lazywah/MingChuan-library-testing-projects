@@ -803,6 +803,8 @@ function switchAdminMainTab(tabId) {
             externalAi.init();
         } else if (tabId === 'accounts') {
             initAccountsTab();
+        } else if (tabId === 'management') {
+            systemSettings.load();   // v3.1 step 6：回到管理分頁時重新載入系統設定
         }
     }
 }
@@ -1005,6 +1007,78 @@ function openAddBindingModal() {
 function closeAddBindingModal() {
     document.getElementById('add-binding-modal')?.classList.add('hidden');
 }
+
+// ==============================================================================
+// v3.1 step 6：系統設定（營運旋鈕）— 資料驅動表單，欄位由後端 registry 回傳
+// GET/PUT /api/v1/admin/system-settings；欄位留空 = 清除覆寫、回退 .env 預設。
+// ==============================================================================
+const systemSettings = {
+    _authHeaders() {
+        return { 'Authorization': `Bearer ${authToken}`, 'Content-Type': 'application/json' };
+    },
+    async load() {
+        const box = document.getElementById('system-settings-fields');
+        if (!box) return;
+        try {
+            const res = await fetch(`${API_BASE}/admin/system-settings`, {
+                headers: { 'Authorization': `Bearer ${authToken}` }
+            });
+            if (!res.ok) throw new Error('load failed');
+            const data = await res.json();
+            this._render(data.settings || []);
+        } catch (e) {
+            box.innerHTML = '<span style="color:#fb7185;">載入系統設定失敗</span>';
+        }
+    },
+    _rangeHint(s) {
+        if (s.min != null && s.max != null) return `${s.min}–${s.max}`;
+        if (s.min != null) return `≥${s.min}`;
+        if (s.max != null) return `≤${s.max}`;
+        return '';
+    },
+    _render(settings) {
+        const box = document.getElementById('system-settings-fields');
+        if (!box) return;
+        box.innerHTML = '';
+        settings.forEach(s => {
+            const step = s.type === 'float' ? '0.05' : '1';
+            const minAttr = s.min != null ? `min="${s.min}"` : '';
+            const maxAttr = s.max != null ? `max="${s.max}"` : '';
+            const range = this._rangeHint(s);
+            const row = document.createElement('div');
+            row.style.cssText = 'display:flex; align-items:center; gap:12px; flex-wrap:wrap;';
+            // 注意：label/default/key 皆來自後端 registry（我方常數，非使用者輸入），無 XSS 疑慮
+            row.innerHTML =
+                `<label style="flex:1 1 240px; min-width:220px; font-size:0.9rem;">${s.label}</label>` +
+                `<input type="number" step="${step}" ${minAttr} ${maxAttr} data-key="${s.key}" ` +
+                `placeholder="預設 ${s.default}" value="${s.overridden ? s.value : ''}" ` +
+                `style="width:130px; padding:6px 8px; font-size:13px;">` +
+                `<span style="flex:0 0 auto; font-size:0.75rem; color:var(--text-muted,#888);">` +
+                `預設 ${s.default}${range ? '・範圍 ' + range : ''}${s.overridden ? '・<b style="color:#38bdf8;">已覆寫</b>' : ''}</span>`;
+            box.appendChild(row);
+        });
+    },
+    async save() {
+        const inputs = document.querySelectorAll('#system-settings-fields input[data-key]');
+        const payload = {};
+        inputs.forEach(inp => { payload[inp.dataset.key] = inp.value.trim(); });  // 空字串 = 回退預設
+        try {
+            const res = await fetch(`${API_BASE}/admin/system-settings`, {
+                method: 'PUT', headers: this._authHeaders(),
+                body: JSON.stringify(payload),
+            });
+            if (!res.ok) {
+                const err = await res.json().catch(() => ({}));
+                throw new Error(err.detail || '儲存失敗');
+            }
+            const data = await res.json();
+            this._render(data.settings || []);
+            showToast('系統設定已更新');
+        } catch (e) {
+            showToast('儲存失敗：' + (e.message || ''), true);
+        }
+    },
+};
 
 const externalAi = {
     _authHeaders() {
@@ -2867,6 +2941,7 @@ function initAdminDashboard() {
     wireAccountsLayout();   // v2.8 立即把使用者/綁定/廠商等 section 搬進「帳號管理」分頁，讓其他分頁瘦身
     fetchClusterStats();
     fetchAdminData();
+    systemSettings.load();   // v3.1 step 6：系統設定在 management 分頁（預設分頁）
     applyTranslations();
 
     // Auto refresh logic
