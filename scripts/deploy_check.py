@@ -98,6 +98,22 @@ def check_secrets(env: dict):
     return PASS, "必填秘鑰皆存在且強度足夠（JWT/WORKER/SECRETS/WEBUI）"
 
 
+def check_inline_comments(env: dict):
+    """
+    ZH: 偵測「值後面黏著行內註解」的 .env 行（例：KEY=value   # 註解）。
+        docker compose / pydantic 不會剝行內 #，註解會變成值的一部分（實際踩過：
+        OIDC tenant 變成註解亂碼）。比對「空白+#」避免誤殺含 # 的密碼。
+    EN: Detect values with a trailing inline comment (whitespace + '#') — compose
+        and pydantic treat it as part of the value. Happened once in the wild.
+    """
+    import re as _re
+    bad = [k for k, v in env.items() if _re.search(r"\s#", v)]
+    if bad:
+        return FAIL, ("以下 key 的值疑似黏到行內註解（compose 會把 # 後面當成值）："
+                      + "、".join(bad) + " → 請把該行改成純 KEY=值")
+    return PASS, ".env 值中無行內註解殘留"
+
+
 def check_drift():
     order, _defaults = se.parse_env_example(se.ENV_EXAMPLE)
     if not order:
@@ -155,6 +171,7 @@ def main():
         ("Docker",        check_docker()),
         ("根 .env",        check_env_file()),
         ("必填秘鑰",       check_secrets(env)),
+        ("行內註解殘留",   check_inline_comments(env)),
         ("設定漂移",       check_drift()),
         (".env 完整性",    check_env_completeness(env)),
         ("gpu-worker 收斂", check_worker_convergence()),
