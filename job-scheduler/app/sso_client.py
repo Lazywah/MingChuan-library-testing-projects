@@ -355,9 +355,11 @@ def get_sso_client(mock_mode: bool = True, config: dict = None) -> BaseSSOClient
         if (oidc_cfg.get("client_id") in PENDING_VALUES or
                 oidc_cfg.get("client_secret") in PENDING_VALUES):
             # v1.1 I7: PENDING 時降級成 mock，避免服務崩潰
-            logger.warning(
-                "provider=oidc 但 client_id/secret 是 PENDING；fallback 至 mock。"
-                "請於 sso_policy.yaml 填入 IT 提供的真實值後重啟。"
+            # v3.1: 提級為 error — OIDC 已正式上線，憑證遺失/漂移屬於重大異常，
+            #       須立刻被看見（/callback 已加閘，此 fallback 不會變成登入後門）
+            logger.error(
+                "provider=oidc 但 client_id/secret 是 PENDING；fallback 至 mock（SSO 實質停用）。"
+                "OIDC 已上線環境出現此訊息＝.env 憑證遺失或未載入，請立即檢查！"
             )
             mock_users = config.get("mock", {}).get("users", [])
             return MockSSOClient(mock_users)

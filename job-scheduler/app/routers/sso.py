@@ -146,6 +146,14 @@ def sso_callback(
     db: Session = Depends(get_db),
 ):
     """處理 SSO 驗證結果並產生系統的 JWT Token"""
+    # ZH: v3.1 安全閘（與 /mock-login 同準則）：本端點只服務 CAS/mock ticket。
+    #     沒有這道閘的風險：OIDC 憑證遺失時工廠會靜默 fallback 成 MockSSOClient，
+    #     屆時任何人打 /callback?ticket=T1090001（yaml 內的測試學號，不驗密碼）即可登入。
+    # EN: v3.1 gate (same rule as /mock-login): this endpoint serves CAS/mock only.
+    #     Without it, a silent PENDING→mock fallback turns /callback into a
+    #     password-less login backdoor using the well-known yaml test ids.
+    if not mock_mode and SSO_POLICY.get("provider") not in ("mock", "cas"):
+        raise HTTPException(status_code=404, detail="Not Found")
     try:
         user_info = sso_client.validate_ticket(ticket)
         return _finalize_sso_login(db, user_info, request=request)
