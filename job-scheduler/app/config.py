@@ -72,7 +72,8 @@ if isinstance(SSO_POLICY, dict):
         ("OIDC_CLIENT_ID", "client_id"),
         ("OIDC_CLIENT_SECRET", "client_secret"),
         ("OIDC_REDIRECT_URI", "redirect_uri"),
-        ("OIDC_TENANT_ID", "tenant_id"),
+        # v3.1: MCU 自建 OIDC — 端點來源改為 discovery URL（取代 Entra tenant 概念）
+        ("OIDC_DISCOVERY_URL", "discovery_url"),
     ):
         _val = os.environ.get(_env_key)
         if _val:
@@ -268,7 +269,7 @@ OIDC_ENABLED = (
     SSO_POLICY.get("provider") == "oidc"
     and _oidc_cfg.get("client_id") not in _PENDING_VALUES
     and _oidc_cfg.get("client_secret") not in _PENDING_VALUES
-    and bool(_oidc_cfg.get("tenant_id"))
+    and bool(_oidc_cfg.get("discovery_url"))   # v3.1: 端點來源（取代 tenant_id）
     and bool(_oidc_cfg.get("redirect_uri"))
 )
 

@@ -22,7 +22,9 @@ import logging
 from abc import ABC, abstractmethod
 
 import httpx
-from jose import jwt  # v1.1 E3: requirements 是 python-jose 不是 PyJWT
+# ZH: v3.1 起身分改由 userinfo endpoint 取得，不再解析 id_token（jose 匯入已移除；
+#     日後 v2.2 若加 jwks 簽章驗證再引回 python-jose）
+# EN: Since v3.1 identity comes from the userinfo endpoint; id_token parsing (jose) removed.
 
 logger = logging.getLogger(__name__)
 
@@ -124,38 +126,85 @@ class CASSSOClient(BaseSSOClient):
 
 
 # ==============================================================================
-# OIDCSSOClient — v2.1 新增，對接 Microsoft Entra ID（MCU 使用此種）
+# OIDCSSOClient — v3.1 改版：discovery 驅動，對接 MCU 自建 OIDC（auth.mcu.edu.tw）
+# ==============================================================================
+# ZH: v3.1 重要變更（2026-08-01，實測 AADSTS700016 後確認）：
+#     MCU 的 SSO **不是** Microsoft Entra，而是自建 OIDC 伺服器 auth.mcu.edu.tw。
+#     其 id_token 只有 sub/iss/auth_time/acr（無 email/學號）→ 身分必須拿
+#     access_token 打 userinfo_endpoint 取得（IT 明示）。因此：
+#       1. 端點改由 discovery URL（.well-known/openid-configuration）啟動時抓取
+#       2. validate_ticket 改為 code → access_token → GET userinfo → 取學號
+# EN: v3.1: MCU runs its OWN OIDC server (auth.mcu.edu.tw), not Microsoft Entra.
+#     Its id_token carries no identity claims — identity comes from the
+#     userinfo endpoint via access_token. Endpoints are discovery-driven.
 # ==============================================================================
 class OIDCSSOClient(BaseSSOClient):
     """
-    v2.1 OIDC client（手寫 httpx，不加 authlib 依賴）。
+    v3.1 OIDC client（手寫 httpx，不加 authlib 依賴）。
 
     用法：
-      client = OIDCSSOClient(tenant_id=..., client_id=..., client_secret=...,
+      client = OIDCSSOClient(discovery_url=..., client_id=..., client_secret=...,
                              redirect_uri=...)
       url = client.get_login_url()        # 內部會生 state，回 authorization URL
       ok = client.verify_state(state)     # router 在 callback 先驗證
-      info = client.validate_ticket(code) # 用 code 換 id_token、回 user info
+      info = client.validate_ticket(code) # code→token→userinfo，回 user info
 
     state 採 stateless HMAC 設計（不需 Redis/in-memory storage）。
     """
 
+    # ZH: username_claim 未設定時，依序嘗試這些 userinfo 欄位當學號/員編
+    # EN: candidate userinfo claims tried in order when username_claim is unset
+    _USERNAME_CANDIDATES = (
+        "preferred_username", "student_id", "studentId", "uid",
+        "employee_id", "employeeId", "account", "username", "user_id", "sub",
+    )
+
     def __init__(self,
-                 tenant_id: str,
+                 discovery_url: str,
                  client_id: str,
                  client_secret: str,
                  redirect_uri: str,
-                 scopes: list = None):
-        self.tenant_id     = tenant_id
-        self.client_id     = client_id
-        self.client_secret = client_secret
-        self.redirect_uri  = redirect_uri
-        self.scopes        = scopes or ["openid", "email", "profile"]
-        self.authority     = f"https://login.microsoftonline.com/{tenant_id}/oauth2/v2.0"
+                 scopes: list = None,
+                 username_claim: str = "",
+                 email_domain: str = ""):
+        self.discovery_url  = discovery_url
+        self.client_id      = client_id
+        self.client_secret  = client_secret
+        self.redirect_uri   = redirect_uri
+        self.scopes         = scopes or ["openid", "email", "profile"]
+        self.username_claim = (username_claim or "").strip()
+        # ZH: userinfo 沒給 email 時的網域 fallback（MCU 只回 sub → 學號@此網域；
+        #     供 MYAI email 綁定對得上）。留空則交由上層用 @unknown。
+        self.email_domain   = (email_domain or "").strip().lstrip("@")
+        self._doc: dict | None = None   # discovery 文件快取
+
+        # ZH: 啟動先試抓 discovery；失敗不擋啟動（第一次登入時 lazy 重試）
+        # EN: Try discovery at startup; failure doesn't block boot (lazy retry on first login)
+        try:
+            self._endpoints()
+        except Exception as e:  # noqa: BLE001
+            logger.warning(f"OIDC discovery 首次抓取失敗（登入時會重試）: {e}")
+
+    # ── discovery ───────────────────────────────────────────────────────
+    def _endpoints(self) -> dict:
+        """抓取並快取 OpenID configuration；缺必要端點視為失敗。"""
+        if self._doc:
+            return self._doc
+        resp = httpx.get(self.discovery_url, timeout=10.0)
+        resp.raise_for_status()
+        doc = resp.json()
+        missing = [k for k in ("authorization_endpoint", "token_endpoint", "userinfo_endpoint")
+                   if not doc.get(k)]
+        if missing:
+            raise RuntimeError(f"OIDC discovery 缺少必要端點: {missing}")
+        self._doc = doc
+        logger.info(f"OIDC discovery 載入完成 (issuer={doc.get('issuer', '?')})")
+        return doc
 
     # ── 介面契約 ────────────────────────────────────────────────────────
     def get_login_url(self) -> str:
-        """組 Microsoft authorization URL（state 內部生成，無外部參數）"""
+        """組 authorization URL（state 內部生成，無外部參數）"""
+        eps = self._endpoints()
         state = self._sign_state()
         params = {
             "client_id":     self.client_id,
@@ -163,21 +212,20 @@ class OIDCSSOClient(BaseSSOClient):
             "redirect_uri":  self.redirect_uri,
             "scope":         " ".join(self.scopes),
             "state":         state,
-            "response_mode": "query",
         }
-        return f"{self.authority}/authorize?{urllib.parse.urlencode(params)}"
+        return f"{eps['authorization_endpoint']}?{urllib.parse.urlencode(params)}"
 
     def validate_ticket(self, code: str) -> dict:
         """
-        OIDC 的 'ticket' 是 authorization code；POST 換 id_token。
-
-        注意：state 驗證由 router 在進入此方法前完成（呼叫 verify_state）。
-        MVP 階段不驗 id_token 簽章（token 直接從 HTTPS token endpoint 拿，
-        端對端加密；v2.2 將加 jwks 簽章驗證）。
+        OIDC 的 'ticket' 是 authorization code。流程（v3.1）：
+          1. POST token endpoint（client_secret_post）→ access_token
+          2. GET userinfo endpoint（Bearer access_token）→ 學號/員編等身分欄位
+        state 驗證由 router 在進入此方法前完成（verify_state）。
         """
+        eps = self._endpoints()
         try:
             token_resp = httpx.post(
-                f"{self.authority}/token",
+                eps["token_endpoint"],
                 data={
                     "client_id":     self.client_id,
                     "client_secret": self.client_secret,
@@ -192,26 +240,61 @@ class OIDCSSOClient(BaseSSOClient):
             logger.error(f"OIDC token exchange failed: {e}")
             raise ValueError(f"OIDC token 交換失敗: {e}")
 
-        id_token = token_resp.json().get("id_token")
-        if not id_token:
-            logger.error("OIDC response missing id_token")
-            raise ValueError("OIDC response missing id_token")
+        access_token = token_resp.json().get("access_token")
+        if not access_token:
+            logger.error("OIDC token response missing access_token")
+            raise ValueError("OIDC response missing access_token")
 
-        # python-jose 的乾淨 API
-        claims = jwt.get_unverified_claims(id_token)
+        try:
+            ui_resp = httpx.get(
+                eps["userinfo_endpoint"],
+                headers={"Authorization": f"Bearer {access_token}"},
+                timeout=10.0,
+            )
+            ui_resp.raise_for_status()
+        except httpx.HTTPError as e:
+            logger.error(f"OIDC userinfo failed: {e}")
+            raise ValueError(f"OIDC userinfo 取得失敗: {e}")
 
-        email = claims.get("email") or claims.get("preferred_username", "")
-        if not email:
-            raise ValueError("OIDC id_token 沒有 email claim")
+        info = ui_resp.json()
+        # ZH: 2026-08-01 實測確認 MCU userinfo 僅回 {'sub': '<學號>'}；username_claim 已
+        #     釘死為 sub（sso_policy.yaml）。完整 payload 降為 debug（內含個資）。
+        # EN: Verified: MCU userinfo returns only {'sub': '<student-id>'}; claim pinned.
+        logger.debug(f"OIDC userinfo keys={sorted(info.keys())} payload={info}")
+
+        username = self._extract_username(info)
+        # ZH: MCU userinfo 無 email → 以學號@email_domain 補（2026-08-01 實測 myai email
+        #     即為 <學號>@me.mcu.edu.tw，此 fallback 讓 MYAI email 綁定對得上）
+        email = info.get("email") or (f"{username}@{self.email_domain}" if self.email_domain else "")
 
         return {
-            "username":    email.split("@")[0],          # 學號
-            "email":       email,
-            "name":        claims.get("name", email),
+            "username":    username,                     # 學號/員編
+            "email":       email,                        # 可能為空；上層有 fallback
+            "name":        info.get("name") or username,
             "role":        "student",                    # 預設；admin 須手動提權
             "auth_source": "sso_oidc",
-            "external_id": claims.get("oid"),            # Microsoft 永久 ID
+            "external_id": str(info.get("sub") or "") or None,   # IdP 永久 ID
         }
+
+    def _extract_username(self, info: dict) -> str:
+        """
+        ZH: 從 userinfo 取學號/員編。username_claim 有設就用它（找不到即報錯，避免悄悄用錯欄位）；
+            未設則依候選清單嘗試。值若為 email 形式取 @ 前半段。
+        EN: Extract the account id from userinfo. Explicit username_claim wins (hard
+            error if absent); otherwise try candidates. Emails are trimmed at '@'.
+        """
+        if self.username_claim:
+            val = info.get(self.username_claim)
+            if not val:
+                raise ValueError(
+                    f"OIDC userinfo 缺少設定的 username_claim '{self.username_claim}'"
+                    f"（實際欄位: {sorted(info.keys())}）")
+        else:
+            val = next((info[k] for k in self._USERNAME_CANDIDATES if info.get(k)), None)
+            if not val:
+                raise ValueError(f"OIDC userinfo 找不到可用的帳號欄位（實際欄位: {sorted(info.keys())}）")
+        val = str(val).strip()
+        return val.split("@")[0] if "@" in val else val
 
     # ── stateless state 簽章（防 CSRF + replay）──────────────────────────
     def _sign_state(self) -> str:
@@ -278,13 +361,15 @@ def get_sso_client(mock_mode: bool = True, config: dict = None) -> BaseSSOClient
             )
             mock_users = config.get("mock", {}).get("users", [])
             return MockSSOClient(mock_users)
-        logger.info(f"使用 OIDC SSO Client (tenant={oidc_cfg.get('tenant_id', '?')[:8]}...)")
+        logger.info(f"使用 OIDC SSO Client (discovery={oidc_cfg.get('discovery_url', '?')})")
         return OIDCSSOClient(
-            tenant_id=oidc_cfg["tenant_id"],
+            discovery_url=oidc_cfg["discovery_url"],
             client_id=oidc_cfg["client_id"],
             client_secret=oidc_cfg["client_secret"],
             redirect_uri=oidc_cfg["redirect_uri"],
             scopes=oidc_cfg.get("scopes"),
+            username_claim=oidc_cfg.get("username_claim", ""),
+            email_domain=oidc_cfg.get("email_domain", ""),
         )
 
     if provider == "cas":
@@ -315,11 +400,13 @@ def build_oidc_client_if_enabled(config: dict) -> "OIDCSSOClient | None":
         return None
     try:
         return OIDCSSOClient(
-            tenant_id=oidc_cfg["tenant_id"],
+            discovery_url=oidc_cfg["discovery_url"],
             client_id=oidc_cfg["client_id"],
             client_secret=oidc_cfg["client_secret"],
             redirect_uri=oidc_cfg["redirect_uri"],
             scopes=oidc_cfg.get("scopes"),
+            username_claim=oidc_cfg.get("username_claim", ""),
+            email_domain=oidc_cfg.get("email_domain", ""),
         )
     except KeyError as e:
         logger.error(f"OIDC 設定缺少必要欄位 {e}；OIDC 不啟用")

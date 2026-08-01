@@ -71,8 +71,9 @@ services:
       OIDC_CLIENT_ID: ${OIDC_CLIENT_ID:-}
       OIDC_CLIENT_SECRET: ${OIDC_CLIENT_SECRET:-}
       OIDC_REDIRECT_URI: ${OIDC_REDIRECT_URI:-}
-      # ZH: tenant_id 非機密，留空＝用 sso_policy.yaml 內建值（MCU）；換校區可用 .env 覆寫
-      OIDC_TENANT_ID: ${OIDC_TENANT_ID:-}
+      # ZH: v3.1 MCU 自建 OIDC — discovery URL 非機密，留空＝用 sso_policy.yaml 內建值
+      #     (https://auth.mcu.edu.tw/.well-known/openid-configuration)；換 IdP 才覆寫
+      OIDC_DISCOVERY_URL: ${OIDC_DISCOVERY_URL:-}
 
       # ZH: Portkey LLM 閘道位址 | EN: Portkey LLM gateway URL
       PORTKEY_URL: ${PORTKEY_URL:-http://ai-platform-portkey:8000/v1/chat/completions}

@@ -217,7 +217,12 @@ def oidc_login():
             status_code=503,
             detail="OIDC is not configured. Please contact system administrator.",
         )
-    url = oidc_client.get_login_url()
+    # v3.1: 端點來自 discovery（auth.mcu.edu.tw）；IdP 連不上時回 503 而非 500
+    try:
+        url = oidc_client.get_login_url()
+    except Exception:
+        logger.exception("OIDC discovery/login-url failed")
+        raise HTTPException(status_code=503, detail="SSO 服務暫時無法使用，請稍後再試")
     return RedirectResponse(url=url)
 
 
@@ -292,15 +297,11 @@ def password_change_info():
             },
             "sso_oidc": {
                 "change_supported": False,
-                "change_url": oidc_cfg.get(
-                    "password_change_url",
-                    "https://account.activedirectory.windowsazure.com/ChangePassword.aspx",
-                ),
-                "reset_url": oidc_cfg.get(
-                    "password_reset_url",
-                    "https://passwordreset.microsoftonline.com/",
-                ),
-                "message": "您使用學校 Microsoft 帳號登入，密碼由學校統一管理",
+                # v3.1: MCU 自建 IdP（auth.mcu.edu.tw）— 不再預設 Microsoft 連結；
+                # yaml 留空時回 None，前端只顯示訊息
+                "change_url": oidc_cfg.get("password_change_url") or None,
+                "reset_url":  oidc_cfg.get("password_reset_url") or None,
+                "message": "您使用學校帳號登入（SSO），密碼由學校系統統一管理",
             },
         },
     }
