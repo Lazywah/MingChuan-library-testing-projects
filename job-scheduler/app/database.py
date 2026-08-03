@@ -212,6 +212,13 @@ def init_db():
             try: conn.execute(text("ALTER TABLE external_ai_accounts ADD COLUMN myai_vendor_sn VARCHAR"))
             except Exception: pass
 
+            # --- v3.2 GPU 節點管理：心跳來源 IP + 撞名偵測（gpu_nodes 新表由 create_all 建）---
+            # EN: v3.2 GPU node mgmt: heartbeat source IP + duplicate-NODE_ID detection
+            try: conn.execute(text("ALTER TABLE worker_heartbeats ADD COLUMN source_ip VARCHAR"))
+            except Exception: pass
+            try: conn.execute(text("ALTER TABLE worker_heartbeats ADD COLUMN ip_conflict_until DATETIME"))
+            except Exception: pass
+
     except Exception as e:
         logger.warning(f"Manual DB migration skipped or partially failed: {e}")
 

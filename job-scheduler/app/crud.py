@@ -644,9 +644,11 @@ def estimate_job_tokens(config: Optional[dict]) -> int:
 
 def upsert_worker_heartbeat(
     db: Session, node_id: str, available_gpus: List[str], gpu_utilization: float,
-    gpus_detail: Optional[list] = None, pool_type: Optional[str] = None
+    gpus_detail: Optional[list] = None, pool_type: Optional[str] = None,
+    source_ip: Optional[str] = None,
 ) -> models.WorkerHeartbeat:
-    """ZH: 更新或新增 Worker 節點心跳 | EN: Upsert worker heartbeat record"""
+    """ZH: 更新或新增 Worker 節點心跳；v3.2 順帶自動註冊 gpu_nodes + NODE_ID 撞名偵測
+       EN: Upsert worker heartbeat; v3.2 also auto-registers gpu_nodes + duplicate-ID detection"""
     node = db.query(models.WorkerHeartbeat).filter(
         models.WorkerHeartbeat.node_id == node_id
     ).first()
@@ -654,6 +656,18 @@ def upsert_worker_heartbeat(
     detail_json = json.dumps(gpus_detail) if gpus_detail is not None else None
     pool = normalize_pool(pool_type)   # v3.0 節點所屬池（未帶＝batch）
     if node:
+        # ZH: v3.2 撞名偵測 — 上一筆心跳「還新鮮」卻換了來源 IP ＝ 兩台機器用同一個
+        #     NODE_ID 在輪流蓋寫（.env 範本預設 gpu-node-01 抄多台的實務地雷）→ 記警示 10 分鐘
+        # EN: v3.2 duplicate-ID detection — fresh heartbeat but source IP flipped means
+        #     two machines share one NODE_ID; flag a 10-minute warning.
+        if source_ip and node.source_ip and source_ip != node.source_ip:
+            last = node.last_seen
+            if last is not None and last.tzinfo is None:
+                last = last.replace(tzinfo=timezone.utc)
+            if last is not None and (now - last) < timedelta(seconds=90):
+                node.ip_conflict_until = now + timedelta(minutes=10)
+        if source_ip:
+            node.source_ip = source_ip
         node.available_gpus = json.dumps(available_gpus)
         node.gpu_utilization = gpu_utilization
         if detail_json is not None:
@@ -670,8 +684,13 @@ def upsert_worker_heartbeat(
             pool_type=pool,
             last_seen=now,
             is_online=True,
+            source_ip=source_ip,
         )
         db.add(node)
+    # ZH: v3.2 自動註冊節點設定列（不存在才建；預設 啟用+全天可排，行為與加表前一致）
+    # EN: v3.2 auto-register the gpu_nodes config row (defaults keep legacy behavior)
+    if db.query(models.GpuNode).filter(models.GpuNode.node_id == node_id).first() is None:
+        db.add(models.GpuNode(node_id=node_id))
     db.commit()
     db.refresh(node)
     return node
@@ -697,13 +716,195 @@ def get_online_worker_nodes(db: Session, timeout_seconds: int = 90) -> List[mode
 
 
 def pool_has_online_worker(db: Session, pool_type: str, timeout_seconds: int = 90) -> bool:
-    """ZH: v3.0 該池是否有在線 worker。派工墊底邏輯用：互動池沒人時，batch 才代領互動任務。
-       EN: v3.0 whether a given pool has any online worker; drives take_job fallback."""
+    """ZH: v3.0 該池是否有「可派工」的在線 worker。派工墊底邏輯用：互動池沒人時，batch 才代領互動任務。
+       v3.2：改為節點管理感知——(1) 池別以 admin 覆蓋值優先於 worker 自報；
+       (2) 「在線但被停用/時段外」的節點不算數，否則互動任務會誤判有人接而卡死 pending。
+       EN: v3.2 node-mgmt aware — pool override wins over worker-reported, and
+       online-but-not-dispatchable nodes (disabled / out of window) don't count."""
     pool = normalize_pool(pool_type)
-    return any(
-        normalize_pool(getattr(n, "pool_type", "batch")) == pool
-        for n in get_online_worker_nodes(db, timeout_seconds=timeout_seconds)
-    )
+    for n in get_online_worker_nodes(db, timeout_seconds=timeout_seconds):
+        cfg = get_gpu_node(db, n.node_id)
+        if effective_pool(cfg, getattr(n, "pool_type", "batch")) != pool:
+            continue
+        if node_dispatch_state(cfg)["allowed"]:
+            return True
+    return False
+
+
+# ==============================================================================
+# ZH: v3.2 GPU 節點管理 — 派工閘門 / 池別覆蓋 / 狀態列表 / 設定更新
+# EN: v3.2 GPU node management — dispatch gate / pool override / status / update
+# ==============================================================================
+from . import gpu_schedule  # noqa: E402  (純函式模組，無循環相依)
+
+VALID_NODE_FIELDS = {"display_name", "note", "enabled", "pool_override",
+                     "schedule", "dispatch_buffer_min"}
+
+
+def get_gpu_node(db: Session, node_id: str) -> Optional[models.GpuNode]:
+    """ZH: 取節點設定列（可能為 None＝尚未心跳註冊）| EN: node config row (None = never seen)"""
+    return db.query(models.GpuNode).filter(models.GpuNode.node_id == node_id).first()
+
+
+def effective_pool(node_cfg: Optional[models.GpuNode], reported_pool) -> str:
+    """ZH: 生效池 = admin 覆蓋值優先，否則 worker 自報 | EN: override wins, else worker-reported"""
+    if node_cfg is not None and node_cfg.pool_override:
+        return normalize_pool(node_cfg.pool_override)
+    return normalize_pool(reported_pool)
+
+
+def node_dispatch_state(node_cfg: Optional[models.GpuNode],
+                        at: Optional[datetime] = None) -> dict:
+    """
+    ZH: 節點此刻可否派工。回 {"allowed": bool, "reason": "ok|disabled|out_of_window|bad_schedule"}。
+        未註冊/未設定 = 允許（向後相容）。schedule 解析失敗視為「全天可排」並回報 bad_schedule
+        於 reason 尾註（fail-open：設定壞掉不該讓整台機器消失，狀態欄會示警）。
+    EN: Whether the node may take jobs now. Missing row = allowed. A corrupt schedule
+        fails open (always-on) and is surfaced for the status panel.
+    """
+    if node_cfg is None:
+        return {"allowed": True, "reason": "ok"}
+    if not node_cfg.enabled:
+        return {"allowed": False, "reason": "disabled"}
+    try:
+        windows = gpu_schedule.parse_schedule(node_cfg.schedule)
+    except (ValueError, TypeError, json.JSONDecodeError):
+        return {"allowed": True, "reason": "ok_bad_schedule"}
+    buffer_min = max(0, int(node_cfg.dispatch_buffer_min or 0))
+    if gpu_schedule.is_open(windows, at=at, buffer_min=buffer_min):
+        return {"allowed": True, "reason": "ok"}
+    return {"allowed": False, "reason": "out_of_window"}
+
+
+def update_gpu_node(db: Session, node_id: str, fields: dict) -> models.GpuNode:
+    """
+    ZH: 更新節點設定（僅白名單欄位）。schedule 先過 parse 驗證（存原始 JSON 字串）；
+        pool_override 限 batch/interactive/空（空＝清除覆蓋）；buffer 夾 0–1440。
+        節點列不存在時建立（允許 admin 在機器上線前先建好設定）。
+    EN: Update node config (whitelisted fields only), validating schedule/pool/buffer.
+        Creates the row if missing (pre-provisioning before the worker first appears).
+    """
+    node = get_gpu_node(db, node_id)
+    if node is None:
+        node = models.GpuNode(node_id=node_id)
+        db.add(node)
+
+    unknown = set(fields.keys()) - VALID_NODE_FIELDS
+    if unknown:
+        raise ValueError(f"不明欄位：{sorted(unknown)}")
+
+    if "schedule" in fields:
+        raw = fields["schedule"]
+        if raw in (None, "", {}):
+            node.schedule = None                      # 清除＝全天可排
+        else:
+            gpu_schedule.parse_schedule(raw)          # 格式錯誤在此丟 ValueError
+            node.schedule = raw if isinstance(raw, str) else json.dumps(raw)
+    if "pool_override" in fields:
+        po = (fields["pool_override"] or "").strip()
+        if po and po not in VALID_POOLS:
+            raise ValueError(f"pool_override 須為 {sorted(VALID_POOLS)} 或留空")
+        node.pool_override = po or None
+    if "enabled" in fields:
+        node.enabled = 1 if fields["enabled"] in (True, 1, "1", "true") else 0
+    if "dispatch_buffer_min" in fields:
+        try:
+            node.dispatch_buffer_min = min(1440, max(0, int(fields["dispatch_buffer_min"] or 0)))
+        except (ValueError, TypeError):
+            raise ValueError("dispatch_buffer_min 須為整數分鐘")
+    if "display_name" in fields:
+        node.display_name = (fields["display_name"] or "").strip() or None
+    if "note" in fields:
+        node.note = (fields["note"] or "").strip() or None
+
+    db.commit()
+    db.refresh(node)
+    return node
+
+
+def list_gpu_nodes_with_status(db: Session, timeout_seconds: int = 90) -> list:
+    """
+    ZH: 給 admin 狀態欄 — 聯集「設定列 ∪ 心跳列」，每節點回：設定 + 心跳即時值 +
+        四態狀態(offline/disabled/out_of_window/idle|working) + 下次開/關時間 +
+        執行中任務 + 累計完成/失敗數 + NODE_ID 撞名警示。
+    EN: Admin status panel — union of config and heartbeat rows with live state,
+        next transition, running jobs, per-node totals, duplicate-ID warning.
+    """
+    now = datetime.now(timezone.utc)
+    hb_map = {h.node_id: h for h in db.query(models.WorkerHeartbeat).all()}
+    cfg_map = {c.node_id: c for c in db.query(models.GpuNode).all()}
+    out = []
+    for node_id in sorted(set(hb_map) | set(cfg_map)):
+        hb, cfg = hb_map.get(node_id), cfg_map.get(node_id)
+
+        last_seen = getattr(hb, "last_seen", None)
+        if last_seen is not None and last_seen.tzinfo is None:
+            last_seen = last_seen.replace(tzinfo=timezone.utc)
+        online = bool(last_seen and (now - last_seen) < timedelta(seconds=timeout_seconds))
+
+        dispatch = node_dispatch_state(cfg)
+        # ZH: 顯示用時段狀態（不含緩衝）與下次切換 | EN: display open-state (no buffer) + next flip
+        schedule_error = False
+        try:
+            windows = gpu_schedule.parse_schedule(cfg.schedule) if cfg else None
+        except (ValueError, TypeError, json.JSONDecodeError):
+            windows, schedule_error = None, True
+        open_now, next_change = gpu_schedule.next_transition(windows)
+
+        running = db.query(models.TrainingJob).filter(
+            models.TrainingJob.gpu_server == node_id,
+            models.TrainingJob.status == "running",
+        ).all()
+
+        if not online:
+            state = "offline"
+        elif cfg is not None and not cfg.enabled:
+            state = "disabled"
+        elif not dispatch["allowed"]:
+            state = "out_of_window_draining" if running else "out_of_window"
+        else:
+            state = "working" if running else "idle"
+
+        conflict_until = getattr(hb, "ip_conflict_until", None)
+        if conflict_until is not None and conflict_until.tzinfo is None:
+            conflict_until = conflict_until.replace(tzinfo=timezone.utc)
+
+        done = db.query(models.TrainingJob).filter(
+            models.TrainingJob.gpu_server == node_id,
+            models.TrainingJob.status == "completed").count()
+        failed = db.query(models.TrainingJob).filter(
+            models.TrainingJob.gpu_server == node_id,
+            models.TrainingJob.status == "failed").count()
+
+        out.append({
+            "node_id": node_id,
+            "display_name": getattr(cfg, "display_name", None),
+            "note": getattr(cfg, "note", None),
+            "enabled": bool(cfg.enabled) if cfg is not None else True,
+            "pool_override": getattr(cfg, "pool_override", None),
+            "reported_pool": normalize_pool(getattr(hb, "pool_type", "batch")),
+            "effective_pool": effective_pool(cfg, getattr(hb, "pool_type", "batch")),
+            "schedule": getattr(cfg, "schedule", None),
+            "schedule_error": schedule_error,
+            "dispatch_buffer_min": getattr(cfg, "dispatch_buffer_min", 0) or 0,
+            "state": state,
+            "online": online,
+            "last_seen": last_seen.isoformat() if last_seen else None,
+            "gpu_utilization": getattr(hb, "gpu_utilization", None),
+            "gpus_detail": json.loads(getattr(hb, "gpus_detail", "[]") or "[]"),
+            "window_open_now": open_now,
+            "next_change": next_change.isoformat() if next_change else None,
+            "running_jobs": [
+                {"id": j.id, "job_name": j.job_name, "user_id": j.user_id,
+                 "started_at": j.started_at.isoformat() if j.started_at else None}
+                for j in running
+            ],
+            "completed_total": done,
+            "failed_total": failed,
+            "ip_conflict": bool(conflict_until and conflict_until > now),
+            "source_ip": getattr(hb, "source_ip", None),
+        })
+    return out
 
 
 # ==============================================================================

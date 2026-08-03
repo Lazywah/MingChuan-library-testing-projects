@@ -224,6 +224,32 @@ class WorkerHeartbeat(Base):
     last_seen = Column(DateTime, default=lambda: datetime.now(timezone.utc))  # ZH: 最後心跳時間 | EN: Last heartbeat time
     is_online = Column(Integer, default=1)                                    # ZH: 是否在線 | EN: Online status
     pool_type = Column(String, default="batch")                               # ZH: 節點池類型 batch/interactive (v2.0 Lab) | EN: Pool type batch/interactive
+    # ZH: v3.2 節點管理 — 心跳來源 IP 與「同 ID 多來源」撞名偵測（NODE_ID 抄預設值的實務地雷）
+    # EN: v3.2 node mgmt — heartbeat source IP + duplicate-NODE_ID detection
+    source_ip = Column(String)                                                # ZH: 最近心跳來源 IP | EN: Latest heartbeat source IP
+    ip_conflict_until = Column(DateTime)                                      # ZH: 撞名警示有效期 | EN: Conflict warning valid until
+
+
+# ==============================================================================
+# ZH: 表 7b: GpuNode - GPU 節點管理設定 (v3.2)
+# EN: Table 7b: GpuNode - GPU node management config (v3.2)
+# ZH: 節點第一次心跳自動註冊；admin 可設 開關/週時段/池別覆蓋/停派緩衝。
+#     派工閘門在 /worker/take 讀本表；未註冊或未設定 = 啟用+全天可排（向後相容）。
+# EN: Auto-registered on first heartbeat; admin sets enable/schedule/pool override/
+#     dispatch buffer. Dispatch gate in /worker/take; missing row = always allowed.
+# ==============================================================================
+class GpuNode(Base):
+    __tablename__ = "gpu_nodes"
+
+    node_id = Column(String, primary_key=True)          # ZH: 對應 worker NODE_ID | EN: worker NODE_ID
+    display_name = Column(String)                       # ZH: 人讀名稱（如「圖書館 3F-05") | EN: Human-readable name
+    note = Column(Text)                                 # ZH: 位置/用途備註 | EN: Location/purpose note
+    enabled = Column(Integer, default=1)                # ZH: 總開關（0=完全不派工）| EN: Master switch
+    pool_override = Column(String)                      # ZH: 池別覆蓋 batch/interactive；NULL=依 worker 自報 | EN: Pool override; NULL=worker-reported
+    schedule = Column(Text)                             # ZH: 週時段 JSON（見 gpu_schedule.py）；NULL=全天可排 | EN: Weekly schedule JSON; NULL=always
+    dispatch_buffer_min = Column(Integer, default=0)    # ZH: 時段結束前 N 分鐘停派新工（drain 緩衝）| EN: Stop dispatching N min before window end
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
 
 
 # ZH: 表 8 (Notebook) 已於 Phase E 移除 — 被 v2.0 Lab (table 9 LabSession) 取代

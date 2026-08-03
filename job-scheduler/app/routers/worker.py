@@ -15,7 +15,7 @@ EN: Auth: All endpoints use static API Token (Bearer), enforced via verify_worke
 ==============================================================================
 """
 
-from fastapi import APIRouter, Depends, HTTPException, status, Header
+from fastapi import APIRouter, Depends, HTTPException, status, Header, Request
 from sqlalchemy.orm import Session
 from sqlalchemy import update
 from pydantic import BaseModel
@@ -91,6 +91,17 @@ def take_job(
     if not req.available_gpus:
         return {"job": None}
 
+    # ZH: v3.2 節點管理閘門 — 節點被停用或在可排程時段外（含停派緩衝）時不派新工。
+    #     心跳照常、執行中任務不受影響（drain：跑完為止）。未註冊節點＝允許（向後相容）。
+    # EN: v3.2 node-management gate — no new dispatch when the node is disabled or
+    #     outside its schedule window (incl. dispatch buffer). Heartbeats and
+    #     running jobs are unaffected (drain policy). Unregistered node = allowed.
+    node_cfg = crud.get_gpu_node(db, req.node_id)
+    gate = crud.node_dispatch_state(node_cfg)
+    if not gate["allowed"]:
+        logger.debug("Node %s dispatch blocked (%s)", req.node_id, gate["reason"])
+        return {"job": None}
+
     pending_jobs = crud.get_pending_jobs(db)
     if not pending_jobs:
         return {"job": None}
@@ -101,7 +112,8 @@ def take_job(
     #                             在線 worker 時」才代領（墊底），避免任務卡死也不搶互動池的活
     # EN: v3.0 local-GPU routing — prefer matching pool, batch backfills interactive
     #     only when no interactive worker is online. See create_job/pool_has_online_worker.
-    taker_pool = crud.normalize_pool(req.pool_type)
+    # ZH: v3.2 池別以 admin 覆蓋值優先（換池免改 worker env）| EN: v3.2 admin override wins
+    taker_pool = crud.effective_pool(node_cfg, req.pool_type)
     interactive_up = crud.pool_has_online_worker(db, "interactive") if taker_pool == "batch" else False
 
     def _pool_allows(job) -> bool:
@@ -222,16 +234,20 @@ def take_job(
 @router.post("/heartbeat")
 def worker_heartbeat(
     payload: schemas.WorkerHeartbeatPayload,
+    request: Request,
     db: Session = Depends(get_db),
     _: None = Depends(verify_worker_token),
 ):
     """
     ZH: Worker 定期上報節點存活與 GPU 使用率（建議每 30 秒一次）
+        v3.2：記錄來源 IP 供 NODE_ID 撞名偵測（多台機器抄同一個範本 NODE_ID 的地雷）
     EN: Worker periodically reports liveness and GPU utilization (recommend every 30s)
     """
+    source_ip = request.client.host if request.client else None
     crud.upsert_worker_heartbeat(
         db, payload.node_id, payload.available_gpus, payload.gpu_utilization or 0.0,
         gpus_detail=payload.gpus_detail, pool_type=payload.pool_type,
+        source_ip=source_ip,
     )
     logger.debug(f"Heartbeat from {payload.node_id}, gpus={payload.available_gpus}, pool={payload.pool_type}")
     return {"status": "ok", "node_id": payload.node_id}

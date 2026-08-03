@@ -89,6 +89,37 @@ def put_system_settings(
 
 
 # ==============================================================================
+# ZH: v3.2 GPU 節點管理 — 可排程時段/開關/池別 + 狀態總覽
+# EN: v3.2 GPU node management — schedule windows/switch/pool + status overview
+# ==============================================================================
+@router.get("/gpu-nodes", summary="GPU 節點狀態與設定總覽")
+def list_gpu_nodes(
+    db: Session = Depends(get_db),
+    _admin: models.User = Depends(require_admin),
+):
+    """ZH: 每節點回 設定+心跳即時值+狀態(四態)+下次開關時間+執行中任務+撞名警示。"""
+    return {"nodes": crud.list_gpu_nodes_with_status(db)}
+
+
+@router.put("/gpu-nodes/{node_id}", summary="更新單一 GPU 節點設定")
+def put_gpu_node(
+    node_id: str,
+    payload: dict = Body(..., description="可含 display_name/note/enabled/pool_override/schedule/dispatch_buffer_min"),
+    db: Session = Depends(get_db),
+    _admin: models.User = Depends(require_admin),
+):
+    """
+    ZH: 更新節點設定（schedule 格式見 gpu_schedule.py；清空=全天可排）。
+        節點未心跳過也可先建設定（pre-provision）。成功後回全列表讓前端整頁刷新。
+    """
+    try:
+        crud.update_gpu_node(db, node_id, payload)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    return {"nodes": crud.list_gpu_nodes_with_status(db)}
+
+
+# ==============================================================================
 # ZH: 使用者管理 | EN: User Management
 # ==============================================================================
 
