@@ -158,6 +158,9 @@
                 <button id="nav-tab-accounts" class="admin-side-tab" onclick="switchAdminMainTab('accounts')">
                     <ion-icon name="people-circle-outline"></ion-icon> <span data-i18n="tab_accounts">帳號管理</span>
                 </button>
+                <button id="nav-tab-gpu-nodes" class="admin-side-tab" onclick="switchAdminMainTab('gpu-nodes')">
+                    <ion-icon name="hardware-chip-outline"></ion-icon> <span data-i18n="tab_gpu_nodes">GPU 節點</span>
+                </button>
             </nav>
 
             <div class="admin-sidebar-footer">
@@ -1373,6 +1376,26 @@
 
             </div>
         </div> <!-- End of tab-accounts -->
+
+        <!-- v3.2 GPU 節點管理分頁：可排程時段/開關/池別 + 狀態卡（資料由 gpuNodes.load() 渲染） -->
+        <div id="tab-gpu-nodes" class="admin-tab-content" style="display: none;">
+            <div class="admin-grid">
+                <section class="widget form-box-panel" style="grid-column: 1 / -1;">
+                    <div class="widget-header split" style="margin-bottom:6px;">
+                        <h3><ion-icon name="hardware-chip-outline" style="margin-right:6px;"></ion-icon>
+                            <span data-i18n="gpu_nodes_title">GPU 節點管理</span></h3>
+                        <button class="ready-btn" onclick="gpuNodes.load()" style="width:auto; padding:6px 14px; margin:0;">
+                            <ion-icon name="refresh-outline"></ion-icon> <span data-i18n="btn_refresh">重新整理</span>
+                        </button>
+                    </div>
+                    <p style="font-size:0.82rem; color:var(--text-muted,#888); margin:0 15px 12px;" data-i18n="gpu_nodes_hint">
+                        時段外/停用只擋「新派工」，執行中任務會跑完（drain）。節點第一次心跳會自動出現在此。</p>
+                    <div id="gpu-nodes-grid" style="display:grid; grid-template-columns:repeat(auto-fill,minmax(340px,1fr)); gap:14px; padding:0 15px 15px;">
+                        <span style="color:var(--text-muted,#888);" data-i18n="msg_loading">載入中...</span>
+                    </div>
+                </section>
+            </div>
+        </div> <!-- End of tab-gpu-nodes -->
         </main> <!-- End of admin-content -->
     </div> <!-- End of admin-layout -->
 
@@ -1408,6 +1431,64 @@
         </div>
     </div>
 
+    <!-- v3.2 GPU 節點設定 Modal（開關/池別/緩衝/週時段編輯；置於頂層同 add-binding-modal 理由） -->
+    <div id="gpu-node-modal" class="tutorial-modal hidden">
+        <div class="tutorial-backdrop" onclick="gpuNodes.closeEditor()"></div>
+        <div class="tutorial-content login-modal" style="max-width: 620px; padding: 26px 30px; max-height: 88vh; overflow-y: auto;">
+            <button class="tutorial-close" onclick="gpuNodes.closeEditor()"><ion-icon name="close-outline"></ion-icon></button>
+            <h2 style="margin-bottom: 4px; display:flex; align-items:center; gap:8px;">
+                <ion-icon name="hardware-chip-outline"></ion-icon>
+                <span data-i18n="gpu_node_edit_title">節點設定</span> — <span id="gpu-node-modal-id" style="font-family:monospace;"></span>
+            </h2>
+            <form onsubmit="gpuNodes.save(); return false;" style="display:flex; flex-direction:column; gap:12px; margin-top:14px;">
+                <div style="display:flex; gap:10px; flex-wrap:wrap;">
+                    <label style="flex:1; min-width:200px; font-size:13px;">顯示名稱
+                        <input type="text" id="gpu-node-name" placeholder="例：圖書館 3F-05" style="width:100%; margin-top:4px; padding:6px 8px;">
+                    </label>
+                    <label style="flex:1; min-width:200px; font-size:13px;">備註
+                        <input type="text" id="gpu-node-note" placeholder="位置 / 用途" style="width:100%; margin-top:4px; padding:6px 8px;">
+                    </label>
+                </div>
+                <div style="display:flex; gap:14px; flex-wrap:wrap; align-items:center;">
+                    <label style="font-size:13px; display:flex; align-items:center; gap:6px;">
+                        <input type="checkbox" id="gpu-node-enabled"> 啟用（總開關）
+                    </label>
+                    <label style="font-size:13px;">池別
+                        <select id="gpu-node-pool" style="margin-left:6px; padding:4px 8px;">
+                            <option value="">依 worker 自報</option>
+                            <option value="batch">batch（高階/重量級）</option>
+                            <option value="interactive">interactive（互動輕量）</option>
+                        </select>
+                    </label>
+                    <label style="font-size:13px;">停派緩衝
+                        <input type="number" id="gpu-node-buffer" min="0" max="1440" step="5" value="0" style="width:70px; margin-left:6px; padding:4px 6px;"> 分鐘
+                    </label>
+                </div>
+                <div style="border-top:1px solid var(--border-color,#333); padding-top:10px;">
+                    <label style="font-size:13px; display:flex; align-items:center; gap:6px; margin-bottom:8px;">
+                        <input type="checkbox" id="gpu-node-always" onchange="gpuNodes.toggleAlways()"> 全天可排（不限時段）
+                    </label>
+                    <div id="gpu-node-days-wrap">
+                        <p style="font-size:12px; color:var(--text-muted,#888); margin:0 0 8px;">
+                            各日可加多段。結束時間 ≤ 開始時間 = 跨夜（延伸到隔日）。</p>
+                        <div id="gpu-node-days" style="display:flex; flex-direction:column; gap:6px;"></div>
+                        <p id="gpu-node-never-warn" style="display:none; font-size:12px; color:#f59e0b; margin:8px 0 0;">
+                            ⚠ 未勾「全天可排」且未設任何時段 ＝ 此節點永不開放派工。</p>
+                    </div>
+                </div>
+                <div id="gpu-node-msg" style="font-size:13px;"></div>
+                <div style="display:flex; gap:10px; justify-content:flex-end; margin-top:2px;">
+                    <button type="button" class="ready-btn" onclick="gpuNodes.closeEditor()" style="width:auto; min-width:auto; margin:0; padding:8px 18px; font-size:0.9rem;">
+                        <span data-i18n="btn_cancel">取消</span>
+                    </button>
+                    <button type="submit" class="ready-btn" style="width:auto; min-width:auto; margin:0; padding:8px 18px; font-size:0.9rem; background:#10b981; border-color:#10b981; color:#fff;">
+                        <span data-i18n="btn_save">儲存</span>
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
     <!-- v2.3: 管理者引導式教學（overlay + 高亮框 + 氣泡；原使用者介面 Unit 6 移入，從 Side Bar ⓘ 導覽開啟） -->
     <div id="admin-guide-ring" class="tutorial-highlight-ring hidden"></div>
     <div id="admin-guide-overlay" class="tutorial-overlay hidden" role="dialog" aria-modal="false">
@@ -1435,7 +1516,7 @@
     <script type="module" src="https://unpkg.com/ionicons@7.1.0/dist/ionicons/ionicons.esm.js"></script>
     <script nomodule src="https://unpkg.com/ionicons@7.1.0/dist/ionicons/ionicons.js"></script>
     <!-- 載入 Admin 邏輯 -->
-    <script src="admin.js?v=d39691be"></script>
+    <script src="admin.js?v=02e0aa42"></script>
 </body>
 
 </html>

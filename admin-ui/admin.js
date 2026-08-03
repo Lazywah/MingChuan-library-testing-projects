@@ -63,6 +63,18 @@ const TRANSLATIONS = {
         alert_cfg_threshold: "低點數門檻",
         alert_cfg_guide: "申請教學連結",
         tab_accounts: "帳號管理",
+        // v3.2 GPU 節點管理
+        tab_gpu_nodes: "GPU 節點",
+        gpu_nodes_title: "GPU 節點管理",
+        gpu_nodes_hint: "時段外/停用只擋「新派工」，執行中任務會跑完（drain）。節點第一次心跳會自動出現在此。",
+        gpu_node_edit_title: "節點設定",
+        btn_refresh: "重新整理",
+        gpu_state_offline: "離線",
+        gpu_state_disabled: "已停用",
+        gpu_state_out: "時段外",
+        gpu_state_drain: "時段外·收尾中",
+        gpu_state_idle: "閒置",
+        gpu_state_working: "執行中",
         acct_overview_title: "帳號總覽",
         acct_search_ph: "搜尋帳號 / Email / 姓名 / 學系…",
         acct_col_user: "平台帳號",
@@ -404,6 +416,18 @@ const TRANSLATIONS = {
         alert_cfg_threshold: "Low-balance threshold",
         alert_cfg_guide: "How-to-apply link",
         tab_accounts: "Accounts",
+        // v3.2 GPU node management
+        tab_gpu_nodes: "GPU Nodes",
+        gpu_nodes_title: "GPU Node Management",
+        gpu_nodes_hint: "Disabled/out-of-window only blocks NEW dispatch; running jobs drain to completion. Nodes appear automatically on first heartbeat.",
+        gpu_node_edit_title: "Node Settings",
+        btn_refresh: "Refresh",
+        gpu_state_offline: "Offline",
+        gpu_state_disabled: "Disabled",
+        gpu_state_out: "Out of window",
+        gpu_state_drain: "Out of window · draining",
+        gpu_state_idle: "Idle",
+        gpu_state_working: "Working",
         acct_overview_title: "Account Overview",
         acct_search_ph: "Search account / email / name / dept…",
         acct_col_user: "Platform Account",
@@ -805,6 +829,8 @@ function switchAdminMainTab(tabId) {
             initAccountsTab();
         } else if (tabId === 'management') {
             systemSettings.load();   // v3.1 step 6：回到管理分頁時重新載入系統設定
+        } else if (tabId === 'gpu-nodes') {
+            gpuNodes.load();         // v3.2：GPU 節點狀態 + 設定
         }
     }
 }
@@ -1076,6 +1102,221 @@ const systemSettings = {
             showToast('系統設定已更新');
         } catch (e) {
             showToast('儲存失敗：' + (e.message || ''), true);
+        }
+    },
+};
+
+// ==============================================================================
+// v3.2 GPU 節點管理 — 狀態卡 + 節點設定編輯（開關/週時段/池別/緩衝）
+// GET/PUT /api/v1/admin/gpu-nodes；schedule 一律送 null（全天）或 JSON「字串」
+// （空物件 "{}"＝永不開放；勿送 dict 形式的 {}，後端會當成「清除」）。
+// ==============================================================================
+const gpuNodes = {
+    _nodes: [],
+    _editingId: null,
+    _DAYS: [["mon","週一"],["tue","週二"],["wed","週三"],["thu","週四"],["fri","週五"],["sat","週六"],["sun","週日"]],
+    _authHeaders() {
+        return { 'Authorization': `Bearer ${authToken}`, 'Content-Type': 'application/json' };
+    },
+    _esc(s) {
+        return String(s == null ? '' : s).replace(/[&<>"']/g,
+            c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+    },
+    _L() { return TRANSLATIONS[currentLang] || TRANSLATIONS.zh; },
+
+    async load() {
+        const grid = document.getElementById('gpu-nodes-grid');
+        if (!grid) return;
+        try {
+            const res = await fetch(`${API_BASE}/admin/gpu-nodes`, {
+                headers: { 'Authorization': `Bearer ${authToken}` }
+            });
+            if (!res.ok) throw new Error('load failed');
+            const data = await res.json();
+            this._nodes = data.nodes || [];
+            this.render();
+        } catch (e) {
+            grid.innerHTML = '<span style="color:#fb7185;">載入 GPU 節點失敗</span>';
+        }
+    },
+
+    _stateInfo(n) {
+        const L = this._L();
+        const map = {
+            offline:                 [L.gpu_state_offline,  '#6b7280'],
+            disabled:                [L.gpu_state_disabled, '#64748b'],
+            out_of_window:           [L.gpu_state_out,      '#f59e0b'],
+            out_of_window_draining:  [L.gpu_state_drain,    '#f59e0b'],
+            idle:                    [L.gpu_state_idle,     '#4ade80'],
+            working:                 [L.gpu_state_working,  '#38bdf8'],
+        };
+        return map[n.state] || [n.state, '#6b7280'];
+    },
+    _fmtRel(iso) {
+        if (!iso) return '—';
+        const s = Math.max(0, (Date.now() - new Date(iso).getTime()) / 1000);
+        if (s < 90) return `${Math.round(s)} 秒前`;
+        if (s < 5400) return `${Math.round(s/60)} 分鐘前`;
+        if (s < 86400*2) return `${Math.round(s/3600)} 小時前`;
+        return `${Math.round(s/86400)} 天前`;
+    },
+    _fmtNext(n) {
+        // 顯示「下次開放/關閉」：window_open_now=目前時段內 → next_change 是關閉時刻
+        if (!n.schedule) return '全天可排';
+        if (n.schedule_error) return '⚠ 時段設定損壞（暫視為全天）';
+        if (!n.next_change) return n.window_open_now ? '全週開放' : '永不開放';
+        const d = new Date(n.next_change);
+        const hhmm = `${String(d.getMonth()+1).padStart(2,'0')}/${String(d.getDate()).padStart(2,'0')} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+        return n.window_open_now ? `開放中 · ${hhmm} 關閉` : `時段外 · ${hhmm} 開放`;
+    },
+
+    render() {
+        const grid = document.getElementById('gpu-nodes-grid');
+        if (!grid) return;
+        if (!this._nodes.length) {
+            grid.innerHTML = '<span style="color:var(--text-muted,#888);">尚無節點——worker 第一次心跳後會自動出現。</span>';
+            return;
+        }
+        grid.innerHTML = '';
+        this._nodes.forEach(n => {
+            const [stateLabel, stateColor] = this._stateInfo(n);
+            const gpuLine = (n.gpus_detail || []).map(g =>
+                `${this._esc(g.name || 'GPU')} ${g.util != null ? Math.round(g.util)+'%' : ''}`).join('、')
+                || (n.gpu_utilization != null ? `使用率 ${Math.round(n.gpu_utilization)}%` : '—');
+            const running = (n.running_jobs || []).map(j => this._esc(j.job_name || j.id.slice(0,8))).join('、');
+            const poolTxt = n.pool_override
+                ? `${this._esc(n.effective_pool)} <span style="color:#38bdf8;">(覆蓋)</span>`
+                : `${this._esc(n.effective_pool)} <span style="color:var(--text-muted,#888);">(自報)</span>`;
+            const card = document.createElement('div');
+            card.style.cssText = 'border:1px solid var(--border-color,#333); border-radius:12px; padding:14px 16px; display:flex; flex-direction:column; gap:8px; background:var(--bg-elevated,rgba(255,255,255,0.03));';
+            card.innerHTML =
+                `<div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+                    <b style="font-size:15px;">${this._esc(n.display_name || n.node_id)}</b>
+                    <span style="font-size:11px; padding:2px 10px; border-radius:999px; background:${stateColor}22; color:${stateColor}; border:1px solid ${stateColor};">${this._esc(stateLabel)}</span>
+                    ${n.ip_conflict ? '<span style="font-size:11px; padding:2px 10px; border-radius:999px; background:#ef444422; color:#ef4444; border:1px solid #ef4444;">⚠ NODE_ID 撞名</span>' : ''}
+                    ${n.schedule_error ? '<span style="font-size:11px; padding:2px 10px; border-radius:999px; background:#ef444422; color:#ef4444; border:1px solid #ef4444;">⚠ 時段損壞</span>' : ''}
+                    <button class="ready-btn" style="width:auto; margin:0 0 0 auto; padding:4px 12px; font-size:12px;" onclick="gpuNodes.openEditor('${this._esc(n.node_id)}')">
+                        <ion-icon name="create-outline"></ion-icon> 編輯</button>
+                 </div>
+                 <div style="font-size:12px; color:var(--text-muted,#888); font-family:monospace;">${this._esc(n.node_id)}${n.source_ip ? ' · ' + this._esc(n.source_ip) : ''}</div>
+                 ${n.note ? `<div style="font-size:12px; color:var(--text-muted,#888);">${this._esc(n.note)}</div>` : ''}
+                 <div style="font-size:13px; display:flex; gap:14px; flex-wrap:wrap;">
+                    <span>池別：${poolTxt}</span>
+                    <span>GPU：${gpuLine}</span>
+                 </div>
+                 <div style="font-size:13px;">時段：${this._fmtNext(n)}${n.dispatch_buffer_min ? `（結束前 ${n.dispatch_buffer_min} 分停派）` : ''}</div>
+                 <div style="font-size:13px;">任務：${running ? ('▶ ' + running) : '無執行中'} · 累計 完成 ${n.completed_total} / 失敗 ${n.failed_total}</div>
+                 <div style="font-size:12px; color:var(--text-muted,#888);">最後心跳：${this._fmtRel(n.last_seen)}</div>`;
+            grid.appendChild(card);
+        });
+    },
+
+    // ── 編輯 Modal ──────────────────────────────────────────────────────
+    openEditor(nodeId) {
+        const n = this._nodes.find(x => x.node_id === nodeId);
+        if (!n) return;
+        this._editingId = nodeId;
+        document.getElementById('gpu-node-modal-id').textContent = nodeId;
+        document.getElementById('gpu-node-name').value = n.display_name || '';
+        document.getElementById('gpu-node-note').value = n.note || '';
+        document.getElementById('gpu-node-enabled').checked = !!n.enabled;
+        document.getElementById('gpu-node-pool').value = n.pool_override || '';
+        document.getElementById('gpu-node-buffer').value = n.dispatch_buffer_min || 0;
+        let sched = null;
+        if (n.schedule) { try { sched = JSON.parse(n.schedule); } catch (e) { sched = null; } }
+        document.getElementById('gpu-node-always').checked = (sched === null);
+        this._renderDays(sched || {});
+        this.toggleAlways();
+        document.getElementById('gpu-node-msg').textContent = '';
+        document.getElementById('gpu-node-modal').classList.remove('hidden');
+    },
+    closeEditor() {
+        this._editingId = null;
+        document.getElementById('gpu-node-modal').classList.add('hidden');
+    },
+    toggleAlways() {
+        const always = document.getElementById('gpu-node-always').checked;
+        document.getElementById('gpu-node-days-wrap').style.display = always ? 'none' : 'block';
+        this._updateNeverWarn();
+    },
+    _renderDays(sched) {
+        const box = document.getElementById('gpu-node-days');
+        box.innerHTML = '';
+        this._DAYS.forEach(([key, label]) => {
+            const row = document.createElement('div');
+            row.dataset.day = key;
+            row.style.cssText = 'display:flex; align-items:center; gap:8px; flex-wrap:wrap;';
+            row.innerHTML = `<span style="width:42px; font-size:13px;">${label}</span>` +
+                `<span class="gpu-day-segs" style="display:flex; gap:8px; flex-wrap:wrap;"></span>` +
+                `<button type="button" class="ready-btn" style="width:auto; margin:0; padding:2px 10px; font-size:12px;" onclick="gpuNodes.addSeg('${key}')">＋</button>`;
+            box.appendChild(row);
+            (sched[key] || []).forEach(seg => this.addSeg(key, seg[0], seg[1]));
+        });
+        this._updateNeverWarn();
+    },
+    addSeg(day, start, end) {
+        const row = document.querySelector(`#gpu-node-days [data-day="${day}"] .gpu-day-segs`) ||
+                    document.querySelector(`#gpu-node-days div[data-day="${day}"] .gpu-day-segs`);
+        if (!row) return;
+        const seg = document.createElement('span');
+        seg.className = 'gpu-seg';
+        seg.style.cssText = 'display:inline-flex; align-items:center; gap:4px; background:var(--bg-elevated,rgba(255,255,255,0.05)); border:1px solid var(--border-color,#333); border-radius:8px; padding:2px 6px;';
+        seg.innerHTML = `<input type="time" class="gpu-seg-start" value="${start || '18:00'}" style="border:none; background:none; color:var(--text-primary,#eee); font-size:12px;">` +
+            `<span style="font-size:12px;">→</span>` +
+            `<input type="time" class="gpu-seg-end" value="${end || '23:00'}" style="border:none; background:none; color:var(--text-primary,#eee); font-size:12px;">` +
+            `<button type="button" style="border:none; background:none; color:#fb7185; cursor:pointer; font-size:13px;" onclick="this.parentElement.remove(); gpuNodes._updateNeverWarn();">✕</button>`;
+        row.appendChild(seg);
+        this._updateNeverWarn();
+    },
+    _updateNeverWarn() {
+        const always = document.getElementById('gpu-node-always');
+        const warn = document.getElementById('gpu-node-never-warn');
+        if (!always || !warn) return;
+        const segCount = document.querySelectorAll('#gpu-node-days .gpu-seg').length;
+        warn.style.display = (!always.checked && segCount === 0) ? 'block' : 'none';
+    },
+    _collectSchedule() {
+        // 回傳 null（全天）或 JSON 字串（可能是 "{}"＝永不開放，警示已顯示）
+        if (document.getElementById('gpu-node-always').checked) return null;
+        const obj = {};
+        document.querySelectorAll('#gpu-node-days [data-day]').forEach(row => {
+            const segs = [];
+            row.querySelectorAll('.gpu-seg').forEach(seg => {
+                const s = seg.querySelector('.gpu-seg-start').value;
+                const e = seg.querySelector('.gpu-seg-end').value;
+                if (s && e) segs.push([s, e]);
+            });
+            if (segs.length) obj[row.dataset.day] = segs;
+        });
+        return JSON.stringify(obj);
+    },
+    async save() {
+        if (!this._editingId) return;
+        const msg = document.getElementById('gpu-node-msg');
+        const payload = {
+            display_name: document.getElementById('gpu-node-name').value,
+            note: document.getElementById('gpu-node-note').value,
+            enabled: document.getElementById('gpu-node-enabled').checked,
+            pool_override: document.getElementById('gpu-node-pool').value,
+            dispatch_buffer_min: parseInt(document.getElementById('gpu-node-buffer').value, 10) || 0,
+            schedule: this._collectSchedule(),
+        };
+        try {
+            const res = await fetch(`${API_BASE}/admin/gpu-nodes/${encodeURIComponent(this._editingId)}`, {
+                method: 'PUT', headers: this._authHeaders(), body: JSON.stringify(payload),
+            });
+            if (!res.ok) {
+                const err = await res.json().catch(() => ({}));
+                throw new Error(err.detail || '儲存失敗');
+            }
+            const data = await res.json();
+            this._nodes = data.nodes || [];
+            this.render();
+            this.closeEditor();
+            showToast('GPU 節點設定已更新');
+        } catch (e) {
+            if (msg) { msg.style.color = '#fb7185'; msg.textContent = '✗ ' + (e.message || '儲存失敗'); }
+            showToast('儲存失敗', true);
         }
     },
 };
