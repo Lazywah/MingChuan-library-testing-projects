@@ -822,6 +822,60 @@ def update_gpu_node(db: Session, node_id: str, fields: dict) -> models.GpuNode:
     return node
 
 
+def pool_availability(db: Session, timeout_seconds: int = 90) -> dict:
+    """
+    ZH: v3.2 Phase 1.5 — 各池「現在有沒有可派工節點；沒有的話最快幾點開放」。
+        給學生端送單前的期待管理（任務 pending 不是壞掉、是在等時段）。語意對齊 take_job：
+        - available = 存在「在線 + 啟用 + 時段內(含停派緩衝)」且 effective pool 匹配的節點
+        - interactive 額外含 batch 墊底：互動池無可派節點時 batch 會代領 → 看 batch 的 available
+        - next_open = 未開放時，啟用節點中「時段最早開放」時刻（全天可排但離線的節點給不出
+          時間 → 不列入；全部給不出 → None，前端顯示「等機器上線」措辭）
+    EN: Per-pool availability + earliest next window opening, matching take_job semantics
+        (incl. batch backfill for interactive).
+    """
+    online_ids = {n.node_id for n in get_online_worker_nodes(db, timeout_seconds=timeout_seconds)}
+    hb_map = {h.node_id: h for h in db.query(models.WorkerHeartbeat).all()}
+    cfg_map = {c.node_id: c for c in db.query(models.GpuNode).all()}
+
+    avail = {"batch": False, "interactive": False}
+    next_open: dict = {"batch": None, "interactive": None}
+
+    for node_id in set(hb_map) | set(cfg_map):
+        hb, cfg = hb_map.get(node_id), cfg_map.get(node_id)
+        pool = effective_pool(cfg, getattr(hb, "pool_type", "batch"))
+        if node_id in online_ids and node_dispatch_state(cfg)["allowed"]:
+            avail[pool] = True
+            continue
+        # ZH: 沒開放 → 若是「啟用 + 有時段表 + 目前時段外」，取它下一次開放時刻當候選
+        if cfg is None or not cfg.enabled:
+            continue
+        try:
+            windows = gpu_schedule.parse_schedule(cfg.schedule)
+        except (ValueError, TypeError, json.JSONDecodeError):
+            continue
+        if windows is None:
+            continue   # 全天可排卻不可用＝離線，給不出「幾點會好」
+        open_now, nxt = gpu_schedule.next_transition(windows)
+        if not open_now and nxt is not None:
+            if next_open[pool] is None or nxt < next_open[pool]:
+                next_open[pool] = nxt
+
+    # ZH: interactive 的 batch 墊底（同 take_job：互動池沒人可派時 batch 代領）
+    inter_avail = avail["interactive"] or avail["batch"]
+    inter_next = next_open["interactive"]
+    if not inter_avail:
+        for cand in (next_open["interactive"], next_open["batch"]):
+            if cand is not None and (inter_next is None or cand < inter_next):
+                inter_next = cand
+
+    return {
+        "batch": {"available": avail["batch"],
+                  "next_open": next_open["batch"].isoformat() if (not avail["batch"] and next_open["batch"]) else None},
+        "interactive": {"available": inter_avail,
+                        "next_open": inter_next.isoformat() if (not inter_avail and inter_next) else None},
+    }
+
+
 def list_gpu_nodes_with_status(db: Session, timeout_seconds: int = 90) -> list:
     """
     ZH: 給 admin 狀態欄 — 聯集「設定列 ∪ 心跳列」，每節點回：設定 + 心跳即時值 +

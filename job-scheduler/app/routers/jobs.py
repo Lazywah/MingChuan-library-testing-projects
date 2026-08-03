@@ -232,6 +232,24 @@ def list_jobs(
 
 
 # ==============================================================================
+# ZH: v3.2 Phase 1.5 — GET /pool-availability：各池可用性與下次開放時間
+#     ⚠ 必須宣告在 GET /{job_id} 之前，否則 "pool-availability" 會被當成 job_id
+# EN: v3.2 Phase 1.5 — per-pool availability. MUST precede GET /{job_id}.
+# ==============================================================================
+@router.get("/pool-availability", summary="各池「現在可否派工 / 下次開放時間」（學生端提示用）")
+def get_pool_availability(
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    ZH: 回 {"batch": {available, next_open}, "interactive": {...}}。
+        available=false 且 next_open 有值 → 前端顯示「預計 X 開始執行」；
+        next_open 為 null → 「等待機器上線」。interactive 已含 batch 墊底語意。
+    """
+    return crud.pool_availability(db)
+
+
+# ==============================================================================
 # ZH: GET /{job_id} - 查詢單一任務狀態
 # EN: GET /{job_id} - Query single job status
 # ==============================================================================

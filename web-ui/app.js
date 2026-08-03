@@ -48,6 +48,9 @@ const TRANSLATIONS = {
         btn_dispatch: "派發任務",
         compute_high: "高階 GPU",
         compute_mid_low: "本地 GPU",
+        // v3.2 Phase 1.5 節點時段期待管理（任務 pending 不是壞掉、是在等時段）
+        pool_hint_next: "目前無開放的運算節點，送出的任務會排隊，預計 {time} 開始執行",
+        pool_hint_offline: "目前無可用的運算節點（機器離線或停用），送出的任務會排隊等待",
         // v3.0 分頁說明（滑鼠移上去浮現）。依規劃目標描述兩種 GPU 的用途取向
         // （高階＝重量級訓練、本地＝互動式輕量）——分頁名字本身看不出各自適合什麼。
         compute_high_tip: "高階 GPU 伺服器（急件佇列）。適合模型訓練、微調這類吃顯卡、要跑很久的重量級工作。因為排隊等專用 GPU，開始時間不一定是立刻。",
@@ -462,6 +465,9 @@ const TRANSLATIONS = {
         btn_dispatch: "Dispatch Task",
         compute_high: "High-end GPU",
         compute_mid_low: "Local GPU",
+        // v3.2 Phase 1.5 pool-availability hint
+        pool_hint_next: "No compute node is open right now; submitted jobs will queue and are expected to start at {time}",
+        pool_hint_offline: "No compute node is available (offline or disabled); submitted jobs will wait in queue",
         // v3.0 sub-tab tooltips — describe the planned purpose of each GPU tier
         // (high-end = heavyweight training, local = lightweight interactive)
         compute_high_tip: "High-end GPU server (priority queue). For heavyweight work like model training and fine-tuning that needs serious GPU power and runs a long time. It queues for a dedicated GPU, so it may not start immediately.",
@@ -1513,6 +1519,10 @@ document.addEventListener('DOMContentLoaded', () => {
             const targetId = btn.getAttribute('data-subtab') + '-page';
             const targetPage = document.getElementById(targetId);
             if (targetPage) targetPage.classList.add('active');
+            // v3.2 Phase 1.5：切到 GPU 送單頁時更新池可用性提示
+            if (targetId === 'compute-high-page' || targetId === 'compute-midlow-page') {
+                refreshPoolHints();
+            }
         });
     });
     
@@ -2332,6 +2342,7 @@ function toggleAuthGatedUI(show) {
 // =========================
 async function fetchDashboardData() {
     await Promise.all([fetchUserProfile(), fetchTokenUsage(), fetchJobs(), fetchAnnouncements()]);
+    refreshPoolHints();   // v3.2 Phase 1.5：池可用性提示（不阻塞儀表板載入）
 }
 
 // v2.2: 拉動態公告 (admin 在 admin UI 可編輯)
@@ -2622,6 +2633,48 @@ function formatDate(dateStr) {
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
+// ==============================================================================
+// v3.2 Phase 1.5：送單前的「池可用性」提示（期待管理）
+// 後端 GET /jobs/pool-availability 語意對齊派工（interactive 已含 batch 墊底）。
+// 提示屬加值資訊：抓不到就靜默隱藏，絕不打擾主流程。
+// ==============================================================================
+async function refreshPoolHints() {
+    if (!authToken) return;
+    let data;
+    try {
+        const res = await fetch(`${API_BASE}/jobs/pool-availability`, {
+            headers: { 'Authorization': `Bearer ${authToken}` }
+        });
+        if (!res.ok) return;
+        data = await res.json();
+    } catch { return; }
+    const t = TRANSLATIONS[currentLang] || TRANSLATIONS.zh;
+    [["batch", "high"], ["interactive", "midlow"]].forEach(([pool, suffix]) => {
+        const form = document.getElementById(`job-form-${suffix}`);
+        if (!form) return;
+        let hint = document.getElementById(`pool-hint-${suffix}`);
+        if (!hint) {
+            hint = document.createElement('div');
+            hint.id = `pool-hint-${suffix}`;
+            hint.style.cssText = 'display:none; margin:0 15px 12px; padding:8px 12px; border:1px solid #f59e0b; border-radius:9px; background:rgba(245,158,11,0.12); color:#f59e0b; font-size:13px;';
+            form.parentElement.insertBefore(hint, form);
+        }
+        const info = data[pool] || {};
+        if (info.available) { hint.style.display = 'none'; return; }
+        let text;
+        if (info.next_open) {
+            const d = new Date(info.next_open);
+            const hhmm = `${String(d.getMonth() + 1).padStart(2, '0')}/${String(d.getDate()).padStart(2, '0')} ` +
+                         `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+            text = (t.pool_hint_next || '').replace('{time}', hhmm);
+        } else {
+            text = t.pool_hint_offline || '';
+        }
+        hint.textContent = '⏳ ' + text;
+        hint.style.display = 'block';
+    });
+}
+
 async function fetchJobs() {
     try {
         const res = await fetch(`${API_BASE}/jobs`, {
@@ -2742,6 +2795,7 @@ async function handleJobSubmit(e, priority, formId) {
         if (group) group.style.display = 'none';
         uploadedDatasetPath = null;
         fetchJobs();
+        refreshPoolHints();   // v3.2 Phase 1.5：送單後刷新提示（可能剛好跨進/跨出時段）
     } catch {
         showToast('toast_job_fail', true);
     }

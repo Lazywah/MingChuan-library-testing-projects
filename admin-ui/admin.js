@@ -1135,9 +1135,41 @@ const gpuNodes = {
             const data = await res.json();
             this._nodes = data.nodes || [];
             this.render();
+            this._updateConflictBanner(this._nodes);   // v3.2 Phase 1.5：同步更新全站撞名橫幅
         } catch (e) {
             grid.innerHTML = '<span style="color:#fb7185;">載入 GPU 節點失敗</span>';
         }
+    },
+
+    // ── v3.2 Phase 1.5：NODE_ID 撞名「全站」橫幅（不只本分頁卡片徽章）──────────
+    // 撞名症狀陰（狀態互蓋、任務歸屬亂），admin 沒點進本分頁也該立刻看見。
+    async checkConflictBanner() {
+        try {
+            const res = await fetch(`${API_BASE}/admin/gpu-nodes`, {
+                headers: { 'Authorization': `Bearer ${authToken}` }
+            });
+            if (!res.ok) return;
+            const data = await res.json();
+            this._updateConflictBanner(data.nodes || []);
+        } catch (e) { /* 靜默：橫幅屬加值警示 */ }
+    },
+    _updateConflictBanner(nodes) {
+        const conflicted = (nodes || []).filter(n => n.ip_conflict).map(n => n.node_id);
+        let bar = document.getElementById('gpu-conflict-banner');
+        if (!conflicted.length) { if (bar) bar.remove(); return; }
+        if (!bar) {
+            const host = document.querySelector('main') || document.getElementById('admin-main-layout') || document.body;
+            bar = document.createElement('div');
+            bar.id = 'gpu-conflict-banner';
+            bar.style.cssText = 'position:sticky; top:0; z-index:9000; background:#7f1d1d; color:#fecaca; ' +
+                'border:1px solid #ef4444; border-radius:10px; padding:8px 16px; margin:0 0 12px; ' +
+                'font-size:13px; cursor:pointer;';
+            bar.onclick = () => switchAdminMainTab('gpu-nodes');
+            host.insertBefore(bar, host.firstChild);
+        }
+        bar.innerHTML = `⚠ 偵測到 NODE_ID 撞名：<b>${conflicted.map(x => this._esc(x)).join('、')}</b>` +
+            ` — 多台機器共用同一節點 ID，狀態與排程設定會互蓋。點此開啟「GPU 節點」分頁；` +
+            `請到各機器的 .env 設定唯一 NODE_ID。`;
     },
 
     _stateInfo(n) {
@@ -3183,6 +3215,7 @@ function initAdminDashboard() {
     fetchClusterStats();
     fetchAdminData();
     systemSettings.load();   // v3.1 step 6：系統設定在 management 分頁（預設分頁）
+    gpuNodes.checkConflictBanner();   // v3.2 Phase 1.5：登入即檢查 NODE_ID 撞名（全站橫幅）
     applyTranslations();
 
     // Auto refresh logic
