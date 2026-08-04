@@ -1089,6 +1089,32 @@
                     <div id="admin-secrets-result" class="admin-table-wrap scrollbar-custom" style="max-height: 280px; overflow-y:auto;"></div>
                 </section>
 
+                <!-- v3.3 Lab 資料封存：刪除帳號後的緩衝區（可還原 / 立即銷毀 / 到期自動清） -->
+                <section class="widget form-box-panel" style="grid-column: 1 / -1;">
+                    <div class="widget-header split">
+                        <h3><ion-icon name="archive-outline" style="margin-right:6px;"></ion-icon>
+                            <span data-i18n="lab_archive_title">已刪除帳號的 Lab 資料（封存中）</span></h3>
+                        <ion-icon name="refresh-circle-outline" onclick="adminLab.refreshArchives()" class="refresh-icon" title="Refresh"></ion-icon>
+                    </div>
+                    <p style="font-size:0.82rem; color:var(--text-muted,#888); margin:0 15px 10px;">
+                        <span data-i18n="lab_archive_hint">帳號刪除時 Lab 資料不會立即銷毀，而是封存於此，逾期自動清除（期限可於「系統設定」調整）。還原會把資料複製進所選使用者的 Lab。</span>
+                        <span id="lab-archive-summary" style="margin-left:6px; color:var(--text-primary);"></span>
+                    </p>
+                    <div class="admin-table-wrap scrollbar-custom">
+                        <table class="admin-table" id="admin-lab-archives-table">
+                            <thead><tr>
+                                <th data-i18n="col_user">原帳號</th>
+                                <th data-i18n="col_size">大小</th>
+                                <th data-i18n="col_archived_at">封存於</th>
+                                <th data-i18n="col_days_left">剩餘</th>
+                                <th data-i18n="col_status">狀態</th>
+                                <th data-i18n="col_actions">操作</th>
+                            </tr></thead>
+                            <tbody><tr><td colspan="6" style="text-align:center; color:var(--text-muted);" data-i18n="msg_loading">載入中...</td></tr></tbody>
+                        </table>
+                    </div>
+                </section>
+
             </div>
         </div> <!-- End of tab-lab -->
 
@@ -1489,6 +1515,43 @@
         </div>
     </div>
 
+    <!-- v3.3 Lab 封存還原 Modal（置於頂層，理由同 add-binding-modal / gpu-node-modal） -->
+    <div id="lab-restore-modal" class="tutorial-modal hidden">
+        <div class="tutorial-backdrop" onclick="adminLab.closeRestore()"></div>
+        <div class="tutorial-content login-modal" style="max-width: 520px; padding: 26px 30px;">
+            <button class="tutorial-close" onclick="adminLab.closeRestore()"><ion-icon name="close-outline"></ion-icon></button>
+            <h2 style="margin-bottom:6px; display:flex; align-items:center; gap:8px;">
+                <ion-icon name="download-outline"></ion-icon>
+                <span data-i18n="lab_restore_title">還原 Lab 資料</span>
+            </h2>
+            <p style="color:var(--text-muted); font-size:13px; margin:0 0 4px;">
+                來源封存：<span id="lab-restore-vol" style="font-family:monospace; font-size:12px;"></span>
+            </p>
+            <p style="color:var(--text-muted); font-size:12px; margin:0 0 16px;">
+                原帳號 <b id="lab-restore-owner"></b> · <span id="lab-restore-size"></span>
+            </p>
+            <form onsubmit="adminLab.doRestore(); return false;" style="display:flex; flex-direction:column; gap:14px;">
+                <label style="font-size:13px;">還原給哪位使用者？
+                    <select id="lab-restore-target" style="width:100%; margin-top:6px; padding:8px;">
+                        <option value="">載入中…</option>
+                    </select>
+                </label>
+                <p style="font-size:12px; color:#f59e0b; margin:0;">
+                    ⚠ 資料會複製進該使用者現有的 Lab；同名檔案會被覆蓋。原封存仍保留，可重複還原。
+                </p>
+                <div id="lab-restore-msg" style="font-size:13px;"></div>
+                <div style="display:flex; gap:10px; justify-content:flex-end;">
+                    <button type="button" class="ready-btn" onclick="adminLab.closeRestore()" style="width:auto; min-width:auto; margin:0; padding:8px 18px; font-size:0.9rem;">
+                        <span data-i18n="btn_cancel">取消</span>
+                    </button>
+                    <button type="submit" class="ready-btn" style="width:auto; min-width:auto; margin:0; padding:8px 18px; font-size:0.9rem; background:#10b981; border-color:#10b981; color:#fff;">
+                        <span data-i18n="lab_restore_confirm">確認還原</span>
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
     <!-- v2.3: 管理者引導式教學（overlay + 高亮框 + 氣泡；原使用者介面 Unit 6 移入，從 Side Bar ⓘ 導覽開啟） -->
     <div id="admin-guide-ring" class="tutorial-highlight-ring hidden"></div>
     <div id="admin-guide-overlay" class="tutorial-overlay hidden" role="dialog" aria-modal="false">
@@ -1516,7 +1579,7 @@
     <script type="module" src="https://unpkg.com/ionicons@7.1.0/dist/ionicons/ionicons.esm.js"></script>
     <script nomodule src="https://unpkg.com/ionicons@7.1.0/dist/ionicons/ionicons.js"></script>
     <!-- 載入 Admin 邏輯 -->
-    <script src="admin.js?v=c9e7ebfc"></script>
+    <script src="admin.js?v=553a53c1"></script>
 </body>
 
 </html>

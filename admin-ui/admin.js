@@ -4296,16 +4296,159 @@ const adminLab = (() => {
         } catch (e) { alert(`錯誤: ${e.message}`); }
     }
 
+    // ── v3.3 Lab 資料封存：清單 / 還原 / 立即銷毀 ──────────────────────────────
+    // 帳號刪除時 volume 原地封存（見 lab_manager.archive_user_lab）；此處提供管理介面。
+    let _archives = [];
+    let _restoreVol = null;
+
+    function _fmtSize(n) {
+        if (!n) return '—';
+        const u = ['B', 'KB', 'MB', 'GB'];
+        let i = 0, v = n;
+        while (v >= 1024 && i < u.length - 1) { v /= 1024; i++; }
+        return `${v.toFixed(i ? 1 : 0)}${u[i]}`;
+    }
+    function _fmtDate(iso) {
+        if (!iso) return '—';
+        const d = new Date(iso);
+        return `${d.getFullYear()}/${String(d.getMonth() + 1).padStart(2, '0')}/${String(d.getDate()).padStart(2, '0')}`;
+    }
+
+    async function refreshArchives() {
+        const tbody = document.querySelector('#admin-lab-archives-table tbody');
+        if (!tbody) return;
+        try {
+            const data = await api('/lab-archives');
+            _archives = data.archives || [];
+            const total = _archives.reduce((s, a) => s + (a.size_bytes || 0), 0);
+            const sum = document.getElementById('lab-archive-summary');
+            if (sum) {
+                sum.textContent = _archives.length
+                    ? `目前 ${_archives.length} 筆，共 ${_fmtSize(total)}（保留 ${data.retention_days} 天）`
+                    : '';
+            }
+            if (!_archives.length) {
+                tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; color:var(--text-muted);">目前沒有封存資料</td></tr>';
+                return;
+            }
+            tbody.innerHTML = '';
+            _archives.forEach(a => {
+                const tr = document.createElement('tr');
+                let status, color;
+                if (!a.exists) { status = '⚠ volume 已不存在'; color = '#fb7185'; }
+                else if (a.restored_at) { status = `已還原 ${_fmtDate(a.restored_at)}`; color = '#4ade80'; }
+                else { status = '封存中'; color = 'var(--text-muted)'; }
+                const owner = esc(a.username || '(未知帳號)') +
+                    (a.email ? `<br><span style="font-size:11px; color:var(--text-muted);">${esc(a.email)}</span>` : '') +
+                    `<br><span style="font-size:10px; color:var(--text-muted); font-family:monospace;">${esc(a.volume_name)}</span>`;
+                const daysCell = a.days_left == null ? '—'
+                    : `<span style="color:${a.days_left <= 3 ? '#f59e0b' : 'inherit'};">${a.days_left} 天</span>`;
+                tr.innerHTML =
+                    `<td>${owner}</td>` +
+                    `<td>${_fmtSize(a.size_bytes)}</td>` +
+                    `<td>${_fmtDate(a.archived_at)}</td>` +
+                    `<td>${daysCell}</td>` +
+                    `<td style="color:${color};">${status}</td>` +
+                    // ZH: volume 已不存在時沒東西可銷毀，該按鈕實際只是清掉殘留紀錄 → 換標籤與語氣
+                    `<td style="white-space:nowrap;">
+                        <button class="ready-btn" style="width:auto; margin:0 4px 0 0; padding:4px 10px; font-size:12px;"
+                                ${a.exists ? '' : 'disabled'}
+                                onclick="adminLab.openRestore('${esc(a.volume_name)}')">還原</button>
+                        <button class="ready-btn" style="width:auto; margin:0; padding:4px 10px; font-size:12px;
+                                ${a.exists ? 'border-color:#fb7185; color:#fb7185;' : ''}"
+                                onclick="adminLab.purgeArchive('${esc(a.volume_name)}')">${a.exists ? '立即銷毀' : '清除紀錄'}</button>
+                     </td>`;
+                tbody.appendChild(tr);
+            });
+        } catch (e) {
+            tbody.innerHTML = `<tr><td colspan="6" style="text-align:center; color:#fb7185;">載入失敗：${esc(e.message)}</td></tr>`;
+        }
+    }
+
+    async function openRestore(volName) {
+        const a = _archives.find(x => x.volume_name === volName);
+        if (!a) return;
+        _restoreVol = volName;
+        document.getElementById('lab-restore-vol').textContent = volName;
+        document.getElementById('lab-restore-owner').textContent = a.username || '(未知)';
+        document.getElementById('lab-restore-size').textContent = _fmtSize(a.size_bytes);
+        document.getElementById('lab-restore-msg').textContent = '';
+        // 目標使用者下拉（SSO 使用者刪除後會以新 uuid 回來，故必須讓管理者指定對象）
+        const sel = document.getElementById('lab-restore-target');
+        sel.innerHTML = '<option value="">載入中…</option>';
+        document.getElementById('lab-restore-modal').classList.remove('hidden');
+        try {
+            const res = await fetch(`${API_BASE}/admin/users?limit=500`, {
+                headers: { 'Authorization': `Bearer ${authToken}` }
+            });
+            const data = await res.json();
+            const users = data.users || data || [];
+            sel.innerHTML = '<option value="">— 請選擇使用者 —</option>';
+            users.forEach(u => {
+                const o = document.createElement('option');
+                o.value = u.id;
+                o.textContent = `${u.username}${u.email ? ' (' + u.email + ')' : ''}`;
+                // 同名的原帳號優先選起來（常見情境：同一位學生重新登入後的新帳號）
+                if (a.username && u.username === a.username) o.selected = true;
+                sel.appendChild(o);
+            });
+        } catch (e) {
+            sel.innerHTML = '<option value="">載入使用者失敗</option>';
+        }
+    }
+
+    function closeRestore() {
+        _restoreVol = null;
+        document.getElementById('lab-restore-modal').classList.add('hidden');
+    }
+
+    async function doRestore() {
+        const target = document.getElementById('lab-restore-target').value;
+        const msg = document.getElementById('lab-restore-msg');
+        if (!target) { msg.style.color = '#fb7185'; msg.textContent = '請先選擇要還原給哪位使用者'; return; }
+        msg.style.color = 'var(--text-muted)';
+        msg.textContent = '還原中…（資料量大時需要一點時間）';
+        try {
+            const r = await api(`/lab-archives/${encodeURIComponent(_restoreVol)}/restore`, {
+                method: 'POST', body: JSON.stringify({ target_user_id: target }),
+            });
+            closeRestore();
+            showToast(`已還原給 ${r.restored_to}`);
+            refreshArchives();
+        } catch (e) {
+            msg.style.color = '#fb7185';
+            msg.textContent = `還原失敗：${e.message}`;
+        }
+    }
+
+    async function purgeArchive(volName) {
+        const a = _archives.find(x => x.volume_name === volName);
+        const who = a && a.username ? a.username : volName;
+        // ZH: volume 不存在＝資料早就沒了（被手動 rm / prune），此動作只是清掉殘留紀錄，
+        //     不該用「資料將永久消失」嚇人。兩種情況分開措辭。
+        const msg = (a && !a.exists)
+            ? `清除「${who}」的封存紀錄？\n\n該 volume 已不存在（資料先前已被移除），此操作只會清掉這筆殘留紀錄。`
+            : `立即銷毀「${who}」的 Lab 封存資料？\n\n此操作不可復原，資料將永久消失。`;
+        if (!confirm(msg)) return;
+        try {
+            await api(`/lab-archives/${encodeURIComponent(volName)}`, { method: 'DELETE' });
+            showToast((a && !a.exists) ? '紀錄已清除' : '封存已銷毀');
+            refreshArchives();
+        } catch (e) { alert(`錯誤: ${e.message}`); }
+    }
+
     // ── Init ─────────────────────────────────────────────────────────────────
     let _initialized = false;
     function init() {
         if (_initialized) {
             refreshSessions();
+            refreshArchives();
             return;
         }
         _initialized = true;
         refreshSessions();
         refreshStorage();
+        refreshArchives();
     }
 
     return {
@@ -4314,6 +4457,7 @@ const adminLab = (() => {
         refreshStorage, changeStorageState, permanentDelete,
         refreshAudit,
         listUserSecrets, deleteUserSecret,
+        refreshArchives, openRestore, closeRestore, doRestore, purgeArchive,
     };
 })();
 window.adminLab = adminLab;

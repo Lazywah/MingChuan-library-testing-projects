@@ -651,24 +651,45 @@ def archive_user_lab(db: Session, user, retention_days: int, reason: str = "admi
 
 
 def purge_expired_archives(db: Session) -> int:
-    """ZH: 背景任務：真正移除逾期封存的 volume。回傳銷毀筆數。
-       EN: Background purge of expired archived volumes."""
+    """
+    ZH: 背景任務：(1) 移除逾期封存的 volume；(2) 自我修復——清掉「volume 早已不存在」
+        的殘留紀錄（volume 被手動 rm / docker prune 掉時，逾期邏輯永遠碰不到它，
+        紀錄會無限累積）。
+        ⚠️ 防呆：只有在**成功列出 volume 清單**時才做 (2)。若 docker 暫時不可用，
+        清單會是空的，此時若照做會誤刪全部紀錄。
+    EN: Purge expired archives, plus self-heal stale records whose volume is already
+        gone — but only when the volume listing actually succeeded (a Docker outage
+        would otherwise look like "everything is missing" and wipe all records).
+    """
     lc = get_lifecycle()
     now = datetime.now(timezone.utc)
-    rows = db.query(models.ArchivedLabVolume).filter(
-        models.ArchivedLabVolume.expires_at.isnot(None)).all()
+
+    present, listing_ok = set(), False
+    try:
+        present = {v.name for v in lc.client.volumes.list()}
+        listing_ok = True
+    except Exception as e:  # noqa: BLE001
+        logger.warning("列出 volume 失敗，略過殘留紀錄清理: %s", e)
+
+    rows = db.query(models.ArchivedLabVolume).all()
     n = 0
     for rec in rows:
         exp = rec.expires_at
         if exp is not None and exp.tzinfo is None:
             exp = exp.replace(tzinfo=timezone.utc)
-        if exp is None or exp > now:
+        expired = exp is not None and exp <= now
+        vanished = listing_ok and rec.volume_name not in present
+
+        if not expired and not vanished:
             continue
-        try:
-            lc.client.volumes.get(rec.volume_name).remove(force=True)
-            logger.info("封存逾期，已銷毀 volume %s", rec.volume_name)
-        except Exception as e:  # noqa: BLE001 - volume 可能已被手動刪
-            logger.warning("銷毀封存 volume %s 失敗（可能已不存在）: %s", rec.volume_name, e)
+        if expired and not vanished:
+            try:
+                lc.client.volumes.get(rec.volume_name).remove(force=True)
+                logger.info("封存逾期，已銷毀 volume %s", rec.volume_name)
+            except Exception as e:  # noqa: BLE001
+                logger.warning("銷毀封存 volume %s 失敗: %s", rec.volume_name, e)
+        elif vanished:
+            logger.info("封存 volume %s 已不存在（外部移除），清除殘留紀錄", rec.volume_name)
         db.delete(rec)
         n += 1
     if n:
