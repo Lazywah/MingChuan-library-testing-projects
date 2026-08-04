@@ -20,6 +20,7 @@ ZH: 在 `docker compose up` 之前跑一次，把常見的無聲地雷一次檢�
 需求 / Requirements: Python 3.6+，無額外套件（重用 setup_env.py 的解析函式）。
 ==============================================================================
 """
+import re
 import socket
 import subprocess
 import sys
@@ -114,6 +115,42 @@ def check_inline_comments(env: dict):
     return PASS, ".env 值中無行內註解殘留"
 
 
+def check_sso(env: dict):
+    """
+    ZH: SSO 設定健檢。sso_policy.yaml committed 為 provider=oidc + mock_mode=false，
+        若新機器沒填 OIDC 憑證，系統會 fallback 成 mock、/providers 回空
+        → **學生一個都登入不了**（admin 仍可走 :8888）。這在畫面上看起來像壞掉，
+        故在部署前就明講。此為 WARN 而非 FAIL：憑證要跟學校 IT 申請，新機初期沒有是正常的。
+    EN: Warn when provider=oidc but credentials are absent — students cannot log in at all.
+    """
+    policy = se.ROOT_DIR / "job-scheduler" / "app" / "sso_policy.yaml"
+    if not policy.exists():
+        return WARN, "找不到 sso_policy.yaml，無法檢查 SSO 設定"
+    text = policy.read_text(encoding="utf-8")
+
+    def _val(key):
+        m = re.search(rf"(?m)^\s*{key}\s*:\s*(.+?)\s*(?:#.*)?$", text)
+        return m.group(1).strip().strip('"\'') if m else ""
+
+    provider = _val("provider")
+    mock_mode = _val("mock_mode").lower()
+    if provider != "oidc":
+        return WARN, f"SSO provider={provider or '?'}（非 oidc）；學生端登入將走 mock/停用狀態"
+    has_id = bool(env.get("OIDC_CLIENT_ID"))
+    has_secret = bool(env.get("OIDC_CLIENT_SECRET"))
+    if not (has_id and has_secret):
+        missing = " / ".join(k for k, v in (("OIDC_CLIENT_ID", has_id),
+                                            ("OIDC_CLIENT_SECRET", has_secret)) if not v)
+        return WARN, (f"provider=oidc 但 .env 缺 {missing} → SSO 停用、**學生無法登入**"
+                      f"（admin 仍可用 :8888）。請向學校 IT 申請憑證後填入 .env")
+    if mock_mode == "true":
+        return FAIL, "OIDC 憑證已備但 mock_mode=true → 會強制走 mock SSO，請改為 false"
+    redirect = env.get("OIDC_REDIRECT_URI", "")
+    if redirect and ":8002" in redirect:
+        return FAIL, "OIDC_REDIRECT_URI 指向 :8002（API 直連埠，不服務 /train/）→ 請改走 nginx origin"
+    return PASS, "SSO OIDC 設定完整（provider=oidc、憑證已填、mock_mode=false）"
+
+
 def check_drift():
     order, _defaults = se.parse_env_example(se.ENV_EXAMPLE)
     if not order:
@@ -172,6 +209,7 @@ def main():
         ("根 .env",        check_env_file()),
         ("必填秘鑰",       check_secrets(env)),
         ("行內註解殘留",   check_inline_comments(env)),
+        ("SSO 設定",       check_sso(env)),
         ("設定漂移",       check_drift()),
         (".env 完整性",    check_env_completeness(env)),
         ("gpu-worker 收斂", check_worker_convergence()),

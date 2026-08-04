@@ -97,6 +97,10 @@ services:
       # EN: C4 fix: .env and docker-compose.yml are read-only — prevents RCE→secret-rewrite
       - ./.env:/app/.env:ro
       - ./docker-compose.yml:/app/docker-compose.yml:ro
+      # ZH: v3.3 維運腳本唯讀掛入 —— cleanup_lab_volumes.py 需同時存取 DB 與 docker socket，
+      #     只能在本容器內執行（docker exec ... python /app/scripts/xxx.py）
+      # EN: v3.3 ops scripts (need both DB and docker socket, hence run inside this container)
+      - ./scripts:/app/scripts:ro
       # ZH: v2.0 Lab — 服務層需要 docker SDK 操作 code-server 容器；建議生產環境改用 TCP socket + TLS
       # EN: v2.0 Lab — service layer needs docker SDK to manage code-server; consider TCP+TLS in prod
       - /var/run/docker.sock:/var/run/docker.sock:rw

@@ -87,7 +87,7 @@ GPU 容器啟動時 `-v C:\storage:/workspace` 把這份共享目錄餵給訓練
 |---|---|---|---|
 | **Mock** | 開發 / 測試 | yaml 明文 | 不曝光按鈕；直接打 `/api/v1/sso/login` |
 | **CAS** | 學校用 Yale CAS | 學校 LDAP/AD | 「使用學校帳號登入」按鈕 |
-| **OIDC** | Microsoft 365 / Google / Keycloak | IdP | 「使用學校帳號登入」按鈕 |
+| **OIDC** | **現行正式模式**（MCU 自建 OIDC `auth.mcu.edu.tw`）| IdP | 「使用學校帳號登入」按鈕 |
 
 切換 provider 只需改 `job-scheduler/app/sso_policy.yaml`，**不必動程式碼**：
 ```yaml
@@ -97,29 +97,70 @@ provider: oidc           # mock | cas | oidc
 
 改完 `docker compose restart job-scheduler`。
 
-### 2.2 OIDC（Microsoft Entra ID）
+### 2.2 OIDC（MCU 自建 OIDC — 現行正式模式）
 
-**前置**：請 IT 在 Microsoft Entra Admin Center 註冊 App Registration，索取：
-- `client_id`、`client_secret`
-- `redirect_uri` 需登記為：`http(s)://<服務層 domain>:8002/api/v1/sso/oidc/callback`
-- 建議一次申請 dev (`localhost`) + prod 兩個 redirect_uri
+> ⚠️ **v3.1 重大更正**：MCU 用的是**自建 OIDC 伺服器 `auth.mcu.edu.tw`**，
+> **不是** Microsoft Entra ID。早期文件寫的 tenant_id / Entra 設定已失效
+> （實測會得到 `AADSTS700016：application not found in directory`）。
 
-填入 `sso_policy.yaml`：
-```yaml
-provider: oidc
-oidc:
-  tenant_id: "30f2f0eb-3fc8-4a5a-94b5-fffa8944532e"   # MCU 範例（公開資訊）
-  client_id: "<IT 給的 client_id>"
-  client_secret: "<IT 給的 client_secret>"            # 敏感，建議改放 .env
-  redirect_uri: "https://your-domain.edu.tw/api/v1/sso/oidc/callback"
-  scopes: ["openid", "email", "profile"]
-  password_change_url: "https://account.activedirectory.windowsazure.com/ChangePassword.aspx"
-  password_reset_url:  "https://passwordreset.microsoftonline.com/"
+**前置**：向學校 IT 申請，索取 `client_id`、`client_secret`，並請他們在 IdP 註冊 redirect URI。
+
+**端點不需手動設定**：程式啟動時自動從 discovery 取得
+（`https://auth.mcu.edu.tw/.well-known/openid-configuration` → authorize / token / userinfo / jwks）。
+
+**憑證只放 `.env`**（`sso_policy.yaml` 進版控，永遠維持 `PENDING` 佔位）：
+```
+OIDC_CLIENT_ID=<IT 提供>
+OIDC_CLIENT_SECRET=<IT 提供>
+OIDC_REDIRECT_URI=http://localhost/api/v1/sso/oidc/callback
+OIDC_DISCOVERY_URL=            # 留空＝用 sso_policy.yaml 內建的 auth.mcu.edu.tw
 ```
 
-> **PENDING fail-safe**：`client_id="PENDING"` 時系統自動降級 mock + warning，不會崩。等 IT 給才填真值。
+**身分對應**：MCU 的 userinfo **只回 `{"sub": "<學號>"}`**（無 email、無姓名），
+故 `username_claim: "sub"`，email 由 `email_domain: "me.mcu.edu.tw"` 補成 `<學號>@me.mcu.edu.tw`。
 
-### 2.3 CAS（其他學校）
+> **PENDING fail-safe**：憑證未填時系統自動降級 mock 並記 **error** log，服務不會崩；
+> `/api/v1/sso/providers` 會回 `[]`，登入頁顯示「系統登入功能尚在設定中」。
+
+---
+
+### 2.3 ⚠️ 部署範圍：redirect_uri 決定「誰能用」
+
+**`redirect_uri` 是給「瀏覽器」去的地址，不是給伺服器的**——這是它與 `SERVICE_LAYER_URL`
+那種機器對機器設定最不一樣、也最容易誤解的地方。
+
+| redirect_uri | 誰能登入 | 說明 |
+|---|---|---|
+| `http://localhost/...` | **只有坐在伺服器前面的人** | `localhost` 永遠指「開瀏覽器的那台電腦」。學生從自己的筆電登入時，IdP 會把他導回**他自己的** localhost → 失敗 |
+| `https://<主機名>/...` | 任何連得到該主機名的人 | ✅ 正式上線用 |
+
+**目前狀態（dev）＝ 學生端實質單機**：`web-ui` 自 v2.1 起**已無本機帳密表單**，
+學生沒有 SSO 以外的登入途徑，故其他電腦完全無法使用。
+
+**不受此限制的部分**（不經瀏覽器，機器對機器）：
+- **GPU worker**：主動連 `SERVICE_LAYER_URL`，**現在就能跨機部署**（見 §1）
+- MYAI 同步等對外 API 呼叫
+
+**admin (:8888) 可跨機登入**（走本機帳密、不經 SSO），但**目前是 http**，
+**管理員密碼會明文經過網路** → 補上 HTTPS 前，建議 admin 也只在伺服器本機使用。
+
+### 2.4 開放給其他電腦需要的四件事
+
+1. **真實主機名**（如 `ai.lib.mcu.edu.tw`）+ 內網 DNS 解析 —— 學校 IT
+2. 該主機名的 **TLS 憑證**（校內 CA 簽發即可）—— 學校 IT
+3. **nginx 加 `:443`** 監聽並掛憑證 —— 我方（目前只有 `:80` / `:8888`）
+4. 請 IT 在 IdP **加註冊** `https://<主機名>/api/v1/sso/oidc/callback`（dev 那筆可並存）
+
+> **為什麼一定要 HTTPS（不只是 IdP 政策）**：登入成功後平台是以
+> `/train/?sso_token=<JWT>` 把權杖交給前端——**權杖寫在網址列上**。
+> 走 http 的話，同網段的人側錄封包即可取得該 token 並冒充該使用者（效期 2 小時）。
+> 這與「密碼有沒有加密」無關，token 本身就是通行證。
+>
+> **能不能用 IP + http 代替？** OIDC 規範本身不禁止，`auth.mcu.edu.tw` 的 discovery
+> 也未宣告限制 —— **收不收要問 IT**。但即使可行也不建議：上述 token 明文問題依舊，
+> 且 IP 會變（每變一次就要麻煩 IT 重新註冊）、校內 CA 實務上不簽裸 IP。
+
+### 2.5 CAS（其他學校）
 
 ```yaml
 provider: cas
@@ -129,7 +170,7 @@ cas:
   version: "3.0"
 ```
 
-### 2.4 Mock（開發）
+### 2.6 Mock（開發）
 
 ```yaml
 mock_mode: true        # 或 provider: mock
@@ -144,15 +185,16 @@ mock:
 
 > Mock SSO **不在 UI 出現按鈕**（避免 admin 用別人身分登入）。dev 直接打 `http://localhost/api/v1/sso/login` 進入。
 
-### 2.5 密碼變更行為
+### 2.7 密碼變更行為
 
 依使用者 `auth_source` 自動分流：
 - `local` → user UI 顯示舊密碼 + 新密碼表單
-- `sso_oidc` → user UI 顯示「請至 Microsoft 變更密碼」連結
+- `sso_oidc` → user UI 顯示「密碼由學校系統統一管理」+「忘記密碼」導向學校中央入口
+  `https://www1.mcu.edu.tw/ForgetPassword.aspx`（學號＋身分證字號 → 新密碼寄校務系統信箱）
 - `sso_cas` → 顯示「請至學校 CAS 系統變更」
 - `sso_mock` → 顯示「Mock 帳號無密碼可變」
 
-### 2.6 yaml 改動會影響使用者管理嗎？
+### 2.8 yaml 改動會影響使用者管理嗎？
 
 - **改 / 新增 mock user**：不影響既有 DB 使用者；影響「未來首次 mock SSO 登入」的人
 - **從 yaml 移除 mock user**：使用者管理列表會 filter 掉（DB row 仍保留，避免破壞聊天歷史 FK）
@@ -182,7 +224,7 @@ mock:
 | 變數 | 開發值 | 上線值 |
 |---|---|---|
 | `JWT_SECRET_KEY` | dev-default | **`secrets.token_urlsafe(48)`** 隨機 |
-| `WORKER_API_TOKEN` | dev-default | 隨機 + 同步到 gpu-worker/.env |
+| `WORKER_API_TOKEN` | dev-default | 隨機（gpu-worker 讀同一份根 .env，不再有 gpu-worker/.env）|
 | `SECRETS_MASTER_KEY` | dev-default | 隨機（變更會讓既有 secrets 全失效）|
 | `WEBUI_SECRET_KEY` | dev-default | 隨機 |
 | `CORS_ORIGINS` | 空（允許全部）| 明確列出正式 domain |
