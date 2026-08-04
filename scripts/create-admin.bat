@@ -1,6 +1,6 @@
 @echo off
 chcp 65001 >nul
-setlocal
+setlocal enabledelayedexpansion
 REM ============================================================================
 REM  建立 / 重設「管理員帳號」 (Windows .bat)
 REM  用途：全新部署後，平台沒有任何 admin，用本腳本建立第一個管理員帳號。
@@ -29,12 +29,24 @@ if errorlevel 1 (
   exit /b 1
 )
 
-REM ── v3.3：密碼改為執行時輸入（原本明文寫死在本檔且進版控）────────────────
+REM ── v3.3：密碼不再寫死於本檔 ────────────────────────────────────────────
+REM   互動模式 → 執行時輸入；auto 模式（供 bootstrap.bat 等腳本呼叫）→ 讀 .env 的
+REM   BOOTSTRAP_ADMIN_PASSWORD，避免自動化流程卡在輸入提示。
 set "ADMIN_PW="
-set /p ADMIN_PW=請輸入要設定的密碼 (至少 8 字元): 
-if "%ADMIN_PW%"=="" (
-  echo [錯誤] 密碼不可為空。
-  exit /b 1
+if /i "%~1"=="auto" (
+  for /f "usebackq tokens=1,* delims==" %%a in (`findstr /b /c:"BOOTSTRAP_ADMIN_PASSWORD=" "%~dp0..\.env"`) do set "ADMIN_PW=%%b"
+  if "!ADMIN_PW!"=="" (
+    echo [錯誤] auto 模式需要 .env 內的 BOOTSTRAP_ADMIN_PASSWORD，但該值為空。
+    echo         請重跑 python scripts\setup_env.py 設定，或改用互動模式執行本檔。
+    exit /b 1
+  )
+  echo [create-admin] auto 模式：使用 .env 的 BOOTSTRAP_ADMIN_PASSWORD
+) else (
+  set /p ADMIN_PW=請輸入要設定的密碼 (至少 8 字元): 
+  if "!ADMIN_PW!"=="" (
+    echo [錯誤] 密碼不可為空。
+    exit /b 1
+  )
 )
 echo [create-admin] 建立 / 重設管理員「%ADMIN_USER%」 ...
 echo        ^(過程若出現 bcrypt "__about__" 警告屬版本相容訊息，可忽略；看到下方「[完成]」即成功^)

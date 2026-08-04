@@ -6,7 +6,7 @@ REM  一鍵啟動平台 (Windows .bat) — 全新機器
 REM  前提：① 已跑過 python scripts\setup_env.py 產生 .env
 REM        ② 已跑過 build-all.sh 把 base images build 好（要用 Lab/訓練才需要）
 REM  本腳本依「正確順序」自動完成：
-REM     AI模型層 → pull 3 模型 → 核心層 → 等就緒 → 建 admin → 驗證KB → 健康檢查
+REM     AI模型層 → pull 3 模型 → 核心層 → 等就緒 → 確認 admin → 驗證KB → 健康檢查
 REM ============================================================================
 
 REM ===== 可調整 =========================================================
@@ -84,9 +84,14 @@ echo       scheduler OK
 
 REM ---- [5/6] 建立管理員 ----
 echo.
-echo [5/6] 建立 / 重設管理員帳號 ...
-call "%~dp0create-admin.bat" auto
-if errorlevel 1 ( echo [錯誤] 建立 admin 失敗 & popd & pause & exit /b 1 )
+echo [5/6] 確認管理員帳號 ...
+REM v3.3：核心層啟動時若「DB 完全沒有 admin」會自動用 .env 的 BOOTSTRAP_ADMIN_PASSWORD
+REM       建立 admin，故此處只需確認；沒有才提示手動建立（不中斷整個流程）。
+docker exec ai-platform-scheduler python -c "from app.database import SessionLocal; from app import models as m; db=SessionLocal(); n=db.query(m.User).filter(m.User.role=='admin').count(); print('       管理員數量 =', n); exit(0 if n>0 else 3)" 2>nul
+if errorlevel 3 (
+  echo       [注意] 尚無管理員 —— 可能是 .env 的 BOOTSTRAP_ADMIN_PASSWORD 留空。
+  echo              請執行： scripts\create-admin.bat  或重跑 python scripts\setup_env.py
+)
 
 REM ---- [6/6] 驗證知識庫 + 健康檢查 ----
 echo.
