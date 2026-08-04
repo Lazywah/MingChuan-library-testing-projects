@@ -134,6 +134,14 @@ const TRANSLATIONS = {
         ext_ai_balance: "AI 點數餘額",
         ext_ai_go: "前往 AI 助手",
         ext_ai_no_store_notice: "提醒：對話內容不會儲存在本平台。",
+        // v3.3 自動開通：初始密碼一次性提示
+        ext_ai_initpwd_title: "已為你開通 AI 助手帳號",
+        ext_ai_initpwd_pwd: "初始密碼",
+        ext_ai_initpwd_hint: "請盡快登入 AI 助手並修改密碼。此密碼僅暫存一段時間，之後將自動清除（屆時可用該平台的「忘記密碼」以你的學校信箱重設）。",
+        ext_ai_initpwd_ack: "我已修改密碼，不再顯示",
+        btn_copy: "複製",
+        toast_copied: "已複製",
+        toast_initpwd_cleared: "已清除暫存密碼",
         ext_ai_shared_notice: "共用電腦提醒：用完請按「結束使用」登出本平台，並關閉 MYAI 分頁，避免下一位使用者進到你的帳號。",
         ext_ai_fresh_login_notice: "點「前往」會先登出前一位使用者、再開啟登入頁，請以自己的帳號登入。",
         ext_ai_end_session: "結束使用 / 換人",
@@ -551,6 +559,14 @@ const TRANSLATIONS = {
         ext_ai_balance: "AI credits",
         ext_ai_go: "Go to AI Assistant",
         ext_ai_no_store_notice: "Note: conversations are not stored on this platform.",
+        // v3.3 auto-provision: one-time initial password notice
+        ext_ai_initpwd_title: "Your AI assistant account is ready",
+        ext_ai_initpwd_pwd: "Initial password",
+        ext_ai_initpwd_hint: "Please sign in to the AI assistant and change this password soon. It is stored only temporarily and will be cleared automatically (after that, use the assistant's own \"forgot password\" with your school email).",
+        ext_ai_initpwd_ack: "I've changed it — stop showing this",
+        btn_copy: "Copy",
+        toast_copied: "Copied",
+        toast_initpwd_cleared: "Temporary password cleared",
         ext_ai_shared_notice: "Shared computer? When done, click \"End session\" to log out here, and close the MYAI tab so the next user can't reach your account.",
         ext_ai_fresh_login_notice: "Clicking \"Go\" signs out the previous user first, then opens the login page — please sign in with your own account.",
         ext_ai_end_session: "End session / switch user",
@@ -972,6 +988,47 @@ function showExternalAiLanding() {
     ensureLowBalPolling();
 }
 
+// ==============================================================================
+// v3.3 自動開通：一次性初始密碼提示
+// 後端 GET /external-ai/my-provision 只在「保留期內且未確認修改」時回傳密碼；
+// 身分一律由 JWT 推導，查不到別人的。按「我已修改」→ POST ack 立即銷毀暫存。
+// ==============================================================================
+async function refreshInitialPassword() {
+    const box = document.getElementById('ext-ai-initpwd');
+    if (!box || !authToken) return;
+    try {
+        const res = await fetch(`${API_BASE}/external-ai/my-provision`, {
+            headers: { 'Authorization': `Bearer ${authToken}` }
+        });
+        if (!res.ok) { box.classList.add('hidden'); return; }
+        const data = await res.json();
+        if (!data.initial_password) { box.classList.add('hidden'); return; }
+
+        const valEl = document.getElementById('ext-ai-initpwd-value');
+        if (valEl) valEl.textContent = data.initial_password;
+        box.classList.remove('hidden');
+
+        const copyBtn = document.getElementById('ext-ai-initpwd-copy');
+        if (copyBtn) copyBtn.onclick = async () => {
+            try {
+                await navigator.clipboard.writeText(data.initial_password);
+                showToast('toast_copied');
+            } catch { /* 剪貼簿不可用時使用者仍可手動選取（已設 user-select:all）*/ }
+        };
+        const ackBtn = document.getElementById('ext-ai-initpwd-ack');
+        if (ackBtn) ackBtn.onclick = async () => {
+            ackBtn.disabled = true;
+            try {
+                await fetch(`${API_BASE}/external-ai/my-provision/ack`, {
+                    method: 'POST', headers: { 'Authorization': `Bearer ${authToken}` }
+                });
+                box.classList.add('hidden');
+                showToast('toast_initpwd_cleared');
+            } catch { ackBtn.disabled = false; }
+        };
+    } catch { box.classList.add('hidden'); }   // 加值資訊：失敗就靜默隱藏
+}
+
 let externalAiLogoutUrl = null;  // v2.8 廠商登出網址（由 /external-ai/me 提供）
 async function loadExternalAiInfo() {
     const activeBox = document.getElementById('external-ai-active');
@@ -1023,6 +1080,7 @@ async function loadExternalAiInfo() {
             }
         };
         if (activeBox) activeBox.classList.remove('hidden');
+        refreshInitialPassword();   // v3.3 自動開通：顯示一次性初始密碼（若仍在保留期內）
     } catch (e) {
         if (emptyMsg) emptyMsg.textContent = t('ext_ai_coming_soon');
         if (emptyBox) emptyBox.classList.remove('hidden');

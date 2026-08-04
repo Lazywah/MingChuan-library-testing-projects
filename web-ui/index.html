@@ -916,6 +916,30 @@
                             </p>
                         </div>
 
+                        <!-- v3.3 自動開通：初始密碼一次性提示（僅本人可見、保留期內顯示） -->
+                        <div id="ext-ai-initpwd" class="hidden" style="margin-top:14px; padding:14px 16px; border:1px solid #f59e0b; border-radius:10px; background:rgba(245,158,11,0.10);">
+                            <p style="margin:0 0 8px; font-size:13px; color:#f59e0b;">
+                                <ion-icon name="key-outline" style="vertical-align:middle;"></ion-icon>
+                                <b data-i18n="ext_ai_initpwd_title">已為你開通 AI 助手帳號</b>
+                            </p>
+                            <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap; font-size:13px; margin-bottom:6px;">
+                                <span data-i18n="ext_ai_initpwd_pwd">初始密碼</span>
+                                <code id="ext-ai-initpwd-value" style="font-size:15px; letter-spacing:1px; user-select:all;">—</code>
+                                <button type="button" id="ext-ai-initpwd-copy" class="external-ai-go-btn"
+                                        style="width:auto; padding:3px 12px; font-size:12px; margin:0;">
+                                    <ion-icon name="copy-outline"></ion-icon> <span data-i18n="btn_copy">複製</span>
+                                </button>
+                            </div>
+                            <p style="margin:0 0 10px; font-size:12px; opacity:.85;" data-i18n="ext_ai_initpwd_hint">
+                                請盡快登入 AI 助手並修改密碼。此密碼僅暫存一段時間，之後將自動清除（屆時可用該平台的「忘記密碼」以你的學校信箱重設）。
+                            </p>
+                            <button type="button" id="ext-ai-initpwd-ack" class="external-ai-go-btn"
+                                    style="width:auto; padding:5px 14px; font-size:12px; margin:0;">
+                                <ion-icon name="checkmark-circle-outline"></ion-icon>
+                                <span data-i18n="ext_ai_initpwd_ack">我已修改密碼，不再顯示</span>
+                            </button>
+                        </div>
+
                         <!-- 未開通 / 即將開放 | Not provisioned / coming soon -->
                         <div id="external-ai-empty" class="hidden">
                             <p id="external-ai-empty-msg" class="external-ai-notice"></p>
@@ -1571,7 +1595,7 @@
     <!-- ZH: 載入圖標庫與主程式碼 | EN: Load Icon library and Main Logic -->
     <script type="module" src="https://unpkg.com/ionicons@7.1.0/dist/ionicons/ionicons.esm.js"></script>
     <script nomodule src="https://unpkg.com/ionicons@7.1.0/dist/ionicons/ionicons.js"></script>
-    <script src="app.js?v=6ab8d55c"></script>
+    <script src="app.js?v=07bf9582"></script>
     <!-- ZH: v2.6 客服／導覽浮動助手 | EN: v2.6 floating support/guide assistant -->
     <script src="assistant-widget.js?v=7f53b841"></script>
 </body>

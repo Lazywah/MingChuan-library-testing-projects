@@ -245,6 +245,37 @@ def get_my_external_ai(
     )
 
 
+# ==============================================================================
+# ZH: v3.3 自動開通 —— 學生端查詢自己的 MYAI 帳號狀態與初始密碼
+# EN: v3.3 auto-provision — per-user account status & initial password
+# ==============================================================================
+@router.get("/my-provision")
+def get_my_provision(
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+) -> Any:
+    """
+    ZH: 回自己的 MYAI 開通狀態。初始密碼**只在保留期內且未確認修改**時才回傳，
+        且身分一律由 JWT 推導（不吃任何身分參數）→ 查不到別人的。
+    EN: Own provisioning status; initial password only within retention & unacknowledged.
+    """
+    from ..services import myai_sync
+    return myai_sync.provision_status(db, current_user)
+
+
+@router.post("/my-provision/ack")
+def ack_my_provision(
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+) -> Any:
+    """ZH: 學生按「我已修改密碼」→ 立即銷毀暫存的初始密碼（不等保留期到）。"""
+    from ..services import myai_sync
+    ok = myai_sync.acknowledge_initial_password(db, current_user)
+    if not ok:
+        raise HTTPException(status_code=404, detail="尚無開通紀錄")
+    return {"message": "已清除暫存的初始密碼"}
+
+
 @router.get("/my-balance")
 def get_my_balance(
     db: Session = Depends(get_db),

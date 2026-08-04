@@ -21,7 +21,7 @@ EN: Endpoints (v2.1 full):
 """
 import logging
 from datetime import datetime, timezone
-from fastapi import APIRouter, Depends, Query, HTTPException, Form, Request
+from fastapi import APIRouter, Depends, Query, HTTPException, Form, Request, BackgroundTasks
 from fastapi.responses import RedirectResponse, HTMLResponse
 from sqlalchemy.orm import Session
 
@@ -252,7 +252,8 @@ def oidc_login():
 @router.get("/oidc/callback", summary="v2.1 OIDC callback (Microsoft 回呼)")
 def oidc_callback(
     request: Request,
-    code: str = Query(..., description="Microsoft 回傳的 authorization code"),
+    background_tasks: BackgroundTasks,
+    code: str = Query(..., description="IdP 回傳的 authorization code"),
     state: str = Query(..., description="登入時簽好的 state，用於防 CSRF"),
     db: Session = Depends(get_db),
 ):
@@ -271,12 +272,39 @@ def oidc_callback(
 
     try:
         user_info = oidc_client.validate_ticket(code)
-        return _finalize_sso_login(db, user_info, request=request)
+        resp = _finalize_sso_login(db, user_info, request=request)
+        # ZH: v3.3 MYAI 自動開通 —— 以背景任務執行，**不讓登入等待廠商回應**
+        #     （建號需往返廠商數秒；失敗也不影響登入，狀態由學生端端點查詢）
+        # EN: v3.3 fire-and-forget MYAI provisioning; never block the login round-trip.
+        username = user_info.get("username")
+        if username:
+            background_tasks.add_task(_provision_myai_bg, username)
+        return resp
     except ValueError as e:
         raise HTTPException(status_code=401, detail=str(e))
+    except HTTPException:
+        raise                       # ZH: 停權 403 等已明確的錯誤原樣拋出，別被下面吞掉
     except Exception:
         logger.exception("OIDC callback failed")
         raise HTTPException(status_code=500, detail="OIDC login failed")
+
+
+async def _provision_myai_bg(username: str) -> None:
+    """ZH: 背景任務：自行開 DB session 跑 MYAI 自動開通；任何失敗只記 log。"""
+    from ..database import SessionLocal
+    from ..services import myai_sync
+    db = SessionLocal()
+    try:
+        user = get_user_by_username(db, username)
+        if user is None:
+            return
+        res = await myai_sync.provision_user(db, user)
+        if res.get("status") not in ("disabled", "bound"):
+            logger.info(f"MYAI 自動開通結果 {username}: {res}")
+    except Exception as e:  # noqa: BLE001 - 開通失敗絕不影響登入
+        logger.error(f"MYAI 自動開通背景任務錯誤 {username}: {e}")
+    finally:
+        db.close()
 
 
 @router.get("/providers", summary="v2.1 列出當下啟用的 SSO providers")

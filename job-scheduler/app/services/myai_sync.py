@@ -611,3 +611,98 @@ def purge_expired_initial_passwords(db: Session, retention_days: int) -> int:
         db.commit()
         logger.info("已清除 %d 筆逾期/已確認的 MYAI 初始密碼", n)
     return n
+
+
+async def provision_user(db: Session, user) -> dict:
+    """
+    ZH: v3.3 自動開通主流程（首次 SSO 登入後以背景任務呼叫，**不阻塞登入**）。
+        狀態機（每一步都可安全重入，重複呼叫不會重複建號）：
+          disabled      → 功能旗標關閉
+          bound         → 已有綁定，什麼都不用做
+          linked_only   → 廠商端已有此 email（先前已註冊）→ 只補綁定，不建號
+          created       → 呼叫廠商批次註冊建號 + 綁定 + 暫存初始密碼
+          failed        → 廠商端失敗（保留錯誤訊息供 admin 檢視）
+    EN: Auto-provision orchestrator; idempotent, runs in background after SSO login.
+    """
+    from .. import crud
+    if not crud.get_setting(db, "myai_autoprovision"):
+        return {"status": "disabled"}
+
+    email = (user.email or "").strip()
+    if not email or email.endswith("@unknown"):
+        return {"status": "skipped", "reason": "no_usable_email"}
+
+    acc = (db.query(models.ExternalAiAccount)
+             .filter(models.ExternalAiAccount.user_id == user.id).first())
+    if acc and acc.vendor_username:
+        return {"status": "bound"}
+
+    # ZH: 廠商端已存在同 email → 只建綁定（避免重複註冊；使用者確認重複會被跳過）
+    exist = (db.query(models.MyaiAccount)
+               .filter(models.MyaiAccount.email.ilike(email)).first())
+    if exist:
+        if not acc:
+            acc = models.ExternalAiAccount(user_id=user.id, vendor_username=email,
+                                           status="active", note="auto-provision(linked)")
+            db.add(acc)
+        acc.vendor_username = email
+        acc.myai_vendor_sn = exist.vendor_sn
+        db.commit()
+        return {"status": "linked_only", "email": email}
+
+    # ZH: 真正建號 —— 走廠商管理端官方批次註冊
+    password = gen_initial_password()
+    rows = [{"email": email, "nickname": _nickname_for(user),
+             "password": password, "remark": "auto-provision"}]
+    try:
+        res = await register_batch(rows)
+    except Exception as e:  # noqa: BLE001
+        logger.error("MYAI 自動開通失敗 %s: %s", email, e)
+        return {"status": "failed", "error": str(e)[:200]}
+    if not res.get("ok"):
+        return {"status": "failed", "error": f"廠商回應 {res.get('status')}"}
+
+    if not acc:
+        acc = models.ExternalAiAccount(user_id=user.id, vendor_username=email,
+                                       status="active", note="auto-provision")
+        db.add(acc)
+    acc.vendor_username = email
+    db.commit()
+    db.refresh(acc)
+    store_initial_password(db, acc, password)
+    logger.info("MYAI 自動開通完成: %s", email)
+    return {"status": "created", "email": email}
+
+
+def provision_status(db: Session, user) -> dict:
+    """
+    ZH: 學生端查詢自己的開通狀態。**只在保留期內、且尚未確認修改**時才回傳初始密碼。
+        身分一律由 JWT 推導（呼叫端傳 user 物件），查不到別人的。
+    EN: Per-user provisioning status; the initial password is returned only while
+        within the retention window and not yet acknowledged.
+    """
+    from .. import crud
+    acc = (db.query(models.ExternalAiAccount)
+             .filter(models.ExternalAiAccount.user_id == user.id).first())
+    if not acc:
+        return {"provisioned": False, "email": None, "initial_password": None}
+    days = crud.get_setting(db, "myai_init_pwd_days")
+    pwd = read_initial_password(db, acc, days)
+    return {
+        "provisioned": True,
+        "email": acc.vendor_username,
+        "initial_password": pwd,                     # None = 已確認/逾期/本來就沒有
+        "acknowledged": bool(acc.init_pwd_ack),
+        "retention_days": days,
+    }
+
+
+def acknowledge_initial_password(db: Session, user) -> bool:
+    """ZH: 學生按「我已修改密碼」→ 立即銷毀暫存的初始密碼"""
+    acc = (db.query(models.ExternalAiAccount)
+             .filter(models.ExternalAiAccount.user_id == user.id).first())
+    if not acc:
+        return False
+    acc.init_pwd_ack = 1
+    clear_initial_password(db, acc)
+    return True
