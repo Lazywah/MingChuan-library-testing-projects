@@ -1140,6 +1140,8 @@ async function doLogout() {
     const menu = document.getElementById('user-dropdown-menu');
     if (menu) menu.style.display = 'none';
     switchToLogin();
+    // v3.2 bug fix：登出後重置 SSO 登入區（原本停在轉圈圈、按鈕未綁，要重整才能再登入）
+    if (typeof window.refreshSsoLoginUI === 'function') window.refreshSsoLoginUI();
 }
 
 // Bind hub card clicks
@@ -3823,23 +3825,48 @@ window.Lab = Lab;
         }
     }
 
-    // 延遲到 DOMContentLoaded 後執行，確保 DOM 已有 #sso-loading 等元素
-    document.addEventListener('DOMContentLoaded', () => {
-        // 已登入則完全跳過 SSO UI（loginView 本來就是 hidden）
-        if (authToken) return;
-
+    // ── v3.2 bug fix：SSO 登入區重置抽成可重複呼叫 ──────────────────────────
+    // 原病：SSO 登入回來時 authToken 已存在 → 整段 setup 被 `if (authToken) return` 跳過
+    // （providers 沒抓、#sso-loading 沒藏、按鈕沒綁）；而登出是 SPA 切視圖不重載頁面，
+    // 登入畫面露出時停在「永遠轉圈圈、按鈕無效」狀態，必須重整才能用。
+    // 修法：載入時(未登入)與 doLogout() 皆呼叫本函式：重置區塊 → 重抓 providers。
+    function refreshSsoLoginUI() {
+        const loading = document.getElementById('sso-loading');
+        const ssoSec  = document.getElementById('sso-section');
+        const pending = document.getElementById('sso-pending');
+        const oidcBtn = document.getElementById('sso-oidc-btn');
+        if (loading) loading.style.display = '';
+        if (ssoSec)  ssoSec.style.display = 'none';
+        if (pending) pending.style.display = 'none';
+        if (oidcBtn) oidcBtn.disabled = false;
         fetch(`${API_BASE}/sso/providers`)
             .then(r => r.ok ? r.json() : { providers: [] })
             .then(({ providers }) => applyProvidersUI(providers || []))
             .catch(() => applyProvidersUI([]));   // 失敗也顯示 pending fallback
+    }
+    window.refreshSsoLoginUI = refreshSsoLoginUI;   // 給 doLogout() 呼叫
 
-        // ── 3. 綁定 OIDC 按鈕 ─────────────────────────────────────────────
+    // 延遲到 DOMContentLoaded 後執行，確保 DOM 已有 #sso-loading 等元素
+    document.addEventListener('DOMContentLoaded', () => {
+        // ── 3. 綁定 OIDC 按鈕（v3.2：無條件綁——登入中畫面隱藏，綁了無害；
+        //       原本只在未登入時綁，導致登出後按鈕沒有 handler）─────────────
         const oidcBtn = document.getElementById('sso-oidc-btn');
         if (oidcBtn) {
             oidcBtn.addEventListener('click', () => {
                 oidcBtn.disabled = true;
                 window.location.href = `${API_BASE}/sso/oidc/login`;
             });
+        }
+        // 首次載入：已登入者登入畫面隱藏，不必抓 providers（登出時會補跑）
+        if (!authToken) refreshSsoLoginUI();
+    });
+
+    // ── v3.2：從學校登入頁按「上一頁」回來（bfcache 還原）時，按鈕會停在
+    //    click 當下設的 disabled → pageshow 事件重置，避免另一種卡死 ─────────
+    window.addEventListener('pageshow', (e) => {
+        if (e.persisted) {
+            const oidcBtn = document.getElementById('sso-oidc-btn');
+            if (oidcBtn) oidcBtn.disabled = false;
         }
     });
 })();
