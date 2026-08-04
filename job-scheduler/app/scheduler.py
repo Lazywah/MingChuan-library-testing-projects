@@ -171,6 +171,24 @@ async def _storage_lifecycle_loop():
             db = SessionLocal()
             try:
                 storage_lifecycle.run_daily_scan(db)
+
+                # ZH: v3.3 每日一併做兩件保留期清理（掛在既有每日任務，不另開背景迴圈）
+                #   1. 逾期的 Lab 封存 volume → 真正銷毀
+                #   2. 逾期/已確認修改的 MYAI 初始密碼 → 清除密文
+                # EN: v3.3 daily retention purges (piggyback on the existing daily task)
+                try:
+                    from .services import lab_manager as _lm
+                    n = _lm.purge_expired_archives(db)
+                    if n:
+                        logger.info(f"ZH: 已銷毀 {n} 筆逾期 Lab 封存")
+                except Exception as e:  # noqa: BLE001
+                    logger.error(f"ZH: Lab 封存清理錯誤: {e}")
+                try:
+                    from .services import myai_sync as _ms
+                    days = crud.get_setting(db, "myai_init_pwd_days")
+                    _ms.purge_expired_initial_passwords(db, days)
+                except Exception as e:  # noqa: BLE001
+                    logger.error(f"ZH: MYAI 初始密碼清理錯誤: {e}")
             finally:
                 db.close()
         except Exception as e:

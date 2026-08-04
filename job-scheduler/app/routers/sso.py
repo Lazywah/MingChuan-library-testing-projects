@@ -97,6 +97,21 @@ def _finalize_sso_login(db: Session, user_info: dict, request: Request = None) -
         )
         upgrade_to_sso(db, user, auth_source=auth_source, external_id=external_id)
 
+    # ==========================================================================
+    # ZH: v3.3 停權檢查 —— 在「登入階段」就擋下被停用的帳號。
+    #     原本 SSO 路徑完全不看 is_active：停權者仍能取得 token 並被導進平台，
+    #     之後每個 API 才 403 → 對學生像「系統壞了」、對管理者像「停用沒生效」。
+    #     停用是懲罰性操作，必須在入口就給明確訊息。
+    # EN: v3.3 Block disabled accounts at login time (previously only enforced per
+    #     request by get_current_user, which looked like a broken system).
+    # ==========================================================================
+    if not user.is_active:
+        logger.warning(f"已停權帳號嘗試 SSO 登入: {user.username}")
+        raise HTTPException(
+            status_code=403,
+            detail="您的帳號已被停權，無法登入。如有疑問請聯絡管理員。",
+        )
+
     # v2.1 修補：SSO 登入也要寫 last_login_* + last_activity（本機 /login 有寫但 SSO 之前漏寫）
     try:
         now = datetime.now(timezone.utc)

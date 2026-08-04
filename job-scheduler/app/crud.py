@@ -1005,6 +1005,8 @@ SYSTEM_SETTINGS = {
     "myai_autoprovision":       {"type": "int",   "default": lambda: 0,                                    "min": 0,   "max": 1,    "label": "MYAI 首次登入自動開通(1=開, 0=關)"},
     "myai_init_pwd_days":       {"type": "int",   "default": lambda: 30,                                   "min": 1,   "max": 180,  "label": "MYAI 初始密碼保存天數(逾期自動清除)"},
     "myai_initial_credit":      {"type": "int",   "default": lambda: 0,                                    "min": 0,   "max": None, "label": "MYAI 新帳號初始點數(0=不發放)"},
+    # v3.3 刪除使用者後 Lab volume 的封存保留天數（逾期背景任務真正刪除）
+    "lab_archive_days":         {"type": "int",   "default": lambda: 30,                                   "min": 1,   "max": 365,  "label": "刪除帳號後 Lab 資料封存天數(逾期銷毀)"},
 }
 
 

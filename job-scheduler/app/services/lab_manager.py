@@ -27,7 +27,7 @@ from __future__ import annotations
 import logging
 import os
 import secrets as _stdlib_secrets
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Optional, Protocol, Dict
 
 import docker
@@ -586,6 +586,177 @@ def list_all_sessions(db: Session) -> list[dict]:
             "mem_quota_mb": s.mem_quota_mb,
         })
     return out
+
+
+# ==============================================================================
+# ZH: v3.3 Lab 資料封存 / 還原 / 逾期銷毀（刪除使用者時不直接毀掉學生檔案）
+# EN: v3.3 archive / restore / purge of per-user Lab volumes on account deletion
+# ==============================================================================
+def _volume_size(vol_name: str) -> Optional[int]:
+    """ZH: 由 docker df 取 volume 大小（取不到回 None，不阻斷流程）"""
+    try:
+        lc = get_lifecycle()
+        for v in (lc.client.df().get("Volumes") or []):
+            if v.get("Name") == vol_name:
+                return (v.get("UsageData") or {}).get("Size")
+    except Exception as e:  # noqa: BLE001
+        logger.warning("取得 volume 大小失敗 %s: %s", vol_name, e)
+    return None
+
+
+def archive_user_lab(db: Session, user, retention_days: int, reason: str = "admin_delete") -> Optional[dict]:
+    """
+    ZH: 刪除使用者前呼叫。停掉並移除其 code-server 容器（容器無資料、可重建），
+        **volume 原地保留**並登記到 archived_lab_volumes（零複製成本），逾期才真正銷毀。
+        volume 不存在（從未用過 Lab）→ 回 None。
+    EN: Stop/remove the container, keep the volume in place and register it for
+        retention-based purge. Returns the archive record dict, or None if no volume.
+    """
+    lc = get_lifecycle()
+    uid = user.id
+    # 1) 容器：直接移除（無狀態，資料都在 volume）
+    try:
+        c = lc.client.containers.get(lc._container_name(uid))
+        c.remove(force=True)
+        logger.info("已移除 Lab 容器 cs-%s", uid[:8])
+    except Exception:
+        pass  # 容器不存在/已停 → 略過
+
+    # 2) volume：確認存在才登記封存
+    vol_name = lc._volume_name(uid)
+    try:
+        lc.client.volumes.get(vol_name)
+    except Exception:
+        logger.info("使用者 %s 無 Lab volume，略過封存", uid[:8])
+        return None
+
+    now = datetime.now(timezone.utc)
+    existing = db.query(models.ArchivedLabVolume).filter(
+        models.ArchivedLabVolume.volume_name == vol_name).first()
+    rec = existing or models.ArchivedLabVolume(volume_name=vol_name)
+    rec.user_id = uid
+    rec.username = getattr(user, "username", None)
+    rec.email = getattr(user, "email", None)
+    rec.size_bytes = _volume_size(vol_name)
+    rec.reason = reason
+    rec.archived_at = now
+    rec.expires_at = now + timedelta(days=max(1, int(retention_days)))
+    rec.restored_at = None
+    rec.restored_to = None
+    if not existing:
+        db.add(rec)
+    db.commit()
+    logger.info("Lab 資料已封存 %s (%s bytes)，到期 %s", vol_name, rec.size_bytes, rec.expires_at)
+    return {"volume": vol_name, "size_bytes": rec.size_bytes, "expires_at": rec.expires_at.isoformat()}
+
+
+def purge_expired_archives(db: Session) -> int:
+    """ZH: 背景任務：真正移除逾期封存的 volume。回傳銷毀筆數。
+       EN: Background purge of expired archived volumes."""
+    lc = get_lifecycle()
+    now = datetime.now(timezone.utc)
+    rows = db.query(models.ArchivedLabVolume).filter(
+        models.ArchivedLabVolume.expires_at.isnot(None)).all()
+    n = 0
+    for rec in rows:
+        exp = rec.expires_at
+        if exp is not None and exp.tzinfo is None:
+            exp = exp.replace(tzinfo=timezone.utc)
+        if exp is None or exp > now:
+            continue
+        try:
+            lc.client.volumes.get(rec.volume_name).remove(force=True)
+            logger.info("封存逾期，已銷毀 volume %s", rec.volume_name)
+        except Exception as e:  # noqa: BLE001 - volume 可能已被手動刪
+            logger.warning("銷毀封存 volume %s 失敗（可能已不存在）: %s", rec.volume_name, e)
+        db.delete(rec)
+        n += 1
+    if n:
+        db.commit()
+    return n
+
+
+def restore_archive(db: Session, volume_name: str, target_user_id: str) -> dict:
+    """
+    ZH: 把封存的 Lab 內容還原給指定使用者。因 SSO 使用者回來是**新 uuid**，
+        還原＝將舊 volume 內容複製進目標使用者的（新）volume，而非改名。
+        以臨時容器掛載兩個 volume 執行 cp -a；完成後保留封存紀錄（標記 restored）。
+    EN: Copy archived volume contents into the target user's current volume via a
+        throwaway container (SSO users return with a new uuid, so rename won't do).
+    """
+    lc = get_lifecycle()
+    rec = db.query(models.ArchivedLabVolume).filter(
+        models.ArchivedLabVolume.volume_name == volume_name).first()
+    if not rec:
+        raise ValueError("找不到該封存紀錄")
+    target = db.query(models.User).filter(models.User.id == target_user_id).first()
+    if not target:
+        raise ValueError("找不到目標使用者")
+    try:
+        lc.client.volumes.get(volume_name)
+    except Exception:
+        raise ValueError("封存的 volume 已不存在（可能已逾期銷毀）")
+
+    dest_vol = lc._ensure_volume(target_user_id)   # 目標不存在會自動建立
+    # ZH: -a 保留權限/時間；來源內容整包倒入目標根層。目標同名檔會被覆蓋。
+    cmd = "sh -c 'cp -a /from/. /to/ 2>/dev/null; echo done'"
+    lc.client.containers.run(
+        image="alpine:3.19", command=cmd, remove=True,
+        volumes={volume_name: {"bind": "/from", "mode": "ro"},
+                 dest_vol: {"bind": "/to", "mode": "rw"}},
+    )
+    rec.restored_at = datetime.now(timezone.utc)
+    rec.restored_to = target_user_id
+    db.commit()
+    logger.info("已將封存 %s 還原給使用者 %s", volume_name, target.username)
+    return {"volume": volume_name, "restored_to": target.username, "target_volume": dest_vol}
+
+
+def list_archives(db: Session) -> list[dict]:
+    """ZH: 給 admin 檢視封存清單（含目前實際是否還在、剩餘天數）"""
+    lc = get_lifecycle()
+    try:
+        present = {v.name for v in lc.client.volumes.list()}
+    except Exception:
+        present = set()
+    now = datetime.now(timezone.utc)
+    out = []
+    for rec in db.query(models.ArchivedLabVolume).order_by(
+            models.ArchivedLabVolume.archived_at.desc()).all():
+        exp = rec.expires_at
+        if exp is not None and exp.tzinfo is None:
+            exp = exp.replace(tzinfo=timezone.utc)
+        out.append({
+            "volume_name": rec.volume_name,
+            "username": rec.username,
+            "email": rec.email,
+            "user_id": rec.user_id,
+            "size_bytes": rec.size_bytes,
+            "reason": rec.reason,
+            "archived_at": rec.archived_at.isoformat() if rec.archived_at else None,
+            "expires_at": exp.isoformat() if exp else None,
+            "days_left": max(0, (exp - now).days) if exp else None,
+            "exists": rec.volume_name in present,
+            "restored_at": rec.restored_at.isoformat() if rec.restored_at else None,
+            "restored_to": rec.restored_to,
+        })
+    return out
+
+
+def delete_archive_now(db: Session, volume_name: str) -> bool:
+    """ZH: admin 立即銷毀某筆封存（不等到期）"""
+    lc = get_lifecycle()
+    rec = db.query(models.ArchivedLabVolume).filter(
+        models.ArchivedLabVolume.volume_name == volume_name).first()
+    if not rec:
+        return False
+    try:
+        lc.client.volumes.get(volume_name).remove(force=True)
+    except Exception as e:  # noqa: BLE001
+        logger.warning("立即銷毀 volume %s 失敗（可能已不存在）: %s", volume_name, e)
+    db.delete(rec)
+    db.commit()
+    return True
 
 
 def _build_url(user_id: str, session) -> dict:

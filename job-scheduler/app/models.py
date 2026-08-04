@@ -199,6 +199,31 @@ class ChatHistory(Base):
 # ZH: 表 6: SystemConfig - 系統設定
 # EN: Table 6: SystemConfig - System configuration (Key-Value)
 # ==============================================================================
+class ArchivedLabVolume(Base):
+    """
+    ZH: v3.3 刪除使用者時，其 Lab volume 不立即銷毀，改「原地封存」並記錄於此。
+        - 原地保留＝零複製成本（volume 300MB~1GB，搬移很慢），資料完全不動
+        - 本表讓「刻意封存」與「來路不明的孤兒 volume」可以區分
+        - 逾期由背景任務真正 remove；期限由 SystemConfig `lab_archive_days` 控制
+        - 還原時把內容複製進目標使用者的新 volume（SSO 使用者回來是新 uuid）
+    EN: v3.3 On user deletion the Lab volume is archived in place (zero-copy) and
+        tracked here; purged after the retention window, restorable meanwhile.
+    """
+    __tablename__ = "archived_lab_volumes"
+
+    id           = Column(String, primary_key=True, default=generate_uuid)
+    volume_name  = Column(String, nullable=False, unique=True, index=True)   # ZH: Docker volume 名稱
+    user_id      = Column(String, nullable=True)     # ZH: 原使用者 id（已刪除，故不設 FK）
+    username     = Column(String, nullable=True)     # ZH: 快照原帳號名，供辨識
+    email        = Column(String, nullable=True)
+    size_bytes   = Column(Integer, nullable=True)    # ZH: 封存當下大小
+    reason       = Column(String, nullable=True)     # ZH: 封存原因（admin_delete / adopted_orphan…）
+    archived_at  = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    expires_at   = Column(DateTime, nullable=True)   # ZH: 逾此時間背景任務會真正刪除
+    restored_at  = Column(DateTime, nullable=True)   # ZH: 已還原給誰/何時（保留紀錄）
+    restored_to  = Column(String, nullable=True)
+
+
 class SystemConfig(Base):
     __tablename__ = "system_config"
 

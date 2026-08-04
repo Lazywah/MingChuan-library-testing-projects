@@ -32,6 +32,7 @@ from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, Query, B
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 from sqlalchemy import func
+from sqlalchemy.exc import IntegrityError
 from datetime import datetime, timezone
 from typing import Any, Optional
 import csv
@@ -499,12 +500,105 @@ def admin_delete_user(
     if not db_user:
         raise HTTPException(status_code=404, detail="User not found")
 
-    db.query(models.TokenUsage).filter(models.TokenUsage.user_id == user_id).delete()
-    db.delete(db_user)
-    db.commit()
+    username = db_user.username
 
-    logger.info(f"User {db_user.username} deleted by admin {current_user.username}")
-    return {"message": f"User {db_user.username} deleted", "deleted_id": user_id}
+    # ==========================================================================
+    # ZH: v3.3 完整刪除流程（原本只刪 token_usage → 會 FK 失敗或留下孤兒）
+    #   1. Lab 資料先「封存」（容器移除、volume 原地保留 N 天，可還原）
+    #   2. 解開稽核類外鍵參照（admin_actions / quota_grants 為 ON DELETE NO ACTION，
+    #      不處理會讓刪除直接 IntegrityError → 500；target_user 可為 NULL，
+    #      故解參照而非刪紀錄，稽核軌跡得以保留）
+    #   3. 清掉無 FK 約束、不會自動 cascade 的表（chat_history / training_jobs / token_usage）
+    #   4. 其餘（external_ai_accounts / lab_sessions / user_secrets / user_session_usage /
+    #      user_storage_state / quota_grants.user_id）由 DB 的 ON DELETE CASCADE 處理
+    # EN: v3.3 full deletion: archive Lab data, unlink audit FKs (else IntegrityError),
+    #     purge non-cascading tables, then delete the user.
+    # ==========================================================================
+    archived = None
+    try:
+        from ..services import lab_manager
+        archived = lab_manager.archive_user_lab(
+            db, db_user, retention_days=crud.get_setting(db, "lab_archive_days"),
+            reason="admin_delete",
+        )
+    except Exception as e:  # noqa: BLE001 - Lab 封存失敗不應阻擋帳號刪除
+        logger.error(f"Lab 封存失敗（仍繼續刪除帳號）: {e}")
+
+    try:
+        db.query(models.AdminAction).filter(
+            models.AdminAction.target_user == user_id
+        ).update({models.AdminAction.target_user: None}, synchronize_session=False)
+        db.query(models.QuotaGrant).filter(
+            models.QuotaGrant.granted_by == user_id
+        ).delete(synchronize_session=False)
+
+        db.query(models.ChatHistory).filter(models.ChatHistory.user_id == user_id).delete(synchronize_session=False)
+        db.query(models.TrainingJob).filter(models.TrainingJob.user_id == user_id).delete(synchronize_session=False)
+        db.query(models.TokenUsage).filter(models.TokenUsage.user_id == user_id).delete(synchronize_session=False)
+
+        db.delete(db_user)
+        db.commit()
+    except IntegrityError as e:
+        db.rollback()
+        logger.error(f"刪除使用者 {username} 失敗（外鍵約束）: {e}")
+        raise HTTPException(
+            status_code=409,
+            detail="無法刪除：此帳號仍被其他資料引用。請聯絡開發者檢查關聯資料。",
+        )
+
+    logger.info(f"User {username} deleted by admin {current_user.username} (lab_archived={bool(archived)})")
+    return {
+        "message": f"User {username} deleted",
+        "deleted_id": user_id,
+        "lab_archived": archived,   # ZH: None=無 Lab 資料；否則含 volume/大小/到期
+    }
+
+
+# ==============================================================================
+# ZH: v3.3 Lab 資料封存管理（刪除帳號後的緩衝區：可檢視 / 還原 / 立即銷毀）
+# EN: v3.3 archived Lab volumes — list / restore / purge-now
+# ==============================================================================
+@router.get("/lab-archives", summary="列出封存中的 Lab 資料")
+def list_lab_archives(
+    db: Session = Depends(get_db),
+    _admin: models.User = Depends(require_admin),
+):
+    from ..services import lab_manager
+    return {"archives": lab_manager.list_archives(db),
+            "retention_days": crud.get_setting(db, "lab_archive_days")}
+
+
+@router.post("/lab-archives/{volume_name}/restore", summary="把封存的 Lab 還原給指定使用者")
+def restore_lab_archive(
+    volume_name: str,
+    payload: dict = Body(..., description='{"target_user_id": "..."}'),
+    db: Session = Depends(get_db),
+    _admin: models.User = Depends(require_admin),
+):
+    """ZH: SSO 使用者刪除後會以新 uuid 回來，故還原＝複製進目標使用者現有的 volume。"""
+    from ..services import lab_manager
+    target = (payload or {}).get("target_user_id")
+    if not target:
+        raise HTTPException(status_code=400, detail="缺少 target_user_id")
+    try:
+        return lab_manager.restore_archive(db, volume_name, target)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:  # noqa: BLE001
+        logger.exception("Lab 還原失敗")
+        raise HTTPException(status_code=500, detail=f"還原失敗：{e}")
+
+
+@router.delete("/lab-archives/{volume_name}", summary="立即銷毀某筆封存（不等到期）")
+def delete_lab_archive(
+    volume_name: str,
+    db: Session = Depends(get_db),
+    _admin: models.User = Depends(require_admin),
+):
+    from ..services import lab_manager
+    if not lab_manager.delete_archive_now(db, volume_name):
+        raise HTTPException(status_code=404, detail="找不到該封存紀錄")
+    return {"message": "已銷毀", "volume_name": volume_name}
 
 
 @router.post("/verify")
