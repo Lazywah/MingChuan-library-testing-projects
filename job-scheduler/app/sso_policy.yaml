@@ -72,6 +72,9 @@ oidc:
   # ZH: userinfo 無 email → 以「學號@此網域」補（學生信箱 = <學號>@me.mcu.edu.tw，
   #     與 MYAI 綁定的 email 一致）。留空則 fallback 為 @unknown。
   email_domain: "me.mcu.edu.tw"
-  # ZH: MCU 自建 IdP 的密碼變更/重設入口未知，留空（前端會顯示「密碼由學校統一管理」）
+  # ZH: 學校中央「忘記密碼」入口（2026-08-04 實地探查：Moodle 與學生查詢系統的忘記密碼
+  #     皆導向此處；表單=學號/員編+身分證字號 → 新密碼寄到校務系統留存 email；
+  #     臨櫃後援 F606(台北)/CC105(桃園)。⚠ 只有 https 通，http 版連不上）。
+  #     變更密碼無獨立公開入口（須登入校務系統後改），change_url 留空。
   password_change_url: ""
-  password_reset_url:  ""
+  password_reset_url:  "https://www1.mcu.edu.tw/ForgetPassword.aspx"

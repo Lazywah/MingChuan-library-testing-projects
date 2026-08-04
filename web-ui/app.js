@@ -358,7 +358,7 @@ const TRANSLATIONS = {
         // v2.1 SSO OIDC 整合
         login_title: "登入系統",
         sso_school_login: "使用學校帳號登入",
-        sso_hint: "學生 / 老師請使用學校 Microsoft 帳號（學號@mcu.edu.tw）",
+        sso_hint: "學生 / 老師請使用學校帳號登入（學號 / 員編）",
         sso_loading: "載入中…",
         sso_pending_msg: "系統登入功能尚在設定中",
         sso_pending_hint: "若您是管理員，請透過管理介面登入",
@@ -374,12 +374,12 @@ const TRANSLATIONS = {
         tip_secrets: "Secrets 是「程式執行時才需要、但不能寫進程式碼裡」的東西 — 最常見就是 API key（HF_TOKEN、OPENAI_API_KEY 等）。\n\n在這裡新增後，啟動 Lab 或送 GPU 任務時平台會自動以「環境變數」注入容器，程式裡用 os.environ[\"KEY_NAME\"] 讀取即可。\n\n💡 一般 Python 作業沒有要呼叫付費 API 的話，這區可以略過。",
         secrets_help_summary: "什麼是環境變數？為什麼這樣設計？",
         secrets_help_body: "環境變數是程式啟動時從作業系統環境讀的「鍵 = 值」對。把金鑰寫死在程式碼會被誤 commit 到 git 外洩，所以業界做法是統一存在 Secrets 機制中、執行時注入。可以類比 Chrome 密碼管理員 — 程式不用知道密碼，只在需要時自動填入。本平台用 AES-256-GCM 加密儲存，僅在 Lab 容器啟動 / GPU 任務執行時解密注入。",
-        password_sso_msg: "您使用學校 Microsoft 帳號登入，密碼由學校統一管理。",
-        password_sso_open: "前往 Microsoft 變更密碼（新分頁）",
-        password_sso_forgot: "忘記密碼？點此重設",
+        password_sso_msg: "您使用學校帳號登入（SSO），密碼由學校系統統一管理。",
+        password_sso_open: "前往學校系統變更密碼（新分頁）",
+        password_sso_forgot: "忘記密碼？前往學校重設入口",
         password_sso_why: "為什麼不能在這裡改？",
-        password_sso_why_explain: "學校採用單一登入 (SSO) 機制，您的密碼存在學校的 Microsoft 系統，本平台從未拿到您的密碼。這是業界標準的安全設計（Slack / Notion / Figma 等使用 SSO 的服務都是如此）。",
-        toast_sso_password_blocked: "SSO 使用者無法在此變更密碼，請至 IdP 系統變更",
+        password_sso_why_explain: "學校採用單一登入 (SSO) 機制，您的密碼存在學校的認證系統，本平台從未拿到您的密碼。這是業界標準的安全設計（Slack / Notion / Figma 等使用 SSO 的服務都是如此）。",
+        toast_sso_password_blocked: "SSO 使用者無法在此變更密碼，請至學校系統處理",
         // v2.1 Profile Modal 豐富資訊版
         settings_profile: "我的帳號資訊",
         // v3.0 我的使用量（學生端：只看自己 + 全體人均對照）
@@ -775,7 +775,7 @@ const TRANSLATIONS = {
         // v2.1 SSO OIDC integration
         login_title: "Sign in",
         sso_school_login: "Sign in with school account",
-        sso_hint: "Students / teachers: use your school Microsoft account (studentid@mcu.edu.tw)",
+        sso_hint: "Students / teachers: sign in with your school account (student / staff ID)",
         sso_loading: "Loading…",
         sso_pending_msg: "Login system is being configured",
         sso_pending_hint: "Administrators please use the admin panel to log in",
@@ -791,12 +791,12 @@ const TRANSLATIONS = {
         tip_secrets: "Secrets are things your program needs at runtime but should never be hard-coded — most commonly API keys (HF_TOKEN, OPENAI_API_KEY, etc.).\n\nAdd them here and the platform injects them as environment variables when your Lab starts or a GPU job runs. Read them in your code with os.environ[\"KEY_NAME\"].\n\n💡 If your Python coursework doesn't call any paid APIs, you can skip this section.",
         secrets_help_summary: "What are environment variables and why this design?",
         secrets_help_body: "Environment variables are key=value pairs read from the OS environment when a program starts. Hard-coding keys in source code risks committing them to git. The industry pattern is to keep them in a Secrets store and inject at runtime — like Chrome's password manager: programs don't know your password, the system fills it in when needed. This platform uses AES-256-GCM encryption at rest and decrypts only when the Lab container starts or a GPU job runs.",
-        password_sso_msg: "You are signed in with your school Microsoft account; passwords are managed by the school.",
-        password_sso_open: "Open Microsoft password change (new tab)",
-        password_sso_forgot: "Forgot password? Reset here",
+        password_sso_msg: "You are signed in with your school account (SSO); passwords are managed by the school.",
+        password_sso_open: "Open the school password-change page (new tab)",
+        password_sso_forgot: "Forgot password? Go to the school reset portal",
         password_sso_why: "Why can't I change it here?",
-        password_sso_why_explain: "The school uses Single Sign-On (SSO); your password lives at Microsoft and this platform never sees it. This is the industry-standard design (Slack / Notion / Figma all do the same).",
-        toast_sso_password_blocked: "SSO users cannot change password here — please use the IdP",
+        password_sso_why_explain: "The school uses Single Sign-On (SSO); your password lives in the school's authentication system and this platform never sees it. This is the industry-standard design (Slack / Notion / Figma all do the same).",
+        toast_sso_password_blocked: "SSO users cannot change password here — please use the school system",
         // v2.1 Profile Modal rich info
         settings_profile: "My Account",
         // v3.0 my usage (student-facing: own data + all-accounts average only)
@@ -3910,8 +3910,9 @@ async function applyPasswordModalMode() {
         if (info.reset_url && resetEl) resetEl.href = info.reset_url;
         if (info.message && msgEl) msgEl.textContent = info.message;
 
-        // 若 reset_url 不存在，隱藏「忘記密碼」連結
-        if (!info.reset_url && resetEl) resetEl.style.display = 'none';
+        // v3.3: 沒提供的入口就整個隱藏（原本 change_url 空時連結仍顯示、href 停在 "#" 是死按鈕）
+        if (linkEl)  linkEl.style.display  = info.change_url ? 'flex' : 'none';
+        if (resetEl) resetEl.style.display = info.reset_url ? '' : 'none';
     } catch (e) {
         console.warn('[SSO] fetch password-change-info failed:', e);
     }

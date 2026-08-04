@@ -201,43 +201,63 @@ async def forgot_password(
     background_tasks: BackgroundTasks,
     db: Session = Depends(get_db)
 ):
-    """ZH: 忘記密碼 - 產生隨機臨時密碼 | EN: Forgot password - Generate random temp password"""
+    """ZH: 忘記密碼（僅 local 帳號）- 產生臨時密碼並寄信
+       EN: Forgot password (local accounts only) - generate temp password and email it"""
     user = crud.get_user_by_username(db, payload.username)
     if not user or user.email != payload.email:
         # ZH: 安全考量，無論是否找到，都回傳模糊訊息或直接回報錯誤
         # EN: Security consideration, return vague message or standard error
         raise HTTPException(status_code=400, detail="Invalid username or email")
 
+    # ==========================================================================
+    # v3.3 安全修補（2026-08-04）：
+    # 1. SSO 帳號一律拒絕 — 密碼歸學校管；且 SSO 上線後 username(學號)/email(學號@me.mcu…)
+    #    皆可由學號推導，若放行等於任何人可亂改他人密碼欄。導向學校中央重設入口。
+    # 2. 未設 SMTP 時不再「重置密碼 + 在 API 回應回傳明文臨時密碼」（原 C-11 行為
+    #    ＝知道 username+email 即可接管 local 帳號）。改回 503 請洽管理員，密碼不動。
+    # EN: v3.3 hardening — reject SSO accounts (password owned by school; identifiers
+    #     derivable from student id) and never return a plaintext temp password.
+    # ==========================================================================
+    if (user.auth_source or "local") != "local":
+        from ..config import SSO_POLICY
+        reset_url = (SSO_POLICY.get("oidc", {}) or {}).get("password_reset_url") or ""
+        detail = "此帳號使用學校單一登入（SSO），密碼由學校系統管理，請至學校入口重設"
+        if reset_url:
+            detail += f"：{reset_url}"
+        raise HTTPException(status_code=400, detail=detail)
+
+    from ..config import settings as _settings
+    if not _settings.SMTP_SERVER:
+        # ZH: 密碼「未被重置」— 不能因無法送達而鎖死使用者或洩漏明文
+        # EN: Password is NOT reset — cannot deliver it safely without SMTP
+        raise HTTPException(
+            status_code=503,
+            detail="郵件服務未設定，無法自助重設；請聯絡管理員重置密碼",
+        )
+
     import secrets
     import string
     import passlib.hash
-    from ..config import settings as _settings
 
     # 產生 8 碼英數混合密碼
     alphabet = string.ascii_letters + string.digits
     temp_password = ''.join(secrets.choice(alphabet) for i in range(8))
 
-    # 更新密碼
+    # 更新密碼並寄信
     user.hashed_password = passlib.hash.bcrypt.hash(temp_password)
     db.commit()
-
-    # C-11: ZH: 有設定 SMTP 則寄信，否則將臨時密碼回傳 (避免密碼消失無法取得)
-    # EN: Send email when SMTP is configured; otherwise return temp password in response
-    email_sent = bool(_settings.SMTP_SERVER)
-    if email_sent:
-        background_tasks.add_task(
-            email_service.send_temp_password,
-            user.email,
-            user.username,
-            temp_password,
-            False
-        )
+    background_tasks.add_task(
+        email_service.send_temp_password,
+        user.email,
+        user.username,
+        temp_password,
+        False
+    )
 
     logger.info(f"ZH: 忘記密碼重設成功: {user.username} | EN: Password reset successful: {user.username}")
     return {
-        "message": "Password reset successful",
-        "temp_password": None if email_sent else temp_password,
-        "email_sent": email_sent,
+        "message": "Password reset email sent",
+        "email_sent": True,
     }
 
 
