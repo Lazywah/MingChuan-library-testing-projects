@@ -115,6 +115,22 @@ def check_inline_comments(env: dict):
     return PASS, ".env 值中無行內註解殘留"
 
 
+def check_bootstrap_admin(env: dict):
+    """
+    ZH: v3.3 —— 首次部署若 BOOTSTRAP_ADMIN_PASSWORD 留空，服務啟動後不會自動建立管理員，
+        使用者將完全無法進入管理端（學生端也要 SSO）。此處提前提醒。
+        （已存在 admin 的既有部署留空是正常的，故為 WARN 而非 FAIL。）
+    EN: Warn when no bootstrap admin password is set (fresh installs would have no admin).
+    """
+    pw = (env.get("BOOTSTRAP_ADMIN_PASSWORD") or "").strip()
+    if pw:
+        if len(pw) < 8:
+            return WARN, "BOOTSTRAP_ADMIN_PASSWORD 短於 8 字元，建議加長"
+        return PASS, "初始管理員密碼已設定（首次啟動且無任何 admin 時會自動建立 admin）"
+    return WARN, ("BOOTSTRAP_ADMIN_PASSWORD 留空 → 全新部署不會自動建立管理員。"
+                  "既有部署已有 admin 則屬正常；否則請重跑 setup_env.py 或用 scripts/create-admin.bat")
+
+
 def check_sso(env: dict):
     """
     ZH: SSO 設定健檢。sso_policy.yaml committed 為 provider=oidc + mock_mode=false，
@@ -209,6 +225,7 @@ def main():
         ("根 .env",        check_env_file()),
         ("必填秘鑰",       check_secrets(env)),
         ("行內註解殘留",   check_inline_comments(env)),
+        ("初始管理員",     check_bootstrap_admin(env)),
         ("SSO 設定",       check_sso(env)),
         ("設定漂移",       check_drift()),
         (".env 完整性",    check_env_completeness(env)),

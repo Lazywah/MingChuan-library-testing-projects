@@ -180,6 +180,14 @@ class Settings(BaseSettings):
     LOG_LEVEL: str = "INFO"
 
     # ------------------------------------------------------------------
+    # ZH: v3.3 首次啟動自動建立的管理員（僅在 DB 完全沒有 admin 時生效）
+    #     密碼明文置於 .env（與 JWT_SECRET_KEY 同等機密；該金鑰更強）。留空＝不自動建立。
+    # EN: v3.3 bootstrap admin, created on first boot only when no admin exists.
+    # ------------------------------------------------------------------
+    BOOTSTRAP_ADMIN_PASSWORD: str = ""
+    BOOTSTRAP_ADMIN_EMAIL: str = "admin@local"
+
+    # ------------------------------------------------------------------
     # ZH: SMTP 郵件設定 | EN: SMTP Email Configuration
     # ------------------------------------------------------------------
     SMTP_SERVER: str = ""

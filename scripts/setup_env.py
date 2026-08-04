@@ -620,6 +620,36 @@ def main() -> None:
     # ══════════════════════════════════════════════════════════════════════════
     # 步驟 3：SMTP（可選）
     # ══════════════════════════════════════════════════════════════════════════
+    # ══════════════════════════════════════════════════════════════════════════
+    # 步驟 2.5：第一個管理員帳號（v3.3）
+    # ══════════════════════════════════════════════════════════════════════════
+    # ZH: 為什麼是「先存密碼、開機才建帳號」：本腳本在容器啟動「之前」執行，此時
+    #     資料庫與資料表都還不存在（schema 由容器啟動時 create_all 建立），且本腳本
+    #     刻意零額外套件（算 bcrypt 需要 passlib/bcrypt，新機器不保證有）。
+    #     故這裡只收密碼寫進 .env，由服務首次啟動時「若尚無任何 admin」自動建立。
+    # EN: The DB does not exist yet at this point (created on first container boot),
+    #     and this script stays dependency-free — so we only capture the password
+    #     here; the app creates the account on first boot if no admin exists.
+    section("步驟 2.5 / Step 2.5：第一個管理員帳號 First Admin Account")
+
+    print(f"  {dim('平台預設沒有任何管理員。在此設定密碼，服務首次啟動時會自動建立帳號 admin。')}")
+    print(f"  {dim('（帳號名稱固定為 admin；登入後可自行改密碼，或建立自己的帳號後刪除它）')}")
+    print(f"  {warn('密碼會以明文存放於 .env（已 gitignore）—— 與 JWT_SECRET_KEY 同等機密等級，請妥善保管。')}")
+    print()
+
+    def _validate_admin_pw(v):
+        if len(v) < 8:
+            return "密碼至少 8 字元 / at least 8 characters"
+
+    while True:
+        admin_pw = ask("設定 admin 密碼 / admin password", hidden=True, validator=_validate_admin_pw)
+        admin_pw2 = ask("再輸入一次確認 / confirm password", hidden=True)
+        if admin_pw == admin_pw2:
+            break
+        print("  " + err("兩次輸入不一致，請重新輸入 / passwords do not match"))
+    admin_email = ask("管理員 Email（登入不需要，僅作紀錄）", default="admin@local")
+    print(f"  {ok('管理員密碼已設定（帳號 admin）/ admin password set')}")
+
     section("步驟 3 / Step 3：SMTP 郵件設定（選填）SMTP Email Config (Optional)")
 
     print(f"  {dim('設定後，forgot_password 不再於 API 回應中回傳明文密碼')}")
@@ -732,6 +762,9 @@ def main() -> None:
         "SMTP_USERNAME":               smtp["SMTP_USERNAME"],
         "SMTP_PASSWORD":               smtp["SMTP_PASSWORD"],
         "SMTP_FROM_EMAIL":             smtp["SMTP_FROM_EMAIL"],
+        # v3.3 首次啟動自動建立的管理員（app 在「尚無任何 admin」時才會用它建帳號）
+        "BOOTSTRAP_ADMIN_PASSWORD":    admin_pw,
+        "BOOTSTRAP_ADMIN_EMAIL":       admin_email,
     })
     if setup_worker:
         overlay.update({
@@ -793,6 +826,8 @@ def main() -> None:
                                       "正式環境請填寫 / fill in for prod"),
         ("LOG_LEVEL",                 log_level,
                                       ""),
+        ("管理員帳號 / admin",         f"admin  /  {admin_pw}",
+                                      "首次啟動自動建立 · 登入後請改密碼"),
         ("SMTP",                      "已設定 / configured" if smtp.get("SMTP_SERVER") else "未設定 / not set",
                                       "" if smtp.get("SMTP_SERVER") else "⚠ temp_password 將明文回傳"),
     ]

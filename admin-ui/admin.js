@@ -1107,6 +1107,34 @@ const systemSettings = {
 };
 
 // ==============================================================================
+// v3.3 初始管理員提醒橫幅
+// 後端 GET /admin/bootstrap-status 用 .env 的 BOOTSTRAP_ADMIN_PASSWORD 去驗 admin 帳號的
+// 雜湊；仍驗得過＝初始密碼還在用 → 顯示橫幅。管理者改過密碼後自動驗不過，橫幅自行消失。
+// ==============================================================================
+async function checkBootstrapAdminBanner() {
+    try {
+        const res = await fetch(`${API_BASE}/admin/bootstrap-status`, {
+            headers: { 'Authorization': `Bearer ${authToken}` }
+        });
+        if (!res.ok) return;
+        const data = await res.json();
+        let bar = document.getElementById('bootstrap-admin-banner');
+        if (!data.using_initial_password) { if (bar) bar.remove(); return; }
+        if (!bar) {
+            const host = document.querySelector('main') || document.getElementById('admin-main-layout') || document.body;
+            bar = document.createElement('div');
+            bar.id = 'bootstrap-admin-banner';
+            bar.style.cssText = 'position:sticky; top:0; z-index:9000; background:#78350f; color:#fde68a; ' +
+                'border:1px solid #f59e0b; border-radius:10px; padding:8px 16px; margin:0 0 12px; font-size:13px;';
+            host.insertBefore(bar, host.firstChild);
+        }
+        bar.innerHTML = '⚠ 你正在使用<b>系統自動建立的初始管理員帳號</b>（admin），' +
+            '且仍是安裝時設定的密碼。請盡快<b>修改密碼</b>，或建立自己的管理員帳號後刪除它。' +
+            '（改完密碼此提示會自動消失；也建議把 .env 的 BOOTSTRAP_ADMIN_PASSWORD 清空）';
+    } catch (e) { /* 靜默：橫幅屬加值提醒 */ }
+}
+
+// ==============================================================================
 // v3.2 GPU 節點管理 — 狀態卡 + 節點設定編輯（開關/週時段/池別/緩衝）
 // GET/PUT /api/v1/admin/gpu-nodes；schedule 一律送 null（全天）或 JSON「字串」
 // （空物件 "{}"＝永不開放；勿送 dict 形式的 {}，後端會當成「清除」）。
@@ -3216,6 +3244,7 @@ function initAdminDashboard() {
     fetchAdminData();
     systemSettings.load();   // v3.1 step 6：系統設定在 management 分頁（預設分頁）
     gpuNodes.checkConflictBanner();   // v3.2 Phase 1.5：登入即檢查 NODE_ID 撞名（全站橫幅）
+    checkBootstrapAdminBanner();      // v3.3：初始管理員仍用預設密碼 → 提醒橫幅
     applyTranslations();
 
     // Auto refresh logic

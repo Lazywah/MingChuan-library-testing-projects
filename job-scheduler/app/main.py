@@ -105,6 +105,57 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.warning(f"ZH: 測試帳號清除失敗: {e} | EN: Test account cleanup failed: {e}")
 
+    # ==========================================================================
+    # ZH: v3.3 首次啟動自動建立管理員（跳板帳號）
+    #     規則：**只在 DB 完全沒有任何 admin 時**才建立。
+    #       - 不會覆寫既有帳號、也不會「復活」已被管理者刪除的跳板帳號
+    #         （因為那時系統裡已有其他 admin）
+    #       - 若所有 admin 都不見了（誤刪／DB 事故），下次啟動會自動再生 → 防永久鎖死
+    #     密碼由 .env 的 BOOTSTRAP_ADMIN_PASSWORD 提供（`scripts/setup_env.py` 互動設定）；
+    #     留空則不建立，改用 scripts/create-admin.bat 手動建。
+    # EN: v3.3 bootstrap admin — created only when NO admin exists at all. Never
+    #     overwrites, never resurrects a deliberately deleted one, but recovers from lockout.
+    # ==========================================================================
+    from .database import SessionLocal as _SL
+    from . import models as _m, crud as _c
+    try:
+        _db = _SL()
+        try:
+            _has_admin = _db.query(_m.User).filter(_m.User.role == "admin").first() is not None
+            _pw = (settings.BOOTSTRAP_ADMIN_PASSWORD or "").strip()
+            if _has_admin:
+                pass                      # 已有管理員 → 什麼都不做
+            elif not _pw:
+                logger.warning(
+                    "ZH: 系統尚無管理員，且 BOOTSTRAP_ADMIN_PASSWORD 未設定 → 未自動建立。"
+                    "請執行 scripts/create-admin.bat 建立管理員。"
+                )
+            else:
+                _admin = _m.User(
+                    username="admin",
+                    email=(settings.BOOTSTRAP_ADMIN_EMAIL or "admin@local"),
+                    hashed_password=_c.get_password_hash(_pw),
+                    role="admin",
+                    is_active=1,
+                )
+                _db.add(_admin)
+                _db.commit()
+                _db.refresh(_admin)
+                _db.add(_m.TokenUsage(
+                    user_id=_admin.id, tokens_used=0,
+                    tokens_limit=_c.get_setting(_db, "monthly_token_limit"),
+                    reset_date=_c._calculate_next_reset_date(_db),
+                ))
+                _db.commit()
+                logger.warning(
+                    "ZH: 已自動建立初始管理員 admin（密碼取自 .env BOOTSTRAP_ADMIN_PASSWORD）。"
+                    "請盡快登入 :8888 修改密碼，或建立自己的帳號後刪除它。"
+                )
+        finally:
+            _db.close()
+    except Exception as e:  # noqa: BLE001 - 建立失敗不應讓服務起不來
+        logger.error(f"ZH: 初始管理員建立失敗: {e}")
+
     # ZH: 啟動時智慧同步全域 Token 額度 | EN: Smart sync global token limit on startup
     # ZH: 只有當 yml 的值被修改過（與上次同步不同），才批量更新所有使用者
     # EN: Only batch-update all users when the yml value actually changed since last sync

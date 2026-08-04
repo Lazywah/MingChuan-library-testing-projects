@@ -42,7 +42,7 @@ import logging
 
 from .. import models, schemas, crud
 from ..auth import get_current_user
-from ..config import SSO_POLICY
+from ..config import SSO_POLICY, settings
 from ..database import get_db
 from ..services import email_service
 
@@ -93,6 +93,31 @@ def put_system_settings(
 # ZH: v3.2 GPU 節點管理 — 可排程時段/開關/池別 + 狀態總覽
 # EN: v3.2 GPU node management — schedule windows/switch/pool + status overview
 # ==============================================================================
+@router.get("/bootstrap-status", summary="初始管理員是否仍在使用預設密碼")
+def bootstrap_admin_status(
+    db: Session = Depends(get_db),
+    _admin: models.User = Depends(require_admin),
+):
+    """
+    ZH: v3.3 給 admin UI 判斷是否顯示「請盡快改密碼」橫幅。
+        判定方式＝拿 .env 的 BOOTSTRAP_ADMIN_PASSWORD 去驗證 admin 帳號的雜湊；
+        驗得過代表初始密碼仍有效 → 顯示提醒。改過密碼後自動驗不過 → 橫幅自動消失。
+        （不回傳密碼本身，只回布林。）
+    EN: Whether the bootstrap admin still uses the initial password (banner trigger).
+    """
+    pw = (settings.BOOTSTRAP_ADMIN_PASSWORD or "").strip()
+    if not pw:
+        return {"using_initial_password": False, "username": None}
+    user = crud.get_user_by_username(db, "admin")
+    if not user or user.role != "admin":
+        return {"using_initial_password": False, "username": None}
+    try:
+        still = crud.verify_password(pw, user.hashed_password)
+    except Exception:  # noqa: BLE001
+        still = False
+    return {"using_initial_password": bool(still), "username": "admin" if still else None}
+
+
 @router.get("/gpu-nodes", summary="GPU 節點狀態與設定總覽")
 def list_gpu_nodes(
     db: Session = Depends(get_db),
