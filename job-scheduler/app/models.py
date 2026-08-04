@@ -426,6 +426,18 @@ class ExternalAiAccount(Base):
     updated_at      = Column(DateTime, default=lambda: datetime.now(timezone.utc),
                              onupdate=lambda: datetime.now(timezone.utc))
 
+    # ==========================================================================
+    # ZH: v3.3 自動開通 — 系統產生的 MYAI「初始密碼」暫存（憑證遞送，非密碼保管）
+    #     ⚠️ 界線：這不是學生自選的密碼，而是我們替他建號時產生的一次性初始值。
+    #     「絕不存學生密碼」原則不變 —— 學生一改密碼，這裡的值即失去意義。
+    #     AES-256-GCM 加密（同 user_secrets 的 KEK）；逾期或學生按「已修改」即清除。
+    # EN: v3.3 auto-provision — system-generated MYAI *initial* password, held briefly
+    #     for delivery only (encrypted, auto-purged). Not a user-chosen password.
+    # ==========================================================================
+    init_pwd_enc    = Column(LargeBinary, nullable=True)                      # ZH: 加密後的初始密碼 | EN: encrypted initial password
+    init_pwd_at     = Column(DateTime, nullable=True)                         # ZH: 發放時間（保存期起算）| EN: issued at (retention clock)
+    init_pwd_ack    = Column(Integer, default=0)                              # ZH: 1=學生已按「我已修改」→ 立即清除 | EN: acknowledged
+
 
 # ==============================================================================
 # ZH: 表 16: KnowledgeChunk - RAG 知識庫片段 (v2.6 客服/導覽助手)

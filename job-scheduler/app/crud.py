@@ -1001,6 +1001,10 @@ SYSTEM_SETTINGS = {
     "rag_top_k":                {"type": "int",   "default": lambda: settings.RAG_TOP_K,                   "min": 1,   "max": 20,   "label": "小基 RAG 取回片段數"},
     "rag_min_score":            {"type": "float", "default": lambda: settings.RAG_MIN_SCORE,               "min": 0.0, "max": 1.0,  "label": "小基 RAG 相似度門檻"},
     "rag_history_turns":        {"type": "int",   "default": lambda: settings.RAG_HISTORY_TURNS,           "min": 0,   "max": 20,   "label": "小基 RAG 帶入對話輪數"},
+    # v3.3 MYAI 自動開通
+    "myai_autoprovision":       {"type": "int",   "default": lambda: 0,                                    "min": 0,   "max": 1,    "label": "MYAI 首次登入自動開通(1=開, 0=關)"},
+    "myai_init_pwd_days":       {"type": "int",   "default": lambda: 30,                                   "min": 1,   "max": 180,  "label": "MYAI 初始密碼保存天數(逾期自動清除)"},
+    "myai_initial_credit":      {"type": "int",   "default": lambda: 0,                                    "min": 0,   "max": None, "label": "MYAI 新帳號初始點數(0=不發放)"},
 }
 
 

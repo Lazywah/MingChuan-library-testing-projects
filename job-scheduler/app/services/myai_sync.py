@@ -448,3 +448,166 @@ def _refresh_points_from_tx(db: Session, rows: list[dict]) -> int:
     if updated:
         db.commit()
     return updated
+
+
+# ==============================================================================
+# ZH: v3.3 自動開通（首次登入即為學生建立 MYAI 帳號並綁定）
+# EN: v3.3 auto-provision — create the student's MYAI account on first login & bind
+# ------------------------------------------------------------------------------
+# ZH: 使用廠商管理端「批次註冊」正式功能（非繞過註冊頁的 CAPTCHA）：
+#       POST /mcu/gt_sdk/admin_168/user/register_batch_check   ← 上傳 xlsx（驗證/預覽）
+#       → 確認送出（第二段）
+#     Excel 格式（官方範本 register_batch.xlsx，**無標題列**，使用者已確認欄序）：
+#       A=email、B=暱稱、C=密碼、D=備註
+#     ⚠️ 這是對廠商端的「寫入」。原「唯讀」界線由使用者於 2026-08-05 有意識放寬，
+#        僅限此官方批次註冊功能；transfer/top_up/delete 一律仍禁止。
+# EN: Uses the vendor's official admin bulk-registration feature (not a CAPTCHA bypass).
+#     Template columns (no header): A=email, B=nickname, C=password, D=remark.
+# ==============================================================================
+REGISTER_BATCH_PATH = "/mcu/gt_sdk/admin_168/user/register_batch"
+REGISTER_BATCH_CHECK_PATH = "/mcu/gt_sdk/admin_168/user/register_batch_check"
+
+
+def gen_initial_password(length: int = 12) -> str:
+    """
+    ZH: 產生 MYAI 初始密碼。廠商規則 8~20 字元；此處固定 12 碼並保證含大小寫+數字。
+        刻意不用學號（公開資訊 → 任何人可登入他人帳號）。排除易混淆字元 0/O/1/l/I。
+    EN: Random initial password (vendor allows 8-20). Never the student id (public).
+    """
+    import secrets as _secrets
+    lower = "abcdefghijkmnopqrstuvwxyz"
+    upper = "ABCDEFGHJKLMNPQRSTUVWXYZ"
+    digits = "23456789"
+    pool = lower + upper + digits
+    while True:
+        pwd = "".join(_secrets.choice(pool) for _ in range(length))
+        if (any(c in lower for c in pwd) and any(c in upper for c in pwd)
+                and any(c in digits for c in pwd)):
+            return pwd
+
+
+def build_register_xlsx(rows: list[dict]) -> bytes:
+    """
+    ZH: 依官方範本格式產生上傳用 xlsx（無標題列；A=email B=暱稱 C=密碼 D=備註）。
+    EN: Build the upload workbook matching the vendor template (no header row).
+
+    rows: [{"email":..., "nickname":..., "password":..., "remark":...}, ...]
+    """
+    from openpyxl import Workbook
+    wb = Workbook()
+    ws = wb.active
+    for r in rows:
+        ws.append([
+            (r.get("email") or "").strip(),
+            (r.get("nickname") or "").strip(),
+            (r.get("password") or "").strip(),
+            (r.get("remark") or "").strip(),
+        ])
+    buf = io.BytesIO()
+    wb.save(buf)
+    return buf.getvalue()
+
+
+async def register_batch(rows: list[dict]) -> dict:
+    """
+    ZH: 送出批次註冊。**第一段**上傳 xlsx 至 register_batch_check（驗證/預覽）。
+        ⚠️ **第二段（確認送出）尚未實作** —— 該頁的實際欄位/token 需真實 POST 一次才看得到，
+        使用者尚未授權對廠商寫入測試。目前僅回傳第一段回應供解析與人工確認。
+        待實測後在此補上確認步驟（找 confirm form 的 action + hidden 欄位再 POST）。
+    EN: Step 1 uploads the workbook to register_batch_check (validate/preview).
+        Step 2 (confirm) is intentionally NOT implemented until we can observe the
+        real response shape; the caller must treat this as "submitted for check".
+
+    回傳 {"ok": bool, "status": int, "html": str}
+    """
+    xlsx = build_register_xlsx(rows)
+
+    async def _do(client):
+        return await client.post(
+            REGISTER_BATCH_CHECK_PATH,
+            files={"upload_xls": ("register_batch.xlsx", xlsx,
+                                  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")},
+            headers={"Referer": settings.MYAI_BASE_URL.rstrip("/") + REGISTER_BATCH_PATH},
+        )
+
+    def _valid(r):
+        return r.status_code == 200 and "Unauthorized" not in r.text[:200]
+
+    r = await _session_request(_do, _valid)
+    return {"ok": _valid(r), "status": r.status_code, "html": r.text}
+
+
+def _nickname_for(user) -> str:
+    """ZH: 暱稱優先用平台顯示名，退回 username（學號）| EN: nickname for the vendor account"""
+    for attr in ("display_name", "full_name", "name"):
+        v = (getattr(user, attr, None) or "").strip()
+        if v:
+            return v[:60]
+    return (user.username or "")[:60]
+
+
+def store_initial_password(db: Session, acc, plaintext: str) -> None:
+    """ZH: 加密暫存初始密碼（AES-256-GCM，同 user_secrets 的 KEK）並記發放時間。
+       EN: Encrypt-at-rest the generated initial password with the shared KEK."""
+    from . import secrets_service
+    acc.init_pwd_enc = secrets_service.encrypt_value(plaintext)
+    acc.init_pwd_at = datetime.now(timezone.utc)
+    acc.init_pwd_ack = 0
+    db.commit()
+
+
+def read_initial_password(db: Session, acc, retention_days: int) -> str | None:
+    """
+    ZH: 讀出未逾期且未被確認修改的初始密碼；逾期/已確認則就地清除並回 None。
+        （學生始終可用 MYAI 自己的「忘記密碼」+ 學校信箱自助重設，故到期清除不會鎖死人。）
+    EN: Return the initial password if still within retention and unacknowledged;
+        otherwise purge it in place. Students can always self-serve via MYAI's own
+        forgot-password using their school email.
+    """
+    if not acc or not acc.init_pwd_enc:
+        return None
+    if acc.init_pwd_ack:
+        clear_initial_password(db, acc)
+        return None
+    issued = acc.init_pwd_at
+    if issued is not None and issued.tzinfo is None:
+        issued = issued.replace(tzinfo=timezone.utc)
+    if issued is None or (datetime.now(timezone.utc) - issued) > timedelta(days=retention_days):
+        clear_initial_password(db, acc)
+        return None
+    from . import secrets_service
+    try:
+        return secrets_service.decrypt_value(acc.init_pwd_enc)
+    except Exception as e:  # noqa: BLE001 - 金鑰換過/資料損壞 → 當作沒有
+        logger.warning("初始密碼解密失敗（視為不存在）: %s", e)
+        return None
+
+
+def clear_initial_password(db: Session, acc) -> None:
+    """ZH: 清除暫存的初始密碼（學生按「已修改」或逾期）| EN: purge the stored initial password"""
+    acc.init_pwd_enc = None
+    acc.init_pwd_at = None
+    db.commit()
+
+
+def purge_expired_initial_passwords(db: Session, retention_days: int) -> int:
+    """ZH: 批次清除逾期初始密碼（背景任務呼叫）| EN: purge expired initial passwords"""
+    cutoff = datetime.now(timezone.utc) - timedelta(days=retention_days)
+    rows = (
+        db.query(models.ExternalAiAccount)
+        .filter(models.ExternalAiAccount.init_pwd_enc.isnot(None))
+        .all()
+    )
+    n = 0
+    for acc in rows:
+        issued = acc.init_pwd_at
+        if issued is not None and issued.tzinfo is None:
+            issued = issued.replace(tzinfo=timezone.utc)
+        if acc.init_pwd_ack or issued is None or issued < cutoff:
+            acc.init_pwd_enc = None
+            acc.init_pwd_at = None
+            n += 1
+    if n:
+        db.commit()
+        logger.info("已清除 %d 筆逾期/已確認的 MYAI 初始密碼", n)
+    return n

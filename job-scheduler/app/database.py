@@ -212,6 +212,15 @@ def init_db():
             try: conn.execute(text("ALTER TABLE external_ai_accounts ADD COLUMN myai_vendor_sn VARCHAR"))
             except Exception: pass
 
+            # --- v3.3 MYAI 自動開通：初始密碼暫存（加密）+ 保存期/已修改旗標 ---
+            # EN: v3.3 MYAI auto-provision: encrypted initial password + retention/ack
+            try: conn.execute(text("ALTER TABLE external_ai_accounts ADD COLUMN init_pwd_enc BLOB"))
+            except Exception: pass
+            try: conn.execute(text("ALTER TABLE external_ai_accounts ADD COLUMN init_pwd_at DATETIME"))
+            except Exception: pass
+            try: conn.execute(text("ALTER TABLE external_ai_accounts ADD COLUMN init_pwd_ack INTEGER DEFAULT 0"))
+            except Exception: pass
+
             # --- v3.2 GPU 節點管理：心跳來源 IP + 撞名偵測（gpu_nodes 新表由 create_all 建）---
             # EN: v3.2 GPU node mgmt: heartbeat source IP + duplicate-NODE_ID detection
             try: conn.execute(text("ALTER TABLE worker_heartbeats ADD COLUMN source_ip VARCHAR"))
