@@ -1007,6 +1007,9 @@ SYSTEM_SETTINGS = {
     "myai_initial_credit":      {"type": "int",   "default": lambda: 0,                                    "min": 0,   "max": None, "label": "MYAI 新帳號初始點數(0=不發放)"},
     # v3.3 刪除使用者後 Lab volume 的封存保留天數（逾期背景任務真正刪除）
     "lab_archive_days":         {"type": "int",   "default": lambda: 30,                                   "min": 1,   "max": 365,  "label": "刪除帳號後 Lab 資料封存天數(逾期銷毀)"},
+    # v3.4 有使用者在線時的 MYAI 輪詢間隔（無人在線會完全跳過，不受此值影響）
+    "myai_active_poll_minutes": {"type": "int",   "default": lambda: 3,                                    "min": 1,   "max": 60,   "label": "MYAI 輪詢間隔(分, 僅有人在線時; 無人時自動休息)"},
+    "myai_usage_window_min":    {"type": "int",   "default": lambda: 15,                                   "min": 1,   "max": 180,  "label": "判定「正在使用 MYAI」的時間窗(分)"},
 }
 
 

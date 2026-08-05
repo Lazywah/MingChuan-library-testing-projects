@@ -1107,6 +1107,107 @@ const systemSettings = {
 };
 
 // ==============================================================================
+// v3.4 MYAI 即時使用狀態（四象限）
+// 交叉比對「MYAI 近期 ai_usage」×「平台在線」：
+//   using_active  正常使用中 / using_offplat ⚠ 有用量但人不在（稽核重點，紅色）
+//   online_idle   在平台沒用 AI / unlinked  未綁定的廠商帳號
+// ⚠ 資料來自定期向廠商同步 → 顯示 last_tx_sync，避免被誤解為即時推播。
+// ==============================================================================
+const liveUsage = {
+    _timer: null,
+    _esc(s) {
+        return String(s == null ? '' : s).replace(/[&<>"']/g,
+            c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+    },
+    _rel(iso) {
+        if (!iso) return '—';
+        const s = Math.max(0, (Date.now() - new Date(iso).getTime()) / 1000);
+        if (s < 90) return `${Math.round(s)} 秒前`;
+        if (s < 5400) return `${Math.round(s / 60)} 分鐘前`;
+        if (s < 86400) return `${Math.round(s / 3600)} 小時前`;
+        return `${Math.round(s / 86400)} 天前`;
+    },
+    async load() {
+        const box = document.getElementById('live-usage-cards');
+        if (!box) return;
+        try {
+            const res = await fetch(`${API_BASE}/external-ai/admin/live-usage`, {
+                headers: { 'Authorization': `Bearer ${authToken}` }
+            });
+            if (!res.ok) throw new Error('load failed');
+            this.render(await res.json());
+        } catch (e) {
+            box.innerHTML = '<span style="color:#fb7185;">載入即時使用狀態失敗</span>';
+        }
+    },
+    render(d) {
+        const meta = document.getElementById('live-usage-meta');
+        if (meta) {
+            meta.innerHTML = `用量窗 ${d.usage_window_minutes} 分 · 在線窗 ${d.online_window_minutes} 分 · ` +
+                `最後同步 <b>${this._rel(d.last_tx_sync)}</b>`;
+        }
+        const box = document.getElementById('live-usage-cards');
+        box.innerHTML = '';
+        const groups = [
+            { key: 'using_active', title: '使用中', icon: 'checkmark-circle', color: '#4ade80',
+              desc: '有 MYAI 用量且在平台上' },
+            { key: 'using_offplat', title: '有用量但人不在', icon: 'alert-circle', color: '#ef4444',
+              desc: '可能在其他電腦使用，或共用機台未登出遭他人使用' },
+            { key: 'online_idle', title: '在平台未用 AI', icon: 'person', color: '#38bdf8', desc: '' },
+            { key: 'unlinked', title: '未綁定帳號有用量', icon: 'help-circle', color: '#f59e0b',
+              desc: '廠商端有此帳號，但平台查無綁定（老師／尚未配對）' },
+        ];
+        groups.forEach(g => {
+            const items = d[g.key] || [];
+            const card = document.createElement('div');
+            card.style.cssText = `border:1px solid ${g.color}55; border-left:3px solid ${g.color}; ` +
+                'border-radius:10px; padding:12px 14px; background:var(--bg-elevated,rgba(255,255,255,0.03));';
+            let body;
+            if (!items.length) {
+                body = '<div style="font-size:12px; color:var(--text-muted,#888); padding:6px 0;">（無）</div>';
+            } else {
+                body = items.map(i => {
+                    const who = this._esc(i.username || i.email || i.vendor_name || '(未知)');
+                    const sub = i.username && i.email ? this._esc(i.email) : (i.vendor_sn ? 'sn:' + this._esc(i.vendor_sn) : '');
+                    const when = i.last_used_at ? this._rel(i.last_used_at) : this._rel(i.last_activity);
+                    const detail = i.events != null
+                        ? `${i.events} 次 · ${i.points_used} 點${i.models && i.models.length ? ' · ' + this._esc(i.models.join('、')) : ''}`
+                        : '';
+                    return `<div style="padding:6px 0; border-top:1px solid var(--border-color,#333);">
+                        <div style="font-size:13px;"><b>${who}</b>
+                            <span style="float:right; color:var(--text-muted,#888); font-size:11px;">${when}</span></div>
+                        ${sub ? `<div style="font-size:11px; color:var(--text-muted,#888);">${sub}</div>` : ''}
+                        ${detail ? `<div style="font-size:11px; color:var(--text-muted,#888);">${detail}</div>` : ''}
+                    </div>`;
+                }).join('');
+            }
+            card.innerHTML =
+                `<div style="display:flex; align-items:center; gap:6px; color:${g.color}; font-size:13px;">
+                    <ion-icon name="${g.icon}-outline"></ion-icon><b>${g.title}</b>
+                    <span style="margin-left:auto; font-size:16px;"><b>${items.length}</b></span>
+                 </div>
+                 ${g.desc ? `<div style="font-size:11px; color:var(--text-muted,#888); margin:4px 0 2px;">${g.desc}</div>` : ''}
+                 ${body}`;
+            box.appendChild(card);
+        });
+    },
+    startAuto() {
+        this.stopAuto();
+        const cb = document.getElementById('live-usage-auto');
+        if (cb && !cb.checked) return;
+        this._timer = setInterval(() => {
+            const el = document.getElementById('tab-external-ai');
+            const on = document.getElementById('live-usage-auto');
+            // 僅在該分頁可見且勾選自動更新時才輪詢（避免背景無謂請求）
+            if (el && el.classList.contains('active') && on && on.checked) this.load();
+        }, 30000);
+    },
+    stopAuto() {
+        if (this._timer) { clearInterval(this._timer); this._timer = null; }
+    },
+};
+
+// ==============================================================================
 // v3.3 初始管理員提醒橫幅
 // 後端 GET /admin/bootstrap-status 用 .env 的 BOOTSTRAP_ADMIN_PASSWORD 去驗 admin 帳號的
 // 雜湊；仍驗得過＝初始密碼還在用 → 顯示橫幅。管理者改過密碼後自動驗不過，橫幅自行消失。
@@ -1386,6 +1487,8 @@ const externalAi = {
         return { 'Authorization': `Bearer ${authToken}`, 'Content-Type': 'application/json' };
     },
     init() {
+        liveUsage.load();          // v3.4 MYAI 即時使用四象限
+        liveUsage.startAuto();
         this.loadUrl();
         this.loadAlertConfig();
         this.refresh();

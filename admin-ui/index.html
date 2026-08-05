@@ -1122,6 +1122,27 @@
         <div id="tab-external-ai" class="admin-tab-content" style="display: none;">
             <div class="admin-grid">
 
+                <!-- v3.4 MYAI 即時使用狀態（四象限：監控 + 稽核） -->
+                <section class="widget form-box-panel" style="grid-column: 1 / -1;">
+                    <div class="widget-header split">
+                        <h3><ion-icon name="pulse-outline" style="margin-right:6px;"></ion-icon>
+                            <span data-i18n="live_usage_title">MYAI 即時使用狀態</span></h3>
+                        <div style="display:flex; align-items:center; gap:10px;">
+                            <label style="font-size:12px; color:var(--text-muted); display:flex; align-items:center; gap:5px;">
+                                <input type="checkbox" id="live-usage-auto" checked> 自動更新(30s)
+                            </label>
+                            <ion-icon name="refresh-circle-outline" onclick="liveUsage.load()" class="refresh-icon" title="Refresh"></ion-icon>
+                        </div>
+                    </div>
+                    <p style="font-size:0.8rem; color:var(--text-muted,#888); margin:0 15px 10px;">
+                        <span data-i18n="live_usage_hint">交叉比對「MYAI 近期用量」×「平台在線」。資料來自定期向廠商同步，非即時推播。</span>
+                        <span id="live-usage-meta" style="margin-left:6px;"></span>
+                    </p>
+                    <div id="live-usage-cards" style="display:grid; grid-template-columns:repeat(auto-fit,minmax(260px,1fr)); gap:12px; padding:0 15px 15px;">
+                        <span style="color:var(--text-muted,#888);" data-i18n="msg_loading">載入中...</span>
+                    </div>
+                </section>
+
                 <!-- 外部 AI 平台網址設定 -->
                 <section class="widget form-box-panel" style="grid-column: 1 / -1;">
                     <div class="widget-header">
@@ -1579,7 +1600,7 @@
     <script type="module" src="https://unpkg.com/ionicons@7.1.0/dist/ionicons/ionicons.esm.js"></script>
     <script nomodule src="https://unpkg.com/ionicons@7.1.0/dist/ionicons/ionicons.js"></script>
     <!-- 載入 Admin 邏輯 -->
-    <script src="admin.js?v=b8be9bb5"></script>
+    <script src="admin.js?v=b4eaa280"></script>
 </body>
 
 </html>

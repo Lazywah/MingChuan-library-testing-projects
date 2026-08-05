@@ -262,18 +262,34 @@ async def _myai_balance_loop():
     except asyncio.CancelledError:
         return
 
+    # ZH: v3.4 依「平台是否有非 admin 使用者在線」調整節奏：
+    #       有人在線 → 用較短的 active 間隔（四象限更即時）
+    #       沒人在線 → **完全跳過請求**，每 IDLE_RECHECK 回頭看一眼有沒有人上線
+    #     ⚠️ 廠商的交易日誌是「一次撈全體」（無分頁），故**不能**改成「只查在線者」——
+    #        那會變成 N 個請求，反而更貴。正確省法是「沒人時不發請求」。
+    # EN: v3.4 adaptive cadence — poll faster while users are online, skip entirely when
+    #     nobody is. (The vendor log is fetched all-users-at-once; per-user filtering
+    #     would multiply requests instead of reducing them.)
+    IDLE_RECHECK_SECONDS = 300
     while _scheduler_running:
+        sleep_s = interval
         try:
             db = SessionLocal()
             try:
-                res = await myai_sync.sync_transactions(db, days=days)
-                logger.debug(f"ZH: MYAI 餘額輪詢: {res}")
+                if not myai_sync.has_online_users(db):
+                    sleep_s = IDLE_RECHECK_SECONDS
+                    logger.debug("ZH: 平台無使用者在線，略過本輪 MYAI 輪詢")
+                else:
+                    active_min = crud.get_setting(db, "myai_active_poll_minutes")
+                    res = await myai_sync.sync_transactions(db, days=days)
+                    logger.debug(f"ZH: MYAI 餘額輪詢: {res}")
+                    sleep_s = max(60, int(active_min) * 60)
             finally:
                 db.close()
         except Exception as e:  # noqa: BLE001
             logger.warning(f"ZH: MYAI 餘額輪詢錯誤（略過）: {e}")
         try:
-            await asyncio.sleep(interval)
+            await asyncio.sleep(sleep_s)
         except asyncio.CancelledError:
             break
 

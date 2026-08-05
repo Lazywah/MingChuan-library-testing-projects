@@ -706,3 +706,146 @@ def acknowledge_initial_password(db: Session, user) -> bool:
     acc.init_pwd_ack = 1
     clear_initial_password(db, acc)
     return True
+
+
+# ==============================================================================
+# ZH: v3.4 MYAI 即時使用狀態（四象限）—— 交叉比對「MYAI 近期用量」×「平台在線」
+# EN: v3.4 live MYAI usage quadrants — recent vendor usage × platform online
+# ------------------------------------------------------------------------------
+# ZH: 用途有二：
+#   (a) 監控：現在有多少人真的在用 MYAI、用哪些模型
+#   (b) 稽核：**有用量但人不在平台** → 可能在別台電腦使用，或共用機台沒登出被盜用
+#       （呼應共用機台換手問題；這象限刻意標紅）
+#   ⚠️ 資料新鮮度受輪詢限制：交易來自每 N 分鐘輪詢廠商，故「當前」實為「近即時」，
+#      最壞情況落後一個輪詢週期。UI 需明示上次同步時間，別讓人誤以為是即時推播。
+# ==============================================================================
+ONLINE_WINDOW_MINUTES = 10      # ZH: 平台在線判定（對齊 admin 的 _ONLINE_THRESHOLD）
+USAGE_WINDOW_MINUTES = 15       # ZH: MYAI「近期有用量」判定（含輪詢延遲的緩衝）
+
+
+def live_usage_quadrants(db: Session, usage_minutes: int = USAGE_WINDOW_MINUTES,
+                         online_minutes: int = ONLINE_WINDOW_MINUTES) -> dict:
+    """
+    ZH: 回傳四象限狀態。象限＝(MYAI 近期有 ai_usage) × (平台近期在線)
+          using_active   ✅✅ 正常使用中
+          using_offplat  ✅❌ **有用量但人不在平台**（稽核重點）
+          online_idle    ❌✅ 在平台但沒用 AI
+          （❌❌ 閒置者不列出，避免清單無意義地變長）
+        身分關聯：external_ai_accounts 的 myai_vendor_sn 優先、退回 vendor_username(email)。
+        未綁定但有用量的廠商帳號另列 unlinked（多半是老師/管理者或尚未綁定的學生）。
+    EN: Cross-tab of recent vendor usage × platform presence; unlinked vendor rows listed separately.
+    """
+    now = datetime.now(timezone.utc)
+    usage_cut = now - timedelta(minutes=max(1, usage_minutes))
+    online_cut = now - timedelta(minutes=max(1, online_minutes))
+
+    # ZH: 近期 ai_usage 逐筆（只取扣點事件；login/transfer 不算「在使用」）
+    rows = (
+        db.query(models.MyaiTransaction)
+        .filter(models.MyaiTransaction.event_type == "ai_usage")
+        .filter(models.MyaiTransaction.occurred_at >= usage_cut.replace(tzinfo=None))
+        .all()
+    )
+    # 依廠商帳號彙總：最後一次活動、期間內筆數與消耗點數、用過的模型
+    by_vendor: dict = {}
+    for t in rows:
+        key = (t.vendor_sn or "").strip() or (t.email or "").strip().lower()
+        if not key:
+            continue
+        agg = by_vendor.setdefault(key, {
+            "vendor_sn": t.vendor_sn, "email": t.email, "name": t.name,
+            "last_at": None, "events": 0, "points": 0, "models": set(),
+        })
+        agg["events"] += 1
+        agg["points"] += abs(t.points_delta or 0)
+        if t.model:
+            agg["models"].add(t.model)
+        occ = t.occurred_at
+        if occ is not None and (agg["last_at"] is None or occ > agg["last_at"]):
+            agg["last_at"] = occ
+            agg["email"] = t.email or agg["email"]
+            agg["name"] = t.name or agg["name"]
+
+    # ZH: 綁定表 → 平台使用者（sn 與 email 兩種索引都建，對應查詢順序）
+    accs = db.query(models.ExternalAiAccount).all()
+    user_ids = {a.user_id for a in accs}
+    users = {u.id: u for u in db.query(models.User).filter(models.User.id.in_(user_ids)).all()} if user_ids else {}
+    by_sn, by_email = {}, {}
+    for a in accs:
+        u = users.get(a.user_id)
+        if not u:
+            continue
+        if a.myai_vendor_sn:
+            by_sn[str(a.myai_vendor_sn).strip()] = u
+        if a.vendor_username:
+            by_email[a.vendor_username.strip().lower()] = u
+
+    def _online(u) -> bool:
+        last = getattr(u, "last_activity", None)
+        if not last:
+            return False
+        if last.tzinfo is None:
+            last = last.replace(tzinfo=timezone.utc)
+        return last >= online_cut
+
+    used_user_ids = set()
+    using_active, using_offplat, unlinked = [], [], []
+    for key, agg in by_vendor.items():
+        u = by_sn.get(key) or by_email.get(key)
+        last_at = agg["last_at"]
+        item = {
+            "vendor_sn": agg["vendor_sn"],
+            "email": agg["email"],
+            "vendor_name": agg["name"],
+            "last_used_at": last_at.isoformat() if last_at else None,
+            "events": agg["events"],
+            "points_used": agg["points"],
+            "models": sorted(agg["models"]),
+            "username": getattr(u, "username", None),
+            "user_id": getattr(u, "id", None),
+            "role": getattr(u, "role", None),
+        }
+        if u is None:
+            unlinked.append(item)
+            continue
+        used_user_ids.add(u.id)
+        (using_active if _online(u) else using_offplat).append(item)
+
+    # ZH: 在平台但近期沒動 MYAI（只列非 admin，admin 開著後台不算「使用者在用」）
+    online_idle = []
+    for u in db.query(models.User).filter(models.User.role != "admin").all():
+        if u.id in used_user_ids or not _online(u):
+            continue
+        la = u.last_activity
+        if la is not None and la.tzinfo is None:
+            la = la.replace(tzinfo=timezone.utc)
+        online_idle.append({
+            "username": u.username, "user_id": u.id, "email": u.email,
+            "last_activity": la.isoformat() if la else None,
+        })
+
+    latest_sync = db.query(models.MyaiTransaction.synced_at).order_by(
+        models.MyaiTransaction.synced_at.desc()).first()
+    return {
+        "using_active": sorted(using_active, key=lambda x: x["last_used_at"] or "", reverse=True),
+        "using_offplat": sorted(using_offplat, key=lambda x: x["last_used_at"] or "", reverse=True),
+        "online_idle": sorted(online_idle, key=lambda x: x["last_activity"] or "", reverse=True),
+        "unlinked": sorted(unlinked, key=lambda x: x["last_used_at"] or "", reverse=True),
+        "usage_window_minutes": usage_minutes,
+        "online_window_minutes": online_minutes,
+        "last_tx_sync": latest_sync[0].isoformat() if latest_sync and latest_sync[0] else None,
+    }
+
+
+def has_online_users(db: Session, online_minutes: int = ONLINE_WINDOW_MINUTES) -> bool:
+    """
+    ZH: 平台上是否有「非 admin」使用者在線 —— 給輪詢迴圈判斷要不要跳過這一輪。
+        排除 admin 的理由：管理者開著後台不代表有學生在用 MYAI，否則永遠不會休息。
+    EN: Whether any non-admin user is active; drives the poll-skip optimization.
+    """
+    cut = (datetime.now(timezone.utc) - timedelta(minutes=max(1, online_minutes))).replace(tzinfo=None)
+    return db.query(models.User).filter(
+        models.User.role != "admin",
+        models.User.last_activity.isnot(None),
+        models.User.last_activity >= cut,
+    ).first() is not None

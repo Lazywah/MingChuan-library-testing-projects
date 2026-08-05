@@ -688,6 +688,23 @@ async def sync_transactions_endpoint(
         raise HTTPException(status_code=500, detail=f"交易同步失敗：{e}")
 
 
+@router.get("/admin/live-usage")
+def admin_live_usage(
+    db: Session = Depends(get_db),
+    _admin: models.User = Depends(require_admin),
+) -> Any:
+    """
+    ZH: v3.4 MYAI 即時使用四象限（監控 + 稽核）。
+        時間窗由系統設定 myai_usage_window_min 控制；⚠ 資料新鮮度受輪詢限制，
+        回傳的 last_tx_sync 即上次與廠商同步的時間，前端須顯示以免誤解為即時。
+    EN: v3.4 live usage quadrants (monitoring + audit).
+    """
+    from ..services import myai_sync
+    return myai_sync.live_usage_quadrants(
+        db, usage_minutes=crud.get_setting(db, "myai_usage_window_min")
+    )
+
+
 @router.get("/admin/consumption")
 def consumption_analytics(
     days: int = 30,
