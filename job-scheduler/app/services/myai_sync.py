@@ -468,14 +468,21 @@ def _refresh_points_from_tx(db: Session, rows: list[dict]) -> int:
 # ⚠️⚠️ 端點辨識（2026-08-06 實地確認頁面標題）—— 廠商管理端有 **三個** Excel 上傳功能，
 #      長得幾乎一樣，用錯會造成不可逆的點數損失。務必只用 register_*：
 #
-#   /user/register_batch         → 「批次註冊」      ✅ 本模組唯一該用的
-#   /user/get_credit_batch       → 「批次**回收**點數」 ⛔ 從使用者身上扣點（非發放！）
-#   /user/transfer_credit_batch  → 「批次轉移點數」   ⛔ 搬移點數
+#   /user/register_batch         → 「批次註冊」✅ 本模組唯一該用的
+#   /user/get_credit_batch       → 「批次**回收**點數」⛔ 名單＝**被扣點的人**
+#                                   （點數從名單上的帳號收回管理者，是扣點不是發放）
+#   /user/transfer_credit_batch  → 「批次轉移點數」⛔ 名單＝**收到點數的人**
+#                                   （點數**從管理者自己的帳號**轉出給名單上的帳號＝發放）
 #
+#   ⚠️ 兩者的名單語意**完全相反**，誤用方向錯誤即造成不可逆損失：
+#      · 把註冊名單誤送 get_credit  → 一次扣光全部學生的點數
+#      · 把註冊名單誤送 transfer    → 從管理者帳號一次發出大量點數（池子被掏空）
 #   三者各有獨立的 *_check 確認端點與 *.xlsx 範本，欄位格式亦不同，不可混用。
 #   下方 _assert_register_endpoint() 會在每次送出前硬性驗證路徑，避免日後誤改。
-# EN: The vendor admin has THREE similar Excel-upload features; only register_* is
-#     safe here. get_credit_batch RECLAIMS points (not grants). Guarded below.
+# EN: THREE similar Excel-upload features; only register_* is used here. The two
+#     credit endpoints have OPPOSITE list semantics — get_credit deducts FROM the
+#     listed accounts; transfer_credit grants TO them from the admin's own balance.
+#     Either misuse is irreversible.
 # ==============================================================================
 REGISTER_BATCH_PATH = "/mcu/gt_sdk/admin_168/user/register_batch"
 REGISTER_BATCH_CHECK_PATH = "/mcu/gt_sdk/admin_168/user/register_batch_check"
