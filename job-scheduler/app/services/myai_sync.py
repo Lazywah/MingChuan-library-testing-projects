@@ -464,8 +464,39 @@ def _refresh_points_from_tx(db: Session, rows: list[dict]) -> int:
 # EN: Uses the vendor's official admin bulk-registration feature (not a CAPTCHA bypass).
 #     Template columns (no header): A=email, B=nickname, C=password, D=remark.
 # ==============================================================================
+# ==============================================================================
+# ⚠️⚠️ 端點辨識（2026-08-06 實地確認頁面標題）—— 廠商管理端有 **三個** Excel 上傳功能，
+#      長得幾乎一樣，用錯會造成不可逆的點數損失。務必只用 register_*：
+#
+#   /user/register_batch         → 「批次註冊」      ✅ 本模組唯一該用的
+#   /user/get_credit_batch       → 「批次**回收**點數」 ⛔ 從使用者身上扣點（非發放！）
+#   /user/transfer_credit_batch  → 「批次轉移點數」   ⛔ 搬移點數
+#
+#   三者各有獨立的 *_check 確認端點與 *.xlsx 範本，欄位格式亦不同，不可混用。
+#   下方 _assert_register_endpoint() 會在每次送出前硬性驗證路徑，避免日後誤改。
+# EN: The vendor admin has THREE similar Excel-upload features; only register_* is
+#     safe here. get_credit_batch RECLAIMS points (not grants). Guarded below.
+# ==============================================================================
 REGISTER_BATCH_PATH = "/mcu/gt_sdk/admin_168/user/register_batch"
 REGISTER_BATCH_CHECK_PATH = "/mcu/gt_sdk/admin_168/user/register_batch_check"
+
+# ZH: 明確列為禁用，若不慎被填進上面兩個常數，防呆會擋下
+_FORBIDDEN_BATCH_TOKENS = ("credit", "transfer", "delete", "top_up", "topup")
+
+
+def _assert_register_endpoint(path: str) -> None:
+    """
+    ZH: 送出前硬性驗證：路徑必須是註冊端點，且不得含任何點數/轉移/刪除字樣。
+        目的是防止日後有人改錯常數、或複製貼上到別的批次功能而造成點數損失。
+    EN: Hard guard — the upload target must be the registration endpoint and must
+        not contain credit/transfer/delete tokens (irreversible point loss otherwise).
+    """
+    p = (path or "").lower()
+    if "register_batch" not in p:
+        raise MyaiSyncError(f"拒絕送出：目標端點不是批次註冊（{path}）")
+    for bad in _FORBIDDEN_BATCH_TOKENS:
+        if bad in p:
+            raise MyaiSyncError(f"拒絕送出：端點含禁用字樣 '{bad}'（{path}）—— 可能誤用點數相關功能")
 
 
 def gen_initial_password(length: int = 12) -> str:
@@ -520,6 +551,11 @@ async def register_batch(rows: list[dict]) -> dict:
 
     回傳 {"ok": bool, "status": int, "html": str}
     """
+    # ZH: 防呆 —— 廠商還有「批次回收點數 / 批次轉移點數」兩個長得一樣的 Excel 上傳功能，
+    #     用錯會造成不可逆的點數損失。送出前硬性驗證目標端點。
+    _assert_register_endpoint(REGISTER_BATCH_CHECK_PATH)
+    _assert_register_endpoint(REGISTER_BATCH_PATH)
+
     xlsx = build_register_xlsx(rows)
 
     async def _do(client):
