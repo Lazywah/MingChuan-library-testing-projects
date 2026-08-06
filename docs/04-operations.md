@@ -17,8 +17,13 @@ http://localhost:8888/ → 用 admin 帳號登入。**80% 維運工作從這裡�
 | **資料分析** | 使用量分布（學系、工具類別）|
 | **設定檔管理** | 線上讀寫 `.env` / `docker-compose*.yml` / `*.yaml` |
 | **審計記錄** | admin 行為 log（配額 grant、強制停 lab、permanent-delete）|
+| **系統設定**（v3.1）| 營運旋鈕即時調整：月額度/重置日/任務逾時/MYAI 同步間隔/RAG 參數/Lab 封存天數…（存 SystemConfig，**不需重啟**）|
+| **GPU 節點**（v3.2）| 每台 GPU 的可排程時段、啟用開關、池別覆蓋、停派緩衝；狀態卡（離線/停用/時段外/閒置/執行中）|
+| **Lab 管理 → 封存區**（v3.3）| 已刪除帳號的 Lab 資料（預設保留 30 天）：檢視 / 還原給指定使用者 / 立即銷毀 |
+| **外部 AI → 即時使用**（v3.4）| MYAI 使用四象限（監控 + 稽核「有用量但人不在」）|
 
-> 改 `.env` 等底層變數後，仍需 SSH `docker compose restart` 才會生效。
+> 改 `.env` 等底層變數後，仍需 `docker compose restart job-scheduler` 才會生效。
+> **例外**：上表「系統設定」頁的營運旋鈕存於 DB（SystemConfig），**改完即時生效、不必重啟**。
 
 ---
 
@@ -206,7 +211,8 @@ docker volume prune -f         # 移除 dangling volume
 
 | 場景 | 動作 |
 |---|---|
-| 學生忘記密碼 | admin UI → 使用者管理 → 找該 user → Reset → 系統寄信 |
+| **學生**忘記密碼（SSO 帳號）| 平台無法重設 → 請他到學校中央入口 <https://www1.mcu.edu.tw/ForgetPassword.aspx>（學號＋身分證字號）|
+| **本機帳號**忘記密碼（老師/admin）| admin UI → 使用者管理 → 找該 user → Reset → 系統寄信（**需先設定 SMTP**，否則無法送達）|
 | Lab 卡住、要強制停 | admin UI → Lab Sessions → Force Stop（或 API `POST /admin/lab/sessions/<uid>/force-stop`）|
 | 某學生濫用 Token | admin UI → 該 user → 調 `tokens_limit` |
 | 學期末清空使用量 | admin UI → 批次選使用者 → Batch Reset Usage |
@@ -214,6 +220,14 @@ docker volume prune -f         # 移除 dangling volume
 | 換 GPU 節點 | 新節點上 `./start-worker.sh up -d`（gpu-worker，會自動帶 --env-file），舊節點 `./start-worker.sh down` |
 | 切換 SSO provider | 改 `sso_policy.yaml` → `docker compose restart job-scheduler` |
 | 修補 cookie / nginx 設定 | 改 `infrastructure/nginx.conf` → `docker compose exec nginx nginx -s reload` |
+| **停權某使用者**（懲罰）| admin UI → 該 user → `is_active=0`。**登入階段即擋下**並顯示明確訊息。⚠️ 對 SSO 使用者請用「停用」而非「刪除」——刪除不等於封鎖 |
+| **刪除使用者** | admin UI → 刪除。Lab 資料會**封存 30 天**（可還原）；SSO 使用者下次登入會以新 uuid 重建 |
+| **誤刪要救回 Lab 檔案** | admin UI →「Lab 管理」→ 封存清單 → 還原給指定使用者（逾期則已銷毀）|
+| **GPU 機器要限時段開放** | admin UI →「GPU 節點」→ 編輯 → 設每週時段。到點只擋新派工，**執行中任務會跑完** |
+| **暫停某台 GPU** | 同上，關掉「啟用」總開關 |
+| **看誰正在用 MYAI** | admin UI →「外部 AI」→ 即時使用四象限。⚠️ 留意「**有用量但人不在**」那格＝可能共用機台未登出 |
+| 清理孤兒 Lab volume | `docker exec ai-platform-scheduler python /app/scripts/cleanup_lab_volumes.py`（預設試跑；`--apply` 才刪）|
+| 調整營運參數（額度/逾時/RAG/封存天數…）| admin UI →「管理介面」→ 系統設定（即時生效，不必重啟）|
 
 ---
 

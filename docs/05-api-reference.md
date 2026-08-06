@@ -41,7 +41,7 @@ curl http://localhost:8002/api/v1/auth/me \
 | GET | `/api/v1/sso/callback?ticket=…` | CAS / mock 的 ticket 回呼 |
 | GET | `/api/v1/sso/mock-login` | Mock 模式 HTML 表單 |
 | POST | `/api/v1/sso/mock-submit` | Mock 表單送出 |
-| GET | `/api/v1/sso/oidc/login` | v2.1 跳 Microsoft Entra |
+| GET | `/api/v1/sso/oidc/login` | v3.1 跳學校 IdP（MCU 自建 OIDC auth.mcu.edu.tw） |
 | GET | `/api/v1/sso/oidc/callback?code=…` | v2.1 OIDC 回呼，簽 JWT + cookie |
 | GET | `/api/v1/sso/providers` | 列出當前啟用的 SSO（給前端決定按鈕） |
 | GET | `/api/v1/sso/password-change-info` | 給設定頁用，依 auth_source 給不同 IdP 連結 |

@@ -183,7 +183,15 @@ flowchart TB
 
 ## 2. 認證流程
 
-平台**三 provider 並存**：`local`（本機帳號）/ `sso_mock` / `sso_cas` / `sso_oidc`（Microsoft Entra ID）。下圖以「本機帳號 + SSO Mock + 受保護端點」為代表；OIDC 另在 IdP 端多一段 302 redirect（見下方說明）。
+平台支援多種 auth_source：`local`（本機帳號）/ `sso_mock`（dev）/ `sso_cas`（保留）/ **`sso_oidc`（現行正式模式）**。
+
+> ⚠️ **v3.1 更正**：`sso_oidc` 對接的是 **MCU 自建 OIDC 伺服器 `auth.mcu.edu.tw`**，
+> **不是** Microsoft Entra ID（早期文件的 Entra/tenant 設定已失效）。端點由 discovery
+> 自動取得；其 id_token **無身分欄位**，學號改由 `userinfo` 端點取得（`sub`）。
+> 另注意：**停權（`is_active=0`）在登入階段就會擋下**；而「刪除」SSO 使用者不等於封鎖，
+> 對方下次登入會以新 uuid 自動重建（詳見 `03-deployment.md` §2）。
+
+下圖以「本機帳號 + SSO Mock + 受保護端點」為代表；OIDC 另在 IdP 端多一段 302 redirect（見下方說明）。
 
 ```mermaid
 sequenceDiagram

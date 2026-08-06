@@ -121,45 +121,32 @@ docker compose -f docker-compose.ai-models.yml up -d
 
 ---
 
-## 7. 建立第一個 admin（Bootstrap）
+## 7. 第一個 admin（v3.3 起自動建立）
 
-> 系統**沒有預設的 admin/admin**（v2.1 安全強化）。第一個 admin 必須從 DB 寫入。
+> 系統**沒有預設的 admin/admin**。v3.3 起改為：`scripts/setup_env.py` 執行時會請你
+> 設定管理員密碼並寫入 `.env` 的 `BOOTSTRAP_ADMIN_PASSWORD`；**核心首次啟動時，
+> 若資料庫「完全沒有任何 admin」→ 自動建立帳號 `admin`**。
 
+驗證是否已建立：
 ```bash
-docker compose exec job-scheduler python -c "
-from app.database import SessionLocal
-from app.crud import get_password_hash
-from app import models
-from datetime import datetime, timezone, timedelta
-
-db = SessionLocal()
-
-# === 改這 3 行 ===
-ADMIN_USERNAME = 'admin'
-ADMIN_EMAIL    = 'admin@school.edu.tw'
-ADMIN_PASSWORD = 'CHANGE_THIS_STRONG_PASSWORD'   # 至少 12 字元
-# =================
-
-if db.query(models.User).filter(models.User.username == ADMIN_USERNAME).first():
-    print(f'User {ADMIN_USERNAME} already exists, skipping.')
-else:
-    user = models.User(
-        username=ADMIN_USERNAME, email=ADMIN_EMAIL,
-        hashed_password=get_password_hash(ADMIN_PASSWORD),
-        role='admin', is_active=1,
-    )
-    db.add(user); db.flush()
-    quota = models.TokenUsage(
-        user_id=user.id, tokens_used=0, tokens_limit=99_000_000,
-        reset_date=datetime.now(timezone.utc) + timedelta(days=30),
-    )
-    db.add(quota); db.commit()
-    print(f'Admin created: {user.id} / {ADMIN_USERNAME}')
-db.close()
-"
+docker logs ai-platform-scheduler | findstr 初始管理員     # Windows
+docker logs ai-platform-scheduler | grep 初始管理員         # Linux/macOS
 ```
 
-然後用 admin 帳號登入 http://localhost:8888/ → 設定 → 變更密碼。
+登入 <http://localhost:8888/>（帳號 `admin`，密碼為你在 setup_env 時輸入的）。
+登入後管理端會顯示提醒橫幅，**請盡快改密碼**，或建立自己的管理員帳號後刪除它
+（改過密碼橫幅會自動消失）。
+
+**需要手動建立的情況**（救援用，密碼於執行時輸入）：
+- setup_env 時把密碼留空 → 不會自動建立
+- 忘記密碼，或所有管理員都被刪除
+
+```bash
+scripts\create-admin.bat        # Windows；其他平台見該檔內的 docker exec 指令
+```
+
+> 自動建立**只在「完全沒有 admin」時發生**：你建了自己的帳號後刪掉 `admin`，
+> 重開機**不會**把它變回來；但萬一所有管理員都消失，下次啟動會自動再生一個，避免永久鎖死。
 
 ---
 

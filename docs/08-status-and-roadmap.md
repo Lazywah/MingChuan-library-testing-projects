@@ -123,7 +123,7 @@
 ### 其他 v2.2 候選
 
 - **Lab secrets 注入稽核**：誰何時讀取了 secrets（目前注入後即明文，container exec 可讀）
-- **SSO group claim → role 自動對應**：Microsoft Entra 「教師」group → `role=teacher`（admin 仍需手動提權）
+- **SSO 身分 → role 自動對應**：由 IdP 提供教職員身分欄位 → `role=teacher`（⚠️ MCU 的 userinfo 目前**只回 `sub`（學號）**，無群組/身分欄位，須先與 IT 確認能否加開）（admin 仍需手動提權）
 - **Single Logout (SLO)**：OIDC RP-initiated logout，登出時順便登出 Microsoft session
 - **id_token jwks 簽章驗證**：目前未驗 RSA 簽章（信任 token endpoint 走 HTTPS）；v2.2 加 jwks + 公鑰 cache
 - **CORS 正式環境設定**：上線前必須在 `.env` 填 `CORS_ORIGINS=https://domain.com,...`

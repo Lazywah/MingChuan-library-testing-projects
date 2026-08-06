@@ -1,3 +1,17 @@
+> # ⛔ 此文件已過時，僅作歷史紀錄，請勿再寄出
+>
+> **實際情況與本文假設不符**：MCU 用的是**自建 OIDC 伺服器 `auth.mcu.edu.tw`**，
+> **不是** Microsoft Entra ID。依本文向 IT 申請 Entra App Registration 會得到錯誤結果
+> （實測 `AADSTS700016`）。憑證已於 2026-08 取得並完成串接。
+>
+> 現行設定與上線步驟請看 [`03-deployment.md`](03-deployment.md) §2 與
+> [`00-本機完整部署指南.md`](00-本機完整部署指南.md) §9。
+>
+> 保留本檔的原因：記錄當時與 IT 往來的問題清單（憑證類型、redirect URI、帳號對應），
+> 日後若要向 IT 申請 **prod 主機名 + TLS 憑證**仍可參考其提問結構。
+
+---
+
 # IT SSO（OIDC / Microsoft Entra ID）申請說明
 
 > 用途：向校內 IT 申請 Microsoft Entra ID 的 App Registration，讓「圖書館 AI 基地」平台能用學校帳號單一登入（SSO）。
