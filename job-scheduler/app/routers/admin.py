@@ -93,6 +93,40 @@ def put_system_settings(
 # ZH: v3.2 GPU 節點管理 — 可排程時段/開關/池別 + 狀態總覽
 # EN: v3.2 GPU node management — schedule windows/switch/pool + status overview
 # ==============================================================================
+@router.get("/email-log", summary="寄信紀錄（誰、何時、結果）")
+def get_email_log(
+    limit: int = Query(200, ge=1, le=1000),
+    status: Optional[str] = Query(None, description="sent / refused / failed / mock"),
+    db: Session = Depends(get_db),
+    _admin: models.User = Depends(require_admin),
+):
+    """
+    ZH: v3.4 寄信紀錄。⚠️ `sent` = **已交付中繼伺服器，不代表送達**；
+        「網域存在但信箱不存在」會被中繼接受、稍後非同步退信到寄件人信箱，程式端看不到。
+        本表的用途是對照名冊：收到退信時可查出那是誰、哪個功能、何時寄的。
+    EN: Outbound email log; `sent` means accepted by relay, not delivered.
+    """
+    q = db.query(models.EmailLog)
+    if status:
+        q = q.filter(models.EmailLog.status == status)
+    rows = q.order_by(models.EmailLog.created_at.desc()).limit(limit).all()
+    counts = dict(
+        db.query(models.EmailLog.status, func.count(models.EmailLog.id))
+        .group_by(models.EmailLog.status).all()
+    )
+    return {
+        "counts": counts,
+        "smtp_configured": bool(settings.SMTP_SERVER),
+        "from_email": settings.SMTP_FROM_EMAIL,
+        "logs": [{
+            "id": r.id, "to_email": r.to_email, "username": r.username,
+            "kind": r.kind, "subject": r.subject, "status": r.status,
+            "detail": r.detail,
+            "created_at": r.created_at.isoformat() if r.created_at else None,
+        } for r in rows],
+    }
+
+
 @router.get("/bootstrap-status", summary="初始管理員是否仍在使用預設密碼")
 def bootstrap_admin_status(
     db: Session = Depends(get_db),

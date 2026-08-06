@@ -1107,6 +1107,60 @@ const systemSettings = {
 };
 
 // ==============================================================================
+// v3.4 寄信紀錄 — 誰、何時、結果
+// ⚠️ sent = 已交付中繼伺服器，**不代表送達**（非同步退信只會到寄件人信箱，程式看不到）。
+//    本表的價值是對照名冊：收到退信時可立刻查出那是誰、哪個功能、何時寄的。
+// ==============================================================================
+const emailLog = {
+    _esc(s) {
+        return String(s == null ? '' : s).replace(/[&<>"']/g,
+            c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+    },
+    _fmt(iso) {
+        if (!iso) return '—';
+        const d = new Date(iso);
+        return `${String(d.getMonth() + 1).padStart(2, '0')}/${String(d.getDate()).padStart(2, '0')} ` +
+               `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+    },
+    async load() {
+        const tbody = document.querySelector('#admin-email-log-table tbody');
+        if (!tbody) return;
+        const st = (document.getElementById('email-log-filter') || {}).value || '';
+        try {
+            const res = await fetch(`${API_BASE}/admin/email-log?limit=200${st ? '&status=' + st : ''}`, {
+                headers: { 'Authorization': `Bearer ${authToken}` }
+            });
+            if (!res.ok) throw new Error('load failed');
+            const d = await res.json();
+            const meta = document.getElementById('email-log-meta');
+            if (meta) {
+                const c = d.counts || {};
+                meta.innerHTML = d.smtp_configured
+                    ? `寄件人 <b>${this._esc(d.from_email)}</b> · 已交付 ${c.sent || 0} · 被拒 ${c.refused || 0} · 失敗 ${c.failed || 0}`
+                    : `<b style="color:#f59e0b;">SMTP 未設定</b>（僅寫入 log、不會實際寄出）`;
+            }
+            const rows = d.logs || [];
+            if (!rows.length) {
+                tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; color:var(--text-muted);">沒有紀錄</td></tr>';
+                return;
+            }
+            const COLOR = { sent: '#4ade80', refused: '#ef4444', failed: '#fb7185', mock: '#94a3b8' };
+            const LABEL = { sent: '已交付', refused: '被拒', failed: '失敗', mock: '未寄出' };
+            tbody.innerHTML = rows.map(r => `<tr>
+                <td style="white-space:nowrap;">${this._fmt(r.created_at)}</td>
+                <td>${this._esc(r.to_email)}</td>
+                <td>${this._esc(r.username || '—')}</td>
+                <td style="font-size:12px;">${this._esc(r.kind || '—')}</td>
+                <td style="color:${COLOR[r.status] || 'inherit'}; white-space:nowrap;">${LABEL[r.status] || this._esc(r.status)}</td>
+                <td style="font-size:11px; color:var(--text-muted);">${this._esc((r.detail || '').slice(0, 60))}</td>
+            </tr>`).join('');
+        } catch (e) {
+            tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; color:#fb7185;">載入寄信紀錄失敗</td></tr>';
+        }
+    },
+};
+
+// ==============================================================================
 // v3.4 MYAI 即時使用狀態（四象限）
 // 交叉比對「MYAI 近期 ai_usage」×「平台在線」：
 //   using_active  正常使用中 / using_offplat ⚠ 有用量但人不在（稽核重點，紅色）
@@ -4575,12 +4629,14 @@ const adminLab = (() => {
         if (_initialized) {
             refreshSessions();
             refreshArchives();
+            emailLog.load();
             return;
         }
         _initialized = true;
         refreshSessions();
         refreshStorage();
         refreshArchives();
+        emailLog.load();          // v3.4 寄信紀錄
     }
 
     return {

@@ -199,6 +199,30 @@ class ChatHistory(Base):
 # ZH: 表 6: SystemConfig - 系統設定
 # EN: Table 6: SystemConfig - System configuration (Key-Value)
 # ==============================================================================
+class EmailLog(Base):
+    """
+    ZH: v3.4 寄信紀錄 —— 「我們試著寄給誰、結果如何」。
+        ⚠️ 重要限制：SMTP 的 `sendmail()` 成功只代表**中繼伺服器收下了**，不代表送達。
+        「網域存在但信箱不存在」會被中繼接受、稍後才**非同步退信到寄件人信箱**，
+        程式端看不到 → 本表對該情況會記為 `sent`。本表的價值是提供對照名冊：
+        收到退信時，可立刻查出那是誰、哪個功能、何時寄的。
+        能明確記錄的失敗：連線/認證錯誤(`failed`)、收件人當下被拒(`refused`)。
+    EN: v3.4 outbound email log. `sent` means accepted by the relay, NOT delivered —
+        async bounces land in the sender's mailbox. Serves as a correlation roster.
+    """
+    __tablename__ = "email_log"
+
+    id         = Column(String, primary_key=True, default=generate_uuid)
+    to_email   = Column(String, nullable=False, index=True)
+    user_id    = Column(String, nullable=True, index=True)   # ZH: 已知才填（不設 FK，帳號刪了仍留紀錄）
+    username   = Column(String, nullable=True)
+    kind       = Column(String, nullable=True)               # ZH: temp_password / login_alert / password_change_alert
+    subject    = Column(String, nullable=True)
+    status     = Column(String, nullable=False)              # ZH: sent / refused / failed / mock
+    detail     = Column(Text, nullable=True)                 # ZH: 錯誤或被拒原因
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), index=True)
+
+
 class ArchivedLabVolume(Base):
     """
     ZH: v3.3 刪除使用者時，其 Lab volume 不立即銷毀，改「原地封存」並記錄於此。
