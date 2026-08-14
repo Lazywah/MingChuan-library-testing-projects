@@ -1,5 +1,6 @@
 import smtplib
 import logging
+from email.utils import make_msgid
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from datetime import datetime, timezone
@@ -8,7 +9,8 @@ from ..config import settings
 logger = logging.getLogger(__name__)
 
 def _record(to_email: str, subject: str, status: str, detail: str = None,
-            kind: str = None, username: str = None, user_id: str = None) -> None:
+            kind: str = None, username: str = None, user_id: str = None,
+            message_id: str = None) -> None:
     """
     ZH: 寫一筆寄信紀錄（自行開 session —— 本模組多由 BackgroundTasks 呼叫，沒有現成 db）。
         記錄失敗絕不影響寄信流程本身。
@@ -22,6 +24,7 @@ def _record(to_email: str, subject: str, status: str, detail: str = None,
             db.add(models.EmailLog(
                 to_email=to_email, subject=subject, status=status,
                 detail=(detail or None), kind=kind, username=username, user_id=user_id,
+                message_id=(message_id or None),
             ))
             db.commit()
         finally:
@@ -48,6 +51,11 @@ def send_email(to_email: str, subject: str, html_content: str,
     EN: Core send. `sent` = accepted by relay, NOT delivered (async bounces are
         invisible to us). Captures refused recipients and hard failures.
     """
+    # ZH: v3.5 自己產 Message-ID —— 退信(DSN)會夾帶原信的 Message-ID，這是把
+    #     「非同步退信」對回「當初那一封」的唯一可靠鍵。交給 SMTP 伺服器自動產的話
+    #     我們拿不到值，之後只能靠 to_email 猜，同一人寄過多封就會對錯。
+    msg_id = make_msgid(domain=(settings.SMTP_FROM_EMAIL.split("@")[-1] or None))
+
     if not settings.SMTP_SERVER:
         logger.info(f"========== [MOCK EMAIL] ==========")
         logger.info(f"To: {to_email}")
@@ -55,7 +63,7 @@ def send_email(to_email: str, subject: str, html_content: str,
         logger.info(f"Content: \n{html_content}")
         logger.info(f"==================================")
         _record(to_email, subject, "mock", "SMTP_SERVER 未設定，未實際寄出",
-                kind, username, user_id)
+                kind, username, user_id, msg_id)
         return
 
     try:
@@ -63,6 +71,7 @@ def send_email(to_email: str, subject: str, html_content: str,
         msg["Subject"] = subject
         msg["From"] = settings.SMTP_FROM_EMAIL
         msg["To"] = to_email
+        msg["Message-ID"] = msg_id
 
         part = MIMEText(html_content, "html")
         msg.attach(part)
@@ -84,18 +93,18 @@ def send_email(to_email: str, subject: str, html_content: str,
 
         if refused:
             logger.warning(f"收件人被拒 {to_email}: {refused}")
-            _record(to_email, subject, "refused", str(refused)[:400], kind, username, user_id)
+            _record(to_email, subject, "refused", str(refused)[:400], kind, username, user_id, msg_id)
         else:
             # ZH: 措辭刻意不用「successfully sent」——那會讓人誤以為已送達
             logger.info(f"已交付 SMTP 伺服器（不代表已送達）: {to_email}")
-            _record(to_email, subject, "sent", None, kind, username, user_id)
+            _record(to_email, subject, "sent", None, kind, username, user_id, msg_id)
 
     except smtplib.SMTPRecipientsRefused as e:
         logger.warning(f"收件人全部被拒 {to_email}: {e.recipients}")
-        _record(to_email, subject, "refused", str(e.recipients)[:400], kind, username, user_id)
+        _record(to_email, subject, "refused", str(e.recipients)[:400], kind, username, user_id, msg_id)
     except Exception as e:
         logger.error(f"寄信失敗 {to_email}: {e}")
-        _record(to_email, subject, "failed", str(e)[:400], kind, username, user_id)
+        _record(to_email, subject, "failed", str(e)[:400], kind, username, user_id, msg_id)
 
 def send_login_alert(to_email: str, username: str, ip_address: str):
     """

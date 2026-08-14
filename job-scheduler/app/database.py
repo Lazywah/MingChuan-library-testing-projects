@@ -221,6 +221,12 @@ def init_db():
             try: conn.execute(text("ALTER TABLE external_ai_accounts ADD COLUMN init_pwd_ack INTEGER DEFAULT 0"))
             except Exception: pass
 
+            # --- v3.5 退信回收：Message-ID 對應 + 退信時間 ---
+            try: conn.execute(text("ALTER TABLE email_log ADD COLUMN message_id VARCHAR"))
+            except Exception: pass
+            try: conn.execute(text("ALTER TABLE email_log ADD COLUMN bounced_at DATETIME"))
+            except Exception: pass
+
             # --- v3.2 GPU 節點管理：心跳來源 IP + 撞名偵測（gpu_nodes 新表由 create_all 建）---
             # EN: v3.2 GPU node mgmt: heartbeat source IP + duplicate-NODE_ID detection
             try: conn.execute(text("ALTER TABLE worker_heartbeats ADD COLUMN source_ip VARCHAR"))

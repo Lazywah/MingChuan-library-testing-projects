@@ -219,8 +219,13 @@ class EmailLog(Base):
     kind       = Column(String, nullable=True)               # ZH: temp_password / login_alert / password_change_alert
     subject    = Column(String, nullable=True)
     status     = Column(String, nullable=False)              # ZH: sent / refused / failed / mock
-    detail     = Column(Text, nullable=True)                 # ZH: 錯誤或被拒原因
+                                                             #     v3.5 退信回填：bounced（永久，5.x.x）/ deferred（暫時，4.x.x）
+    detail     = Column(Text, nullable=True)                 # ZH: 錯誤或被拒原因 / 退信診斷碼
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), index=True)
+    # ZH: v3.5 退信回收 —— Message-ID 是把「非同步退信」對回「當初那一封」的唯一可靠鍵。
+    #     只靠 to_email 比對，同一人寄過多封時會對錯封。
+    message_id = Column(String, nullable=True, index=True)
+    bounced_at = Column(DateTime, nullable=True)             # ZH: 收到退信的時間（status 轉 bounced/deferred）
 
 
 class ArchivedLabVolume(Base):

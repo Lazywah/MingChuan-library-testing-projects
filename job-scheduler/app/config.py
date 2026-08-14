@@ -196,6 +196,15 @@ class Settings(BaseSettings):
     SMTP_PASSWORD: str = ""
     SMTP_FROM_EMAIL: str = "noreply@ai-platform.local"
 
+    # ZH: v3.5 退信回收（IMAP 讀寄件信箱）。留空則沿用 SMTP_* 的帳密，
+    #     主機由 SMTP_SERVER 推導（smtp.gmail.com → imap.gmail.com）。
+    #     全部留空 = 不啟用退信回收（寄信照常，只是退信看不到）。
+    IMAP_SERVER: str = ""
+    IMAP_PORT: int = 993
+    IMAP_USERNAME: str = ""
+    IMAP_PASSWORD: str = ""
+    IMAP_FOLDER: str = "INBOX"
+
     model_config = {
         "env_file": ".env",
         "case_sensitive": True,
