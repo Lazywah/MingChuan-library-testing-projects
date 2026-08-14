@@ -688,6 +688,24 @@ async def sync_transactions_endpoint(
         raise HTTPException(status_code=500, detail=f"交易同步失敗：{e}")
 
 
+@router.get("/admin/provision-candidates")
+def admin_provision_candidates(
+    db: Session = Depends(get_db),
+    _admin: models.User = Depends(require_admin),
+) -> Any:
+    """
+    ZH: v3.4 待開通清單。依**事實**分類，不做信心度預測：
+          ready         有 email → 可自動開通（信箱真假不預判，寄出後看退件紀錄）
+          no_email      完全沒有 email → 無從建號，需人工補
+          staff_pending 信箱網域屬教職員域但角色仍是學生 → 只提示，不自動升權
+    EN: Unbound SSO users split by a fact (has an address or not), never by confidence.
+    """
+    from ..services import myai_sync
+    out = myai_sync.provision_candidates(db)
+    out["staff_pending"] = myai_sync.staff_pending(db)
+    return out
+
+
 @router.get("/admin/live-usage")
 def admin_live_usage(
     db: Session = Depends(get_db),

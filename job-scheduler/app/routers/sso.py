@@ -89,6 +89,17 @@ def _finalize_sso_login(db: Session, user_info: dict, request: Request = None) -
             external_id=external_id,
         )
         logger.info(f"SSO 首次登入，建立帳號 username={username} auth_source={auth_source}")
+        # ZH: v3.4 教職員標記 —— 依**信箱網域**判定為教職員時只記錄、**不自動升權**。
+        #     網域不是權威授權來源，誤升等於送出過大權限 → 留給管理者在
+        #     「MYAI 待開通清單」的「疑似教職員」區確認後手動調整。
+        try:
+            from ..services.myai_sync import classify_email
+            if classify_email(user.email)["label"] == "staff":
+                logger.info(
+                    "帳號 %s 的信箱網域（%s）屬教職員域，角色仍建為 %s；"
+                    "如需升為教師請由管理端手動調整。", username, user.email, user.role)
+        except Exception as e:  # noqa: BLE001  分類只是提示，不該擋登入
+            logger.debug("教職員網域判定略過：%s", e)
     elif user.auth_source == "local":
         # 既有 local 帳號首次走 SSO → 升級為 SSO（含寫入 external_id）
         logger.warning(

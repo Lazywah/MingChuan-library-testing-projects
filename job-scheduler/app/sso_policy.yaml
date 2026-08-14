@@ -72,6 +72,32 @@ oidc:
   # ZH: userinfo 無 email → 以「學號@此網域」補（學生信箱 = <學號>@me.mcu.edu.tw，
   #     與 MYAI 綁定的 email 一致）。留空則 fallback 為 @unknown。
   email_domain: "me.mcu.edu.tw"
+  # ==========================================================================
+  # ZH: v3.4 email 網域規則 —— 兩個用途，別混在一起：
+  #       (a) 建構：MCU 的 userinfo 只回 sub，登入時依 sub 的長相選網域組出信箱
+  #                 學生   純數字學號  → @me.mcu.edu.tw    例 12361114@me.mcu.edu.tw
+  #                 教職員 英文帳號名  → @mail.mcu.edu.tw  例 liangyu@ / lsho@ / tfho@
+  #       (b) 判定：拿到信箱後，只看**網域**分類（student / staff）。
+  #
+  #     ⚠️ 原則（2026-08-06 定調）：我們**不預測、不評估信箱真假**，也不拿「使用者名稱」
+  #        當判定依據（平台允許自由改名，可變欄位不能當身分判準）。
+  #        組出來的地址照樣建號、照樣寄 —— 信箱到底存不存在，由**實際寄送的退件紀錄**
+  #        （EmailLog：寄給誰、被誰拒絕、誰不存在）回答，那才是事實。
+  # EN: Two distinct uses — (a) build an address from the IdP's `sub`, (b) classify an
+  #     existing address by DOMAIN only. We never score confidence or guess whether a
+  #     mailbox exists; real bounces (EmailLog) answer that. Never keys off the mutable
+  #     platform username.
+  # ==========================================================================
+  email_rules:
+    # ZH: 學號實測為 8 碼純數字（如 12361114）。用精確長度而非 {6,12}：
+    #     若教職員的 sub 是員編數字，寬鬆規則會把他誤判成學生、組出錯誤網域的信箱。
+    #     長度不符者落到下方 email_domain 預設值 —— 一樣會寄，寄不到就會有退件紀錄。
+    - pattern: '^[0-9]{8}$'
+      domain: "me.mcu.edu.tw"
+      label: "student"
+    - pattern: '^[A-Za-z][A-Za-z0-9._-]{1,30}$'  # 英文開頭＝教職員帳號名
+      domain: "mail.mcu.edu.tw"
+      label: "staff"
   # ZH: 學校中央「忘記密碼」入口（2026-08-04 實地探查：Moodle 與學生查詢系統的忘記密碼
   #     皆導向此處；表單=學號/員編+身分證字號 → 新密碼寄到校務系統留存 email；
   #     臨櫃後援 F606(台北)/CC105(桃園)。⚠ 只有 https 通，http 版連不上）。

@@ -12,6 +12,7 @@ ZH: 回傳契約 — validate_ticket() 統一回傳 dict 含 `auth_source` 欄�
 EN: Return contract — validate_ticket() always returns dict with `auth_source` (v1.1 E5)
 ==============================================================================
 """
+import re
 import urllib.parse
 import time
 import hmac
@@ -166,7 +167,8 @@ class OIDCSSOClient(BaseSSOClient):
                  redirect_uri: str,
                  scopes: list = None,
                  username_claim: str = "",
-                 email_domain: str = ""):
+                 email_domain: str = "",
+                 email_rules: list = None):
         self.discovery_url  = discovery_url
         self.client_id      = client_id
         self.client_secret  = client_secret
@@ -176,6 +178,8 @@ class OIDCSSOClient(BaseSSOClient):
         # ZH: userinfo 沒給 email 時的網域 fallback（MCU 只回 sub → 學號@此網域；
         #     供 MYAI email 綁定對得上）。留空則交由上層用 @unknown。
         self.email_domain   = (email_domain or "").strip().lstrip("@")
+        # ZH: v3.4 依 sub 型態選網域（學生 @me / 教職員 @mail）；見 sso_policy.yaml 說明
+        self.email_rules    = email_rules or []
         self._doc: dict | None = None   # discovery 文件快取
 
         # ZH: 啟動先試抓 discovery；失敗不擋啟動（第一次登入時 lazy 重試）
@@ -263,9 +267,9 @@ class OIDCSSOClient(BaseSSOClient):
         logger.debug(f"OIDC userinfo keys={sorted(info.keys())} payload={info}")
 
         username = self._extract_username(info)
-        # ZH: MCU userinfo 無 email → 以學號@email_domain 補（2026-08-01 實測 myai email
-        #     即為 <學號>@me.mcu.edu.tw，此 fallback 讓 MYAI email 綁定對得上）
-        email = info.get("email") or (f"{username}@{self.email_domain}" if self.email_domain else "")
+        # ZH: v3.4 email 推導 —— IdP 有給就用（最可信）；否則依 email_rules 依 sub 型態
+        #     選網域。**推不出來就留空**，交由上層判定「無法確信」而跳過建號。
+        email, email_source = self._derive_email(username, info.get("email"))
 
         return {
             "username":    username,                     # 學號/員編
@@ -274,7 +278,42 @@ class OIDCSSOClient(BaseSSOClient):
             "role":        "student",                    # 預設；admin 須手動提權
             "auth_source": "sso_oidc",
             "external_id": str(info.get("sub") or "") or None,   # IdP 永久 ID
+            # ZH: idp=IdP 直接提供(最可信) / rule:<label>=依規則推導 / fallback=舊單一網域
+            #     / none=推不出來。供 MYAI 自動開通判斷要不要建帳號。
+            "email_source": email_source,
         }
+
+    def _derive_email(self, username: str, idp_email: str | None) -> tuple[str, str]:
+        """
+        ZH: 產生這個人的信箱。MCU 的 userinfo 只回 sub，不自己建構就完全沒有地址可用。
+            優先序：IdP 給的 email > email_rules 依 sub 選網域 > email_domain > 無。
+
+            ⚠ 界線（別混淆）：這裡是用 IdP 的 **sub（不可變的學號/員編）建構**地址，
+              不是拿平台上「使用者可自由更改的名稱」做判定。分類請一律用
+              myai_sync.classify_email()（只看網域）。
+              建構出來的地址不代表信箱存在 —— 存不存在由實際寄送的退件紀錄回答。
+        EN: Build the address from the IdP's immutable `sub` (userinfo returns only sub).
+            This is construction, not judgement; classification keys off the DOMAIN only
+            (myai_sync.classify_email). Existence is answered by real bounces, not guesses.
+        """
+        idp_email = (idp_email or "").strip()
+        if idp_email:
+            return idp_email, "idp"
+        local = (username or "").strip()
+        if not local:
+            return "", "none"
+        for rule in self.email_rules:
+            try:
+                pat = rule.get("pattern") or ""
+                dom = (rule.get("domain") or "").strip().lstrip("@")
+                if pat and dom and re.match(pat, local):
+                    return f"{local}@{dom}", f"rule:{rule.get('label') or dom}"
+            except re.error as e:
+                logger.warning("email_rules 的 pattern 無效（略過該條）: %s", e)
+        if self.email_domain:
+            # ZH: 舊的單一網域設定；規則都沒中時才用，可信度較低
+            return f"{local}@{self.email_domain}", "fallback"
+        return "", "none"
 
     def _extract_username(self, info: dict) -> str:
         """
@@ -372,6 +411,7 @@ def get_sso_client(mock_mode: bool = True, config: dict = None) -> BaseSSOClient
             scopes=oidc_cfg.get("scopes"),
             username_claim=oidc_cfg.get("username_claim", ""),
             email_domain=oidc_cfg.get("email_domain", ""),
+            email_rules=oidc_cfg.get("email_rules") or [],
         )
 
     if provider == "cas":
@@ -409,6 +449,7 @@ def build_oidc_client_if_enabled(config: dict) -> "OIDCSSOClient | None":
             scopes=oidc_cfg.get("scopes"),
             username_claim=oidc_cfg.get("username_claim", ""),
             email_domain=oidc_cfg.get("email_domain", ""),
+            email_rules=oidc_cfg.get("email_rules") or [],
         )
     except KeyError as e:
         logger.error(f"OIDC 設定缺少必要欄位 {e}；OIDC 不啟用")

@@ -1173,6 +1173,24 @@
                     </div>
                 </section>
 
+                <!-- v3.4 MYAI 待開通清單（email 網域規則 → 可信度分流） -->
+                <section class="widget form-box-panel" style="grid-column: 1 / -1;">
+                    <div class="widget-header split">
+                        <h3><ion-icon name="person-add-outline" style="margin-right:6px;"></ion-icon>
+                            <span data-i18n="prov_cand_title">MYAI 待開通清單</span></h3>
+                        <ion-icon name="refresh-circle-outline" onclick="provisionCandidates.load()" class="refresh-icon" title="Refresh"></ion-icon>
+                    </div>
+                    <p style="font-size:0.8rem; color:var(--text-muted,#888); margin:0 15px 10px;" data-i18n="prov_cand_hint">
+                        尚未綁定廠商帳號的 SSO 使用者。信箱來自 SSO，或依網域規則以學號/員編組出
+                        （8 碼數字 → @me.mcu.edu.tw、英文帳號名 → @mail.mcu.edu.tw）。
+                        <b>系統不預判信箱真假</b> —— 有地址就照建、照寄，寄不到的會出現在
+                        「Email 寄送紀錄」的退件裡，那才是事實。只有「完全沒有地址」才無從建號。
+                    </p>
+                    <div id="prov-cand-body" style="padding:0 15px 15px;">
+                        <span style="color:var(--text-muted,#888);" data-i18n="msg_loading">載入中...</span>
+                    </div>
+                </section>
+
                 <!-- 外部 AI 平台網址設定 -->
                 <section class="widget form-box-panel" style="grid-column: 1 / -1;">
                     <div class="widget-header">
@@ -1630,7 +1648,7 @@
     <script type="module" src="https://unpkg.com/ionicons@7.1.0/dist/ionicons/ionicons.esm.js"></script>
     <script nomodule src="https://unpkg.com/ionicons@7.1.0/dist/ionicons/ionicons.js"></script>
     <!-- 載入 Admin 邏輯 -->
-    <script src="admin.js?v=268f86d1"></script>
+    <script src="admin.js?v=27d4f45f"></script>
 </body>
 
 </html>

@@ -31,7 +31,7 @@ import httpx
 from sqlalchemy.orm import Session
 
 from .. import models
-from ..config import settings
+from ..config import settings, SSO_POLICY
 
 logger = logging.getLogger(__name__)
 
@@ -680,9 +680,30 @@ async def provision_user(db: Session, user) -> dict:
     if acc and acc.vendor_username:
         return {"status": "bound"}
 
-    # ZH: 廠商端已存在同 email → 只建綁定（避免重複註冊；使用者確認重複會被跳過）
-    exist = (db.query(models.MyaiAccount)
-               .filter(models.MyaiAccount.email.ilike(email)).first())
+    # ==========================================================================
+    # ZH: v3.4 建號前的雙重防呆（核心目的：**不要在 MYAI 造出綁不到人的垃圾帳號**）
+    #   ① 先用「同一 local-part × 所有已知網域」查廠商端有沒有既有帳號 → 有就綁定不建號
+    #      （教職員很可能早就有 liangyu@mail.mcu.edu.tw；只查我們推導的那個會漏掉）
+    #   ② 推導不可信（規則沒命中，例如 sub 是員編數字）→ **跳過建號**，列入待人工處理
+    # EN: v3.4 guards — look up existing vendor accounts across all known domains
+    #     first, and refuse to create when the derived address isn't trustworthy.
+    # ==========================================================================
+    local = email.split("@")[0] if "@" in email else (user.username or "")
+    known_domains = {(r.get("domain") or "").strip().lstrip("@")
+                     for r in ((SSO_POLICY.get("oidc", {}) or {}).get("email_rules") or [])}
+    known_domains.discard("")
+    candidates = {email.lower()} | {f"{local}@{d}".lower() for d in known_domains if local}
+
+    exist = None
+    for cand in candidates:
+        exist = (db.query(models.MyaiAccount)
+                   .filter(models.MyaiAccount.email.ilike(cand)).first())
+        if exist:
+            if exist.email and exist.email.lower() != email.lower():
+                logger.info("MYAI 既有帳號網域與推導不同，改用廠商端實際值：%s → %s",
+                            email, exist.email)
+                email = exist.email      # ZH: 以廠商端實際 email 為準
+            break
     if exist:
         if not acc:
             acc = models.ExternalAiAccount(user_id=user.id, vendor_username=email,
@@ -692,6 +713,14 @@ async def provision_user(db: Session, user) -> dict:
         acc.myai_vendor_sn = exist.vendor_sn
         db.commit()
         return {"status": "linked_only", "email": email}
+
+    # ZH: ② 唯一的前置條件 —— **有沒有信箱**（事實），不是「信箱像不像真的」（預測）。
+    #     沒有地址就無從建號；有地址就照建、照寄，帳號到底存不存在交給退件告訴我們
+    #     （EmailLog 會記下寄給誰、被誰拒絕、誰不存在）。這裡刻意不做可信度評分。
+    if not classify_email(email)["email"]:
+        logger.info("MYAI 自動開通跳過 %s：沒有可用的 email（SSO 未提供且推導不出）。",
+                    user.username)
+        return {"status": "skipped", "reason": "no_email", "username": user.username}
 
     # ZH: 真正建號 —— 走廠商管理端官方批次註冊
     password = gen_initial_password()
@@ -892,3 +921,84 @@ def has_online_users(db: Session, online_minutes: int = ONLINE_WINDOW_MINUTES) -
         models.User.last_activity.isnot(None),
         models.User.last_activity >= cut,
     ).first() is not None
+
+
+# ==============================================================================
+# ZH: v3.4 email 可信度判定 —— 決定「能不能拿這個 email 去廠商端建帳號」
+# EN: v3.4 email trust check — gates vendor account creation
+# ------------------------------------------------------------------------------
+# ZH: 動機（使用者 2026-08-06 明示）：這整套規則的目的**不是為了寄信**，而是
+#     **不要在 MYAI 亂建帳號**——建錯 email 會產生「綁不到人 / 沒人用」的殭屍帳號，
+#     而且該老師可能早就有自己的帳號 → 變成兩個帳號、點數分裂。
+#     因此判定從嚴：只有 IdP 直接給的、或規則明確命中的，才允許建號。
+# ==============================================================================
+TRUSTED_EMAIL_SOURCES = ("idp",)      # ZH: 規則命中的另外用 startswith("rule:") 判斷
+
+
+def classify_email(email: str) -> dict:
+    """
+    ZH: 依 sso_policy.yaml 的 email_rules 判定「這個信箱屬於哪一類」—— 只看**網域**。
+        回 {"email":…, "domain":…, "label": "student"|"staff"|None}
+
+        ⚠ 設計原則（2026-08-06 使用者定調，別再改回去）：
+          1. **不對信箱做任何預測或評估**。這裡不算信心度、不判斷帳號存不存在，
+             只做分類。帳號到底存不存在，由「實際寄送後的退件」告訴我們（EmailLog），
+             那是事實；我們自己猜的信心度不是。
+          2. **不拿使用者名稱當判定依據**。平台允許使用者自由更改名稱，
+             拿可變欄位當身分判準本身就不成立。
+    EN: Classify an address by DOMAIN only. No confidence scoring, no existence guessing —
+        whether the mailbox exists is answered by real bounces (EmailLog), not by us.
+        Never keys off the username: users can freely rename themselves.
+    """
+    from ..config import SSO_POLICY
+    cfg = (SSO_POLICY or {}).get("oidc", {}) or {}
+    addr = (email or "").strip()
+    # ZH: @unknown 是 SSO 完全取不到信箱時寫入的佔位值，不是地址 → 視為沒有信箱
+    if not addr or "@" not in addr or addr.lower().endswith("@unknown"):
+        return {"email": "", "domain": "", "label": None}
+    domain = addr.split("@")[-1].lower()
+    label = next((r.get("label") for r in (cfg.get("email_rules") or [])
+                  if (r.get("domain") or "").strip().lstrip("@").lower() == domain), None)
+    return {"email": addr, "domain": domain, "label": label}
+
+
+def provision_candidates(db: Session) -> dict:
+    """
+    ZH: 給 admin 檢視 —— SSO 使用者中「尚未綁定 MYAI」的人，依**事實**分兩類：
+          ready     有 email → 可以自動開通（信箱真假不預判，寄出後看退件）
+          no_email  完全沒有 email（SSO 未提供、也推導不出）→ 無從建號，需人工補
+        刻意不做「信心度」分類：帳號存不存在由退件紀錄回答，不由我們猜。
+    EN: Unbound SSO users split by a FACT — has an address or not. No confidence scoring.
+    """
+    bound = {a.user_id for a in db.query(models.ExternalAiAccount).all()}
+    ready, no_email = [], []
+    for u in db.query(models.User).filter(models.User.auth_source == "sso_oidc").all():
+        if u.id in bound:
+            continue
+        info = classify_email(u.email)
+        row = {"user_id": u.id, "username": u.username, "platform_email": u.email,
+               "email": info["email"], "domain": info["domain"], "label": info["label"]}
+        (ready if info["email"] else no_email).append(row)
+    return {"ready": ready, "no_email": no_email}
+
+
+def staff_pending(db: Session) -> list[dict]:
+    """
+    ZH: 疑似教職員清單 —— **信箱網域**屬於教職員域、但平台角色仍是 student 的 SSO 帳號。
+        判定只看網域（不看使用者名稱，那是可自由更改的欄位）。
+        **不自動升權**：網域不是權威授權來源，誤升等於送出過大權限 → 只列出來給管理者確認。
+    EN: SSO users whose mail DOMAIN says staff but whose platform role is still student.
+        Domain-based only (never the mutable username). Never auto-promoted.
+    """
+    out: list[dict] = []
+    users = (db.query(models.User)
+               .filter(models.User.auth_source != "local",
+                       models.User.role == "student")
+               .all())
+    for u in users:
+        info = classify_email(u.email)
+        if info["label"] == "staff":
+            out.append({"user_id": u.id, "username": u.username,
+                        "platform_email": u.email, "email": info["email"],
+                        "domain": info["domain"], "role": u.role})
+    return out

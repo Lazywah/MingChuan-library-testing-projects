@@ -1262,6 +1262,82 @@ const liveUsage = {
 };
 
 // ==============================================================================
+// v3.4 MYAI 待開通清單 —— email 網域規則的「人工守門」出口
+// ZH: ready = 規則命中、可安全自動開通；needs_review = 推導不可信（多半是教職員的
+//     sub 不是帳號名而是員編）→ 後端**不會**自動建號，必須由管理者確認真實信箱後
+//     手動綁定。這一頁存在的目的就是讓「被跳過的人」看得見，不要無聲消失。
+// ==============================================================================
+const provisionCandidates = {
+    _esc(s) {
+        return String(s == null ? '' : s).replace(/[&<>"']/g,
+            c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+    },
+    _table(rows, cols) {
+        const e = this._esc;
+        return '<div style="overflow-x:auto;"><table style="width:100%; border-collapse:collapse; font-size:13px;">' +
+            '<thead><tr style="text-align:left; color:var(--text-muted,#888);">' +
+            cols.map(c => `<th style="padding:6px 8px;">${e(c[0])}</th>`).join('') +
+            '</tr></thead><tbody>' +
+            rows.map(r => '<tr style="border-top:1px solid var(--border-color);">' +
+                cols.map(c => `<td style="padding:6px 8px;">${c[1](r, e)}</td>`).join('') +
+            '</tr>').join('') + '</tbody></table></div>';
+    },
+    async load() {
+        const box = document.getElementById('prov-cand-body');
+        if (!box) return;
+        const e = this._esc;
+        try {
+            const res = await fetch(`${API_BASE}/external-ai/admin/provision-candidates`, {
+                headers: { 'Authorization': `Bearer ${authToken}` }
+            });
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+            const d = await res.json();
+            const ready = d.ready || [], none = d.no_email || [], staff = d.staff_pending || [];
+            let html = '<div style="margin-bottom:8px; font-size:13px;">' +
+                `<span style="color:#10b981;">● 可開通 ${ready.length}</span>` +
+                `<span style="margin-left:14px; color:#f87171;">● 無信箱 ${none.length}</span>` +
+                `<span style="margin-left:14px; color:#60a5fa;">● 疑似教職員 ${staff.length}</span></div>`;
+
+            if (none.length) {
+                html += '<h4 style="margin:12px 0 6px; font-size:14px; color:#f87171;">無信箱（無從建號）</h4>' +
+                    '<p style="font-size:12px; color:var(--text-muted,#888); margin:0 0 6px;">' +
+                    'SSO 沒給信箱、也組不出地址，沒有收件人就無法建號。需要人工補上正確信箱。</p>' +
+                    this._table(none, [
+                        ['帳號', r => `<code>${e(r.username)}</code>`],
+                        ['平台 email', r => e(r.platform_email) || '—'],
+                    ]);
+            }
+            if (ready.length) {
+                html += '<h4 style="margin:16px 0 6px; font-size:14px; color:#10b981;">可開通</h4>' +
+                    this._table(ready, [
+                        ['帳號', r => `<code>${e(r.username)}</code>`],
+                        ['email', r => e(r.email)],
+                        ['網域類別', r => e(r.label) || '<span style="color:var(--text-muted,#888);">未分類</span>'],
+                    ]);
+            }
+            if (!ready.length && !none.length) {
+                html += '<span style="color:var(--text-muted,#888);">目前沒有未綁定的 SSO 使用者。</span>';
+            }
+            if (staff.length) {
+                html += '<h4 style="margin:16px 0 6px; font-size:14px; color:#60a5fa;">' +
+                    `疑似教職員（${staff.length}）— 角色仍為學生</h4>` +
+                    '<p style="font-size:12px; color:var(--text-muted,#888); margin:0 0 6px;">' +
+                    '判定只看<b>信箱網域</b>。網域不是權威授權來源，所以系統<b>不會自動升權</b>；' +
+                    '確認後請到「使用者」分頁調整角色。</p>' +
+                    this._table(staff, [
+                        ['帳號', r => `<code>${e(r.username)}</code>`],
+                        ['email', r => e(r.email)],
+                        ['目前角色', r => e(r.role)],
+                    ]);
+            }
+            box.innerHTML = html;
+        } catch (err) {
+            box.innerHTML = `<span style="color:#f87171;">載入失敗：${e(err.message)}</span>`;
+        }
+    },
+};
+
+// ==============================================================================
 // v3.3 初始管理員提醒橫幅
 // 後端 GET /admin/bootstrap-status 用 .env 的 BOOTSTRAP_ADMIN_PASSWORD 去驗 admin 帳號的
 // 雜湊；仍驗得過＝初始密碼還在用 → 顯示橫幅。管理者改過密碼後自動驗不過，橫幅自行消失。
@@ -1542,6 +1618,7 @@ const externalAi = {
     },
     init() {
         liveUsage.load();          // v3.4 MYAI 即時使用四象限
+        provisionCandidates.load();// v3.4 待開通清單（規則推導可信度分流）
         liveUsage.startAuto();
         this.loadUrl();
         this.loadAlertConfig();
