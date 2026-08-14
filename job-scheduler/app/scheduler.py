@@ -171,12 +171,24 @@ async def _storage_lifecycle_loop():
         try:
             db = SessionLocal()
             try:
-                storage_lifecycle.run_daily_scan(db)
+                # ZH: 這裡有三件各自獨立的每日工作，**各自包 try** —— 任何一件失敗
+                #     都不該連累其他兩件。
+                #     ⚠ 曾經踩過：主掃描的函式名打錯（run_daily_scan，實際叫 daily_scan），
+                #       AttributeError 把後面兩個保留期清理一起帶走，導致 Lab 封存 volume
+                #       與 MYAI 初始密碼到期都沒被清除，而且只會靜靜寫進 log 沒人發現。
+                # EN: three independent daily jobs, each guarded separately — one failing
+                #     must not skip the others (it did, via a typo'd function name).
+                try:
+                    stats = storage_lifecycle.daily_scan(db)
+                    logger.info(f"ZH: 儲存生命週期掃描完成 | EN: Storage lifecycle scan: {stats}")
+                except Exception as e:  # noqa: BLE001
+                    logger.error(f"ZH: 儲存生命週期掃描錯誤 | EN: Storage scan error: {e}",
+                                 exc_info=True)
 
-                # ZH: v3.3 每日一併做兩件保留期清理（掛在既有每日任務，不另開背景迴圈）
+                # ZH: v3.3 每日保留期清理
                 #   1. 逾期的 Lab 封存 volume → 真正銷毀
                 #   2. 逾期/已確認修改的 MYAI 初始密碼 → 清除密文
-                # EN: v3.3 daily retention purges (piggyback on the existing daily task)
+                # EN: v3.3 daily retention purges
                 try:
                     from .services import lab_manager as _lm
                     n = _lm.purge_expired_archives(db)
@@ -192,8 +204,9 @@ async def _storage_lifecycle_loop():
                     logger.error(f"ZH: MYAI 初始密碼清理錯誤: {e}")
             finally:
                 db.close()
-        except Exception as e:
-            logger.error(f"ZH: 儲存生命週期掃描錯誤 | EN: Storage scan error: {e}", exc_info=True)
+        except Exception as e:  # noqa: BLE001 - 連 session 都開不起來才會到這裡
+            logger.error(f"ZH: 每日維護任務整體錯誤 | EN: Daily maintenance error: {e}",
+                         exc_info=True)
 
     logger.info("ZH: 儲存生命週期迴圈已停止")
 
