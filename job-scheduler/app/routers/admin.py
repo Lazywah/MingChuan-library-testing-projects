@@ -96,15 +96,17 @@ def put_system_settings(
 @router.get("/email-log", summary="寄信紀錄（誰、何時、結果）")
 def get_email_log(
     limit: int = Query(200, ge=1, le=1000),
-    status: Optional[str] = Query(None, description="sent / refused / failed / mock"),
+    status: Optional[str] = Query(None, description="sent / refused / failed / mock / bounced / deferred"),
     db: Session = Depends(get_db),
     _admin: models.User = Depends(require_admin),
 ):
     """
     ZH: v3.4 寄信紀錄。⚠️ `sent` = **已交付中繼伺服器，不代表送達**；
         「網域存在但信箱不存在」會被中繼接受、稍後非同步退信到寄件人信箱，程式端看不到。
-        本表的用途是對照名冊：收到退信時可查出那是誰、哪個功能、何時寄的。
-    EN: Outbound email log; `sent` means accepted by relay, not delivered.
+        v3.5 起會由退信回收（IMAP）把非同步退信回填成 `bounced`(永久，5.x.x：信箱不存在)
+        或 `deferred`(暫時，4.x.x：稍後可能仍會送達，**不代表不存在**)。
+    EN: Outbound email log; `sent` means accepted by relay, not delivered. v3.5 back-fills
+        real bounces read over IMAP.
     """
     q = db.query(models.EmailLog)
     if status:
@@ -123,8 +125,28 @@ def get_email_log(
             "kind": r.kind, "subject": r.subject, "status": r.status,
             "detail": r.detail,
             "created_at": r.created_at.isoformat() if r.created_at else None,
+            "bounced_at": r.bounced_at.isoformat() if r.bounced_at else None,
         } for r in rows],
     }
+
+
+@router.post("/email-log/scan-bounces", summary="v3.5 立即用 IMAP 掃退信並回填")
+def scan_bounces_now(
+    db: Session = Depends(get_db),
+    _admin: models.User = Depends(require_admin),
+):
+    """
+    ZH: 手動觸發一次退信回收（平常由排程每 bounce_scan_minutes 分鐘自動跑）。
+        唯讀：只讀退信、只標記已讀，絕不刪信/移動/寄信。
+        回 {scanned, bounces, applied}；applied=0 代表退信對不到任何寄件紀錄
+        （例如那些信寄出時還沒有 email_log）——此時**不會**新增假紀錄。
+    EN: Trigger one bounce-scan pass now; read-only, never fabricates log rows.
+    """
+    from ..services import bounce_reader
+    try:
+        return bounce_reader.scan_bounces(db)
+    except bounce_reader.BounceReaderError as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
 
 @router.get("/bootstrap-status", summary="初始管理員是否仍在使用預設密碼")

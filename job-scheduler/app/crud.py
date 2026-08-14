@@ -1010,6 +1010,7 @@ SYSTEM_SETTINGS = {
     # v3.4 有使用者在線時的 MYAI 輪詢間隔（無人在線會完全跳過，不受此值影響）
     "myai_active_poll_minutes": {"type": "int",   "default": lambda: 3,                                    "min": 1,   "max": 60,   "label": "MYAI 輪詢間隔(分, 僅有人在線時; 無人時自動休息)"},
     "myai_usage_window_min":    {"type": "int",   "default": lambda: 15,                                   "min": 1,   "max": 180,  "label": "判定「正在使用 MYAI」的時間窗(分)"},
+    "bounce_scan_minutes":      {"type": "int",   "default": lambda: 30,                                   "min": 0,   "max": 1440, "label": "退信回收掃描間隔(分, 0=停用)"},
 }
 
 

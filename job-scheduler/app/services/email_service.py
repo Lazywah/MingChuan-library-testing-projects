@@ -172,3 +172,36 @@ def send_temp_password(to_email: str, username: str, temp_password: str, is_new_
     send_email(to_email, subject, html,
                kind=("account_provisioned" if is_new_account else "password_reset"),
                username=username)
+
+
+def send_myai_provisioned(to_email: str, username: str, platform_url: str = ""):
+    """
+    ZH: v3.5 MYAI 開通完成通知。
+
+        ⚠️ **刻意不含密碼**：初始密碼留在平台上讓本人登入後查看
+        （加密存 DB、限期、可確認清除）。密碼進信箱＝多一個外洩面。
+
+        這封信同時是**探針**：我們替 SSO 使用者組出來的信箱到底存不存在，
+        只有真的寄一封才會知道 —— 寄不到會退信到我們的寄件信箱，
+        由退信回收(bounce_reader)回填成 bounced。每人只寄一次。
+    EN: MYAI provisioning notice. Deliberately password-free (the initial password
+        stays in the platform UI). Doubles as the deliverability probe: a bounce is
+        the only way to learn whether a derived address actually exists.
+    """
+    subject = "圖書館 AI 基地 - MYAI 帳號已開通 | Your MYAI account is ready"
+    link = (f'<p><a href="{platform_url}">{platform_url}</a></p>' if platform_url else "")
+    html = f"""
+    <html>
+        <body>
+            <h2>{username} 你好，</h2>
+            <p>你的 <strong>MYAI</strong> 帳號已自動開通，帳號即為這個信箱：
+               <strong>{to_email}</strong></p>
+            <p><strong>初始密碼請登入本平台查看</strong>（基於安全考量不放在信件中）。
+               登入後在「AI 助手」頁面即可看到，並請盡快自行修改密碼。</p>
+            {link}
+            <br>
+            <p>圖書館 AI 基地</p>
+        </body>
+    </html>
+    """
+    send_email(to_email, subject, html, kind="myai_provisioned", username=username)

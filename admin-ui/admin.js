@@ -1136,7 +1136,8 @@ const emailLog = {
             if (meta) {
                 const c = d.counts || {};
                 meta.innerHTML = d.smtp_configured
-                    ? `寄件人 <b>${this._esc(d.from_email)}</b> · 已交付 ${c.sent || 0} · 被拒 ${c.refused || 0} · 失敗 ${c.failed || 0}`
+                    ? `寄件人 <b>${this._esc(d.from_email)}</b> · 已交付 ${c.sent || 0} · 被拒 ${c.refused || 0} · 失敗 ${c.failed || 0}` +
+                      ` · <span style="color:#ef4444;">退信 ${c.bounced || 0}</span> · <span style="color:#fbbf24;">暫時失敗 ${c.deferred || 0}</span>`
                     : `<b style="color:#f59e0b;">SMTP 未設定</b>（僅寫入 log、不會實際寄出）`;
             }
             const rows = d.logs || [];
@@ -1144,8 +1145,11 @@ const emailLog = {
                 tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; color:var(--text-muted);">沒有紀錄</td></tr>';
                 return;
             }
-            const COLOR = { sent: '#4ade80', refused: '#ef4444', failed: '#fb7185', mock: '#94a3b8' };
-            const LABEL = { sent: '已交付', refused: '被拒', failed: '失敗', mock: '未寄出' };
+            // ZH: bounced = 退信確認信箱不存在（事實）；deferred = 暫時失敗，**不代表不存在**
+            const COLOR = { sent: '#4ade80', refused: '#ef4444', failed: '#fb7185', mock: '#94a3b8',
+                            bounced: '#ef4444', deferred: '#fbbf24' };
+            const LABEL = { sent: '已交付', refused: '被拒', failed: '失敗', mock: '未寄出',
+                            bounced: '退信·不存在', deferred: '暫時失敗' };
             tbody.innerHTML = rows.map(r => `<tr>
                 <td style="white-space:nowrap;">${this._fmt(r.created_at)}</td>
                 <td>${this._esc(r.to_email)}</td>
@@ -1156,6 +1160,29 @@ const emailLog = {
             </tr>`).join('');
         } catch (e) {
             tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; color:#fb7185;">載入寄信紀錄失敗</td></tr>';
+        }
+    },
+    // ZH: 手動觸發退信回收。平常由排程自動跑，這裡是「我現在就想看」的入口。
+    async scanBounces() {
+        const meta = document.getElementById('email-log-meta');
+        const old = meta ? meta.innerHTML : '';
+        if (meta) meta.innerHTML = '掃描退信中…';
+        try {
+            const res = await fetch(`${API_BASE}/admin/email-log/scan-bounces`, {
+                method: 'POST', headers: { 'Authorization': `Bearer ${authToken}` }
+            });
+            const d = await res.json();
+            if (!res.ok) throw new Error(d.detail || `HTTP ${res.status}`);
+            await this.load();
+            const note = d.applied === 0 && d.bounces > 0
+                ? `（讀到 ${d.bounces} 封退信，但都對不到寄件紀錄 —— 不會新增假紀錄）`
+                : '';
+            alert(`退信掃描完成
+讀取 ${d.scanned} 封 / 退信 ${d.bounces} 封 / 回填 ${d.applied} 筆
+${note}`);
+        } catch (e) {
+            if (meta) meta.innerHTML = old;
+            alert('退信掃描失敗：' + e.message);
         }
     },
 };

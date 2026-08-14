@@ -1109,6 +1109,16 @@
                         <span data-i18n="email_log_hint">⚠️「已交付」只代表中繼伺服器收下，<b>不代表送達</b>：網域存在但信箱不存在會被收下，稍後才非同步退信到寄件人信箱（程式看不到）。本表用途是對照——收到退信時可查出那是誰、哪個功能、何時寄的。</span>
                         <span id="email-log-meta" style="margin-left:6px;"></span>
                     </p>
+                    <div style="margin:0 15px 10px;">
+                        <button class="ready-btn config-save-btn" onclick="emailLog.scanBounces()"
+                                style="width:auto; margin:0; padding:6px 14px; font-size:13px;">
+                            <ion-icon name="download-outline"></ion-icon> 立即掃描退信
+                        </button>
+                        <span style="font-size:12px; color:var(--text-muted,#888); margin-left:8px;">
+                            用 IMAP 讀寄件信箱的退信回填狀態。<b>退信·不存在</b>才是「信箱不存在」的事實；
+                            <b>暫時失敗</b>只代表當下沒送成，稍後可能仍會送達。唯讀，不刪信。
+                        </span>
+                    </div>
                     <div class="admin-table-wrap scrollbar-custom" style="max-height:360px; overflow:auto;">
                         <table class="admin-table" id="admin-email-log-table">
                             <thead><tr>
@@ -1648,7 +1658,7 @@
     <script type="module" src="https://unpkg.com/ionicons@7.1.0/dist/ionicons/ionicons.esm.js"></script>
     <script nomodule src="https://unpkg.com/ionicons@7.1.0/dist/ionicons/ionicons.js"></script>
     <!-- 載入 Admin 邏輯 -->
-    <script src="admin.js?v=27d4f45f"></script>
+    <script src="admin.js?v=0802d22e"></script>
 </body>
 
 </html>

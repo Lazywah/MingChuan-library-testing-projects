@@ -301,15 +301,31 @@ def scan_bounces(db: Session, max_messages: int = 200) -> dict:
             if cv == uidvalidity and cu.isdigit():
                 last_uid = int(cu)
 
+        # ZH: ① 先只取「新信的 UID 清單」（只回編號，不下載內容）→ 用來推進游標
         typ, data = M.uid("SEARCH", None, f"UID {last_uid + 1}:*")
-        uids = (data[0].split() if (typ == "OK" and data and data[0]) else [])
-        # ZH: "UID n:*" 在信箱沒有更新的信時仍會回最後一封 → 自行過濾
-        uids = [u for u in uids if int(u) > last_uid][-max_messages:]
+        all_new = (data[0].split() if (typ == "OK" and data and data[0]) else [])
+        # ZH: "UID n:*" 在沒有更新的信時仍會回最後一封 → 自行過濾
+        all_new = [u for u in all_new if int(u) > last_uid]
 
-        max_seen = last_uid
+        # ZH: ② ⭐ 伺服器端先篩退信，**只下載退信的內容**。
+        #     不這樣做的話，等於把信箱裡的私人郵件全部抓下來再判斷 —— 即使不留存，
+        #     也違反「只讀退信」這條界線。篩選條件取聯集：郵件守護程式寄件者 + 標準 DSN。
+        # EN: server-side filter so only bounce bodies are ever downloaded; fetching every
+        #     message would pull the user's personal mail through us, even if discarded.
+        wanted: set = set()
+        for crit in ('(FROM "mailer-daemon")', '(FROM "postmaster")',
+                     '(HEADER Content-Type "report-type=delivery-status")'):
+            try:
+                typ, d = M.uid("SEARCH", None, f"UID {last_uid + 1}:*", crit)
+                if typ == "OK" and d and d[0]:
+                    wanted |= {u for u in d[0].split() if int(u) > last_uid}
+            except Exception as e:  # noqa: BLE001 - 某條件不被伺服器支援就跳過該條件
+                logger.debug("IMAP 篩選條件不支援（略過）：%s / %s", crit, e)
+
+        uids = sorted(wanted, key=lambda x: int(x))[-max_messages:]
+        max_seen = max([last_uid] + [int(u) for u in all_new])
         for uid in uids:
             scanned += 1
-            max_seen = max(max_seen, int(uid))
             typ, fetched = M.uid("FETCH", uid, "(BODY.PEEK[])")
             if typ != "OK" or not fetched or not isinstance(fetched[0], tuple):
                 continue

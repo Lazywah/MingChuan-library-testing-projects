@@ -743,6 +743,21 @@ async def provision_user(db: Session, user) -> dict:
     db.refresh(acc)
     store_initial_password(db, acc, password)
     logger.info("MYAI 自動開通完成: %s", email)
+
+    # ZH: 開通通知信（每人只寄一次，不含密碼）。同時是**唯一的探針** ——
+    #     SSO 路徑本來完全不寄信，不寄就永遠不會有退信，也就永遠不知道
+    #     我們替他組出來的信箱到底存不存在。寄了、退了，才是事實。
+    #     寄信是同步阻塞的，這裡在 async 流程中 → 丟到執行緒避免卡住事件迴圈。
+    #     寄失敗絕不影響已完成的開通。
+    try:
+        import asyncio
+        from .email_service import send_myai_provisioned
+        from .. import crud as _crud
+        url = _crud.get_system_config(db, "platform_public_url", "") or ""
+        await asyncio.to_thread(send_myai_provisioned, email, _nickname_for(user), url)
+    except Exception as e:  # noqa: BLE001
+        logger.warning("MYAI 開通通知信寄送失敗（不影響開通）：%s", e)
+
     return {"status": "created", "email": email}
 
 

@@ -24,6 +24,7 @@ _lab_scan_task = None        # v2.0: 每分鐘掃描 lab session idle/hard-limit
 _storage_scan_task = None    # v2.0: 每日 03:00 執行儲存生命週期掃描
 _myai_sync_task = None       # v2.8: 每 N 小時 headless 同步 myai168 帳號/Token
 _myai_balance_task = None    # v2.8: 每 N 分輕量輪詢交易日誌更新餘額（低點數提醒用）
+_bounce_scan_task  = None    # v3.5: 定期 IMAP 讀退信回填 email_log（信箱不存在的事實來源）
 
 # H-1: ZH: 從 scheduler_policy.yaml 讀取間隔，YAML 未設定則預設 300 秒
 # EN: Read interval from scheduler_policy.yaml; default 300 s if not configured
@@ -296,26 +297,70 @@ async def _myai_balance_loop():
     logger.info("ZH: MYAI 餘額輪詢迴圈已停止")
 
 
+async def _bounce_scan_loop():
+    """
+    ZH: 定期用 IMAP 讀寄件信箱，把非同步退信回填 email_log。
+        間隔由 SystemConfig 的 bounce_scan_minutes 控制（0 = 停用，可 runtime 調整）。
+        IMAP 未設定就直接不啟用；失敗只記 log，絕不影響其他排程。
+        ⚠ 這是「事實來源」——沒有它，信箱不存在只會停在 sent，永遠看不出來。
+    EN: Periodically pull bounces over IMAP and back-fill email_log.
+    """
+    from .services import bounce_reader
+    IDLE_RECHECK_SECONDS = 600
+
+    try:
+        await asyncio.sleep(120)      # ZH: 開機後晚一點啟動，錯開其他首次同步
+    except asyncio.CancelledError:
+        return
+
+    while _scheduler_running:
+        sleep_s = IDLE_RECHECK_SECONDS
+        try:
+            db = SessionLocal()
+            try:
+                minutes = int(crud.get_setting(db, "bounce_scan_minutes") or 0)
+                if minutes <= 0:
+                    logger.debug("ZH: 退信回收已停用 (bounce_scan_minutes=0)")
+                else:
+                    res = bounce_reader.scan_bounces(db)
+                    if res["bounces"]:
+                        logger.info(f"ZH: 退信回收: {res}")
+                    sleep_s = minutes * 60
+            finally:
+                db.close()
+        except bounce_reader.BounceReaderError as e:
+            logger.warning(f"ZH: 退信回收未執行（設定或連線問題）: {e}")
+        except Exception as e:  # noqa: BLE001
+            logger.warning(f"ZH: 退信回收錯誤（略過本輪）: {e}")
+        try:
+            await asyncio.sleep(sleep_s)
+        except asyncio.CancelledError:
+            break
+
+    logger.info("ZH: 退信回收迴圈已停止")
+
+
 # ==============================================================================
 # ZH: 排程器生命週期控制
 # EN: Scheduler lifecycle control
 # ==============================================================================
 
 async def start_scheduler():
-    global _scheduler_task, _lab_scan_task, _storage_scan_task, _myai_sync_task, _myai_balance_task, _scheduler_running
+    global _scheduler_task, _lab_scan_task, _storage_scan_task, _myai_sync_task, _myai_balance_task, _bounce_scan_task, _scheduler_running
     _scheduler_running = True
     _scheduler_task    = asyncio.create_task(_timeout_cleanup_loop())
     _lab_scan_task     = asyncio.create_task(_lab_session_scan_loop())
     _storage_scan_task = asyncio.create_task(_storage_lifecycle_loop())
     _myai_sync_task    = asyncio.create_task(_myai_sync_loop())
     _myai_balance_task = asyncio.create_task(_myai_balance_loop())
-    logger.info("ZH: 排程器背景工作已啟動 (timeout + lab + storage + myai + myai餘額) | EN: Scheduler started (5 tasks)")
+    _bounce_scan_task  = asyncio.create_task(_bounce_scan_loop())
+    logger.info("ZH: 排程器背景工作已啟動 (timeout + lab + storage + myai + myai餘額 + 退信回收) | EN: Scheduler started (6 tasks)")
 
 
 async def stop_scheduler():
-    global _scheduler_task, _lab_scan_task, _storage_scan_task, _myai_sync_task, _myai_balance_task, _scheduler_running
+    global _scheduler_task, _lab_scan_task, _storage_scan_task, _myai_sync_task, _myai_balance_task, _bounce_scan_task, _scheduler_running
     _scheduler_running = False
-    for task in (_scheduler_task, _lab_scan_task, _storage_scan_task, _myai_sync_task, _myai_balance_task):
+    for task in (_scheduler_task, _lab_scan_task, _storage_scan_task, _myai_sync_task, _myai_balance_task, _bounce_scan_task):
         if task:
             task.cancel()
             try:
