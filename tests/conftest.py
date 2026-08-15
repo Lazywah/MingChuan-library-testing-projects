@@ -30,8 +30,40 @@ os.environ.setdefault("DATABASE_PATH", "/tmp/test_ai_platform.db")
 os.environ.setdefault("PORTKEY_ENABLED", "false")  # ZH: 測試時不呼叫真實 LLM
 os.environ["RATELIMIT_ENABLED"] = "False"  # ZH: 測試時停用速率限制，避免跨測試累積
 
+# ZH: 測試絕不碰真實外部服務。config.py 會讀 repo 根目錄的 .env，那裡面是**正式環境**
+#     的 SMTP 與 Ollama 設定 —— 不覆蓋的話跑測試會真的寄信、真的連 Ollama。
+#     用直接指派而非 setdefault：環境變數的優先序高於 .env，setdefault 對「.env 有值
+#     但 os.environ 沒有」的情況無效。
+# EN: Tests must never touch real external services; .env holds PRODUCTION SMTP/Ollama.
+#     Direct assignment (not setdefault) — env vars outrank .env in pydantic-settings.
+os.environ["SMTP_SERVER"] = ""                        # ZH: 空值 → send_email 走 mock，不實際寄出
+os.environ["OLLAMA_BASE_URL"] = "http://127.0.0.1:1"  # ZH: 立即連線被拒，不做 DNS 查詢
+# ZH: 為什麼是 127.0.0.1:1 而不是留著預設：預設值 ai-platform-ollama:11434 是 docker
+#     內部主機名，在容器外每個 embedding 請求都要等一次 DNS 解析失敗。啟動時的知識庫
+#     匯入有 40 個 chunk，等於每個測試多花約 60 秒（client fixture 是 function scope，
+#     每個測試都重跑一次 lifespan）。指向 localhost 的關閉埠則是立即 ECONNREFUSED。
+
 from app.database import Base, get_db
 from app.main import app
+
+# ZH: lifespan 啟動時會匯入知識庫（v2.6 support assistant），那要打 Ollama。
+#     測試環境沒有 Ollama，8 個檔案切成 40 個 chunk 每個都等一次連線失敗，
+#     **每建立一次 TestClient 就要 91 秒**——而 client fixture 是 function scope，
+#     等於每個測試都付一次。實測：跳過之後單一測試從 92s 降到 1s 出頭。
+#     這裡換成 no-op 而不是改 app 程式碼：匯入與被測邏輯無關，
+#     且 test_rag_service.py 只測純函式（chunk/cosine/rank/build_*），不碰這支。
+#     真要測匯入的話，該測試自己 monkeypatch 回來。
+# EN: Startup KB ingest needs Ollama (absent in tests) and costs ~91s per TestClient.
+#     Replaced with a no-op here; no app code changed. test_rag_service.py only
+#     exercises pure helpers and never calls this.
+from app.services import rag_service as _rag_service
+
+
+async def _skip_kb_ingest(db, force: bool = False):
+    return {"status": "skipped-in-tests", "chunks": 0, "files": 0, "failed": 0}
+
+
+_rag_service.ingest_knowledge_base = _skip_kb_ingest
 
 # ZH: 使用每次測試都獨立的記憶體 SQLite
 # EN: Use isolated in-memory SQLite per test
@@ -88,10 +120,26 @@ def client(db_engine):
 
 def make_user(db, username="testuser", email="test@example.com",
               password="password123", role="student"):
+    """
+    ZH: 建立測試使用者。
+        role != student 時不能直接丟給 schemas.UserCreate —— UserCreate 有
+        role_must_be_student 驗證器（公開註冊只允許 student，teacher/admin 由管理端
+        佈建）。所以一律以 student 建立再改 role，等於走「管理端佈建」那條路徑，
+        密碼雜湊等邏輯仍由 crud.create_user 負責。
+        不這樣做的話，所有 make_user(role="admin"/"teacher") 都會 ValidationError ——
+        test_admin.py 15 個、test_api.py 1 個測試就是這樣一起紅的。
+    EN: UserCreate rejects non-student roles (public-registration guard), so create as
+        student then promote — mirroring admin-side provisioning.
+    """
     from app import crud, schemas
     user_in = schemas.UserCreate(username=username, email=email,
-                                  password=password, role=role)
-    return crud.create_user(db, user_in)
+                                  password=password, role="student")
+    user = crud.create_user(db, user_in)
+    if role != "student":
+        user.role = role
+        db.commit()
+        db.refresh(user)
+    return user
 
 
 def auth_headers(client, username="testuser", password="password123"):
