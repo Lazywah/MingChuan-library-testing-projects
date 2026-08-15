@@ -1206,7 +1206,7 @@ def grant_quota(
     target = db.query(models.User).filter(models.User.id == payload.user_id).first()
     if not target:
         raise HTTPException(404, "Target user not found")
-    grant = quota_service.grant(
+    grant = quota_service.grant_quota(
         db,
         user_id=payload.user_id,
         extra_quota_gb=payload.extra_quota_gb,
@@ -1224,7 +1224,7 @@ def revoke_quota(
     admin: models.User = Depends(require_admin),
 ) -> Any:
     """ZH: 撤銷一筆配額提權 | EN: Revoke a quota grant"""
-    success = quota_service.revoke(db, grant_id=grant_id, revoked_by=admin.id)
+    success = quota_service.revoke_quota(db, grant_id=grant_id, revoked_by=admin.id)
     if not success:
         raise HTTPException(404, "Grant not found or already revoked")
     return {"status": "revoked", "grant_id": grant_id}

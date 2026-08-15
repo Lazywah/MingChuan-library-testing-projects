@@ -16,6 +16,7 @@ EN: Purpose:
 
 from __future__ import annotations
 
+import json
 import logging
 from datetime import datetime, date, timezone
 from typing import Optional
@@ -27,6 +28,25 @@ from .. import models
 from ..config import SCHEDULER_POLICY
 
 logger = logging.getLogger(__name__)
+
+
+def _audit(db: Session, admin_id: str, target_user: Optional[str],
+           action: str, payload: dict) -> None:
+    """
+    ZH: 掛一筆 admin_actions 記錄到「目前這個交易」——只 add 不 commit。
+        呼叫端在自己的 db.commit() 前呼叫，稽核列與領域變更同進同出；
+        不像 storage_lifecycle._log_admin_action 各自 commit（那會有
+        「提權成功但稽核掉了」的窗口）。
+        action 值須與 models.AdminAction.action 的註解一致，/admin/audit 靠它篩選。
+    EN: Stage an admin_actions row in the caller's transaction (no commit).
+    """
+    db.add(models.AdminAction(
+        admin_id=admin_id,
+        target_user=target_user,
+        action=action,
+        payload=json.dumps(payload, ensure_ascii=False),
+        timestamp=datetime.now(timezone.utc),
+    ))
 
 
 # ==============================================================================
@@ -98,6 +118,13 @@ def grant_quota(
         expires_at=expires_at,
     )
     db.add(grant)
+    db.flush()                      # ZH: 先 flush 取得 grant.id，稽核列才引用得到
+    _audit(db, granted_by, user_id, "grant_quota", {
+        "grant_id": grant.id,
+        "extra_quota_gb": extra_quota_gb,
+        "reason": grant.reason,
+        "expires_at": expires_at.isoformat() if expires_at else None,
+    })
     db.commit()
     db.refresh(grant)
     logger.info(
@@ -107,15 +134,22 @@ def grant_quota(
     return grant
 
 
-def revoke_quota(db: Session, grant_id: str) -> bool:
+def revoke_quota(db: Session, grant_id: str, revoked_by: str) -> bool:
     """
     ZH: 撤銷一筆配額提權（不刪除，保留審計）
-    EN: Revoke a quota grant (soft delete, audit preserved)
+        revoked_by 只寫進 admin_actions —— QuotaGrant 表只有 revoked_at、
+        沒有 revoked_by 欄位，加欄位要 migration，而稽核列已足以回答「誰撤銷的」。
+    EN: Revoke a quota grant (soft delete, audit preserved).
+        revoked_by goes to admin_actions only (QuotaGrant has no such column).
     """
     grant = db.query(models.QuotaGrant).filter(models.QuotaGrant.id == grant_id).first()
     if not grant or grant.revoked_at is not None:
         return False
     grant.revoked_at = datetime.now(timezone.utc)
+    _audit(db, revoked_by, grant.user_id, "revoke_quota", {
+        "grant_id": grant_id,
+        "extra_quota_gb": grant.extra_quota_gb,
+    })
     db.commit()
     return True
 
