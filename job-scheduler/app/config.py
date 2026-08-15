@@ -24,6 +24,43 @@ from pydantic import field_validator
 
 logger = logging.getLogger(__name__)
 
+# ==============================================================================
+# ZH: .env 的定位 —— 必須在任何讀取 os.environ 的程式碼之前完成
+# ==============================================================================
+# ZH: 兩套機制以前是分開的，而且會不一致：
+#       Settings 的 env_file=".env" 相對於**工作目錄**解析
+#       OIDC 覆寫（見下方）直接讀 os.environ
+#     於是「用 docker compose 跑」與「直接跑 python」的行為不同 ——
+#     compose 把 OIDC_* 注入容器環境所以正常；直接跑時 .env 只進 Settings、
+#     不進 os.environ，OIDC 就拿不到憑證，**靜默降級成 mock**（只印一行 log）。
+#     這是安全問題：正式環境若改用 systemd / uvicorn 直跑就會中招。
+#
+#     修法：啟動時把 .env 主動載進 os.environ，路徑相對**本檔**而非工作目錄。
+#     override=False 是關鍵 —— 真實環境變數（compose 注入、測試的 conftest 覆蓋）
+#     優先序永遠高於 .env 檔，不會被蓋掉。
+# EN: Load .env into os.environ up-front, resolved relative to THIS file (not cwd),
+#     with override=False so real env vars always win.
+_APP_DIR = os.path.dirname(os.path.abspath(__file__))
+ENV_FILE = None
+for _cand in (
+    os.path.join(_APP_DIR, "..", "..", ".env"),   # CodeSpace/.env（正式位置）
+    os.path.join(_APP_DIR, "..", ".env"),         # job-scheduler/.env
+    os.path.join(os.getcwd(), ".env"),            # 相容舊行為
+):
+    _cand = os.path.abspath(_cand)
+    if os.path.isfile(_cand):
+        ENV_FILE = _cand
+        break
+
+if ENV_FILE:
+    try:
+        from dotenv import load_dotenv
+        load_dotenv(ENV_FILE, override=False)
+    except ImportError:                            # noqa: BLE001
+        # ZH: 容器映像不一定裝 python-dotenv；那種情境下 compose 已注入環境變數，
+        #     沒有 .env 檔也是正常的，不該讓應用起不來。
+        logger.debug("python-dotenv 未安裝，略過 .env 載入（環境變數仍有效）")
+
 # ZH: C3 修復：弱秘鑰黑名單，啟動時若 .env 仍用這些值會 fail-fast
 # EN: C3 fix: weak-secret blacklist — fail-fast on container start
 _INSECURE_SECRETS = {
@@ -206,7 +243,9 @@ class Settings(BaseSettings):
     IMAP_FOLDER: str = "INBOX"
 
     model_config = {
-        "env_file": ".env",
+        # ZH: 用上面解析出的絕對路徑，不要用相對的 ".env" ——
+        #     相對路徑會跟著工作目錄跑，從 tests/ 或 job-scheduler/ 啟動就找不到。
+        "env_file": ENV_FILE or ".env",
         "case_sensitive": True,
         "extra": "ignore",
     }
