@@ -33,6 +33,22 @@ def _record(to_email: str, subject: str, status: str, detail: str = None,
         logger.warning(f"寫入寄信紀錄失敗（不影響寄信）: {e}")
 
 
+# ZH: RFC 2606 / RFC 6761 保留給「文件與測試」的網域與 TLD。
+#     這些**規範上就不可投遞**，寄過去必定退信到我們的寄件信箱。
+#     這不是對可投遞性的猜測，是規範定義的事實，所以可以硬擋。
+# EN: RFC 2606 / 6761 reserved names — undeliverable by definition, never send.
+#     `localhost` 要單獨列：它是 TLD 本身，不以 `.localhost` 結尾。
+_RESERVED_DOMAINS = {"example.com", "example.net", "example.org", "example.edu",
+                     "localhost", "test", "invalid", "example"}
+_RESERVED_TLDS = (".test", ".example", ".invalid", ".localhost")
+
+
+def is_undeliverable_by_spec(to_email: str) -> bool:
+    """ZH: 收件網域是否為規範保留（必定退信）。"""
+    dom = (to_email or "").rsplit("@", 1)[-1].strip().lower()
+    return dom in _RESERVED_DOMAINS or dom.endswith(_RESERVED_TLDS)
+
+
 def send_email(to_email: str, subject: str, html_content: str,
                kind: str = None, username: str = None, user_id: str = None):
     """
@@ -55,6 +71,17 @@ def send_email(to_email: str, subject: str, html_content: str,
     #     「非同步退信」對回「當初那一封」的唯一可靠鍵。交給 SMTP 伺服器自動產的話
     #     我們拿不到值，之後只能靠 to_email 猜，同一人寄過多封就會對錯。
     msg_id = make_msgid(domain=(settings.SMTP_FROM_EMAIL.split("@")[-1] or None))
+
+    # ZH: 保留網域一律不寄。這道閘門刻意放在**最前面、且不依賴任何設定** ——
+    #     實測踩過：跑測試時 conftest 沒有覆蓋 SMTP_SERVER，43 個測試登入點
+    #     真的往 xxx@example.com 寄了信，全數退回寄件信箱（2026-08-15，約 35 封）。
+    #     測試端的防線（設定 SMTP_SERVER="" 走 mock）有效，但那是**外部**防線，
+    #     改壞了就破功；這一道在寄信路徑內，任何呼叫端都繞不過去。
+    if is_undeliverable_by_spec(to_email):
+        logger.warning("拒寄：%s 是 RFC 2606/6761 保留網域，規範上不可投遞", to_email)
+        _record(to_email, subject, "blocked", "reserved domain (RFC 2606/6761)",
+                kind, username, user_id, msg_id)
+        return
 
     if not settings.SMTP_SERVER:
         logger.info(f"========== [MOCK EMAIL] ==========")
