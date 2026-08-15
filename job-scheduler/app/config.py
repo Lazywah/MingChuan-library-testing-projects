@@ -120,6 +120,8 @@ class Settings(BaseSettings):
     """
     ZH: 應用程式基礎設定類別 (僅保留與密碼、路徑相關)
     EN: Application base settings class (paths and secrets only)
+
+    @node job-scheduler/app/config.py::Settings
     """
 
     # ------------------------------------------------------------------
@@ -255,6 +257,7 @@ class Settings(BaseSettings):
     @field_validator("JWT_SECRET_KEY")
     @classmethod
     def _validate_jwt_secret(cls, v: str) -> str:
+        """@node job-scheduler/app/config.py::Settings._validate_jwt_secret"""
         if v in _INSECURE_SECRETS:
             raise ValueError(
                 "JWT_SECRET_KEY uses an insecure default value. "
@@ -269,6 +272,7 @@ class Settings(BaseSettings):
     @field_validator("WORKER_API_TOKEN")
     @classmethod
     def _validate_worker_token(cls, v: str) -> str:
+        """@node job-scheduler/app/config.py::Settings._validate_worker_token"""
         if v in _INSECURE_SECRETS:
             raise ValueError(
                 "WORKER_API_TOKEN uses an insecure default value. "
@@ -286,6 +290,8 @@ class Settings(BaseSettings):
         """
         ZH: v2.0 Secrets KEK — 必須足夠強，加密所有使用者 API keys
         EN: v2.0 Secrets KEK — must be strong; encrypts all user API keys
+
+        @node job-scheduler/app/config.py::Settings._validate_secrets_master_key
         """
         if v in _INSECURE_SECRETS or v == "dev-secrets-master-key-change-in-production":
             raise ValueError(

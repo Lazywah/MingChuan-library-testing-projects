@@ -54,6 +54,8 @@ def _extract_token(request: Request, bearer_token: str | None) -> str | None:
 
     Cookie 路徑用於瀏覽器直接導航的場景 (例：window.open('/code/...'))，
     這類請求 fetch API 才能塞 header，直接 navigate 無法。
+
+    @node job-scheduler/app/auth.py::_extract_token
     """
     if bearer_token:
         return bearer_token
@@ -68,6 +70,8 @@ def authenticate_user(db: Session, username: str, password: str):
     Returns:
         ZH: 成功回傳 User 物件，失敗回傳 None
         EN: User object on success, None on failure
+
+    @node job-scheduler/app/auth.py::authenticate_user
     """
     user = crud.get_user_by_username(db, username)
     if not user:
@@ -87,6 +91,8 @@ def create_access_token(data: dict, expires_delta: timedelta = None) -> str:
     Args:
         data: ZH: 要編碼的資料 (通常含 sub=username, role) | EN: Data to encode
         expires_delta: ZH: 自訂過期時間 | EN: Custom expiration time
+
+    @node job-scheduler/app/auth.py::create_access_token
     """
     to_encode = data.copy()
     expire = datetime.now(timezone.utc) + (expires_delta or timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES))
@@ -109,6 +115,8 @@ async def get_current_user(
 
     v2.1: 同時支援 Authorization: Bearer (fetch/SPA 用) 與 ai_hud_token cookie
     (瀏覽器直接導航如 window.open('/code/...') 走這條路)
+
+    @node job-scheduler/app/auth.py::get_current_user
     """
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
@@ -166,8 +174,11 @@ def require_role(*allowed_roles: str):
         def teacher_page(user = Depends(require_role("teacher", "admin"))):
             ...
     EN: Usage: see above
+
+    @node job-scheduler/app/auth.py::require_role
     """
     async def role_checker(current_user: models.User = Depends(get_current_user)):
+        """@node job-scheduler/app/auth.py::require_role.<nested@170>.role_checker"""
         if current_user.role not in allowed_roles:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,

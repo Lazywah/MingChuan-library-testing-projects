@@ -41,12 +41,18 @@ pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 
 def get_password_hash(password: str) -> str:
-    """ZH: 將明文密碼轉為 bcrypt 雜湊 | EN: Hash plaintext password with bcrypt"""
+    """ZH: 將明文密碼轉為 bcrypt 雜湊 | EN: Hash plaintext password with bcrypt
+
+    @node job-scheduler/app/crud.py::get_password_hash
+    """
     return pwd_context.hash(password)
 
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
-    """ZH: 驗證密碼是否匹配 | EN: Verify password matches hash"""
+    """ZH: 驗證密碼是否匹配 | EN: Verify password matches hash
+
+    @node job-scheduler/app/crud.py::verify_password
+    """
     return pwd_context.verify(plain_password, hashed_password)
 
 
@@ -55,17 +61,26 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
 # ==============================================================================
 
 def get_user_by_username(db: Session, username: str) -> Optional[models.User]:
-    """ZH: 依使用者名稱查詢 | EN: Query user by username"""
+    """ZH: 依使用者名稱查詢 | EN: Query user by username
+
+    @node job-scheduler/app/crud.py::get_user_by_username
+    """
     return db.query(models.User).filter(models.User.username == username).first()
 
 
 def get_user_by_email(db: Session, email: str) -> Optional[models.User]:
-    """ZH: 依電子郵件查詢 | EN: Query user by email"""
+    """ZH: 依電子郵件查詢 | EN: Query user by email
+
+    @node job-scheduler/app/crud.py::get_user_by_email
+    """
     return db.query(models.User).filter(models.User.email == email).first()
 
 
 def get_user_by_id(db: Session, user_id: str) -> Optional[models.User]:
-    """ZH: 依 ID 查詢 | EN: Query user by ID"""
+    """ZH: 依 ID 查詢 | EN: Query user by ID
+
+    @node job-scheduler/app/crud.py::get_user_by_id
+    """
     return db.query(models.User).filter(models.User.id == user_id).first()
 
 
@@ -76,6 +91,8 @@ def get_user_by_external_id(db: Session, external_id: str) -> Optional[models.Us
 
     ZH: v2.1 — OIDC callback 優先使用 oid 識別（學號改名 / 換 email 都不變）
     EN: v2.1 — OIDC callback prefers oid (immune to username / email changes)
+
+    @node job-scheduler/app/crud.py::get_user_by_external_id
     """
     if not external_id:
         return None
@@ -95,6 +112,8 @@ def create_user(db: Session, user: schemas.UserCreate) -> models.User:
         1. Hash password
         2. Create User record
         3. Create corresponding TokenUsage record
+
+    @node job-scheduler/app/crud.py::create_user
     """
     hashed_password = get_password_hash(user.password)
     db_user = models.User(
@@ -132,6 +151,8 @@ def update_user(db: Session, db_user: models.User, update_data: schemas.UserUpda
     EN: v2.1 — SSO users (auth_source != "local") cannot change password here
         because the password lives at the IdP. Frontend hides the password
         field and shows an IdP link instead.
+
+    @node job-scheduler/app/crud.py::update_user
     """
     # v2.1: SSO 使用者改密碼直接拒絕
     if update_data.password is not None and update_data.password.strip():
@@ -170,6 +191,8 @@ def create_sso_user(
         auth_source 由 SSO client 的 validate_ticket() 回傳並傳遞至此。
     EN: v2.1 — adds auth_source and external_id, populated from SSO client's
         validate_ticket() return dict.
+
+    @node job-scheduler/app/crud.py::create_sso_user
     """
     import secrets as _secrets
     random_password = _secrets.token_urlsafe(16)
@@ -218,6 +241,8 @@ def upgrade_to_sso(
         但既有本機密碼 hash 仍保留在 DB（不主動清除，作為緊急救援保險）。
     EN: Security note — after upgrade, user cannot change password via /me;
         but existing hashed_password is preserved in DB for emergency fallback.
+
+    @node job-scheduler/app/crud.py::upgrade_to_sso
     """
     db_user.auth_source = auth_source
     if external_id:
@@ -231,14 +256,20 @@ def upgrade_to_sso(
 # ==============================================================================
 
 def get_token_usage(db: Session, user_id: str) -> Optional[models.TokenUsage]:
-    """ZH: 查詢使用者 Token 用量 | EN: Query user token usage"""
+    """ZH: 查詢使用者 Token 用量 | EN: Query user token usage
+
+    @node job-scheduler/app/crud.py::get_token_usage
+    """
     return db.query(models.TokenUsage).filter(
         models.TokenUsage.user_id == user_id
     ).first()
 
 
 def create_token_usage(db: Session, user_id: str) -> models.TokenUsage:
-    """ZH: 建立 Token 用量記錄 (若不存在) | EN: Create token usage record (if not exists)"""
+    """ZH: 建立 Token 用量記錄 (若不存在) | EN: Create token usage record (if not exists)
+
+    @node job-scheduler/app/crud.py::create_token_usage
+    """
     next_month_reset = _calculate_next_reset_date(db)
     db_usage = models.TokenUsage(
         user_id=user_id,
@@ -259,6 +290,8 @@ def increment_token_usage(db: Session, user_id: str, tokens: int) -> models.Toke
 
     ZH: 會自動檢查是否需要重置 (過了重置日期)
     EN: Auto-checks if reset is needed (past reset date)
+
+    @node job-scheduler/app/crud.py::increment_token_usage
     """
     usage = get_token_usage(db, user_id)
     if not usage:
@@ -294,6 +327,8 @@ def try_deduct_tokens(db: Session, user_id: str, tokens: int) -> bool:
     Returns:
         True  — deduction succeeded
         False — quota exceeded (caller should raise HTTP 429)
+
+    @node job-scheduler/app/crud.py::try_deduct_tokens
     """
     from sqlalchemy import update as _sa_update
 
@@ -349,7 +384,10 @@ VALID_POOLS = ("batch", "interactive")
 
 
 def normalize_pool(value) -> str:
-    """ZH: 正規化 pool_type，非白名單一律回 'batch' | EN: normalize pool, unknown → 'batch'."""
+    """ZH: 正規化 pool_type，非白名單一律回 'batch' | EN: normalize pool, unknown → 'batch'.
+
+    @node job-scheduler/app/crud.py::normalize_pool
+    """
     v = (value or "batch")
     return v if v in VALID_POOLS else "batch"
 
@@ -358,6 +396,8 @@ def create_job(db: Session, job: schemas.JobCreate, user_id: str) -> models.Trai
     """
     ZH: 建立新訓練任務 (狀態 = pending)
     EN: Create new training job (status = pending)
+
+    @node job-scheduler/app/crud.py::create_job
     """
     db_job = models.TrainingJob(
         user_id=user_id,
@@ -383,7 +423,10 @@ def create_job(db: Session, job: schemas.JobCreate, user_id: str) -> models.Trai
 
 
 def get_job(db: Session, job_id: str) -> Optional[models.TrainingJob]:
-    """ZH: 依 ID 查詢任務 | EN: Query job by ID"""
+    """ZH: 依 ID 查詢任務 | EN: Query job by ID
+
+    @node job-scheduler/app/crud.py::get_job
+    """
     return db.query(models.TrainingJob).filter(
         models.TrainingJob.id == job_id
     ).first()
@@ -401,6 +444,8 @@ def get_jobs_by_user(
     EN: Query user's job list (with filter, pagination)
 
     Returns: (jobs_list, total_count)
+
+    @node job-scheduler/app/crud.py::get_jobs_by_user
     """
     query = db.query(models.TrainingJob).filter(
         models.TrainingJob.user_id == user_id
@@ -421,6 +466,8 @@ def get_all_jobs(
 ) -> tuple[List[models.TrainingJob], int]:
     """
     ZH: 查詢所有任務 (管理員用) | EN: Query all jobs (admin only)
+
+    @node job-scheduler/app/crud.py::get_all_jobs
     """
     query = db.query(models.TrainingJob)
     if status:
@@ -435,6 +482,8 @@ def get_pending_jobs(db: Session) -> List[models.TrainingJob]:
     """
     ZH: 取得待處理任務 (按優先級排序，排程器使用)
     EN: Get pending jobs (sorted by priority, used by scheduler)
+
+    @node job-scheduler/app/crud.py::get_pending_jobs
     """
     return db.query(models.TrainingJob).filter(
         models.TrainingJob.status == "pending"
@@ -445,7 +494,10 @@ def get_pending_jobs(db: Session) -> List[models.TrainingJob]:
 
 
 def get_running_jobs_count(db: Session) -> int:
-    """ZH: 取得正在執行的任務數量 | EN: Get running jobs count"""
+    """ZH: 取得正在執行的任務數量 | EN: Get running jobs count
+
+    @node job-scheduler/app/crud.py::get_running_jobs_count
+    """
     return db.query(models.TrainingJob).filter(
         models.TrainingJob.status == "running"
     ).count()
@@ -463,6 +515,8 @@ def update_job_status(
     """
     ZH: 更新任務狀態 (由排程器呼叫)
     EN: Update job status (called by scheduler)
+
+    @node job-scheduler/app/crud.py::update_job_status
     """
     job = get_job(db, job_id)
     if not job:
@@ -491,7 +545,10 @@ def update_job_status(
 
 
 def update_job_progress(db: Session, job_id: str, progress: float) -> Optional[models.TrainingJob]:
-    """ZH: 更新任務進度 | EN: Update job progress"""
+    """ZH: 更新任務進度 | EN: Update job progress
+
+    @node job-scheduler/app/crud.py::update_job_progress
+    """
     job = get_job(db, job_id)
     if job:
         job.progress = progress
@@ -501,7 +558,10 @@ def update_job_progress(db: Session, job_id: str, progress: float) -> Optional[m
 
 
 def append_job_log(db: Session, job_id: str, new_log: str) -> Optional[models.TrainingJob]:
-    """ZH: 附加日誌 | EN: Append execution log"""
+    """ZH: 附加日誌 | EN: Append execution log
+
+    @node job-scheduler/app/crud.py::append_job_log
+    """
     job = get_job(db, job_id)
     if job:
         current_logs = job.logs or ""
@@ -512,7 +572,10 @@ def append_job_log(db: Session, job_id: str, new_log: str) -> Optional[models.Tr
 
 
 def append_job_metric(db: Session, job_id: str, metric: dict) -> Optional[models.TrainingJob]:
-    """ZH: 附加指標資料 (存為 JSON array) | EN: Append metric data (stored as JSON array)"""
+    """ZH: 附加指標資料 (存為 JSON array) | EN: Append metric data (stored as JSON array)
+
+    @node job-scheduler/app/crud.py::append_job_metric
+    """
     job = get_job(db, job_id)
     if job:
         current_metrics = []
@@ -532,6 +595,8 @@ def cancel_job(db: Session, job_id: str) -> Optional[models.TrainingJob]:
     """
     ZH: 取消任務 (僅 pending/queued 可取消)
     EN: Cancel job (only pending/queued can be cancelled)
+
+    @node job-scheduler/app/crud.py::cancel_job
     """
     job = get_job(db, job_id)
     if not job:
@@ -546,7 +611,10 @@ def cancel_job(db: Session, job_id: str) -> Optional[models.TrainingJob]:
 
 
 def get_queue_position(db: Session, job_id: str) -> Optional[int]:
-    """ZH: 計算任務在佇列中的位置 | EN: Calculate job's queue position"""
+    """ZH: 計算任務在佇列中的位置 | EN: Calculate job's queue position
+
+    @node job-scheduler/app/crud.py::get_queue_position
+    """
     job = get_job(db, job_id)
     if not job or job.status not in ("pending", "queued"):
         return None
@@ -571,6 +639,8 @@ def _calculate_next_reset_date(db: Session = None) -> datetime:
 
     ZH: 邏輯：找到下一個每月第 token_reset_day 天。有 db 就讀 runtime 設定，否則回 .env 預設。
     EN: Find the next Nth day of the month. Reads runtime setting when db given, else .env default.
+
+    @node job-scheduler/app/crud.py::_calculate_next_reset_date
     """
     now = datetime.now(timezone.utc)
     reset_day = get_setting(db, "token_reset_day") if db is not None else settings.TOKEN_RESET_DAY
@@ -592,7 +662,10 @@ def _calculate_next_reset_date(db: Session = None) -> datetime:
 # ==============================================================================
 
 def create_chat_history(db: Session, chat: models.ChatHistory) -> models.ChatHistory:
-    """ZH: 建立單筆對話紀錄 | EN: Create a single chat history record"""
+    """ZH: 建立單筆對話紀錄 | EN: Create a single chat history record
+
+    @node job-scheduler/app/crud.py::create_chat_history
+    """
     db.add(chat)
     # ZH: 注意：此處不呼叫 commit()，由呼叫者控制事務 | EN: Caller handles commit
     return chat
@@ -604,7 +677,10 @@ def create_chat_history(db: Session, chat: models.ChatHistory) -> models.ChatHis
 
 def list_public_models(db: Session, tool_type: str = "chat") -> List[models.Model]:
     """ZH: 列出某工具「公開且適用」的模型（tool_types 以逗號邊界精確比對，避免子字串誤判）。
-       EN: List public models applicable to a tool (exact comma-split match)."""
+       EN: List public models applicable to a tool (exact comma-split match).
+
+    @node job-scheduler/app/crud.py::list_public_models
+    """
     tt = (tool_type or "chat").strip().lower()
     rows = (
         db.query(models.Model)
@@ -628,6 +704,8 @@ def estimate_job_tokens(config: Optional[dict]) -> int:
     """
     ZH: 依訓練配置估算 Token 消耗（epochs × 1000，最低 1000）
     EN: Estimate token cost from training config (epochs × 1000, minimum 1000)
+
+    @node job-scheduler/app/crud.py::estimate_job_tokens
     """
     epochs = 10
     if config and "epochs" in config:
@@ -648,7 +726,10 @@ def upsert_worker_heartbeat(
     source_ip: Optional[str] = None,
 ) -> models.WorkerHeartbeat:
     """ZH: 更新或新增 Worker 節點心跳；v3.2 順帶自動註冊 gpu_nodes + NODE_ID 撞名偵測
-       EN: Upsert worker heartbeat; v3.2 also auto-registers gpu_nodes + duplicate-ID detection"""
+       EN: Upsert worker heartbeat; v3.2 also auto-registers gpu_nodes + duplicate-ID detection
+
+    @node job-scheduler/app/crud.py::upsert_worker_heartbeat
+    """
     node = db.query(models.WorkerHeartbeat).filter(
         models.WorkerHeartbeat.node_id == node_id
     ).first()
@@ -708,6 +789,8 @@ def get_online_worker_nodes(db: Session, timeout_seconds: int = 90) -> List[mode
     """
     ZH: 取得在線的 Worker 節點列表（最後心跳在 timeout_seconds 秒內）
     EN: Get online worker nodes (last heartbeat within timeout_seconds)
+
+    @node job-scheduler/app/crud.py::get_online_worker_nodes
     """
     cutoff = datetime.now(timezone.utc) - timedelta(seconds=timeout_seconds)
     return db.query(models.WorkerHeartbeat).filter(
@@ -720,7 +803,10 @@ def pool_has_online_worker(db: Session, pool_type: str, timeout_seconds: int = 9
        v3.2：改為節點管理感知——(1) 池別以 admin 覆蓋值優先於 worker 自報；
        (2) 「在線但被停用/時段外」的節點不算數，否則互動任務會誤判有人接而卡死 pending。
        EN: v3.2 node-mgmt aware — pool override wins over worker-reported, and
-       online-but-not-dispatchable nodes (disabled / out of window) don't count."""
+       online-but-not-dispatchable nodes (disabled / out of window) don't count.
+
+    @node job-scheduler/app/crud.py::pool_has_online_worker
+    """
     pool = normalize_pool(pool_type)
     for n in get_online_worker_nodes(db, timeout_seconds=timeout_seconds):
         cfg = get_gpu_node(db, n.node_id)
@@ -742,12 +828,18 @@ VALID_NODE_FIELDS = {"display_name", "note", "enabled", "pool_override",
 
 
 def get_gpu_node(db: Session, node_id: str) -> Optional[models.GpuNode]:
-    """ZH: 取節點設定列（可能為 None＝尚未心跳註冊）| EN: node config row (None = never seen)"""
+    """ZH: 取節點設定列（可能為 None＝尚未心跳註冊）| EN: node config row (None = never seen)
+
+    @node job-scheduler/app/crud.py::get_gpu_node
+    """
     return db.query(models.GpuNode).filter(models.GpuNode.node_id == node_id).first()
 
 
 def effective_pool(node_cfg: Optional[models.GpuNode], reported_pool) -> str:
-    """ZH: 生效池 = admin 覆蓋值優先，否則 worker 自報 | EN: override wins, else worker-reported"""
+    """ZH: 生效池 = admin 覆蓋值優先，否則 worker 自報 | EN: override wins, else worker-reported
+
+    @node job-scheduler/app/crud.py::effective_pool
+    """
     if node_cfg is not None and node_cfg.pool_override:
         return normalize_pool(node_cfg.pool_override)
     return normalize_pool(reported_pool)
@@ -761,6 +853,8 @@ def node_dispatch_state(node_cfg: Optional[models.GpuNode],
         於 reason 尾註（fail-open：設定壞掉不該讓整台機器消失，狀態欄會示警）。
     EN: Whether the node may take jobs now. Missing row = allowed. A corrupt schedule
         fails open (always-on) and is surfaced for the status panel.
+
+    @node job-scheduler/app/crud.py::node_dispatch_state
     """
     if node_cfg is None:
         return {"allowed": True, "reason": "ok"}
@@ -783,6 +877,8 @@ def update_gpu_node(db: Session, node_id: str, fields: dict) -> models.GpuNode:
         節點列不存在時建立（允許 admin 在機器上線前先建好設定）。
     EN: Update node config (whitelisted fields only), validating schedule/pool/buffer.
         Creates the row if missing (pre-provisioning before the worker first appears).
+
+    @node job-scheduler/app/crud.py::update_gpu_node
     """
     node = get_gpu_node(db, node_id)
     if node is None:
@@ -832,6 +928,8 @@ def pool_availability(db: Session, timeout_seconds: int = 90) -> dict:
           時間 → 不列入；全部給不出 → None，前端顯示「等機器上線」措辭）
     EN: Per-pool availability + earliest next window opening, matching take_job semantics
         (incl. batch backfill for interactive).
+
+    @node job-scheduler/app/crud.py::pool_availability
     """
     online_ids = {n.node_id for n in get_online_worker_nodes(db, timeout_seconds=timeout_seconds)}
     hb_map = {h.node_id: h for h in db.query(models.WorkerHeartbeat).all()}
@@ -883,6 +981,8 @@ def list_gpu_nodes_with_status(db: Session, timeout_seconds: int = 90) -> list:
         執行中任務 + 累計完成/失敗數 + NODE_ID 撞名警示。
     EN: Admin status panel — union of config and heartbeat rows with live state,
         next transition, running jobs, per-node totals, duplicate-ID warning.
+
+    @node job-scheduler/app/crud.py::list_gpu_nodes_with_status
     """
     now = datetime.now(timezone.utc)
     hb_map = {h.node_id: h for h in db.query(models.WorkerHeartbeat).all()}
@@ -966,13 +1066,19 @@ def list_gpu_nodes_with_status(db: Session, timeout_seconds: int = 90) -> list:
 # ==============================================================================
 
 def get_system_config(db: Session, key: str, default: str = "") -> str:
-    """ZH: 讀設定值，不存在回 default | EN: Read config value, default if missing"""
+    """ZH: 讀設定值，不存在回 default | EN: Read config value, default if missing
+
+    @node job-scheduler/app/crud.py::get_system_config
+    """
     row = db.query(models.SystemConfig).filter(models.SystemConfig.key == key).first()
     return row.value if row else default
 
 
 def set_system_config(db: Session, key: str, value: str, description: Optional[str] = None) -> models.SystemConfig:
-    """ZH: 寫設定值 (upsert) | EN: Upsert config value"""
+    """ZH: 寫設定值 (upsert) | EN: Upsert config value
+
+    @node job-scheduler/app/crud.py::set_system_config
+    """
     row = db.query(models.SystemConfig).filter(models.SystemConfig.key == key).first()
     if row:
         row.value = value
@@ -1015,6 +1121,7 @@ SYSTEM_SETTINGS = {
 
 
 def _clamp_setting(v, lo, hi):
+    """@node job-scheduler/app/crud.py::_clamp_setting"""
     if lo is not None:
         v = max(lo, v)
     if hi is not None:
@@ -1026,6 +1133,8 @@ def get_setting(db: Session, key: str):
     """
     ZH: 讀營運設定的「生效值」：SystemConfig 有值優先，否則回 .env/Settings 預設；一律夾範圍。
     EN: Effective value of an operational setting: SystemConfig override wins, else .env default; clamped.
+
+    @node job-scheduler/app/crud.py::get_setting
     """
     spec = SYSTEM_SETTINGS[key]
     default = spec["default"]()
@@ -1040,7 +1149,10 @@ def get_setting(db: Session, key: str):
 
 
 def get_all_settings(db: Session) -> list:
-    """ZH: 給 admin GET — 每個 key 的 生效值/預設值/範圍/是否已覆寫。"""
+    """ZH: 給 admin GET — 每個 key 的 生效值/預設值/範圍/是否已覆寫。
+
+    @node job-scheduler/app/crud.py::get_all_settings
+    """
     out = []
     for key, spec in SYSTEM_SETTINGS.items():
         raw = get_system_config(db, key, "")
@@ -1062,6 +1174,8 @@ def set_settings(db: Session, updates: dict) -> list:
     ZH: 給 admin PUT — 逐鍵驗證型別+夾限後 upsert；值為 None/空字串＝清除覆寫(回退預設)。
         回傳更新後的完整設定表。未知 key 略過。
     EN: Validate/clamp each key then upsert; empty value clears the override (revert to default).
+
+    @node job-scheduler/app/crud.py::set_settings
     """
     for key, val in updates.items():
         if key not in SYSTEM_SETTINGS:
@@ -1087,14 +1201,20 @@ def set_settings(db: Session, updates: dict) -> list:
 # ==============================================================================
 
 def get_external_account_by_user_id(db: Session, user_id: str) -> Optional[models.ExternalAiAccount]:
-    """ZH: 取某使用者的廠商帳號對應 | EN: Get a user's vendor account mapping"""
+    """ZH: 取某使用者的廠商帳號對應 | EN: Get a user's vendor account mapping
+
+    @node job-scheduler/app/crud.py::get_external_account_by_user_id
+    """
     return db.query(models.ExternalAiAccount).filter(
         models.ExternalAiAccount.user_id == user_id
     ).first()
 
 
 def list_external_accounts(db: Session) -> List[dict]:
-    """ZH: 列出所有對應 (join users 帶平台帳號名) | EN: List all mappings (join users for username)"""
+    """ZH: 列出所有對應 (join users 帶平台帳號名) | EN: List all mappings (join users for username)
+
+    @node job-scheduler/app/crud.py::list_external_accounts
+    """
     rows = (
         db.query(models.ExternalAiAccount, models.User.username)
         .join(models.User, models.User.id == models.ExternalAiAccount.user_id)
@@ -1120,7 +1240,10 @@ def create_external_account(
     status: str = "active", note: Optional[str] = None
 ) -> models.ExternalAiAccount:
     """ZH: 以平台帳號名建立對應 (查無使用者或已存在對應則拋 ValueError)
-       EN: Create mapping by platform username (raises ValueError if user missing or mapping exists)"""
+       EN: Create mapping by platform username (raises ValueError if user missing or mapping exists)
+
+    @node job-scheduler/app/crud.py::create_external_account
+    """
     user = get_user_by_username(db, platform_username)
     if not user:
         raise ValueError(f"platform user not found: {platform_username}")
@@ -1140,7 +1263,10 @@ def update_external_account(
     db: Session, account_id: str, vendor_username: Optional[str] = None,
     status: Optional[str] = None, note: Optional[str] = None
 ) -> Optional[models.ExternalAiAccount]:
-    """ZH: 更新對應 | EN: Update mapping"""
+    """ZH: 更新對應 | EN: Update mapping
+
+    @node job-scheduler/app/crud.py::update_external_account
+    """
     acc = db.query(models.ExternalAiAccount).filter(models.ExternalAiAccount.id == account_id).first()
     if not acc:
         return None
@@ -1156,7 +1282,10 @@ def update_external_account(
 
 
 def delete_external_account(db: Session, account_id: str) -> bool:
-    """ZH: 刪除對應 | EN: Delete mapping"""
+    """ZH: 刪除對應 | EN: Delete mapping
+
+    @node job-scheduler/app/crud.py::delete_external_account
+    """
     acc = db.query(models.ExternalAiAccount).filter(models.ExternalAiAccount.id == account_id).first()
     if not acc:
         return False
@@ -1169,7 +1298,10 @@ def upsert_external_account_by_username(
     db: Session, platform_username: str, vendor_username: str
 ) -> str:
     """ZH: CSV 匯入用：以平台帳號名 upsert，回傳 'created'/'updated'/'skipped'
-       EN: For CSV import: upsert by platform username, returns 'created'/'updated'/'skipped'"""
+       EN: For CSV import: upsert by platform username, returns 'created'/'updated'/'skipped'
+
+    @node job-scheduler/app/crud.py::upsert_external_account_by_username
+    """
     user = get_user_by_username(db, platform_username)
     if not user:
         raise ValueError(f"platform user not found: {platform_username}")

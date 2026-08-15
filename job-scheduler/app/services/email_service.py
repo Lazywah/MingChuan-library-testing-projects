@@ -15,6 +15,8 @@ def _record(to_email: str, subject: str, status: str, detail: str = None,
     ZH: 寫一筆寄信紀錄（自行開 session —— 本模組多由 BackgroundTasks 呼叫，沒有現成 db）。
         記錄失敗絕不影響寄信流程本身。
     EN: Persist one outbound-email record; never let logging break the send path.
+
+    @node job-scheduler/app/services/email_service.py::_record
     """
     try:
         from ..database import SessionLocal
@@ -44,7 +46,10 @@ _RESERVED_TLDS = (".test", ".example", ".invalid", ".localhost")
 
 
 def is_undeliverable_by_spec(to_email: str) -> bool:
-    """ZH: 收件網域是否為規範保留（必定退信）。"""
+    """ZH: 收件網域是否為規範保留（必定退信）。
+
+    @node job-scheduler/app/services/email_service.py::is_undeliverable_by_spec
+    """
     dom = (to_email or "").rsplit("@", 1)[-1].strip().lower()
     return dom in _RESERVED_DOMAINS or dom.endswith(_RESERVED_TLDS)
 
@@ -66,6 +71,8 @@ def send_email(to_email: str, subject: str, html_content: str,
           mock    — 未設定 SMTP_SERVER，只印 log 不實際寄出
     EN: Core send. `sent` = accepted by relay, NOT delivered (async bounces are
         invisible to us). Captures refused recipients and hard failures.
+
+    @node job-scheduler/app/services/email_service.py::send_email
     """
     # ZH: v3.5 自己產 Message-ID —— 退信(DSN)會夾帶原信的 Message-ID，這是把
     #     「非同步退信」對回「當初那一封」的唯一可靠鍵。交給 SMTP 伺服器自動產的話
@@ -137,6 +144,8 @@ def send_login_alert(to_email: str, username: str, ip_address: str):
     """
     ZH: 寄送登入通知
     EN: Send login alert
+
+    @node job-scheduler/app/services/email_service.py::send_login_alert
     """
     subject = "AI Platform - New Login Alert"
     time_str = datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S UTC')
@@ -161,6 +170,8 @@ def send_password_change_alert(to_email: str, username: str):
     """
     ZH: 寄送密碼變更通知
     EN: Send password change alert
+
+    @node job-scheduler/app/services/email_service.py::send_password_change_alert
     """
     subject = "AI Platform - Password Changed Successfully"
     time_str = datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S UTC')
@@ -182,6 +193,8 @@ def send_temp_password(to_email: str, username: str, temp_password: str, is_new_
     """
     ZH: 寄送臨時密碼或新帳號通知
     EN: Send temporary password or new account alert
+
+    @node job-scheduler/app/services/email_service.py::send_temp_password
     """
     subject = "AI Platform - Account Provisioned" if is_new_account else "AI Platform - Password Reset"
     html = f"""
@@ -214,6 +227,8 @@ def send_myai_provisioned(to_email: str, username: str, platform_url: str = ""):
     EN: MYAI provisioning notice. Deliberately password-free (the initial password
         stays in the platform UI). Doubles as the deliverability probe: a bounce is
         the only way to learn whether a derived address actually exists.
+
+    @node job-scheduler/app/services/email_service.py::send_myai_provisioned
     """
     subject = "圖書館 AI 基地 - MYAI 帳號已開通 | Your MYAI account is ready"
     link = (f'<p><a href="{platform_url}">{platform_url}</a></p>' if platform_url else "")

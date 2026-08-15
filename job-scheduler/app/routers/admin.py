@@ -57,7 +57,10 @@ router = APIRouter(tags=["管理員 Admin"])
 # ==============================================================================
 
 def require_admin(current_user: models.User = Depends(get_current_user)) -> models.User:
-    """ZH: 確保呼叫者為 admin，否則拋出 403 | EN: Ensure caller is admin, raise 403 otherwise"""
+    """ZH: 確保呼叫者為 admin，否則拋出 403 | EN: Ensure caller is admin, raise 403 otherwise
+
+    @node job-scheduler/app/routers/admin.py::require_admin
+    """
     if current_user.role != "admin":
         raise HTTPException(status_code=403, detail="Forbidden: Admins only")
     return current_user
@@ -72,7 +75,10 @@ def get_system_settings(
     db: Session = Depends(get_db),
     _admin: models.User = Depends(require_admin),
 ):
-    """ZH: 回傳每個旋鈕的 生效值/預設值/範圍/是否已覆寫。"""
+    """ZH: 回傳每個旋鈕的 生效值/預設值/範圍/是否已覆寫。
+
+    @node job-scheduler/app/routers/admin.py::get_system_settings
+    """
     return {"settings": crud.get_all_settings(db)}
 
 
@@ -82,6 +88,7 @@ def put_system_settings(
     db: Session = Depends(get_db),
     _admin: models.User = Depends(require_admin),
 ):
+    """@node job-scheduler/app/routers/admin.py::put_system_settings"""
     try:
         updated = crud.set_settings(db, payload)
     except ValueError as e:
@@ -107,6 +114,8 @@ def get_email_log(
         或 `deferred`(暫時，4.x.x：稍後可能仍會送達，**不代表不存在**)。
     EN: Outbound email log; `sent` means accepted by relay, not delivered. v3.5 back-fills
         real bounces read over IMAP.
+
+    @node job-scheduler/app/routers/admin.py::get_email_log
     """
     q = db.query(models.EmailLog)
     if status:
@@ -141,6 +150,8 @@ def scan_bounces_now(
         回 {scanned, bounces, applied}；applied=0 代表退信對不到任何寄件紀錄
         （例如那些信寄出時還沒有 email_log）——此時**不會**新增假紀錄。
     EN: Trigger one bounce-scan pass now; read-only, never fabricates log rows.
+
+    @node job-scheduler/app/routers/admin.py::scan_bounces_now
     """
     from ..services import bounce_reader
     try:
@@ -160,6 +171,8 @@ def bootstrap_admin_status(
         驗得過代表初始密碼仍有效 → 顯示提醒。改過密碼後自動驗不過 → 橫幅自動消失。
         （不回傳密碼本身，只回布林。）
     EN: Whether the bootstrap admin still uses the initial password (banner trigger).
+
+    @node job-scheduler/app/routers/admin.py::bootstrap_admin_status
     """
     pw = (settings.BOOTSTRAP_ADMIN_PASSWORD or "").strip()
     if not pw:
@@ -179,7 +192,10 @@ def list_gpu_nodes(
     db: Session = Depends(get_db),
     _admin: models.User = Depends(require_admin),
 ):
-    """ZH: 每節點回 設定+心跳即時值+狀態(四態)+下次開關時間+執行中任務+撞名警示。"""
+    """ZH: 每節點回 設定+心跳即時值+狀態(四態)+下次開關時間+執行中任務+撞名警示。
+
+    @node job-scheduler/app/routers/admin.py::list_gpu_nodes
+    """
     return {"nodes": crud.list_gpu_nodes_with_status(db)}
 
 
@@ -193,6 +209,8 @@ def put_gpu_node(
     """
     ZH: 更新節點設定（schedule 格式見 gpu_schedule.py；清空=全天可排）。
         節點未心跳過也可先建設定（pre-provision）。成功後回全列表讓前端整頁刷新。
+
+    @node job-scheduler/app/routers/admin.py::put_gpu_node
     """
     try:
         crud.update_gpu_node(db, node_id, payload)
@@ -218,6 +236,8 @@ def _compute_online(user: models.User) -> Optional[int]:
     v2.1 修正：admin 從未登入過 user UI（last_login_time 為 None）→ 回 None，
     讓 admin UI 顯示「—」而非誤導性的「離線」。
     admin 一旦登入過 user UI（即使後來離線），仍回 0/1 正常計算。
+
+    @node job-scheduler/app/routers/admin.py::_compute_online
     """
     if user.role == "admin" and user.last_login_time is None:
         return None
@@ -236,6 +256,8 @@ def _yaml_mock_usernames() -> set:
 
     v2.1: 用於 filter 已從 yaml 移除但 DB 仍有 row 的 sso_mock 使用者
     (保留 orphan row 不破壞既有聊天歷史 / 任務 FK，僅在列表中隱藏)
+
+    @node job-scheduler/app/routers/admin.py::_yaml_mock_usernames
     """
     try:
         users = (SSO_POLICY or {}).get("mock", {}).get("users", []) or []
@@ -266,6 +288,8 @@ def get_all_users(
     v2.1 擴充：
     - 可用 ?auth_source=local|sso_oidc|sso_mock 過濾分類
     - sso_mock 帳號額外做 yaml filter：若 username 已從 sso_policy.yaml 移除則隱藏
+
+    @node job-scheduler/app/routers/admin.py::get_all_users
     """
     query = (
         db.query(models.User, models.TokenUsage)
@@ -357,6 +381,8 @@ def export_users(
       - 限 admin (require_admin)
       - 欄位走白名單 (_EXPORT_COLUMNS)，避免拉到 hashed_password 等敏感欄位
       - 寫入 audit log
+
+    @node job-scheduler/app/routers/admin.py::export_users
     """
     # 解析 + 驗證 columns
     requested = [c.strip() for c in columns.split(",") if c.strip()]
@@ -473,7 +499,10 @@ def export_users(
 def export_users_columns(
     _: models.User = Depends(require_admin),
 ) -> Any:
-    """ZH: 回傳 [{key, label}, ...] 給前端 modal 動態建勾選清單"""
+    """ZH: 回傳 [{key, label}, ...] 給前端 modal 動態建勾選清單
+
+    @node job-scheduler/app/routers/admin.py::export_users_columns
+    """
     return [{"key": k, "label": v[0]} for k, v in _EXPORT_COLUMNS.items()]
 
 
@@ -489,6 +518,8 @@ def batch_update_tokens(
 
     ZH: action = reset_usage → 將 tokens_used 歸零
     ZH: action = set_limit   → 將 tokens_limit 設為 payload.value
+
+    @node job-scheduler/app/routers/admin.py::batch_update_tokens
     """
     if not payload.user_ids:
         raise HTTPException(status_code=400, detail="user_ids cannot be empty")
@@ -528,7 +559,10 @@ def admin_update_user(
     db: Session = Depends(get_db),
     _: models.User = Depends(require_admin),
 ) -> Any:
-    """ZH: 管理員修改使用者資訊 | EN: Admin update user details"""
+    """ZH: 管理員修改使用者資訊 | EN: Admin update user details
+
+    @node job-scheduler/app/routers/admin.py::admin_update_user
+    """
     db_user = db.query(models.User).filter(models.User.id == user_id).first()
     if not db_user:
         raise HTTPException(status_code=404, detail="User not found")
@@ -571,7 +605,10 @@ def admin_delete_user(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(require_admin),
 ) -> Any:
-    """ZH: 管理員刪除使用者 (需驗證密碼) | EN: Admin delete user (requires password verification)"""
+    """ZH: 管理員刪除使用者 (需驗證密碼) | EN: Admin delete user (requires password verification)
+
+    @node job-scheduler/app/routers/admin.py::admin_delete_user
+    """
     if not crud.verify_password(payload.admin_password, current_user.hashed_password):
         raise HTTPException(status_code=403, detail="Invalid admin password")
     if user_id == current_user.id:
@@ -644,6 +681,7 @@ def list_lab_archives(
     db: Session = Depends(get_db),
     _admin: models.User = Depends(require_admin),
 ):
+    """@node job-scheduler/app/routers/admin.py::list_lab_archives"""
     from ..services import lab_manager
     return {"archives": lab_manager.list_archives(db),
             "retention_days": crud.get_setting(db, "lab_archive_days")}
@@ -656,7 +694,10 @@ def restore_lab_archive(
     db: Session = Depends(get_db),
     _admin: models.User = Depends(require_admin),
 ):
-    """ZH: SSO 使用者刪除後會以新 uuid 回來，故還原＝複製進目標使用者現有的 volume。"""
+    """ZH: SSO 使用者刪除後會以新 uuid 回來，故還原＝複製進目標使用者現有的 volume。
+
+    @node job-scheduler/app/routers/admin.py::restore_lab_archive
+    """
     from ..services import lab_manager
     target = (payload or {}).get("target_user_id")
     if not target:
@@ -676,6 +717,7 @@ def delete_lab_archive(
     db: Session = Depends(get_db),
     _admin: models.User = Depends(require_admin),
 ):
+    """@node job-scheduler/app/routers/admin.py::delete_lab_archive"""
     from ..services import lab_manager
     if not lab_manager.delete_archive_now(db, volume_name):
         raise HTTPException(status_code=404, detail="找不到該封存紀錄")
@@ -687,7 +729,10 @@ def admin_verify_action(
     payload: schemas.AdminVerify,
     current_user: models.User = Depends(require_admin),
 ) -> Any:
-    """ZH: 管理員密碼驗證（解鎖敏感操作）| EN: Admin password verification (unlock sensitive actions)"""
+    """ZH: 管理員密碼驗證（解鎖敏感操作）| EN: Admin password verification (unlock sensitive actions)
+
+    @node job-scheduler/app/routers/admin.py::admin_verify_action
+    """
     if not crud.verify_password(payload.admin_password, current_user.hashed_password):
         raise HTTPException(status_code=403, detail="Invalid admin password")
     return {"message": "Verification successful"}
@@ -700,7 +745,10 @@ def provision_user(
     db: Session = Depends(get_db),
     _: models.User = Depends(require_admin),
 ) -> Any:
-    """ZH: 管理員配發新帳號（預先建立，待 SSO 接管）| EN: Admin provision a new user account"""
+    """ZH: 管理員配發新帳號（預先建立，待 SSO 接管）| EN: Admin provision a new user account
+
+    @node job-scheduler/app/routers/admin.py::provision_user
+    """
     if crud.get_user_by_username(db, data.username):
         raise HTTPException(status_code=400, detail="Username already exists")
     if crud.get_user_by_email(db, data.email):
@@ -748,7 +796,10 @@ def reset_user_account(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(require_admin),
 ) -> Any:
-    """ZH: 初始化帳號 — 重置密碼 + 歸零 Token 用量 | EN: Reset password and clear token usage"""
+    """ZH: 初始化帳號 — 重置密碼 + 歸零 Token 用量 | EN: Reset password and clear token usage
+
+    @node job-scheduler/app/routers/admin.py::reset_user_account
+    """
     db_user = db.query(models.User).filter(models.User.id == user_id).first()
     if not db_user:
         raise HTTPException(status_code=404, detail="User not found")
@@ -793,7 +844,10 @@ def get_all_jobs(
     db: Session = Depends(get_db),
     _: models.User = Depends(require_admin),
 ) -> Any:
-    """ZH: 列出所有任務，支援分頁 | EN: List all jobs with pagination"""
+    """ZH: 列出所有任務，支援分頁 | EN: List all jobs with pagination
+
+    @node job-scheduler/app/routers/admin.py::get_all_jobs
+    """
     jobs = (
         db.query(models.TrainingJob)
         .order_by(models.TrainingJob.created_at.desc())
@@ -826,7 +880,10 @@ def admin_cancel_job(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(require_admin),
 ) -> Any:
-    """ZH: 管理員強制取消任務 | EN: Admin force-cancel a job"""
+    """ZH: 管理員強制取消任務 | EN: Admin force-cancel a job
+
+    @node job-scheduler/app/routers/admin.py::admin_cancel_job
+    """
     job = db.query(models.TrainingJob).filter(models.TrainingJob.id == job_id).first()
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
@@ -851,7 +908,10 @@ def admin_update_job_priority(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(require_admin),
 ) -> Any:
-    """ZH: 管理員修改任務優先級 | EN: Admin update job priority"""
+    """ZH: 管理員修改任務優先級 | EN: Admin update job priority
+
+    @node job-scheduler/app/routers/admin.py::admin_update_job_priority
+    """
     job = db.query(models.TrainingJob).filter(models.TrainingJob.id == job_id).first()
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
@@ -879,7 +939,10 @@ def get_all_models(
     db: Session = Depends(get_db),
     _: models.User = Depends(require_admin),
 ) -> Any:
-    """ZH: 列出所有模型 | EN: List all models"""
+    """ZH: 列出所有模型 | EN: List all models
+
+    @node job-scheduler/app/routers/admin.py::get_all_models
+    """
     mdls = db.query(models.Model).order_by(models.Model.created_at.desc()).all()
     return [
         {
@@ -901,7 +964,10 @@ def admin_create_model(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(require_admin),
 ) -> Any:
-    """ZH: 管理員新增模型 | EN: Admin create model"""
+    """ZH: 管理員新增模型 | EN: Admin create model
+
+    @node job-scheduler/app/routers/admin.py::admin_create_model
+    """
     if db.query(models.Model).filter(models.Model.name == data.name).first():
         raise HTTPException(status_code=400, detail=f"Model '{data.name}' already exists")
 
@@ -928,7 +994,10 @@ def admin_update_model(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(require_admin),
 ) -> Any:
-    """ZH: 管理員更新模型資訊 | EN: Admin update model info"""
+    """ZH: 管理員更新模型資訊 | EN: Admin update model info
+
+    @node job-scheduler/app/routers/admin.py::admin_update_model
+    """
     mdl = db.query(models.Model).filter(models.Model.id == model_id).first()
     if not mdl:
         raise HTTPException(status_code=404, detail="Model not found")
@@ -960,7 +1029,10 @@ def admin_delete_model(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(require_admin),
 ) -> Any:
-    """ZH: 管理員刪除模型 | EN: Admin delete model"""
+    """ZH: 管理員刪除模型 | EN: Admin delete model
+
+    @node job-scheduler/app/routers/admin.py::admin_delete_model
+    """
     mdl = db.query(models.Model).filter(models.Model.id == model_id).first()
     if not mdl:
         raise HTTPException(status_code=404, detail="Model not found")
@@ -983,7 +1055,10 @@ def get_cluster_stats(
     _: models.User = Depends(require_admin),
 ) -> Any:
     """ZH: 取得各 GPU 即時狀態（每張卡一筆，供前端 cluster 卡片）
-       EN: Per-GPU live stats (one entry per card) for the admin cluster panel."""
+       EN: Per-GPU live stats (one entry per card) for the admin cluster panel.
+
+    @node job-scheduler/app/routers/admin.py::get_cluster_stats
+    """
     nodes = db.query(models.WorkerHeartbeat).order_by(models.WorkerHeartbeat.last_seen.desc()).all()
     out: list[dict] = []
     for n in nodes:
@@ -1035,6 +1110,8 @@ def get_user_analytics(
     """
     ZH: 取得指定使用者的細粒度數據分析（Token、Sessions、工具分布）
     EN: Detailed per-user analytics — token quota, sessions, tool breakdown
+
+    @node job-scheduler/app/routers/admin.py::get_user_analytics
     """
     user = db.query(models.User).filter(models.User.id == user_id).first()
     if not user:
@@ -1127,7 +1204,10 @@ def get_analytics(
     db: Session = Depends(get_db),
     _: models.User = Depends(require_admin),
 ) -> Any:
-    """ZH: 取得管理員分析數據（學系/工具用量）| EN: Get admin analytics (department/tool usage)"""
+    """ZH: 取得管理員分析數據（學系/工具用量）| EN: Get admin analytics (department/tool usage)
+
+    @node job-scheduler/app/routers/admin.py::get_analytics
+    """
     base_q = db.query(
         models.User.department,
         func.count(models.User.id).label("user_count"),
@@ -1202,7 +1282,10 @@ def grant_quota(
     db: Session = Depends(get_db),
     admin: models.User = Depends(require_admin),
 ) -> Any:
-    """ZH: 為使用者額外提權配額（保留歷史） | EN: Grant extra disk quota to user"""
+    """ZH: 為使用者額外提權配額（保留歷史） | EN: Grant extra disk quota to user
+
+    @node job-scheduler/app/routers/admin.py::grant_quota
+    """
     target = db.query(models.User).filter(models.User.id == payload.user_id).first()
     if not target:
         raise HTTPException(404, "Target user not found")
@@ -1223,7 +1306,10 @@ def revoke_quota(
     db: Session = Depends(get_db),
     admin: models.User = Depends(require_admin),
 ) -> Any:
-    """ZH: 撤銷一筆配額提權 | EN: Revoke a quota grant"""
+    """ZH: 撤銷一筆配額提權 | EN: Revoke a quota grant
+
+    @node job-scheduler/app/routers/admin.py::revoke_quota
+    """
     success = quota_service.revoke_quota(db, grant_id=grant_id, revoked_by=admin.id)
     if not success:
         raise HTTPException(404, "Grant not found or already revoked")
@@ -1236,7 +1322,10 @@ def get_user_quota(
     db: Session = Depends(get_db),
     _: models.User = Depends(require_admin),
 ) -> Any:
-    """ZH: 查看使用者目前生效配額與所有提權紀錄 | EN: View user effective quota + all grants"""
+    """ZH: 查看使用者目前生效配額與所有提權紀錄 | EN: View user effective quota + all grants
+
+    @node job-scheduler/app/routers/admin.py::get_user_quota
+    """
     user = db.query(models.User).filter(models.User.id == user_id).first()
     if not user:
         raise HTTPException(404, "User not found")
@@ -1269,7 +1358,10 @@ def storage_freeze(
     admin: models.User = Depends(require_admin),
     request: Any = None,
 ) -> Any:
-    """ZH: 凍結使用者儲存（停用 lab session 但保留檔案） | EN: Freeze storage"""
+    """ZH: 凍結使用者儲存（停用 lab session 但保留檔案） | EN: Freeze storage
+
+    @node job-scheduler/app/routers/admin.py::storage_freeze
+    """
     storage_lifecycle.freeze(db, user_id=payload.user_id, admin_id=admin.id, reason=payload.reason)
     return {"status": "frozen", "user_id": payload.user_id}
 
@@ -1280,7 +1372,10 @@ def storage_archive(
     db: Session = Depends(get_db),
     admin: models.User = Depends(require_admin),
 ) -> Any:
-    """ZH: 歸檔到冷儲存（HDD） | EN: Archive to cold storage"""
+    """ZH: 歸檔到冷儲存（HDD） | EN: Archive to cold storage
+
+    @node job-scheduler/app/routers/admin.py::storage_archive
+    """
     storage_lifecycle.archive(db, user_id=payload.user_id, admin_id=admin.id, reason=payload.reason)
     return {"status": "archived", "user_id": payload.user_id}
 
@@ -1291,7 +1386,10 @@ def storage_restore(
     db: Session = Depends(get_db),
     admin: models.User = Depends(require_admin),
 ) -> Any:
-    """ZH: 從凍結/歸檔還原 | EN: Restore from frozen/archived"""
+    """ZH: 從凍結/歸檔還原 | EN: Restore from frozen/archived
+
+    @node job-scheduler/app/routers/admin.py::storage_restore
+    """
     storage_lifecycle.restore(db, user_id=payload.user_id, admin_id=admin.id, reason=payload.reason)
     return {"status": "active", "user_id": payload.user_id}
 
@@ -1302,7 +1400,10 @@ def storage_permanent_delete(
     db: Session = Depends(get_db),
     admin: models.User = Depends(require_admin),
 ) -> Any:
-    """ZH: 永久刪除（需 admin 密碼驗證） | EN: Permanent delete (requires admin password)"""
+    """ZH: 永久刪除（需 admin 密碼驗證） | EN: Permanent delete (requires admin password)
+
+    @node job-scheduler/app/routers/admin.py::storage_permanent_delete
+    """
     if not payload.admin_password:
         raise HTTPException(400, "admin_password required for permanent delete")
     if not crud.verify_password(payload.admin_password, admin.hashed_password):
@@ -1317,7 +1418,10 @@ def list_storage_states(
     db: Session = Depends(get_db),
     _: models.User = Depends(require_admin),
 ) -> Any:
-    """ZH: 列出所有使用者儲存狀態 | EN: List all storage states"""
+    """ZH: 列出所有使用者儲存狀態 | EN: List all storage states
+
+    @node job-scheduler/app/routers/admin.py::list_storage_states
+    """
     states = storage_lifecycle.list_states(db, filter_state=state)
     return {"states": states}
 
@@ -1329,7 +1433,10 @@ def list_lab_sessions(
     db: Session = Depends(get_db),
     _: models.User = Depends(require_admin),
 ) -> Any:
-    """ZH: 列出當前所有 lab sessions | EN: List all current lab sessions"""
+    """ZH: 列出當前所有 lab sessions | EN: List all current lab sessions
+
+    @node job-scheduler/app/routers/admin.py::list_lab_sessions
+    """
     sessions = lab_manager.list_all_sessions(db)
     return {"sessions": sessions}
 
@@ -1340,7 +1447,10 @@ def force_stop_session(
     db: Session = Depends(get_db),
     admin: models.User = Depends(require_admin),
 ) -> Any:
-    """ZH: 強制停止特定使用者 lab session | EN: Force-stop a user's lab session"""
+    """ZH: 強制停止特定使用者 lab session | EN: Force-stop a user's lab session
+
+    @node job-scheduler/app/routers/admin.py::force_stop_session
+    """
     success = lab_manager.force_stop(db, user_id=user_id, admin_id=admin.id)
     if not success:
         raise HTTPException(404, "Session not found or already stopped")
@@ -1355,7 +1465,10 @@ def list_user_secret_names(
     db: Session = Depends(get_db),
     _: models.User = Depends(require_admin),
 ) -> Any:
-    """ZH: 列出某使用者的 secret 名稱（不回 value） | EN: List user secret names (no values)"""
+    """ZH: 列出某使用者的 secret 名稱（不回 value） | EN: List user secret names (no values)
+
+    @node job-scheduler/app/routers/admin.py::list_user_secret_names
+    """
     secrets_meta = secrets_service.list_secrets_masked(db, user_id=user_id)
     return {"user_id": user_id, "secrets": secrets_meta}
 
@@ -1367,7 +1480,10 @@ def admin_delete_user_secret(
     db: Session = Depends(get_db),
     admin: models.User = Depends(require_admin),
 ) -> Any:
-    """ZH: 管理員刪除使用者的特定 secret（離校等情境） | EN: Admin delete a user's secret"""
+    """ZH: 管理員刪除使用者的特定 secret（離校等情境） | EN: Admin delete a user's secret
+
+    @node job-scheduler/app/routers/admin.py::admin_delete_user_secret
+    """
     success = secrets_service.delete_secret(db, user_id=user_id, name=name, admin_id=admin.id)
     if not success:
         raise HTTPException(404, "Secret not found")
@@ -1386,7 +1502,10 @@ def get_audit_log(
     db: Session = Depends(get_db),
     _: models.User = Depends(require_admin),
 ) -> Any:
-    """ZH: 查詢 admin 操作審計 log（支援篩選與分頁） | EN: Query admin audit log"""
+    """ZH: 查詢 admin 操作審計 log（支援篩選與分頁） | EN: Query admin audit log
+
+    @node job-scheduler/app/routers/admin.py::get_audit_log
+    """
     q = db.query(models.AdminAction)
     if admin_id:
         q = q.filter(models.AdminAction.admin_id == admin_id)

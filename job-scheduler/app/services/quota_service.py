@@ -39,6 +39,8 @@ def _audit(db: Session, admin_id: str, target_user: Optional[str],
         「提權成功但稽核掉了」的窗口）。
         action 值須與 models.AdminAction.action 的註解一致，/admin/audit 靠它篩選。
     EN: Stage an admin_actions row in the caller's transaction (no commit).
+
+    @node job-scheduler/app/services/quota_service.py::_audit
     """
     db.add(models.AdminAction(
         admin_id=admin_id,
@@ -57,6 +59,8 @@ def get_base_quota_gb(role: str) -> int:
     """
     ZH: 從 scheduler_policy.yaml 取得角色預設配額
     EN: Read role-default quota from scheduler_policy.yaml
+
+    @node job-scheduler/app/services/quota_service.py::get_base_quota_gb
     """
     defaults = SCHEDULER_POLICY.get("default_disk_quota_gb", {})
     fallback = {"student": 10, "teacher": 50, "admin": 100}
@@ -71,6 +75,8 @@ def get_effective_quota_gb(db: Session, user_id: str) -> int:
     生效條件 / Active conditions:
         - revoked_at IS NULL
         - expires_at IS NULL OR expires_at > now
+
+    @node job-scheduler/app/services/quota_service.py::get_effective_quota_gb
     """
     user = db.query(models.User).filter(models.User.id == user_id).first()
     if not user:
@@ -104,6 +110,8 @@ def grant_quota(
     """
     ZH: 新增配額提權紀錄
     EN: Create a new quota grant
+
+    @node job-scheduler/app/services/quota_service.py::grant_quota
     """
     if extra_quota_gb <= 0:
         raise ValueError("extra_quota_gb must be positive")
@@ -141,6 +149,8 @@ def revoke_quota(db: Session, grant_id: str, revoked_by: str) -> bool:
         沒有 revoked_by 欄位，加欄位要 migration，而稽核列已足以回答「誰撤銷的」。
     EN: Revoke a quota grant (soft delete, audit preserved).
         revoked_by goes to admin_actions only (QuotaGrant has no such column).
+
+    @node job-scheduler/app/services/quota_service.py::revoke_quota
     """
     grant = db.query(models.QuotaGrant).filter(models.QuotaGrant.id == grant_id).first()
     if not grant or grant.revoked_at is not None:
@@ -155,7 +165,10 @@ def revoke_quota(db: Session, grant_id: str, revoked_by: str) -> bool:
 
 
 def list_grants(db: Session, user_id: str, include_inactive: bool = False) -> list:
-    """ZH: 列出某使用者的配額提權紀錄 | EN: List grants for a user"""
+    """ZH: 列出某使用者的配額提權紀錄 | EN: List grants for a user
+
+    @node job-scheduler/app/services/quota_service.py::list_grants
+    """
     q = db.query(models.QuotaGrant).filter(models.QuotaGrant.user_id == user_id)
     if not include_inactive:
         now = datetime.now(timezone.utc)
@@ -182,6 +195,8 @@ def get_session_limits(role: str) -> dict:
         {"idle_timeout_min": 30 | None,
          "hard_limit_min":   90 | None,
          "daily_limit_min": 360 | None}
+
+    @node job-scheduler/app/services/quota_service.py::get_session_limits
     """
     limits_map = SCHEDULER_POLICY.get("session_limits", {})
     fallback = {
@@ -196,6 +211,8 @@ def get_today_usage(db: Session, user_id: str) -> models.UserSessionUsage:
     """
     ZH: 取得（或建立）今日的累積使用紀錄
     EN: Get or create today's UserSessionUsage row
+
+    @node job-scheduler/app/services/quota_service.py::get_today_usage
     """
     today = date.today()
     row = db.query(models.UserSessionUsage).filter(
@@ -219,6 +236,8 @@ def can_start_session(db: Session, user_id: str) -> tuple[bool, str]:
 
     Returns:
         (allowed: bool, reason: str)
+
+    @node job-scheduler/app/services/quota_service.py::can_start_session
     """
     user = db.query(models.User).filter(models.User.id == user_id).first()
     if not user:
@@ -239,6 +258,8 @@ def increment_usage(db: Session, user_id: str, seconds: int) -> None:
     """
     ZH: 增加今日累積使用秒數（session 結束時呼叫）
     EN: Increment today's accumulated session seconds (call on session end)
+
+    @node job-scheduler/app/services/quota_service.py::increment_usage
     """
     if seconds <= 0:
         return
@@ -252,6 +273,8 @@ def get_today_remaining_minutes(db: Session, user_id: str) -> Optional[int]:
     """
     ZH: 取得今日剩餘可用分鐘（None = 不限制）
     EN: Today's remaining minutes (None = unlimited)
+
+    @node job-scheduler/app/services/quota_service.py::get_today_remaining_minutes
     """
     user = db.query(models.User).filter(models.User.id == user_id).first()
     if not user:

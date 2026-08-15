@@ -42,6 +42,8 @@ def is_archival_allowed_today() -> bool:
     """
     ZH: 今日是否在「允許執行歸檔 / 刪除」的月份內（暑假）
     EN: Is today within the archival months (typically July-August)?
+
+    @node job-scheduler/app/services/storage_lifecycle.py::is_archival_allowed_today
     """
     cal = SCHEDULER_POLICY.get("academic_calendar", {})
     archival_months = cal.get("archival_months", [7, 8])
@@ -52,6 +54,8 @@ def is_semester_today() -> bool:
     """
     ZH: 今日是否在學期月份內（保護學生資料）
     EN: Is today within a semester month (data is protected)
+
+    @node job-scheduler/app/services/storage_lifecycle.py::is_semester_today
     """
     cal = SCHEDULER_POLICY.get("academic_calendar", {})
     semester_months = cal.get("semester_months", [9, 10, 11, 12, 1, 2, 3, 4, 5, 6])
@@ -63,7 +67,10 @@ def is_semester_today() -> bool:
 # ==============================================================================
 
 def get_or_create_state(db: Session, user_id: str) -> models.UserStorageState:
-    """ZH: 取得或建立 storage state | EN: Get or create storage state"""
+    """ZH: 取得或建立 storage state | EN: Get or create storage state
+
+    @node job-scheduler/app/services/storage_lifecycle.py::get_or_create_state
+    """
     state = db.query(models.UserStorageState).filter(
         models.UserStorageState.user_id == user_id
     ).first()
@@ -82,7 +89,10 @@ def get_or_create_state(db: Session, user_id: str) -> models.UserStorageState:
 
 def list_states(db: Session, filter_state: Optional[str] = None) -> list[dict]:
     """ZH: 列出所有使用者儲存狀態，供 admin Lab「儲存生命週期」面板。
-       EN: List all user storage states for the admin Lab storage panel."""
+       EN: List all user storage states for the admin Lab storage panel.
+
+    @node job-scheduler/app/services/storage_lifecycle.py::list_states
+    """
     q = db.query(models.UserStorageState)
     if filter_state and filter_state not in ("all", ""):
         q = q.filter(models.UserStorageState.state == filter_state)
@@ -113,6 +123,8 @@ def freeze(db: Session, user_id: str, admin_id: Optional[str] = None,
         - 超過配額
         - 90 天未登入
         - admin 手動
+
+    @node job-scheduler/app/services/storage_lifecycle.py::freeze
     """
     state = get_or_create_state(db, user_id)
     if state.state == "frozen":
@@ -141,6 +153,8 @@ def archive(db: Session, user_id: str, admin_id: Optional[str] = None,
 
     學期中（semester_months）禁止執行此轉換
     Not allowed during semester months
+
+    @node job-scheduler/app/services/storage_lifecycle.py::archive
     """
     if not is_archival_allowed_today() and not admin_id:
         logger.info("Archive skipped for %s (in semester, no admin override)",
@@ -181,6 +195,8 @@ def restore(db: Session, user_id: str, admin_id: str) -> bool:
     """
     ZH: 從 archived 還原為 active（管理員操作）
     EN: Restore archived user back to active (admin op)
+
+    @node job-scheduler/app/services/storage_lifecycle.py::restore
     """
     state = get_or_create_state(db, user_id)
     if state.state not in ("archived", "frozen", "pending_delete"):
@@ -205,6 +221,8 @@ def mark_pending_delete(db: Session, user_id: str, admin_id: str,
     """
     ZH: 將使用者標記為 pending_delete，等待 admin 二次確認真正刪除
     EN: Mark user as pending_delete; waiting for admin re-confirmation
+
+    @node job-scheduler/app/services/storage_lifecycle.py::mark_pending_delete
     """
     state = get_or_create_state(db, user_id)
     old_state = state.state
@@ -228,6 +246,8 @@ def permanent_delete(db: Session, user_id: str, admin_id: str,
 
     Args:
         admin_password_verified: 必須先呼叫 /api/v1/admin/verify 取得 True
+
+    @node job-scheduler/app/services/storage_lifecycle.py::permanent_delete
     """
     if not admin_password_verified:
         raise PermissionError("Admin password re-verification required for permanent delete")
@@ -269,6 +289,8 @@ def daily_scan(db: Session) -> dict:
         summer = full chain
 
     Returns: 統計 dict
+
+    @node job-scheduler/app/services/storage_lifecycle.py::daily_scan
     """
     stats = {"active_to_frozen": 0, "frozen_to_archived": 0,
              "archived_to_pending_delete": 0}
@@ -347,7 +369,10 @@ def daily_scan(db: Session) -> dict:
 
 def _log_admin_action(db: Session, admin_id: str, target_user: Optional[str],
                       action: str, payload: dict) -> None:
-    """ZH: 寫一筆 admin_actions 記錄 | EN: Write admin_actions row"""
+    """ZH: 寫一筆 admin_actions 記錄 | EN: Write admin_actions row
+
+    @node job-scheduler/app/services/storage_lifecycle.py::_log_admin_action
+    """
     import json
     db.add(models.AdminAction(
         admin_id=admin_id,

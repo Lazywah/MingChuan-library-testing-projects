@@ -31,6 +31,8 @@ def list_models(
 
     value = api_model_id or name（送給 /chat/completions 的 model_id）
     label = name（顯示用）
+
+    @node job-scheduler/app/routers/models.py::list_models
     """
     mdls = crud.list_public_models(db, tool_type)
     return [

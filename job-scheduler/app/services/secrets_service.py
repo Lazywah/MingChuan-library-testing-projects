@@ -46,6 +46,8 @@ def _derive_key() -> bytes:
 
     ZH: 使用 SHA-256 將任意長度的 master key 壓到 32 bytes
     EN: SHA-256 compresses arbitrary-length master key to 32 bytes
+
+    @node job-scheduler/app/services/secrets_service.py::_derive_key
     """
     master = getattr(settings, "SECRETS_MASTER_KEY", None)
     if not master:
@@ -60,6 +62,8 @@ def encrypt_value(plaintext: str) -> bytes:
     """
     ZH: 加密單一 secret value，回傳 nonce(12) + ciphertext + tag(16)
     EN: Encrypt a secret value; returns nonce(12) + ciphertext + tag(16)
+
+    @node job-scheduler/app/services/secrets_service.py::encrypt_value
     """
     key = _derive_key()
     aesgcm = AESGCM(key)
@@ -72,6 +76,8 @@ def decrypt_value(blob: bytes) -> str:
     """
     ZH: 解密；blob 為 encrypt_value() 的輸出
     EN: Decrypt blob produced by encrypt_value()
+
+    @node job-scheduler/app/services/secrets_service.py::decrypt_value
     """
     key = _derive_key()
     aesgcm = AESGCM(key)
@@ -87,6 +93,8 @@ def set_secret(db: Session, user_id: str, name: str, value: str) -> models.UserS
     """
     ZH: 新增或更新使用者的某個 secret（upsert）
     EN: Insert or update a user's secret (upsert)
+
+    @node job-scheduler/app/services/secrets_service.py::set_secret
     """
     if not name or not name.replace("_", "").isalnum():
         raise ValueError("Secret name must be alphanumeric + underscore only")
@@ -119,6 +127,8 @@ def get_secret_plaintext(db: Session, user_id: str, name: str) -> Optional[str]:
     """
     ZH: 取得單一 secret 的明文（僅用於 Job 注入等內部呼叫）
     EN: Get plaintext of a single secret (internal use only, e.g. job injection)
+
+    @node job-scheduler/app/services/secrets_service.py::get_secret_plaintext
     """
     row = db.query(models.UserSecret).filter(
         models.UserSecret.user_id == user_id,
@@ -139,6 +149,8 @@ def get_all_secrets_plaintext(db: Session, user_id: str) -> Dict[str, str]:
         僅供 Job 提交、code-server 啟動時內部呼叫，**不可**透過 API 回傳給前端
     EN: Get all user secrets as plaintext {name: plaintext}
         Internal use only; NEVER return through API to frontend
+
+    @node job-scheduler/app/services/secrets_service.py::get_all_secrets_plaintext
     """
     out: Dict[str, str] = {}
     for row in db.query(models.UserSecret).filter(models.UserSecret.user_id == user_id).all():
@@ -158,6 +170,8 @@ def list_secrets_masked(db: Session, user_id: str) -> List[dict]:
     範例 masked 格式：
         "hf_abc123def456..." → "hf_********f456"
         "sk-xxx"             → "***x"
+
+    @node job-scheduler/app/services/secrets_service.py::list_secrets_masked
     """
     rows = db.query(models.UserSecret).filter(models.UserSecret.user_id == user_id).all()
     out = []
@@ -177,7 +191,10 @@ def list_secrets_masked(db: Session, user_id: str) -> List[dict]:
 
 
 def _mask(plaintext: str) -> str:
-    """ZH: 將值打碼 — 保留前 3 + 後 4 字元，中間用 * | EN: Mask middle of value"""
+    """ZH: 將值打碼 — 保留前 3 + 後 4 字元，中間用 * | EN: Mask middle of value
+
+    @node job-scheduler/app/services/secrets_service.py::_mask
+    """
     n = len(plaintext)
     if n <= 8:
         return "*" * n
@@ -188,6 +205,8 @@ def delete_secret(db: Session, user_id: str, name: str) -> bool:
     """
     ZH: 刪除某個 secret，回傳 True if 找到並刪除
     EN: Delete a secret; returns True if found and deleted
+
+    @node job-scheduler/app/services/secrets_service.py::delete_secret
     """
     row = db.query(models.UserSecret).filter(
         models.UserSecret.user_id == user_id,
@@ -206,6 +225,8 @@ def build_docker_env(db: Session, user_id: str) -> Dict[str, str]:
     ZH: 取得使用者全部 secrets 並以 docker env 字典格式回傳，給 lab_manager
         或 worker /take 端點使用
     EN: Get all user secrets as a dict ready for docker -e injection
+
+    @node job-scheduler/app/services/secrets_service.py::build_docker_env
     """
     return get_all_secrets_plaintext(db, user_id)
 
@@ -214,6 +235,8 @@ def admin_list_user_secret_names(db: Session, user_id: str) -> List[dict]:
     """
     ZH: 管理員用 — 列出某使用者 secrets 名稱（**絕不**回傳 value，連 masked 都不給）
     EN: Admin-only — list secret names of a user (NEVER returns value, not even masked)
+
+    @node job-scheduler/app/services/secrets_service.py::admin_list_user_secret_names
     """
     rows = db.query(models.UserSecret).filter(models.UserSecret.user_id == user_id).all()
     return [

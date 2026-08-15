@@ -51,7 +51,10 @@ _PROVIDER_MAP = {
 }
 
 def _get_portkey_headers(model_id: str) -> dict:
-    """ZH: 依模型名稱決定 Portkey provider | EN: Determine Portkey provider from model name"""
+    """ZH: 依模型名稱決定 Portkey provider | EN: Determine Portkey provider from model name
+
+    @node job-scheduler/app/routers/chat.py::_get_portkey_headers
+    """
     model_lower = model_id.lower()
     headers = {"Content-Type": "application/json"}
     for prefix, provider in _PROVIDER_MAP.items():
@@ -71,13 +74,17 @@ async def chat_completions(
     current_user: models.User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """ZH: AI 聊天串流代理 | EN: AI Chat SSE proxy"""
+    """ZH: AI 聊天串流代理 | EN: AI Chat SSE proxy
+
+    @node job-scheduler/app/routers/chat.py::chat_completions
+    """
 
     # ZH: 配額前置檢查（v2.8：內部計量關閉時不擋）| EN: Upfront quota check (skipped when internal accounting off)
     if settings.INTERNAL_TOKEN_ACCOUNTING:
         usage = crud.get_token_usage(db, current_user.id)
         if usage and usage.tokens_used >= usage.tokens_limit:
             async def quota_exceeded():
+                """@node job-scheduler/app/routers/chat.py::chat_completions.<nested@80>.quota_exceeded"""
                 yield f"data: {json.dumps({'error': 'Token quota exceeded'}, ensure_ascii=False)}\n\n"
             return StreamingResponse(quota_exceeded(), media_type="text/event-stream")
 
@@ -105,6 +112,7 @@ async def chat_completions(
     portkey_headers = _get_portkey_headers(request.model_id)
 
     async def stream_generator():
+        """@node job-scheduler/app/routers/chat.py::chat_completions.<nested@107>.stream_generator"""
         combined_response: list[str] = []
         total_tokens = 0
 
@@ -218,18 +226,27 @@ async def chat_completions(
 # ==============================================================================
 
 def _sse(payload: dict) -> str:
-    """ZH: 包成單行 SSE data 事件 | EN: Wrap into one SSE data line"""
+    """ZH: 包成單行 SSE data 事件 | EN: Wrap into one SSE data line
+
+    @node job-scheduler/app/routers/chat.py::_sse
+    """
     return f"data: {json.dumps(payload, ensure_ascii=False)}\n\n"
 
 
 def _content_event(text: str) -> str:
-    """ZH: 仿 OpenAI delta 格式，讓前端既有 parser 直接吃 | EN: OpenAI-style delta"""
+    """ZH: 仿 OpenAI delta 格式，讓前端既有 parser 直接吃 | EN: OpenAI-style delta
+
+    @node job-scheduler/app/routers/chat.py::_content_event
+    """
     return _sse({"choices": [{"delta": {"content": text}}]})
 
 
 def _extract_spec_json(block: str) -> str:
     """ZH: 容錯地把標記區塊內的 JSON 取出（去掉可能的 ``` 圍欄）
-       EN: Tolerantly extract JSON from the marker block (strip code fences)"""
+       EN: Tolerantly extract JSON from the marker block (strip code fences)
+
+    @node job-scheduler/app/routers/chat.py::_extract_spec_json
+    """
     s = block.strip()
     if s.startswith("```"):
         # 去掉第一行 ```/```json 與結尾 ```
@@ -251,6 +268,8 @@ async def _dispatch_stream_generator(
     EN: Specialized agent stream: inject system prompt → stream → detect the
         generation contract → extract spec → render → emit result event.
         Raw JSON is hidden from the user (stop forwarding once START is seen).
+
+    @node job-scheduler/app/routers/chat.py::_dispatch_stream_generator
     """
     cfg = agent_dispatcher.get_agent_config(request.tool_type)
     start_marker = cfg["spec_start"]
@@ -407,7 +426,10 @@ def get_chat_history(
     current_user: models.User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """ZH: 取得當前使用者的歷史對話 | EN: Get current user's chat history"""
+    """ZH: 取得當前使用者的歷史對話 | EN: Get current user's chat history
+
+    @node job-scheduler/app/routers/chat.py::get_chat_history
+    """
     query = db.query(models.ChatHistory).filter(
         models.ChatHistory.user_id == current_user.id
     )
@@ -422,7 +444,10 @@ def get_chat_sessions(
     current_user: models.User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """ZH: 取得使用者的所有對話 session 清單 | EN: List all chat sessions for current user"""
+    """ZH: 取得使用者的所有對話 session 清單 | EN: List all chat sessions for current user
+
+    @node job-scheduler/app/routers/chat.py::get_chat_sessions
+    """
     from sqlalchemy import distinct
     sessions = (
         db.query(models.ChatHistory.session_id)

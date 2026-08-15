@@ -42,6 +42,8 @@ def verify_worker_token(authorization: Optional[str] = Header(None)) -> None:
     """
     ZH: 驗證 Worker 節點的靜態 API Token（使用 hmac.compare_digest 防計時攻擊）
     EN: Validate Worker API token using hmac.compare_digest to prevent timing attacks
+
+    @node job-scheduler/app/routers/worker.py::verify_worker_token
     """
     if not authorization:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED,
@@ -87,6 +89,8 @@ def take_job(
     """
     ZH: Worker 節點請求任務（原子搶佔，防止多節點重複領取）
     EN: Worker claims a job atomically, preventing double-dispatch across nodes
+
+    @node job-scheduler/app/routers/worker.py::take_job
     """
     if not req.available_gpus:
         return {"job": None}
@@ -117,6 +121,7 @@ def take_job(
     interactive_up = crud.pool_has_online_worker(db, "interactive") if taker_pool == "batch" else False
 
     def _pool_allows(job) -> bool:
+        """@node job-scheduler/app/routers/worker.py::take_job.<nested@119>._pool_allows"""
         job_pool = crud.normalize_pool(getattr(job, "pool_type", "batch"))
         if taker_pool == "interactive":
             return job_pool == "interactive"
@@ -242,6 +247,8 @@ def worker_heartbeat(
     ZH: Worker 定期上報節點存活與 GPU 使用率（建議每 30 秒一次）
         v3.2：記錄來源 IP 供 NODE_ID 撞名偵測（多台機器抄同一個範本 NODE_ID 的地雷）
     EN: Worker periodically reports liveness and GPU utilization (recommend every 30s)
+
+    @node job-scheduler/app/routers/worker.py::worker_heartbeat
     """
     source_ip = request.client.host if request.client else None
     crud.upsert_worker_heartbeat(
@@ -263,6 +270,8 @@ def update_job(
     """
     ZH: Worker 回報任務進度與狀態
     EN: Worker reports job progress and status
+
+    @node job-scheduler/app/routers/worker.py::update_job
     """
     job = crud.get_job(db, job_id=job_id)
     if not job:

@@ -73,7 +73,10 @@ _COOKIE_FILE = os.path.join(os.path.dirname(settings.DATABASE_PATH) or ".", "mya
 
 
 def _save_cookies(cookies) -> None:
-    """ZH: 把 vendor session cookie 存成 JSON（best-effort，失敗不影響同步）。"""
+    """ZH: 把 vendor session cookie 存成 JSON（best-effort，失敗不影響同步）。
+
+    @node job-scheduler/app/services/myai_sync.py::_save_cookies
+    """
     try:
         items = [{"name": c.name, "value": c.value, "domain": c.domain, "path": c.path}
                  for c in cookies.jar]
@@ -86,7 +89,10 @@ def _save_cookies(cookies) -> None:
 
 
 def _load_cookies():
-    """ZH: 啟動時載入上次的 cookie；沒有或壞掉就回 None（會自動重登）。"""
+    """ZH: 啟動時載入上次的 cookie；沒有或壞掉就回 None（會自動重登）。
+
+    @node job-scheduler/app/services/myai_sync.py::_load_cookies
+    """
     try:
         if not os.path.exists(_COOKIE_FILE):
             return None
@@ -105,7 +111,10 @@ _MYAI_COOKIES = _load_cookies()  # type: httpx.Cookies | None  # 啟動即載入
 
 
 def _login_ctx():
-    """ZH: 回 (base, login_page, headers)。廠商防跨站 → 登入 POST 必須帶對的 Referer/Origin。"""
+    """ZH: 回 (base, login_page, headers)。廠商防跨站 → 登入 POST 必須帶對的 Referer/Origin。
+
+    @node job-scheduler/app/services/myai_sync.py::_login_ctx
+    """
     base = settings.MYAI_BASE_URL.rstrip("/")
     login_page = settings.MYAI_LOGIN_PATH.rsplit("/", 1)[0] + "/login"  # /mcu/ai/user/login
     headers = {
@@ -122,7 +131,10 @@ def _login_ctx():
 async def _session_request(do_fetch, is_valid):
     """ZH: 帶快取 cookie 送出請求；若被導回登入頁(is_valid=False) 才登入一次再抓。
            do_fetch(client)->Response、is_valid(Response)->bool。回最終 Response。
-       EN: issue a request with cached cookies; re-login once only if invalid."""
+       EN: issue a request with cached cookies; re-login once only if invalid.
+
+    @node job-scheduler/app/services/myai_sync.py::_session_request
+    """
     global _MYAI_COOKIES
     if not settings.MYAI_ADMIN_EMAIL or not settings.MYAI_ADMIN_PASSWORD:
         raise MyaiSyncError("MYAI_ADMIN_EMAIL / MYAI_ADMIN_PASSWORD 未設定（請填入 .env）")
@@ -161,11 +173,16 @@ async def _session_request(do_fetch, is_valid):
 
 async def fetch_export_bytes() -> bytes:
     """ZH: 取得 export_user_list 的 .xlsx bytes（session 快取，失效才登入）。失敗拋 MyaiSyncError。
-       EN: download export_user_list (.xlsx) reusing the cached session. Raises on failure."""
+       EN: download export_user_list (.xlsx) reusing the cached session. Raises on failure.
+
+    @node job-scheduler/app/services/myai_sync.py::fetch_export_bytes
+    """
     async def _do(client):
+        """@node job-scheduler/app/services/myai_sync.py::fetch_export_bytes.<nested@165>._do"""
         return await client.get(settings.MYAI_EXPORT_PATH)
 
     def _valid(r):  # 是 xlsx(ZIP 魔術數字 PK) = 登入有效
+        """@node job-scheduler/app/services/myai_sync.py::fetch_export_bytes.<nested@168>._valid"""
         return r.status_code == 200 and r.content[:2] == b"PK"
 
     r = await _session_request(_do, _valid)
@@ -178,7 +195,10 @@ async def fetch_export_bytes() -> bytes:
 
 def parse_xlsx(body: bytes) -> list[dict]:
     """ZH: 解析匯出 .xlsx → list[dict]（已對應欄位、points 轉 int）。
-       EN: parse the exported .xlsx into mapped dict rows."""
+       EN: parse the exported .xlsx into mapped dict rows.
+
+    @node job-scheduler/app/services/myai_sync.py::parse_xlsx
+    """
     from openpyxl import load_workbook  # ZH: 延遲匯入 | lazy import
 
     wb = load_workbook(io.BytesIO(body), read_only=True, data_only=True)
@@ -214,7 +234,10 @@ def parse_xlsx(body: bytes) -> list[dict]:
 
 async def sync(db: Session) -> dict:
     """ZH: 完整同步：登入 → 匯出 → 解析 → upsert 進 myai_accounts。
-       EN: full sync: login → export → parse → upsert into myai_accounts."""
+       EN: full sync: login → export → parse → upsert into myai_accounts.
+
+    @node job-scheduler/app/services/myai_sync.py::sync
+    """
     body = await fetch_export_bytes()
     records = parse_xlsx(body)
     created = updated = 0
@@ -262,7 +285,10 @@ def auto_match(db: Session) -> dict:
        規則：myai.email == user.email(不分大小寫) 且該使用者尚未綁定 → 自動建綁定
        (vendor_username=email, myai_vendor_sn=vendor_sn)；已綁且 email 相符但缺 sn → 回填 sn。
        只寫本平台 DB；絕不碰廠商。回傳 {matched_created, backfilled}。
-       EN: Auto-bind myai accounts to platform users by email. Writes our DB only."""
+       EN: Auto-bind myai accounts to platform users by email. Writes our DB only.
+
+    @node job-scheduler/app/services/myai_sync.py::auto_match
+    """
     created = backfilled = 0
     myai_rows = (
         db.query(models.MyaiAccount)
@@ -300,7 +326,10 @@ def auto_match(db: Session) -> dict:
 # EN: v2.8 transaction-log sync — per event (all users, incl. model); no IP
 # ==============================================================================
 def _classify(note: str, pts: int) -> tuple[str, str | None]:
-    """ZH: 由備註判斷事件類型與模型 | EN: classify event/model from note."""
+    """ZH: 由備註判斷事件類型與模型 | EN: classify event/model from note.
+
+    @node job-scheduler/app/services/myai_sync.py::_classify
+    """
     low = (note or "").lower()
     if "login" in low:
         return "login", None
@@ -312,7 +341,10 @@ def _classify(note: str, pts: int) -> tuple[str, str | None]:
 
 
 def _to_int(s: str) -> int:
-    """ZH: '2,100,000' / '-1,234' / '0' → int（去掉逗號等非數字字元）。"""
+    """ZH: '2,100,000' / '-1,234' / '0' → int（去掉逗號等非數字字元）。
+
+    @node job-scheduler/app/services/myai_sync.py::_to_int
+    """
     try:
         return int(re.sub(r"[^\d\-]", "", (s or "").strip()) or "0")
     except ValueError:
@@ -321,10 +353,14 @@ def _to_int(s: str) -> int:
 
 def parse_transactions(html: str) -> list[dict]:
     """ZH: 解析交易日誌 HTML（廠商新版 kbx-grid 版型）→ list[dict]（不取 IP）。
-       EN: parse the transaction log (vendor's kbx-grid layout). No IP stored."""
+       EN: parse the transaction log (vendor's kbx-grid layout). No IP stored.
+
+    @node job-scheduler/app/services/myai_sync.py::parse_transactions
+    """
     from lxml import html as lxml_html  # ZH: 延遲匯入 | lazy import
 
     def _has(el, token: str) -> bool:  # ZH: class 是否含某 token
+        """@node job-scheduler/app/services/myai_sync.py::parse_transactions.<nested@327>._has"""
         return token in (el.get("class") or "").split()
 
     try:
@@ -379,7 +415,10 @@ def parse_transactions(html: str) -> list[dict]:
 
 def _tx_logged_in(r) -> bool:
     """ZH: 交易頁(已登入)含「交易紀錄／備註」；登入頁不含 → 用來判斷 session 是否有效。
-       EN: the logged-in tx page contains these labels; the login page does not."""
+       EN: the logged-in tx page contains these labels; the login page does not.
+
+    @node job-scheduler/app/services/myai_sync.py::_tx_logged_in
+    """
     if r.status_code != 200:
         return False
     t = r.text
@@ -388,8 +427,12 @@ def _tx_logged_in(r) -> bool:
 
 async def fetch_transactions_html(date_start: str, date_end: str) -> str:
     """ZH: GET admin 交易日誌(日期範圍) → 回 HTML（session 快取，失效才登入）。唯讀。
-       EN: GET the admin transaction log reusing the cached session. Read-only."""
+       EN: GET the admin transaction log reusing the cached session. Read-only.
+
+    @node job-scheduler/app/services/myai_sync.py::fetch_transactions_html
+    """
     async def _do(client):
+        """@node job-scheduler/app/services/myai_sync.py::fetch_transactions_html.<nested@392>._do"""
         return await client.get(ADMIN_TX_PATH, params={"date_start": date_start, "date_end": date_end})
 
     r = await _session_request(_do, _tx_logged_in)
@@ -402,7 +445,10 @@ async def fetch_transactions_html(date_start: str, date_end: str) -> str:
 
 async def sync_transactions(db: Session, days: int = 90) -> dict:
     """ZH: 抓近 N 天交易日誌 → 解析 → 去重 upsert（不存 IP）。回統計。
-       EN: fetch last N days of the tx log, parse, dedup-insert (no IP)."""
+       EN: fetch last N days of the tx log, parse, dedup-insert (no IP).
+
+    @node job-scheduler/app/services/myai_sync.py::sync_transactions
+    """
     days = max(1, min(int(days or 90), 730))
     end = datetime.now()
     start = end - timedelta(days=days)
@@ -431,7 +477,10 @@ async def sync_transactions(db: Session, days: int = 90) -> dict:
 
 def _refresh_points_from_tx(db: Session, rows: list[dict]) -> int:
     """ZH: 以每位使用者(vendor_sn)在本批交易中最新一列的餘額，更新 myai_accounts.points。
-       EN: update myai_accounts.points to each user's latest tx balance in this batch."""
+       EN: update myai_accounts.points to each user's latest tx balance in this batch.
+
+    @node job-scheduler/app/services/myai_sync.py::_refresh_points_from_tx
+    """
     latest: dict[str, tuple] = {}   # vendor_sn -> (occurred_at, balance)
     for r in rows:
         sn, occ = r.get("vendor_sn"), r.get("occurred_at")
@@ -497,6 +546,8 @@ def _assert_register_endpoint(path: str) -> None:
         目的是防止日後有人改錯常數、或複製貼上到別的批次功能而造成點數損失。
     EN: Hard guard — the upload target must be the registration endpoint and must
         not contain credit/transfer/delete tokens (irreversible point loss otherwise).
+
+    @node job-scheduler/app/services/myai_sync.py::_assert_register_endpoint
     """
     p = (path or "").lower()
     if "register_batch" not in p:
@@ -511,6 +562,8 @@ def gen_initial_password(length: int = 12) -> str:
     ZH: 產生 MYAI 初始密碼。廠商規則 8~20 字元；此處固定 12 碼並保證含大小寫+數字。
         刻意不用學號（公開資訊 → 任何人可登入他人帳號）。排除易混淆字元 0/O/1/l/I。
     EN: Random initial password (vendor allows 8-20). Never the student id (public).
+
+    @node job-scheduler/app/services/myai_sync.py::gen_initial_password
     """
     import secrets as _secrets
     lower = "abcdefghijkmnopqrstuvwxyz"
@@ -530,6 +583,8 @@ def build_register_xlsx(rows: list[dict]) -> bytes:
     EN: Build the upload workbook matching the vendor template (no header row).
 
     rows: [{"email":..., "nickname":..., "password":..., "remark":...}, ...]
+
+    @node job-scheduler/app/services/myai_sync.py::build_register_xlsx
     """
     from openpyxl import Workbook
     wb = Workbook()
@@ -557,6 +612,8 @@ async def register_batch(rows: list[dict]) -> dict:
         real response shape; the caller must treat this as "submitted for check".
 
     回傳 {"ok": bool, "status": int, "html": str}
+
+    @node job-scheduler/app/services/myai_sync.py::register_batch
     """
     # ZH: 防呆 —— 廠商還有「批次回收點數 / 批次轉移點數」兩個長得一樣的 Excel 上傳功能，
     #     用錯會造成不可逆的點數損失。送出前硬性驗證目標端點。
@@ -566,6 +623,7 @@ async def register_batch(rows: list[dict]) -> dict:
     xlsx = build_register_xlsx(rows)
 
     async def _do(client):
+        """@node job-scheduler/app/services/myai_sync.py::register_batch.<nested@568>._do"""
         return await client.post(
             REGISTER_BATCH_CHECK_PATH,
             files={"upload_xls": ("register_batch.xlsx", xlsx,
@@ -574,6 +632,7 @@ async def register_batch(rows: list[dict]) -> dict:
         )
 
     def _valid(r):
+        """@node job-scheduler/app/services/myai_sync.py::register_batch.<nested@576>._valid"""
         return r.status_code == 200 and "Unauthorized" not in r.text[:200]
 
     r = await _session_request(_do, _valid)
@@ -581,7 +640,10 @@ async def register_batch(rows: list[dict]) -> dict:
 
 
 def _nickname_for(user) -> str:
-    """ZH: 暱稱優先用平台顯示名，退回 username（學號）| EN: nickname for the vendor account"""
+    """ZH: 暱稱優先用平台顯示名，退回 username（學號）| EN: nickname for the vendor account
+
+    @node job-scheduler/app/services/myai_sync.py::_nickname_for
+    """
     for attr in ("display_name", "full_name", "name"):
         v = (getattr(user, attr, None) or "").strip()
         if v:
@@ -591,7 +653,10 @@ def _nickname_for(user) -> str:
 
 def store_initial_password(db: Session, acc, plaintext: str) -> None:
     """ZH: 加密暫存初始密碼（AES-256-GCM，同 user_secrets 的 KEK）並記發放時間。
-       EN: Encrypt-at-rest the generated initial password with the shared KEK."""
+       EN: Encrypt-at-rest the generated initial password with the shared KEK.
+
+    @node job-scheduler/app/services/myai_sync.py::store_initial_password
+    """
     from . import secrets_service
     acc.init_pwd_enc = secrets_service.encrypt_value(plaintext)
     acc.init_pwd_at = datetime.now(timezone.utc)
@@ -606,6 +671,8 @@ def read_initial_password(db: Session, acc, retention_days: int) -> str | None:
     EN: Return the initial password if still within retention and unacknowledged;
         otherwise purge it in place. Students can always self-serve via MYAI's own
         forgot-password using their school email.
+
+    @node job-scheduler/app/services/myai_sync.py::read_initial_password
     """
     if not acc or not acc.init_pwd_enc:
         return None
@@ -627,14 +694,20 @@ def read_initial_password(db: Session, acc, retention_days: int) -> str | None:
 
 
 def clear_initial_password(db: Session, acc) -> None:
-    """ZH: 清除暫存的初始密碼（學生按「已修改」或逾期）| EN: purge the stored initial password"""
+    """ZH: 清除暫存的初始密碼（學生按「已修改」或逾期）| EN: purge the stored initial password
+
+    @node job-scheduler/app/services/myai_sync.py::clear_initial_password
+    """
     acc.init_pwd_enc = None
     acc.init_pwd_at = None
     db.commit()
 
 
 def purge_expired_initial_passwords(db: Session, retention_days: int) -> int:
-    """ZH: 批次清除逾期初始密碼（背景任務呼叫）| EN: purge expired initial passwords"""
+    """ZH: 批次清除逾期初始密碼（背景任務呼叫）| EN: purge expired initial passwords
+
+    @node job-scheduler/app/services/myai_sync.py::purge_expired_initial_passwords
+    """
     cutoff = datetime.now(timezone.utc) - timedelta(days=retention_days)
     rows = (
         db.query(models.ExternalAiAccount)
@@ -666,6 +739,8 @@ async def provision_user(db: Session, user) -> dict:
           created       → 呼叫廠商批次註冊建號 + 綁定 + 暫存初始密碼
           failed        → 廠商端失敗（保留錯誤訊息供 admin 檢視）
     EN: Auto-provision orchestrator; idempotent, runs in background after SSO login.
+
+    @node job-scheduler/app/services/myai_sync.py::provision_user
     """
     from .. import crud
     if not crud.get_setting(db, "myai_autoprovision"):
@@ -767,6 +842,8 @@ def provision_status(db: Session, user) -> dict:
         身分一律由 JWT 推導（呼叫端傳 user 物件），查不到別人的。
     EN: Per-user provisioning status; the initial password is returned only while
         within the retention window and not yet acknowledged.
+
+    @node job-scheduler/app/services/myai_sync.py::provision_status
     """
     from .. import crud
     acc = (db.query(models.ExternalAiAccount)
@@ -785,7 +862,10 @@ def provision_status(db: Session, user) -> dict:
 
 
 def acknowledge_initial_password(db: Session, user) -> bool:
-    """ZH: 學生按「我已修改密碼」→ 立即銷毀暫存的初始密碼"""
+    """ZH: 學生按「我已修改密碼」→ 立即銷毀暫存的初始密碼
+
+    @node job-scheduler/app/services/myai_sync.py::acknowledge_initial_password
+    """
     acc = (db.query(models.ExternalAiAccount)
              .filter(models.ExternalAiAccount.user_id == user.id).first())
     if not acc:
@@ -821,6 +901,8 @@ def live_usage_quadrants(db: Session, usage_minutes: int = USAGE_WINDOW_MINUTES,
         身分關聯：external_ai_accounts 的 myai_vendor_sn 優先、退回 vendor_username(email)。
         未綁定但有用量的廠商帳號另列 unlinked（多半是老師/管理者或尚未綁定的學生）。
     EN: Cross-tab of recent vendor usage × platform presence; unlinked vendor rows listed separately.
+
+    @node job-scheduler/app/services/myai_sync.py::live_usage_quadrants
     """
     now = datetime.now(timezone.utc)
     usage_cut = now - timedelta(minutes=max(1, usage_minutes))
@@ -868,6 +950,7 @@ def live_usage_quadrants(db: Session, usage_minutes: int = USAGE_WINDOW_MINUTES,
             by_email[a.vendor_username.strip().lower()] = u
 
     def _online(u) -> bool:
+        """@node job-scheduler/app/services/myai_sync.py::live_usage_quadrants.<nested@870>._online"""
         last = getattr(u, "last_activity", None)
         if not last:
             return False
@@ -929,6 +1012,8 @@ def has_online_users(db: Session, online_minutes: int = ONLINE_WINDOW_MINUTES) -
     ZH: 平台上是否有「非 admin」使用者在線 —— 給輪詢迴圈判斷要不要跳過這一輪。
         排除 admin 的理由：管理者開著後台不代表有學生在用 MYAI，否則永遠不會休息。
     EN: Whether any non-admin user is active; drives the poll-skip optimization.
+
+    @node job-scheduler/app/services/myai_sync.py::has_online_users
     """
     cut = (datetime.now(timezone.utc) - timedelta(minutes=max(1, online_minutes))).replace(tzinfo=None)
     return db.query(models.User).filter(
@@ -964,6 +1049,8 @@ def classify_email(email: str) -> dict:
     EN: Classify an address by DOMAIN only. No confidence scoring, no existence guessing —
         whether the mailbox exists is answered by real bounces (EmailLog), not by us.
         Never keys off the username: users can freely rename themselves.
+
+    @node job-scheduler/app/services/myai_sync.py::classify_email
     """
     from ..config import SSO_POLICY
     cfg = (SSO_POLICY or {}).get("oidc", {}) or {}
@@ -984,6 +1071,8 @@ def provision_candidates(db: Session) -> dict:
           no_email  完全沒有 email（SSO 未提供、也推導不出）→ 無從建號，需人工補
         刻意不做「信心度」分類：帳號存不存在由退件紀錄回答，不由我們猜。
     EN: Unbound SSO users split by a FACT — has an address or not. No confidence scoring.
+
+    @node job-scheduler/app/services/myai_sync.py::provision_candidates
     """
     bound = {a.user_id for a in db.query(models.ExternalAiAccount).all()}
     ready, no_email = [], []
@@ -1004,6 +1093,8 @@ def staff_pending(db: Session) -> list[dict]:
         **不自動升權**：網域不是權威授權來源，誤升等於送出過大權限 → 只列出來給管理者確認。
     EN: SSO users whose mail DOMAIN says staff but whose platform role is still student.
         Domain-based only (never the mutable username). Never auto-promoted.
+
+    @node job-scheduler/app/services/myai_sync.py::staff_pending
     """
     out: list[dict] = []
     users = (db.query(models.User)

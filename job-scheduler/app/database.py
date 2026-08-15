@@ -68,6 +68,8 @@ def set_sqlite_pragma(dbapi_conn, connection_record):
     """
     ZH: 設定 SQLite PRAGMA (每次新連線自動執行)
     EN: Set SQLite PRAGMAs (auto-executed on each new connection)
+
+    @node job-scheduler/app/database.py::set_sqlite_pragma
     """
     cursor = dbapi_conn.cursor()
     cursor.execute("PRAGMA journal_mode=WAL")       # ZH: 寫前日誌模式 | EN: Write-Ahead Logging
@@ -102,6 +104,8 @@ def get_db():
         @app.get("/users")
         def get_users(db: Session = Depends(get_db)):
             ...
+
+    @node job-scheduler/app/database.py::get_db
     """
     db = SessionLocal()
     try:
@@ -117,6 +121,8 @@ def init_db():
 
     ZH: 在 app/main.py 的 startup 事件中呼叫
     EN: Called in app/main.py startup event
+
+    @node job-scheduler/app/database.py::init_db
     """
     # ZH: 確保資料庫目錄存在 | EN: Ensure database directory exists
     db_dir = os.path.dirname(settings.DATABASE_PATH)

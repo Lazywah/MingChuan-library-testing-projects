@@ -52,6 +52,8 @@ def list_my_secrets(
     """
     ZH: 列出自己的 secrets，value 永遠 masked
     EN: List own secrets; value is always masked
+
+    @node job-scheduler/app/routers/secrets.py::list_my_secrets
     """
     return secrets_service.list_secrets_masked(db, current_user.id)
 
@@ -71,6 +73,8 @@ def upsert_secret(
     EN: Insert or update a secret
 
     name 必須為英數 + 底線（環境變數命名規則）
+
+    @node job-scheduler/app/routers/secrets.py::upsert_secret
     """
     try:
         secrets_service.set_secret(db, current_user.id, name, payload.value)
@@ -88,7 +92,10 @@ def delete_secret(
     current_user: models.User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """ZH: 刪除自己的 secret | EN: Delete own secret"""
+    """ZH: 刪除自己的 secret | EN: Delete own secret
+
+    @node job-scheduler/app/routers/secrets.py::delete_secret
+    """
     deleted = secrets_service.delete_secret(db, current_user.id, name)
     if not deleted:
         raise HTTPException(status_code=404, detail="Secret not found")

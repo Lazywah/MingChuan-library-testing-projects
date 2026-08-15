@@ -32,6 +32,7 @@ IN_USE, ARCHIVED, LEGACY, ORPHAN = "使用中", "封存", "舊命名(dash)", "�
 
 
 def human(n):
+    """@node scripts/cleanup_lab_volumes.py::human"""
     if n is None:
         return "?"
     for unit in ("B", "KB", "MB", "GB"):
@@ -41,6 +42,7 @@ def human(n):
 
 
 def classify():
+    """@node scripts/cleanup_lab_volumes.py::classify"""
     import docker
     from app.database import SessionLocal
     from app import models
@@ -77,6 +79,7 @@ def classify():
 
 
 def main():
+    """@node scripts/cleanup_lab_volumes.py::main"""
     apply_ = "--apply" in sys.argv
     adopt = "--adopt" in sys.argv
     db, dc, rows = classify()

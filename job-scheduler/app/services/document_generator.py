@@ -53,6 +53,7 @@ class DocumentGenerationError(Exception):
 # ==============================================================================
 
 def _clean_text(value, fallback: str = "") -> str:
+    """@node job-scheduler/app/services/document_generator.py::_clean_text"""
     if value is None:
         return fallback
     text = str(value).strip()
@@ -60,7 +61,10 @@ def _clean_text(value, fallback: str = "") -> str:
 
 
 def _normalize_spec(spec: dict) -> dict:
-    """ZH: 容錯地把 AI spec 整理成可渲染結構 | EN: Tolerant normalization."""
+    """ZH: 容錯地把 AI spec 整理成可渲染結構 | EN: Tolerant normalization.
+
+    @node job-scheduler/app/services/document_generator.py::_normalize_spec
+    """
     if not isinstance(spec, dict):
         raise DocumentGenerationError("spec 不是物件 (expected JSON object)")
 
@@ -97,7 +101,10 @@ def _normalize_spec(spec: dict) -> dict:
 # ==============================================================================
 
 def _render_pptx_bytes(norm: dict) -> bytes:
-    """ZH: 用內建 template 渲染成 .pptx，回傳 bytes | EN: Render to .pptx bytes."""
+    """ZH: 用內建 template 渲染成 .pptx，回傳 bytes | EN: Render to .pptx bytes.
+
+    @node job-scheduler/app/services/document_generator.py::_render_pptx_bytes
+    """
     prs = Presentation()  # ZH: 預設 16:9-ish template | EN: built-in default template
 
     # --- 封面 / Title slide ---
@@ -148,6 +155,7 @@ def _render_pptx_bytes(norm: dict) -> bytes:
 # ==============================================================================
 
 def _safe_filename(title: str) -> str:
+    """@node job-scheduler/app/services/document_generator.py::_safe_filename"""
     base = "".join(c for c in title if c.isalnum() or c in (" ", "-", "_")).strip()
     base = base.replace(" ", "_")[:40] or "presentation"
     ts = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
@@ -159,6 +167,8 @@ def _put_into_container(user_id: str, filename: str, data: bytes) -> str:
     ZH: 把 bytes 以 put_archive 拷貝進 running 容器的 OUTPUTS_DIR。
         回傳容器內完整路徑。容器不存在/未啟動 → DocumentGenerationError。
     EN: Copy bytes into running container's OUTPUTS_DIR via put_archive.
+
+    @node job-scheduler/app/services/document_generator.py::_put_into_container
     """
     lc = lab_manager.get_lifecycle()
     container_name = lc._container_name(user_id)
@@ -218,6 +228,8 @@ def generate_presentation(spec: dict, user_id: str) -> dict:
         成功 → {"ok": True, "filename", "path", "slides"}
         失敗 → {"ok": False, "error": "<友善訊息>"}
     EN: Called by chat.py presentation branch.
+
+    @node job-scheduler/app/services/document_generator.py::generate_presentation
     """
     try:
         norm = _normalize_spec(spec)

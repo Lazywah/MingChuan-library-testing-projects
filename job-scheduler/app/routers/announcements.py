@@ -46,6 +46,8 @@ def list_announcements(
     EN: Announcement list (for user UI homepage)
 
     僅回 is_visible=1 的；置頂的排最前，其餘按 posted_at desc。
+
+    @node job-scheduler/app/routers/announcements.py::list_announcements
     """
     pinned = (
         db.query(models.Announcement)
@@ -76,7 +78,10 @@ def admin_list_announcements(
     db: Session = Depends(get_db),
     _: models.User = Depends(require_admin),
 ) -> Any:
-    """ZH: admin 看到的全部公告（含隱藏 / 草稿）"""
+    """ZH: admin 看到的全部公告（含隱藏 / 草稿）
+
+    @node job-scheduler/app/routers/announcements.py::admin_list_announcements
+    """
     q = db.query(models.Announcement)
     if not include_hidden:
         q = q.filter(models.Announcement.is_visible == 1)
@@ -92,7 +97,10 @@ def admin_create_announcement(
     db: Session = Depends(get_db),
     current_admin: models.User = Depends(require_admin),
 ) -> Any:
-    """ZH: 新增公告"""
+    """ZH: 新增公告
+
+    @node job-scheduler/app/routers/announcements.py::admin_create_announcement
+    """
     a = models.Announcement(
         title=payload.title,
         body=payload.body,
@@ -111,7 +119,10 @@ def admin_update_announcement(
     db: Session = Depends(get_db),
     _: models.User = Depends(require_admin),
 ) -> Any:
-    """ZH: 編輯公告"""
+    """ZH: 編輯公告
+
+    @node job-scheduler/app/routers/announcements.py::admin_update_announcement
+    """
     a = db.query(models.Announcement).filter(models.Announcement.id == ann_id).first()
     if not a:
         raise HTTPException(status_code=404, detail="Announcement not found")
@@ -129,7 +140,10 @@ def admin_delete_announcement(
     db: Session = Depends(get_db),
     _: models.User = Depends(require_admin),
 ) -> None:
-    """ZH: 刪除公告"""
+    """ZH: 刪除公告
+
+    @node job-scheduler/app/routers/announcements.py::admin_delete_announcement
+    """
     a = db.query(models.Announcement).filter(models.Announcement.id == ann_id).first()
     if not a:
         raise HTTPException(status_code=404, detail="Announcement not found")

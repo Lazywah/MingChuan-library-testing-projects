@@ -42,6 +42,8 @@ async def _timeout_cleanup_loop():
     EN: Periodically scan jobs stuck in running state beyond the timeout threshold.
     ZH: 典型觸發情境：GPU Worker 意外斷線，任務永遠不會回報完成。
     EN: Typical trigger: GPU Worker crashes, job never reports completion.
+
+    @node job-scheduler/app/scheduler.py::_timeout_cleanup_loop
     """
     logger.info(
         f"ZH: 排程器啟動，超時閾值={settings.JOB_TIMEOUT_MINUTES} 分鐘 | "
@@ -60,7 +62,10 @@ async def _timeout_cleanup_loop():
 
 
 def _cleanup_timed_out_jobs(db=None):
-    """ZH: 執行一次超時清理，在同步上下文中操作 DB | EN: One-shot timeout cleanup (sync DB access)"""
+    """ZH: 執行一次超時清理，在同步上下文中操作 DB | EN: One-shot timeout cleanup (sync DB access)
+
+    @node job-scheduler/app/scheduler.py::_cleanup_timed_out_jobs
+    """
     _owns_db = db is None
     if _owns_db:
         db = SessionLocal()
@@ -117,6 +122,8 @@ async def _lab_session_scan_loop():
     """
     ZH: 每分鐘呼叫 lab_manager.scan_and_evict() — 處理 idle 30 分鐘 / 8h hard limit
     EN: Every minute, invoke lab_manager.scan_and_evict() — handles idle/hard limit
+
+    @node job-scheduler/app/scheduler.py::_lab_session_scan_loop
     """
     logger.info(f"ZH: Lab session 掃描迴圈啟動 (每 {LAB_SCAN_INTERVAL_SECONDS}s)")
     # ZH: 延遲 import，避免 lab_manager 初始化 docker SDK 影響啟動順序
@@ -146,6 +153,8 @@ async def _storage_lifecycle_loop():
     """
     ZH: 每日 03:00 執行儲存生命週期掃描 — 90 天 freeze、180 天 archive、365 天 pending_delete
     EN: Daily 03:00 storage lifecycle scan — 90d freeze, 180d archive, 365d pending_delete
+
+    @node job-scheduler/app/scheduler.py::_storage_lifecycle_loop
     """
     logger.info("ZH: 儲存生命週期迴圈啟動 (每日 03:00)")
     from .services import storage_lifecycle
@@ -219,7 +228,10 @@ async def _storage_lifecycle_loop():
 async def _myai_sync_loop():
     """ZH: headless 同步 myai168 帳號/Token。帳密未設則不啟用（帳密是 .env，非 runtime）。
        v3.1 step 6：同步間隔改由 SystemConfig(myai_sync_interval_hours) 每輪重讀，admin 可即時調；
-       設為 0＝暫停（迴圈仍在，每 5 分鐘回看是否被重新啟用）。失敗只記 log，不影響其他排程。"""
+       設為 0＝暫停（迴圈仍在，每 5 分鐘回看是否被重新啟用）。失敗只記 log，不影響其他排程。
+
+    @node job-scheduler/app/scheduler.py::_myai_sync_loop
+    """
     from .config import settings
     if not (settings.MYAI_ADMIN_EMAIL and settings.MYAI_ADMIN_PASSWORD):
         logger.info("ZH: MYAI 自動同步未啟用（帳密未設）")
@@ -261,7 +273,10 @@ async def _myai_sync_loop():
 async def _myai_balance_loop():
     """ZH: 每 MYAI_BALANCE_POLL_MINUTES 分鐘，輕量抓近 MYAI_BALANCE_POLL_DAYS 天交易日誌，
        更新各人餘額（供低點數提醒即時判斷）。一個請求涵蓋全體、cookie 重用故成本低。
-       帳密未設或間隔<=0 則不啟用。失敗只記 log。"""
+       帳密未設或間隔<=0 則不啟用。失敗只記 log。
+
+    @node job-scheduler/app/scheduler.py::_myai_balance_loop
+    """
     from .config import settings
     if not (settings.MYAI_ADMIN_EMAIL and settings.MYAI_ADMIN_PASSWORD) or settings.MYAI_BALANCE_POLL_MINUTES <= 0:
         logger.info("ZH: MYAI 餘額輪詢未啟用（帳密未設或 MYAI_BALANCE_POLL_MINUTES=0）")
@@ -317,6 +332,8 @@ async def _bounce_scan_loop():
         IMAP 未設定就直接不啟用；失敗只記 log，絕不影響其他排程。
         ⚠ 這是「事實來源」——沒有它，信箱不存在只會停在 sent，永遠看不出來。
     EN: Periodically pull bounces over IMAP and back-fill email_log.
+
+    @node job-scheduler/app/scheduler.py::_bounce_scan_loop
     """
     from .services import bounce_reader
     IDLE_RECHECK_SECONDS = 600
@@ -359,6 +376,7 @@ async def _bounce_scan_loop():
 # ==============================================================================
 
 async def start_scheduler():
+    """@node job-scheduler/app/scheduler.py::start_scheduler"""
     global _scheduler_task, _lab_scan_task, _storage_scan_task, _myai_sync_task, _myai_balance_task, _bounce_scan_task, _scheduler_running
     _scheduler_running = True
     _scheduler_task    = asyncio.create_task(_timeout_cleanup_loop())
@@ -371,6 +389,7 @@ async def start_scheduler():
 
 
 async def stop_scheduler():
+    """@node job-scheduler/app/scheduler.py::stop_scheduler"""
     global _scheduler_task, _lab_scan_task, _storage_scan_task, _myai_sync_task, _myai_balance_task, _bounce_scan_task, _scheduler_running
     _scheduler_running = False
     for task in (_scheduler_task, _lab_scan_task, _storage_scan_task, _myai_sync_task, _myai_balance_task, _bounce_scan_task):

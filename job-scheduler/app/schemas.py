@@ -33,7 +33,10 @@ from typing import Optional, Dict, Any, List
 # ==============================================================================
 
 class UserCreate(BaseModel):
-    """ZH: 使用者註冊請求 | EN: User registration request"""
+    """ZH: 使用者註冊請求 | EN: User registration request
+
+    @node job-scheduler/app/schemas.py::UserCreate
+    """
     username: str                                    # ZH: 使用者名稱 | EN: Username
     email: EmailStr                                  # ZH: 電子郵件 (自動驗證格式) | EN: Email (auto-validated)
     password: str                                    # ZH: 密碼 (明文，後端會雜湊) | EN: Password (plaintext, hashed by backend)
@@ -45,6 +48,7 @@ class UserCreate(BaseModel):
     @field_validator("role")
     @classmethod
     def role_must_be_student(cls, v: Optional[str]) -> str:
+        """@node job-scheduler/app/schemas.py::UserCreate.role_must_be_student"""
         if v not in (None, "student"):
             raise ValueError(
                 "ZH: 公開註冊只允許 student 角色，teacher/admin 由管理員配發 | "

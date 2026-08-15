@@ -42,6 +42,7 @@ _REF = re.compile(
 
 
 def content_hash(path: Path) -> str:
+    """@node scripts/bump_assets.py::content_hash"""
     return hashlib.sha256(path.read_bytes()).hexdigest()[:HASH_LEN]
 
 
@@ -50,11 +51,14 @@ def process_html(html_path: Path, write: bool):
     回傳 (changed_list, missing_list)：
       changed_list = [(asset, old_v, new_v), ...] 需要更新的項目
       missing_list = [asset, ...] 引用了但檔案不存在的項目
+
+    @node scripts/bump_assets.py::process_html
     """
     text = html_path.read_bytes().decode("utf-8")
     changed, missing = [], []
 
     def repl(m):
+        """@node scripts/bump_assets.py::process_html.<nested@57>.repl"""
         attr, asset, old_v, tail = m.group(1), m.group(2), m.group(3), m.group(4)
         # 外部資源（http/https/協定相對）不處理
         if asset.startswith(("http://", "https://", "//")):
@@ -78,6 +82,7 @@ def process_html(html_path: Path, write: bool):
 
 
 def main():
+    """@node scripts/bump_assets.py::main"""
     check_only = "--check" in sys.argv
 
     html_files = []

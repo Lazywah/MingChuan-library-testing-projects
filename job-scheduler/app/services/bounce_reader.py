@@ -71,6 +71,8 @@ def imap_config() -> dict:
         主機由 SMTP 主機推導（smtp.gmail.com → imap.gmail.com），可用 IMAP_* 覆寫。
     EN: IMAP settings, defaulting to the SMTP credentials and a host derived from
         the SMTP host; IMAP_* env vars override.
+
+    @node job-scheduler/app/services/bounce_reader.py::imap_config
     """
     host = (getattr(settings, "IMAP_SERVER", "") or "").strip()
     if not host:
@@ -90,7 +92,10 @@ def imap_config() -> dict:
 # 解析
 # ==============================================================================
 def is_bounce(msg: Message) -> bool:
-    """ZH: 這封是不是退信？兩個判準取聯集：標準 DSN 結構、或寄件者是郵件守護程式。"""
+    """ZH: 這封是不是退信？兩個判準取聯集：標準 DSN 結構、或寄件者是郵件守護程式。
+
+    @node job-scheduler/app/services/bounce_reader.py::is_bounce
+    """
     ctype = (msg.get_content_type() or "").lower()
     params = (msg.get("Content-Type") or "").lower()
     if ctype == "multipart/report" and "delivery-status" in params:
@@ -103,6 +108,8 @@ def _walk_delivery_status(msg: Message) -> list[dict]:
     """
     ZH: 解析標準 DSN 的 message/delivery-status 區塊（RFC 3464）。
         每個 recipient 區塊給一筆：Final-Recipient / Action / Status / Diagnostic-Code。
+
+    @node job-scheduler/app/services/bounce_reader.py::_walk_delivery_status
     """
     out: list[dict] = []
     for part in msg.walk():
@@ -132,6 +139,8 @@ def _original_message_id(msg: Message) -> str | None:
     """
     ZH: 從退信裡挖出**原信**的 Message-ID。DSN 會把原信（或其 header）夾在
         message/rfc822 或 text/rfc822-headers 區塊裡。
+
+    @node job-scheduler/app/services/bounce_reader.py::_original_message_id
     """
     for part in msg.walk():
         ctype = (part.get_content_type() or "").lower()
@@ -156,6 +165,8 @@ def _plaintext_fallback(msg: Message) -> list[dict]:
     """
     ZH: 沒有標準 DSN 結構時的後援 —— 從純文字內容抓 5.x.x/4.x.x 狀態碼與地址。
         刻意保守：抓不到狀態碼就不猜，回空（寧可漏抓，不要誤判成退信）。
+
+    @node job-scheduler/app/services/bounce_reader.py::_plaintext_fallback
     """
     text = ""
     for part in msg.walk():
@@ -182,6 +193,8 @@ def parse_bounce(raw: bytes) -> dict | None:
     ZH: 解析一封退信 → {"message_id":…, "recipients":[{recipient,status,action,diagnostic}]}
         不是退信、或解析不出收件人 → 回 None（呼叫端跳過，不留任何內容）。
     EN: Parse one bounce message; returns None for anything that isn't a parsable bounce.
+
+    @node job-scheduler/app/services/bounce_reader.py::parse_bounce
     """
     try:
         msg = email.message_from_bytes(raw)
@@ -203,6 +216,8 @@ def classify_status(status: str, action: str = "") -> str:
           4.x.x / action=delayed → deferred （暫時失敗：稍後可能仍會送達，不代表不存在）
         ⚠ 只有 bounced 才是「這個地址不存在」的事實；deferred 不是。
     EN: map DSN status class to our log status; only 5.x.x is a definitive failure.
+
+    @node job-scheduler/app/services/bounce_reader.py::classify_status
     """
     s = (status or "").strip()
     if s.startswith("5"):
@@ -223,6 +238,8 @@ def apply_bounce(db: Session, parsed: dict) -> int:
         回填筆數。找不到對應也不新增假紀錄（我們只回填事實，不編造寄件紀錄）。
     EN: Back-fill email_log; prefer Message-ID, fall back to the latest `sent` row
         for that address. Never fabricates a row when no match is found.
+
+    @node job-scheduler/app/services/bounce_reader.py::apply_bounce
     """
     n = 0
     now = datetime.now(timezone.utc)
@@ -264,6 +281,8 @@ def scan_bounces(db: Session, max_messages: int = 200) -> dict:
         進度以 IMAP UID 游標記在 SystemConfig，重啟不會重掃。
     EN: Scan the sender mailbox for new bounces and back-fill the log. Read-only:
         marks processed messages \\Seen; never deletes or moves anything.
+
+    @node job-scheduler/app/services/bounce_reader.py::scan_bounces
     """
     from .. import crud
 

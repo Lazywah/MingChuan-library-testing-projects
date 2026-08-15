@@ -83,15 +83,24 @@ _AGENTS: dict[str, dict] = {
 
 
 def is_dispatch_tool(tool_type: str | None) -> bool:
-    """ZH: 此 tool_type 是否走專項生成 dispatch | EN: Whether this tool_type uses dispatch"""
+    """ZH: 此 tool_type 是否走專項生成 dispatch | EN: Whether this tool_type uses dispatch
+
+    @node job-scheduler/app/services/agent_dispatcher.py::is_dispatch_tool
+    """
     return (tool_type or "").strip() in _AGENTS
 
 
 def get_agent_config(tool_type: str) -> dict:
-    """ZH: 取得專項 agent 設定 | EN: Get specialized agent config"""
+    """ZH: 取得專項 agent 設定 | EN: Get specialized agent config
+
+    @node job-scheduler/app/services/agent_dispatcher.py::get_agent_config
+    """
     return _AGENTS[(tool_type or "").strip()]
 
 
 def get_system_prompt(tool_type: str) -> str:
-    """ZH: 取得專項 agent 的 system prompt | EN: Get the agent's system prompt"""
+    """ZH: 取得專項 agent 的 system prompt | EN: Get the agent's system prompt
+
+    @node job-scheduler/app/services/agent_dispatcher.py::get_system_prompt
+    """
     return _AGENTS[(tool_type or "").strip()]["system_prompt"]

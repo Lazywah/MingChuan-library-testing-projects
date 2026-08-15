@@ -44,6 +44,8 @@ def _get_db_url() -> str:
         fallback 到 alembic.ini 的 sqlalchemy.url。
     EN: Get DB URL. Reads DATABASE_PATH env var first (e.g. /data/app.db),
         falls back to alembic.ini sqlalchemy.url.
+
+    @node job-scheduler/migrations/env.py::_get_db_url
     """
     db_path = os.environ.get("DATABASE_PATH")
     if db_path:
@@ -55,6 +57,8 @@ def run_migrations_offline() -> None:
     """
     ZH: 離線模式：輸出 SQL 到 stdout，不實際連線 DB（適合 review / CI）
     EN: Offline mode: emit SQL to stdout without connecting to DB (useful for review/CI)
+
+    @node job-scheduler/migrations/env.py::run_migrations_offline
     """
     url = _get_db_url()
     context.configure(
@@ -72,6 +76,8 @@ def run_migrations_online() -> None:
     """
     ZH: 線上模式：直接連線 DB 並執行 migration
     EN: Online mode: connect to DB and run migrations
+
+    @node job-scheduler/migrations/env.py::run_migrations_online
     """
     configuration = config.get_section(config.config_ini_section, {})
     configuration["sqlalchemy.url"] = _get_db_url()

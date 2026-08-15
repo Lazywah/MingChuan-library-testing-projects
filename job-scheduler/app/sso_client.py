@@ -38,9 +38,13 @@ PENDING_VALUES = {"PENDING", "", None}
 # 抽象介面 | Abstract Interface
 # ==============================================================================
 class BaseSSOClient(ABC):
+    """@node job-scheduler/app/sso_client.py::BaseSSOClient"""
     @abstractmethod
     def get_login_url(self) -> str:
-        """取得 SSO 登入導向網址"""
+        """取得 SSO 登入導向網址
+
+        @node job-scheduler/app/sso_client.py::BaseSSOClient.get_login_url
+        """
         pass
 
     @abstractmethod
@@ -55,6 +59,8 @@ class BaseSSOClient(ABC):
           - role (str, "student" / "teacher" / "admin")
           - auth_source (str, "sso_mock" / "sso_cas" / "sso_oidc")
           - external_id (str, optional) — OIDC 的 oid；CAS 留空
+
+        @node job-scheduler/app/sso_client.py::BaseSSOClient.validate_ticket
         """
         pass
 
@@ -63,13 +69,17 @@ class BaseSSOClient(ABC):
 # MockSSOClient — 開發測試用
 # ==============================================================================
 class MockSSOClient(BaseSSOClient):
+    """@node job-scheduler/app/sso_client.py::MockSSOClient"""
     def __init__(self, mock_users: list):
+        """@node job-scheduler/app/sso_client.py::MockSSOClient.__init__"""
         self.mock_users = mock_users
 
     def get_login_url(self) -> str:
+        """@node job-scheduler/app/sso_client.py::MockSSOClient.get_login_url"""
         return "/api/v1/sso/mock-login"
 
     def validate_ticket(self, ticket: str) -> dict:
+        """@node job-scheduler/app/sso_client.py::MockSSOClient.validate_ticket"""
         for user in self.mock_users:
             if user.get("student_id") == ticket:
                 return {
@@ -87,16 +97,20 @@ class MockSSOClient(BaseSSOClient):
 # CASSSOClient — Yale CAS 協定（學術界 SSO 標準，目前 MCU 沒用，留著未來其他學校用）
 # ==============================================================================
 class CASSSOClient(BaseSSOClient):
+    """@node job-scheduler/app/sso_client.py::CASSSOClient"""
     def __init__(self, server_url: str, service_url: str, version: str = "3.0"):
+        """@node job-scheduler/app/sso_client.py::CASSSOClient.__init__"""
         self.server_url = server_url.rstrip("/")
         self.service_url = service_url
         self.version = version
 
     def get_login_url(self) -> str:
+        """@node job-scheduler/app/sso_client.py::CASSSOClient.get_login_url"""
         encoded_service = urllib.parse.quote(self.service_url, safe='')
         return f"{self.server_url}/login?service={encoded_service}"
 
     def validate_ticket(self, ticket: str) -> dict:
+        """@node job-scheduler/app/sso_client.py::CASSSOClient.validate_ticket"""
         encoded_service = urllib.parse.quote(self.service_url, safe='')
         # 注意: 依照真實 CAS 伺服器設定，可能是 /serviceValidate 或 /p3/serviceValidate
         validate_url = f"{self.server_url}/p3/serviceValidate?service={encoded_service}&ticket={ticket}"
@@ -151,6 +165,8 @@ class OIDCSSOClient(BaseSSOClient):
       info = client.validate_ticket(code) # code→token→userinfo，回 user info
 
     state 採 stateless HMAC 設計（不需 Redis/in-memory storage）。
+
+    @node job-scheduler/app/sso_client.py::OIDCSSOClient
     """
 
     # ZH: username_claim 未設定時，依序嘗試這些 userinfo 欄位當學號/員編
@@ -169,6 +185,7 @@ class OIDCSSOClient(BaseSSOClient):
                  username_claim: str = "",
                  email_domain: str = "",
                  email_rules: list = None):
+        """@node job-scheduler/app/sso_client.py::OIDCSSOClient.__init__"""
         self.discovery_url  = discovery_url
         self.client_id      = client_id
         self.client_secret  = client_secret
@@ -191,7 +208,10 @@ class OIDCSSOClient(BaseSSOClient):
 
     # ── discovery ───────────────────────────────────────────────────────
     def _endpoints(self) -> dict:
-        """抓取並快取 OpenID configuration；缺必要端點視為失敗。"""
+        """抓取並快取 OpenID configuration；缺必要端點視為失敗。
+
+        @node job-scheduler/app/sso_client.py::OIDCSSOClient._endpoints
+        """
         if self._doc:
             return self._doc
         resp = httpx.get(self.discovery_url, timeout=10.0)
@@ -207,7 +227,10 @@ class OIDCSSOClient(BaseSSOClient):
 
     # ── 介面契約 ────────────────────────────────────────────────────────
     def get_login_url(self) -> str:
-        """組 authorization URL（state 內部生成，無外部參數）"""
+        """組 authorization URL（state 內部生成，無外部參數）
+
+        @node job-scheduler/app/sso_client.py::OIDCSSOClient.get_login_url
+        """
         eps = self._endpoints()
         state = self._sign_state()
         params = {
@@ -225,6 +248,8 @@ class OIDCSSOClient(BaseSSOClient):
           1. POST token endpoint（client_secret_post）→ access_token
           2. GET userinfo endpoint（Bearer access_token）→ 學號/員編等身分欄位
         state 驗證由 router 在進入此方法前完成（verify_state）。
+
+        @node job-scheduler/app/sso_client.py::OIDCSSOClient.validate_ticket
         """
         eps = self._endpoints()
         try:
@@ -295,6 +320,8 @@ class OIDCSSOClient(BaseSSOClient):
         EN: Build the address from the IdP's immutable `sub` (userinfo returns only sub).
             This is construction, not judgement; classification keys off the DOMAIN only
             (myai_sync.classify_email). Existence is answered by real bounces, not guesses.
+
+        @node job-scheduler/app/sso_client.py::OIDCSSOClient._derive_email
         """
         idp_email = (idp_email or "").strip()
         if idp_email:
@@ -321,6 +348,8 @@ class OIDCSSOClient(BaseSSOClient):
             未設則依候選清單嘗試。值若為 email 形式取 @ 前半段。
         EN: Extract the account id from userinfo. Explicit username_claim wins (hard
             error if absent); otherwise try candidates. Emails are trimmed at '@'.
+
+        @node job-scheduler/app/sso_client.py::OIDCSSOClient._extract_username
         """
         if self.username_claim:
             val = info.get(self.username_claim)
@@ -338,6 +367,7 @@ class OIDCSSOClient(BaseSSOClient):
     # ── stateless state 簽章（防 CSRF + replay）──────────────────────────
     def _sign_state(self) -> str:
         # 延遲 import 避免循環相依
+        """@node job-scheduler/app/sso_client.py::OIDCSSOClient._sign_state"""
         from .config import settings
         payload = f"{int(time.time())}|{secrets.token_urlsafe(16)}"
         sig = hmac.new(
@@ -348,6 +378,7 @@ class OIDCSSOClient(BaseSSOClient):
         return base64.urlsafe_b64encode(f"{payload}|{sig}".encode()).decode()
 
     def verify_state(self, state: str, max_age_seconds: int = 600) -> bool:
+        """@node job-scheduler/app/sso_client.py::OIDCSSOClient.verify_state"""
         from .config import settings
         try:
             decoded = base64.urlsafe_b64decode(state.encode()).decode()
@@ -378,6 +409,8 @@ def get_sso_client(mock_mode: bool = True, config: dict = None) -> BaseSSOClient
          → 否：建立 OIDCSSOClient
       3. config["provider"] == "cas"：建立 CASSSOClient
       4. default fallback → MockSSOClient
+
+    @node job-scheduler/app/sso_client.py::get_sso_client
     """
     config = config or {}
 
@@ -433,6 +466,8 @@ def build_oidc_client_if_enabled(config: dict) -> "OIDCSSOClient | None":
     建立獨立的 OIDC client singleton（即使主 sso_client 是 mock 也可同時建 OIDC client）。
     供 routers/sso.py 的 /oidc/login + /oidc/callback 端點使用。
     若 OIDC 設定 PENDING 則回 None（前端會根據 /providers 端點隱藏 OIDC 按鈕）。
+
+    @node job-scheduler/app/sso_client.py::build_oidc_client_if_enabled
     """
     if config.get("provider") != "oidc":
         return None

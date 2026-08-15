@@ -20,16 +20,19 @@ _busy_gpus: set = set()
 
 
 def _mark_gpu_busy(gpu_id: str) -> None:
+    """@node gpu-worker/worker.py::_mark_gpu_busy"""
     with _busy_gpus_lock:
         _busy_gpus.add(str(gpu_id))
 
 
 def _mark_gpu_free(gpu_id: str) -> None:
+    """@node gpu-worker/worker.py::_mark_gpu_free"""
     with _busy_gpus_lock:
         _busy_gpus.discard(str(gpu_id))
 
 
 def _busy_gpu_snapshot() -> set:
+    """@node gpu-worker/worker.py::_busy_gpu_snapshot"""
     with _busy_gpus_lock:
         return set(_busy_gpus)
 
@@ -63,6 +66,8 @@ def get_available_gpus():
     """
     ZH: 透過 nvidia-smi 查詢空閒 GPU，並排除本機已派發但容器尚未起跑的 GPU
     EN: Query idle GPUs via nvidia-smi, excluding GPUs already dispatched locally
+
+    @node gpu-worker/worker.py::get_available_gpus
     """
     try:
         result = subprocess.run(
@@ -92,6 +97,8 @@ def get_gpu_utilization() -> float:
     """
     Return the average GPU utilization (%) across all GPUs.
     Returns 0.0 on failure.
+
+    @node gpu-worker/worker.py::get_gpu_utilization
     """
     try:
         result = subprocess.run(
@@ -108,6 +115,8 @@ def get_gpu_details() -> list:
     """
     ZH: 查詢每張 GPU 的 name/util/temp/memory，供 admin 叢集監控卡片顯示。
     EN: Per-GPU name/util/temp/memory for the admin cluster panel.
+
+    @node gpu-worker/worker.py::get_gpu_details
     """
     try:
         result = subprocess.run(
@@ -141,6 +150,8 @@ def send_heartbeat(available_gpus: list) -> None:
     """
     POST /api/v1/worker/heartbeat to keep the service layer informed of this
     node's availability and GPU utilisation.  Errors are logged but never fatal.
+
+    @node gpu-worker/worker.py::send_heartbeat
     """
     try:
         gpu_util = get_gpu_utilization()
@@ -169,6 +180,8 @@ def report_update(job_id, payload, *, retries: int = 3, backoff: float = 2.0) ->
     """
     ZH: 向服務層回報任務狀態，失敗時最多重試 retries 次（指數退避）。
     EN: Report job status to service layer; retries up to `retries` times with backoff on failure.
+
+    @node gpu-worker/worker.py::report_update
     """
     url = f"{SERVICE_LAYER_URL}/api/v1/worker/jobs/{job_id}/update"
     for attempt in range(1, retries + 1):
@@ -206,6 +219,8 @@ def parse_progress(log_line):
         - "Progress: 25%"        Generic
         - "[  2/ 10]"            llama.cpp fine-tune / gguf tools
         - "step 50/200"          HuggingFace Trainer
+
+    @node gpu-worker/worker.py::parse_progress
     """
     # ZH: PyTorch: Epoch 2/10 | EN: PyTorch
     match = re.search(r'Epoch (\d+)/(\d+)', log_line, re.IGNORECASE)
@@ -233,13 +248,17 @@ def parse_progress(log_line):
     return None
 
 def _mask_secret(value: str) -> str:
-    """ZH: 將 secret 在 log 中 mask 成 ab****yz | EN: Mask secret as ab****yz for logs"""
+    """ZH: 將 secret 在 log 中 mask 成 ab****yz | EN: Mask secret as ab****yz for logs
+
+    @node gpu-worker/worker.py::_mask_secret
+    """
     if not value or len(value) <= 6:
         return "***"
     return f"{value[:2]}****{value[-2:]}"
 
 
 def execute_job(job):
+    """@node gpu-worker/worker.py::execute_job"""
     job_id    = job.get("job_id")
     gpu_id    = job.get("gpu_id", "0")
     image     = job.get("docker_image") or DEFAULT_IMAGE
@@ -388,6 +407,7 @@ def execute_job(job):
         _mark_gpu_free(gpu_id)
 
 def poll_loop():
+    """@node gpu-worker/worker.py::poll_loop"""
     logger.info("Worker node %s started. Polling %s every %ds, heartbeat every %ds.",
                 NODE_ID, SERVICE_LAYER_URL, POLL_INTERVAL, HEARTBEAT_INTERVAL)
 

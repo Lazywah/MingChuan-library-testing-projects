@@ -61,6 +61,8 @@ def _finalize_sso_login(db: Session, user_info: dict, request: Request = None) -
         1. 依 external_id → email → username 順序找既有使用者
         2. 找不到就 create_sso_user；找到 local 帳號就 upgrade_to_sso
         3. 簽 JWT，302 回前端帶 ?sso_token=
+
+    @node job-scheduler/app/routers/sso.py::_finalize_sso_login
     """
     username = user_info.get("username")
     if not username:
@@ -160,7 +162,10 @@ def _finalize_sso_login(db: Session, user_info: dict, request: Request = None) -
 # ==============================================================================
 @router.get("/login", summary="SSO 登入導向（依 provider 配置）")
 def sso_login():
-    """導向至當下 provider 的登入頁面（CAS / Mock / OIDC fallback to mock）"""
+    """導向至當下 provider 的登入頁面（CAS / Mock / OIDC fallback to mock）
+
+    @node job-scheduler/app/routers/sso.py::sso_login
+    """
     url = sso_client.get_login_url()
     return RedirectResponse(url=url)
 
@@ -171,7 +176,10 @@ def sso_callback(
     ticket: str = Query(..., description="CAS Server 或 Mock 傳回的 ticket"),
     db: Session = Depends(get_db),
 ):
-    """處理 SSO 驗證結果並產生系統的 JWT Token"""
+    """處理 SSO 驗證結果並產生系統的 JWT Token
+
+    @node job-scheduler/app/routers/sso.py::sso_callback
+    """
     # ZH: v3.1 安全閘（與 /mock-login 同準則）：本端點只服務 CAS/mock ticket。
     #     沒有這道閘的風險：OIDC 憑證遺失時工廠會靜默 fallback 成 MockSSOClient，
     #     屆時任何人打 /callback?ticket=T1090001（yaml 內的測試學號，不驗密碼）即可登入。
@@ -192,7 +200,10 @@ def sso_callback(
 
 @router.get("/mock-login", response_class=HTMLResponse, summary="模擬 SSO 登入畫面")
 def mock_sso_login_page():
-    """Mock 模式下的內建登入 HTML 表單（dev 環境用，UI 不曝光此入口）"""
+    """Mock 模式下的內建登入 HTML 表單（dev 環境用，UI 不曝光此入口）
+
+    @node job-scheduler/app/routers/sso.py::mock_sso_login_page
+    """
     if not mock_mode and SSO_POLICY.get("provider") != "mock":
         raise HTTPException(status_code=404, detail="Mock SSO is disabled")
 
@@ -232,6 +243,7 @@ def mock_sso_login_page():
 
 @router.post("/mock-submit", summary="處理模擬登入表單的送出")
 def mock_sso_submit(ticket: str = Form(...)):
+    """@node job-scheduler/app/routers/sso.py::mock_sso_submit"""
     if not mock_mode and SSO_POLICY.get("provider") != "mock":
         raise HTTPException(status_code=404, detail="Mock SSO is disabled")
     return RedirectResponse(url=f"/api/v1/sso/callback?ticket={ticket}", status_code=303)
@@ -245,6 +257,8 @@ def oidc_login():
     """
     ZH: 跳轉至 Microsoft Entra ID 授權頁。state 由 client 內部簽好寫進 URL。
     EN: Redirect to Microsoft Entra ID. State signed inside client.
+
+    @node job-scheduler/app/routers/sso.py::oidc_login
     """
     if not OIDC_ENABLED or oidc_client is None:
         raise HTTPException(
@@ -273,6 +287,8 @@ def oidc_callback(
         1. 驗證 state（防 CSRF + replay）
         2. 用 code 換 id_token（OIDCSSOClient.validate_ticket）
         3. 共用 _finalize_sso_login 建 user + 簽 JWT
+
+    @node job-scheduler/app/routers/sso.py::oidc_callback
     """
     if not OIDC_ENABLED or oidc_client is None:
         raise HTTPException(status_code=503, detail="OIDC is not configured")
@@ -301,7 +317,10 @@ def oidc_callback(
 
 
 async def _provision_myai_bg(username: str) -> None:
-    """ZH: 背景任務：自行開 DB session 跑 MYAI 自動開通；任何失敗只記 log。"""
+    """ZH: 背景任務：自行開 DB session 跑 MYAI 自動開通；任何失敗只記 log。
+
+    @node job-scheduler/app/routers/sso.py::_provision_myai_bg
+    """
     from ..database import SessionLocal
     from ..services import myai_sync
     db = SessionLocal()
@@ -325,6 +344,8 @@ def list_providers():
         Mock SSO 永遠不在此列表（user UI 不曝光）。
     EN: For the user UI login page to decide which buttons to show.
         Mock SSO is intentionally never listed here (it's dev-only via direct URL).
+
+    @node job-scheduler/app/routers/sso.py::list_providers
     """
     providers: list[str] = []
     if OIDC_ENABLED and oidc_client is not None:
@@ -339,6 +360,8 @@ def password_change_info():
     ZH: 前端設定頁讀取此端點來決定要顯示「密碼輸入框」還是「IdP 連結」。
         本端點不需要認證（用 auth_source 對應 IdP 連結，不洩漏使用者資訊）。
     EN: Frontend Settings page reads this to render password-change UI.
+
+    @node job-scheduler/app/routers/sso.py::password_change_info
     """
     oidc_cfg = SSO_POLICY.get("oidc", {})
     return {

@@ -48,7 +48,10 @@ from .database import Base
 
 
 def generate_uuid() -> str:
-    """ZH: 產生 UUID 字串 | EN: Generate UUID string"""
+    """ZH: 產生 UUID 字串 | EN: Generate UUID string
+
+    @node job-scheduler/app/models.py::generate_uuid
+    """
     return str(uuid.uuid4())
 
 

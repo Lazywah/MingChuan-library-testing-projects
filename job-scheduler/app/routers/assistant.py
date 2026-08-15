@@ -65,12 +65,18 @@ class AssistantAskRequest(BaseModel):
 
 
 def _sse(payload: dict) -> str:
-    """ZH: 包成單行 SSE | EN: one SSE data line（與 chat.py 同格式，前端可共用 parser）"""
+    """ZH: 包成單行 SSE | EN: one SSE data line（與 chat.py 同格式，前端可共用 parser）
+
+    @node job-scheduler/app/routers/assistant.py::_sse
+    """
     return f"data: {json.dumps(payload, ensure_ascii=False)}\n\n"
 
 
 def _delta(text: str) -> str:
-    """ZH: 仿 OpenAI delta，沿用前端既有解析 | EN: OpenAI-style delta for the existing parser"""
+    """ZH: 仿 OpenAI delta，沿用前端既有解析 | EN: OpenAI-style delta for the existing parser
+
+    @node job-scheduler/app/routers/assistant.py::_delta
+    """
     return _sse({"choices": [{"delta": {"content": text}}]})
 
 
@@ -85,7 +91,10 @@ async def ask(
     body: AssistantAskRequest,
     db: Session = Depends(get_db),
 ):
-    """ZH: 客服問答 SSE 串流 | EN: Support Q&A SSE stream"""
+    """ZH: 客服問答 SSE 串流 | EN: Support Q&A SSE stream
+
+    @node job-scheduler/app/routers/assistant.py::ask
+    """
 
     history = [{"role": m.role, "content": m.content} for m in body.messages]
     # ZH: 取最後一則 user 訊息當檢索 query | EN: last user message is the retrieval query
@@ -100,6 +109,7 @@ async def ask(
         history = history[:-1]
 
     async def gen():
+        """@node job-scheduler/app/routers/assistant.py::ask.<nested@102>.gen"""
         if not query:
             if body.mode == "code":
                 yield _delta("嗨，我是程式家教小基 👨‍🏫 你可以貼上程式碼、或附上 Lab 裡的檔，我陪你一起看。")
@@ -206,7 +216,10 @@ async def ask(
 
 @router.get("/status")
 def status(db: Session = Depends(get_db)):
-    """ZH: 回傳知識庫片段數與模型設定 | EN: KB chunk count + model config"""
+    """ZH: 回傳知識庫片段數與模型設定 | EN: KB chunk count + model config
+
+    @node job-scheduler/app/routers/assistant.py::status
+    """
     count = db.query(models.KnowledgeChunk).count()
     return {
         "ready": count > 0,
@@ -224,7 +237,10 @@ def status(db: Session = Depends(get_db)):
 @router.get("/lab-files")
 def lab_files(current_user: models.User = Depends(get_current_user)):
     """ZH: 回傳使用者 cs-<uid> 容器內 /home/coder 下可挑選的檔（相對路徑）。
-       EN: List selectable files under /home/coder in the user's own container."""
+       EN: List selectable files under /home/coder in the user's own container.
+
+    @node job-scheduler/app/routers/assistant.py::lab_files
+    """
     return lab_manager.list_user_files(current_user.id)
 
 
@@ -237,7 +253,10 @@ async def reindex(
     current_user: models.User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """ZH: 重新讀取 knowledge/*.md 並重建向量（僅 admin）| EN: Rebuild KB from knowledge/*.md (admin only)"""
+    """ZH: 重新讀取 knowledge/*.md 並重建向量（僅 admin）| EN: Rebuild KB from knowledge/*.md (admin only)
+
+    @node job-scheduler/app/routers/assistant.py::reindex
+    """
     if current_user.role != "admin":
         from fastapi import HTTPException
         raise HTTPException(status_code=403, detail="Forbidden: Admins only")

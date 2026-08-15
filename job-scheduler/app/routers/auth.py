@@ -62,6 +62,8 @@ async def register(request: Request, user: schemas.UserCreate, db: Session = Dep
 
     ZH: 限制：username 和 email 必須唯一；角色限定 student
     EN: Constraints: username and email must be unique; role forced to student
+
+    @node job-scheduler/app/routers/auth.py::register
     """
     # ZH: 檢查使用者名稱是否已存在 | EN: Check if username exists
     if crud.get_user_by_username(db, username=user.username):
@@ -103,6 +105,8 @@ async def login(
 
     ZH: 使用 OAuth2 表單格式 (username + password)
     EN: Uses OAuth2 form format (username + password)
+
+    @node job-scheduler/app/routers/auth.py::login
     """
     user = authenticate_user(db, form_data.username, form_data.password)
     
@@ -202,7 +206,10 @@ async def forgot_password(
     db: Session = Depends(get_db)
 ):
     """ZH: 忘記密碼（僅 local 帳號）- 產生臨時密碼並寄信
-       EN: Forgot password (local accounts only) - generate temp password and email it"""
+       EN: Forgot password (local accounts only) - generate temp password and email it
+
+    @node job-scheduler/app/routers/auth.py::forgot_password
+    """
     user = crud.get_user_by_username(db, payload.username)
     if not user or user.email != payload.email:
         # ZH: 安全考量，無論是否找到，都回傳模糊訊息或直接回報錯誤
@@ -271,7 +278,10 @@ def logout(
     current_user: models.User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """ZH: 登出 - 清空 last_activity 讓使用者立即離線 | EN: Logout - clear last_activity for instant offline"""
+    """ZH: 登出 - 清空 last_activity 讓使用者立即離線 | EN: Logout - clear last_activity for instant offline
+
+    @node job-scheduler/app/routers/auth.py::logout
+    """
     # v2.1: online_status 已 deprecated；改清 last_activity 讓 admin 立即看到離線
     try:
         current_user.last_activity = None
@@ -292,6 +302,8 @@ def read_users_me(current_user: models.User = Depends(get_current_user)):
     """
     ZH: 取得已登入使用者的個人資訊
     EN: Get logged-in user's profile info
+
+    @node job-scheduler/app/routers/auth.py::read_users_me
     """
     return current_user
 
@@ -309,6 +321,8 @@ def update_users_me(
     """
     ZH: 更新已登入使用者的個人資訊 (修改信箱、密碼)
     EN: Update logged-in user's profile info (email, password)
+
+    @node job-scheduler/app/routers/auth.py::update_users_me
     """
     password_changed = update_data.password is not None and update_data.password != ""
     updated_user = crud.update_user(db, current_user, update_data)
@@ -335,6 +349,8 @@ def get_token_usage(
     """
     ZH: 查詢當前使用者的 Token 用量與配額
     EN: Query current user's token usage and quota
+
+    @node job-scheduler/app/routers/auth.py::get_token_usage
     """
     usage = crud.get_token_usage(db, user_id=current_user.id)
     if not usage:
@@ -369,6 +385,8 @@ def increment_token_usage(
 
     ZH: C2 修復：扣減目標為 request.user_id（先前誤扣 current_user/admin 自己）
     EN: C2 fix: deducts from request.user_id (previously deducted from current_user/admin)
+
+    @node job-scheduler/app/routers/auth.py::increment_token_usage
     """
     # ZH: 驗證目標使用者存在 | EN: Verify target user exists
     target_user = crud.get_user_by_id(db, user_id=request.user_id)

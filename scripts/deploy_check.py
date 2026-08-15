@@ -60,12 +60,14 @@ PASS, WARN, FAIL = "PASS", "WARN", "FAIL"
 
 
 def port_in_use(port: int) -> bool:
+    """@node scripts/deploy_check.py::port_in_use"""
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
         s.settimeout(0.3)
         return s.connect_ex(("127.0.0.1", port)) == 0
 
 
 def check_docker():
+    """@node scripts/deploy_check.py::check_docker"""
     import shutil
     if shutil.which("docker") is None:
         return FAIL, "Docker 未安裝或不在 PATH / docker not found"
@@ -79,12 +81,14 @@ def check_docker():
 
 
 def check_env_file():
+    """@node scripts/deploy_check.py::check_env_file"""
     if se.SERVICE_ENV.exists():
         return PASS, f"根 .env 存在 / found: {se.SERVICE_ENV}"
     return FAIL, f"根 .env 不存在 → 先跑 python scripts/setup_env.py"
 
 
 def check_secrets(env: dict):
+    """@node scripts/deploy_check.py::check_secrets"""
     bad = []
     for key, min_len in SECRET_MIN_LEN.items():
         val = env.get(key, "")
@@ -106,6 +110,8 @@ def check_inline_comments(env: dict):
         OIDC tenant 變成註解亂碼）。比對「空白+#」避免誤殺含 # 的密碼。
     EN: Detect values with a trailing inline comment (whitespace + '#') — compose
         and pydantic treat it as part of the value. Happened once in the wild.
+
+    @node scripts/deploy_check.py::check_inline_comments
     """
     import re as _re
     bad = [k for k, v in env.items() if _re.search(r"\s#", v)]
@@ -121,6 +127,8 @@ def check_bootstrap_admin(env: dict):
         使用者將完全無法進入管理端（學生端也要 SSO）。此處提前提醒。
         （已存在 admin 的既有部署留空是正常的，故為 WARN 而非 FAIL。）
     EN: Warn when no bootstrap admin password is set (fresh installs would have no admin).
+
+    @node scripts/deploy_check.py::check_bootstrap_admin
     """
     pw = (env.get("BOOTSTRAP_ADMIN_PASSWORD") or "").strip()
     if pw:
@@ -138,6 +146,8 @@ def check_sso(env: dict):
         → **學生一個都登入不了**（admin 仍可走 :8888）。這在畫面上看起來像壞掉，
         故在部署前就明講。此為 WARN 而非 FAIL：憑證要跟學校 IT 申請，新機初期沒有是正常的。
     EN: Warn when provider=oidc but credentials are absent — students cannot log in at all.
+
+    @node scripts/deploy_check.py::check_sso
     """
     policy = se.ROOT_DIR / "job-scheduler" / "app" / "sso_policy.yaml"
     if not policy.exists():
@@ -145,6 +155,7 @@ def check_sso(env: dict):
     text = policy.read_text(encoding="utf-8")
 
     def _val(key):
+        """@node scripts/deploy_check.py::check_sso.<nested@147>._val"""
         m = re.search(rf"(?m)^\s*{key}\s*:\s*(.+?)\s*(?:#.*)?$", text)
         return m.group(1).strip().strip('"\'') if m else ""
 
@@ -168,6 +179,7 @@ def check_sso(env: dict):
 
 
 def check_drift():
+    """@node scripts/deploy_check.py::check_drift"""
     order, _defaults = se.parse_env_example(se.ENV_EXAMPLE)
     if not order:
         return FAIL, "讀不到 .env.example"
@@ -178,6 +190,7 @@ def check_drift():
 
 
 def check_env_completeness(env: dict):
+    """@node scripts/deploy_check.py::check_env_completeness"""
     order, _defaults = se.parse_env_example(se.ENV_EXAMPLE)
     missing = [k for k in order if k not in env]
     if missing:
@@ -187,6 +200,7 @@ def check_env_completeness(env: dict):
 
 
 def check_worker_convergence():
+    """@node scripts/deploy_check.py::check_worker_convergence"""
     if se.WORKER_ENV.exists():
         return WARN, (f"偵測到已停用的 gpu-worker/.env（step 3 已收斂）→ 建議刪除："
                       f"rm {se.WORKER_ENV}")
@@ -194,6 +208,7 @@ def check_worker_convergence():
 
 
 def check_asset_versions():
+    """@node scripts/deploy_check.py::check_asset_versions"""
     script = SCRIPTS_DIR / "bump_assets.py"
     if not script.exists():
         return WARN, "找不到 bump_assets.py，略過 ?v= 檢查"
@@ -204,7 +219,10 @@ def check_asset_versions():
 
 
 def check_ports():
-    """回傳單一彙總（有占用列為 WARN，因可能是本平台已在跑）。"""
+    """回傳單一彙總（有占用列為 WARN，因可能是本平台已在跑）。
+
+    @node scripts/deploy_check.py::check_ports
+    """
     in_use = [(p, label) for p, label in EXPECTED_PORTS if port_in_use(p)]
     if not in_use:
         return PASS, "主機埠 80/8888/8002/3000/8787/11434 皆空閒"
@@ -213,6 +231,7 @@ def check_ports():
 
 
 def main():
+    """@node scripts/deploy_check.py::main"""
     print()
     print(se.bold(se.cyan("== 部署前健檢 / Pre-deploy Health Check ==")))
     print(se.dim(f"   root: {se.ROOT_DIR}"))

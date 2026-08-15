@@ -55,6 +55,8 @@ def chunk_markdown(text: str, source: str, max_chars: int = 600) -> list[dict]:
         up to ~max_chars; an over-long single paragraph is hard-split.
 
     回傳 | returns: [{"source", "heading", "content"}]
+
+    @node job-scheduler/app/services/rag_service.py::chunk_markdown
     """
     chunks: list[dict] = []
     heading = ""
@@ -62,6 +64,7 @@ def chunk_markdown(text: str, source: str, max_chars: int = 600) -> list[dict]:
     buf_len = 0
 
     def flush():
+        """@node job-scheduler/app/services/rag_service.py::chunk_markdown.<nested@64>.flush"""
         nonlocal buf, buf_len
         body = "\n".join(buf).strip()
         if body:
@@ -101,7 +104,10 @@ def chunk_markdown(text: str, source: str, max_chars: int = 600) -> list[dict]:
 
 
 def cosine_similarity(a: list[float], b: list[float]) -> float:
-    """ZH: 純 Python cosine 相似度 | EN: Pure-Python cosine similarity."""
+    """ZH: 純 Python cosine 相似度 | EN: Pure-Python cosine similarity.
+
+    @node job-scheduler/app/services/rag_service.py::cosine_similarity
+    """
     if not a or not b or len(a) != len(b):
         return 0.0
     dot = 0.0
@@ -128,6 +134,8 @@ def rank_chunks(
 
     candidates: [(chunk_obj, embedding_list), ...]
     回傳 | returns: [{"chunk": obj, "score": float}, ...]  已依分數遞減排序
+
+    @node job-scheduler/app/services/rag_service.py::rank_chunks
     """
     scored = [
         {"chunk": chunk, "score": cosine_similarity(query_vec, emb)}
@@ -143,6 +151,8 @@ def build_context_block(ranked: list[dict]) -> str:
     ZH: 把檢索到的片段組成給 LLM 的「知識上下文」字串（含來源標註）。
     EN: Assemble retrieved chunks into a knowledge-context string for the LLM
         (with source tags).
+
+    @node job-scheduler/app/services/rag_service.py::build_context_block
     """
     parts = []
     for i, item in enumerate(ranked, start=1):
@@ -202,6 +212,8 @@ async def embed_text(text: str) -> list[float]:
     """
     ZH: 以 Ollama /api/embeddings 取得單段文字的向量。失敗回傳空陣列。
     EN: Get an embedding for one text via Ollama /api/embeddings. Returns [] on failure.
+
+    @node job-scheduler/app/services/rag_service.py::embed_text
     """
     url = f"{settings.OLLAMA_BASE_URL.rstrip('/')}/api/embeddings"
     payload = {"model": settings.RAG_EMBED_MODEL, "prompt": text}
@@ -229,6 +241,8 @@ async def ingest_knowledge_base(db: Session, *, force: bool = False) -> dict:
     EN: Read all .md under KNOWLEDGE_DIR → chunk → embed → rebuild knowledge_chunks.
         force=False skips when data already exists (startup); force=True rebuilds
         unconditionally (admin /reindex).
+
+    @node job-scheduler/app/services/rag_service.py::ingest_knowledge_base
     """
     existing = db.query(models.KnowledgeChunk).count()
     if existing and not force:
@@ -275,7 +289,10 @@ async def ingest_knowledge_base(db: Session, *, force: bool = False) -> dict:
 
 
 def _embed_input(chunk: dict) -> str:
-    """ZH: 嵌入時把標題併入內容，提升檢索命中 | EN: Prepend heading to improve recall."""
+    """ZH: 嵌入時把標題併入內容，提升檢索命中 | EN: Prepend heading to improve recall.
+
+    @node job-scheduler/app/services/rag_service.py::_embed_input
+    """
     h = chunk.get("heading") or ""
     return f"{h}\n{chunk['content']}" if h else chunk["content"]
 
@@ -288,6 +305,8 @@ async def retrieve(db: Session, query: str) -> list[dict]:
     """
     ZH: 對使用者問題做檢索，回傳 top-k 片段（含分數）。查無/失敗回傳 []。
     EN: Retrieve top-k chunks for the user's question. Returns [] when empty/failed.
+
+    @node job-scheduler/app/services/rag_service.py::retrieve
     """
     qvec = await embed_text(query)
     if not qvec:
@@ -316,6 +335,8 @@ def build_messages(query: str, ranked: list[dict], history: list[dict] | None = 
         history_turns 由呼叫端(有 db)傳入 runtime 值；None 時回退 .env 預設。
     EN: Build the messages for Ollama. history_turns is the runtime value passed by the
         caller (which has db); falls back to the .env default when None.
+
+    @node job-scheduler/app/services/rag_service.py::build_messages
     """
     if ranked:
         system = GUIDE_SYSTEM_PROMPT.format(context=build_context_block(ranked))
@@ -344,6 +365,8 @@ def build_code_messages(
         retrieved context) + history + question.
 
     file_excerpt: {"path": str, "content": str, "truncated": bool} 或 None
+
+    @node job-scheduler/app/services/rag_service.py::build_code_messages
     """
     if file_excerpt and file_excerpt.get("content"):
         trunc = "（內容過長，僅節錄前段）\n" if file_excerpt.get("truncated") else ""

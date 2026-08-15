@@ -91,6 +91,7 @@ else:
     ANSI_OK = sys.stdout.isatty()
 
 def _c(code, text):
+    """@node scripts/setup_env.py::_c"""
     return f"\033[{code}m{text}\033[0m" if ANSI_OK else text
 
 def red(t):    return _c("31",   t)
@@ -107,7 +108,10 @@ def err(t):    return red("✗ ") + t
 # 輸入輔助 / Input Helpers
 # ══════════════════════════════════════════════════════════════════════════════
 def ask(prompt: str, default=None, validator=None, hidden=False) -> str:
-    """互動式輸入，支援預設值與驗證 / Interactive input with default + validation."""
+    """互動式輸入，支援預設值與驗證 / Interactive input with default + validation.
+
+    @node scripts/setup_env.py::ask
+    """
     suffix = f"  {dim('[' + str(default) + ']')}" if default is not None else ""
     while True:
         try:
@@ -133,6 +137,7 @@ def ask(prompt: str, default=None, validator=None, hidden=False) -> str:
 
 
 def ask_yes_no(prompt: str, default: bool = True) -> bool:
+    """@node scripts/setup_env.py::ask_yes_no"""
     hint = dim("[Y/n]") if default else dim("[y/N]")
     try:
         raw = input(f"  {cyan('?')} {prompt} {hint}: ").strip().lower()
@@ -164,6 +169,8 @@ def smart_url_normalize(raw: str) -> str:
       http://server              → http://server:8002 (自動補 port)
       http://server:8002         → http://server:8002 (保留)
       https://prod.example.com   → https://prod.example.com (HTTPS 不補 port)
+
+    @node scripts/setup_env.py::smart_url_normalize
     """
     raw = raw.strip().rstrip("/")
     if not raw:
@@ -183,7 +190,10 @@ def smart_url_normalize(raw: str) -> str:
 
 
 def validate_url(v):
-    """v2.1: 改為驗證 smart_url_normalize 後的結果是否合法 URL"""
+    """v2.1: 改為驗證 smart_url_normalize 後的結果是否合法 URL
+
+    @node scripts/setup_env.py::validate_url
+    """
     normalized = smart_url_normalize(v)
     if not normalized.startswith(("http://", "https://")):
         return "必須包含主機/IP 或以 http(s):// 開頭 / Must contain host/IP or start with http(s)://"
@@ -199,6 +209,7 @@ def validate_url(v):
 
 
 def validate_positive_int(v):
+    """@node scripts/setup_env.py::validate_positive_int"""
     try:
         if int(v) <= 0:
             return "必須為正整數 / Must be a positive integer"
@@ -206,6 +217,7 @@ def validate_positive_int(v):
         return "必須為整數 / Must be an integer"
 
 def validate_log_level(v):
+    """@node scripts/setup_env.py::validate_log_level"""
     if v.upper() not in ("DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"):
         return "必須為 DEBUG / INFO / WARNING / ERROR / CRITICAL"
 
@@ -214,13 +226,17 @@ def validate_log_level(v):
 # 工具函式 / Utility Functions
 # ══════════════════════════════════════════════════════════════════════════════
 def mask_secret(s: str, show: int = 10) -> str:
-    """顯示前幾碼，其餘遮蔽 / Show first N chars, mask the rest."""
+    """顯示前幾碼，其餘遮蔽 / Show first N chars, mask the rest.
+
+    @node scripts/setup_env.py::mask_secret
+    """
     if len(s) <= show + 4:
         return s
     return s[:show] + dim("…") + s[-4:]
 
 
 def backup_if_exists(path: Path) -> None:
+    """@node scripts/setup_env.py::backup_if_exists"""
     if path.exists():
         ts  = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
         bak = path.parent / (path.name + f".bak_{ts}")
@@ -229,6 +245,7 @@ def backup_if_exists(path: Path) -> None:
 
 
 def section(title: str) -> None:
+    """@node scripts/setup_env.py::section"""
     print()
     print(bold(f"── {title} {'─' * max(0, 60 - len(title))}"))
     print()
@@ -249,12 +266,18 @@ REQUIRED_KEYS = {
 
 
 def generate_secrets() -> dict:
-    """產生全部必要 secrets (首次部署用) / Generate all required secrets (first deploy)"""
+    """產生全部必要 secrets (首次部署用) / Generate all required secrets (first deploy)
+
+    @node scripts/setup_env.py::generate_secrets
+    """
     return {key: gen() for key, (gen, _desc) in REQUIRED_KEYS.items()}
 
 
 def parse_env_file(path: Path) -> dict:
-    """讀取 .env 為 dict（用於 --check 與 migrate 邏輯）/ Parse .env into dict"""
+    """讀取 .env 為 dict（用於 --check 與 migrate 邏輯）/ Parse .env into dict
+
+    @node scripts/setup_env.py::parse_env_file
+    """
     if not path.exists():
         return {}
     result = {}
@@ -285,6 +308,8 @@ def parse_env_example(path: Path):
 
     Returns:
         (order: list[str], defaults: dict[str, str])
+
+    @node scripts/setup_env.py::parse_env_example
     """
     order, defaults = [], {}
     if not path.exists():
@@ -306,7 +331,10 @@ def parse_env_example(path: Path):
 
 
 def extract_compose_keys() -> set:
-    """撈出所有 compose 檔引用的 ${VAR} 名稱 / All ${VAR} names referenced by compose."""
+    """撈出所有 compose 檔引用的 ${VAR} 名稱 / All ${VAR} names referenced by compose.
+
+    @node scripts/setup_env.py::extract_compose_keys
+    """
     pat = re.compile(r"\$\{([A-Z_][A-Z0-9_]*)")
     keys = set()
     for p in COMPOSE_FILES:
@@ -320,6 +348,8 @@ def extract_settings_keys() -> set:
     ZH: 從 config.py 撈 pydantic Settings 欄位（4 空格縮排的 UPPER: ）
         + os.environ.get / os.getenv 直接讀的 key（如 OIDC_*）。
     EN: Settings field annotations + direct os.environ reads from config.py.
+
+    @node scripts/setup_env.py::extract_settings_keys
     """
     keys = set()
     if not CONFIG_PY.exists():
@@ -348,6 +378,8 @@ def audit_drift(example_keys: set):
 
     Returns:
         (referenced, missing_from_example, orphan_in_example, intentional)
+
+    @node scripts/setup_env.py::audit_drift
     """
     referenced = extract_compose_keys() | extract_settings_keys()
     missing_from_example = (referenced - example_keys) - set(_INTENTIONAL_UNDECLARED)
@@ -363,6 +395,8 @@ def render_env_from_example(overlay: dict, note: str) -> str:
         全行註解、空行、『已停用』區原樣保留。
     EN: Render a .env from .env.example skeleton; active keys take overlay value (else the
         example default), inline comments stripped, full-line comments/blanks preserved.
+
+    @node scripts/setup_env.py::render_env_from_example
     """
     lines_out = [
         "# ==============================================================================",
@@ -396,6 +430,8 @@ def print_drift_audit(example_order) -> int:
 
     Returns:
         真漂移數（compose/Settings 有引用、但 .env.example 沒宣告）/ number of real drifts
+
+    @node scripts/setup_env.py::print_drift_audit
     """
     section("漂移稽核 / Drift Audit（.env.example vs compose ∪ Settings）")
     if not ENV_EXAMPLE.exists():
@@ -438,6 +474,8 @@ def check_and_patch(path: Path, example_order, example_defaults) -> int:
 
     Returns:
         缺失欄位數 / number of missing fields patched
+
+    @node scripts/setup_env.py::check_and_patch
     """
     section(f"檢查 .env 完整性 / Checking {path.name} against .env.example")
     if not path.exists():
@@ -483,6 +521,7 @@ def check_and_patch(path: Path, example_order, example_defaults) -> int:
 # 顯示現有設定 / Show Existing Config
 # ══════════════════════════════════════════════════════════════════════════════
 def show_existing() -> None:
+    """@node scripts/setup_env.py::show_existing"""
     section("現有設定 / Existing Configuration")
     for label, path in [("Service layer", SERVICE_ENV), ("GPU Worker", WORKER_ENV)]:
         print(f"  {bold(label)}: {dim(str(path))}")
@@ -507,6 +546,7 @@ def show_existing() -> None:
 # 主流程 / Main Setup
 # ══════════════════════════════════════════════════════════════════════════════
 def main() -> None:
+    """@node scripts/setup_env.py::main"""
     now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
     # ── Banner ────────────────────────────────────────────────────────────────
@@ -638,6 +678,7 @@ def main() -> None:
     print()
 
     def _validate_admin_pw(v):
+        """@node scripts/setup_env.py::main.<nested@640>._validate_admin_pw"""
         if len(v) < 8:
             return "密碼至少 8 字元 / at least 8 characters"
 
@@ -849,6 +890,7 @@ def main() -> None:
 
     def trow(k, v, n):
         # Strip ANSI for length calculation
+        """@node scripts/setup_env.py::main.<nested@850>.trow"""
         ansi_strip = re.compile(r'\x1b\[[0-9;]*m')
         vlen = len(ansi_strip.sub("", v))
         nlen = len(ansi_strip.sub("", n))

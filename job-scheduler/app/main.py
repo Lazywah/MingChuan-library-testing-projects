@@ -75,6 +75,8 @@ async def lifespan(app: FastAPI):
     EN: Startup order:
         1. Initialize database (create tables)
         2. Start background scheduler
+
+    @node job-scheduler/app/main.py::lifespan
     """
     # ---- ZH: 啟動 | EN: Startup ----
     logger.info("=" * 60)
@@ -332,6 +334,8 @@ def health_check():
     """
     ZH: 服務健康檢查
     EN: Service health check
+
+    @node job-scheduler/app/main.py::health_check
     """
     sched_config = SCHEDULER_POLICY.get("scheduling", {})
     return {
@@ -351,6 +355,8 @@ def root():
     """
     ZH: API 根路徑 - 回傳服務資訊
     EN: API root - returns service info
+
+    @node job-scheduler/app/main.py::root
     """
     return {
         "service": "AI Training Platform - Job Scheduler",

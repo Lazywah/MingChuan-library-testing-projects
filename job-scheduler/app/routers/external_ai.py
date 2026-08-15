@@ -47,6 +47,7 @@ class AlertConfig(BaseModel):
 
 
 def _low_balance_threshold(db: Session) -> int:
+    """@node job-scheduler/app/routers/external_ai.py::_low_balance_threshold"""
     try:
         return int(crud.get_system_config(db, MYAI_LOW_BALANCE_KEY, str(DEFAULT_LOW_BALANCE)) or DEFAULT_LOW_BALANCE)
     except (TypeError, ValueError):
@@ -58,7 +59,10 @@ def _current_myai_account(db: Session, current_user: models.User):
             ⚠ 一律由 JWT 的 current_user 推導，絕不接受前端傳來的身分參數
               —— 這是「使用者只能看自己」的唯一防線。
        EN: resolve the caller's OWN myai row from the JWT user only (never from
-           client-supplied identity). This is the sole guard for self-only access."""
+           client-supplied identity). This is the sole guard for self-only access.
+
+    @node job-scheduler/app/routers/external_ai.py::_current_myai_account
+    """
     acc = crud.get_external_account_by_user_id(db, current_user.id)
     row = None
     if acc:
@@ -75,7 +79,10 @@ def _current_myai_account(db: Session, current_user: models.User):
 
 
 def _current_myai_points(db: Session, current_user: models.User):
-    """ZH: 取登入者當前的 myai 剩餘點數（綁定 sn 優先，退 email）；無則 None。"""
+    """ZH: 取登入者當前的 myai 剩餘點數（綁定 sn 優先，退 email）；無則 None。
+
+    @node job-scheduler/app/routers/external_ai.py::_current_myai_points
+    """
     row = _current_myai_account(db, current_user)
     return row.points if row else None
 
@@ -96,7 +103,10 @@ def _peer_baseline(db: Session, since):
             管理端個人查詢與學生端「我的使用量」共用這裡，避免兩份人均邏輯各自漂移。
        EN: same-window aggregate baseline. Returns aggregates only — no per-person
            identity ever leaves this function. Shared by admin lookup and the
-           student-facing endpoint so the two can't drift apart."""
+           student-facing endpoint so the two can't drift apart.
+
+    @node job-scheduler/app/routers/external_ai.py::_peer_baseline
+    """
     q = db.query(models.MyaiTransaction).filter(
         models.MyaiTransaction.event_type == "ai_usage",
         models.MyaiTransaction.occurred_at.isnot(None),
@@ -124,7 +134,10 @@ def _peer_baseline(db: Session, since):
 
 def _own_usage(db: Session, sns: set, since, mmap: dict):
     """ZH: 某組 vendor_sn 的自身用量（消耗/次數/登入、模型別、每日）。
-       EN: own usage for a set of vendor_sn: totals, per-model, per-day."""
+       EN: own usage for a set of vendor_sn: totals, per-model, per-day.
+
+    @node job-scheduler/app/routers/external_ai.py::_own_usage
+    """
     tq = db.query(models.MyaiTransaction).filter(models.MyaiTransaction.vendor_sn.in_(sns))
     if since:
         tq = tq.filter(models.MyaiTransaction.occurred_at >= since)
@@ -161,7 +174,10 @@ def _own_usage(db: Session, sns: set, since, mmap: dict):
 def _aligned_series(daily_me: dict, peer: dict):
     """ZH: 趨勢軸用「全體有活動的日子」，自己沒用的日子補 0
             —— 這樣才看得出自己在整體節奏中的位置，而不是只看到自己的孤島。
-       EN: align own series onto the all-accounts activity axis; zero-fill own gaps."""
+       EN: align own series onto the all-accounts activity axis; zero-fill own gaps.
+
+    @node job-scheduler/app/routers/external_ai.py::_aligned_series
+    """
     active = peer["active"] or 1
     return [{
         "date": d,
@@ -173,7 +189,10 @@ def _aligned_series(daily_me: dict, peer: dict):
 def _ranked_models(model_agg: dict, consumed: int, peer: dict):
     """ZH: 模型別排序 + 佔比。share=自己佔比、peer_share=全體佔比
             → 並排比得出「我特別吃哪種模型」（絕對點數量級差太多，比不動）。
-       EN: per-model list with own vs all-accounts share (%), sorted by points."""
+       EN: per-model list with own vs all-accounts share (%), sorted by points.
+
+    @node job-scheduler/app/routers/external_ai.py::_ranked_models
+    """
     rows = sorted(model_agg.values(), key=lambda x: x["points"], reverse=True)
     total_all = peer["total"]
     for m in rows:
@@ -184,7 +203,10 @@ def _ranked_models(model_agg: dict, consumed: int, peer: dict):
 
 
 def require_admin(current_user: models.User = Depends(get_current_user)) -> models.User:
-    """ZH: 確保呼叫者為 admin | EN: Ensure caller is admin"""
+    """ZH: 確保呼叫者為 admin | EN: Ensure caller is admin
+
+    @node job-scheduler/app/routers/external_ai.py::require_admin
+    """
     if current_user.role != "admin":
         raise HTTPException(status_code=403, detail="Forbidden: Admins only")
     return current_user
@@ -200,7 +222,10 @@ def get_my_external_ai(
     current_user: models.User = Depends(get_current_user),
 ) -> Any:
     """ZH: 取得自己的外部 AI 導流資訊（網址 + 指派帳號 + 狀態）
-       EN: Get my external-AI redirect info (url + assigned account + status)"""
+       EN: Get my external-AI redirect info (url + assigned account + status)
+
+    @node job-scheduler/app/routers/external_ai.py::get_my_external_ai
+    """
     url = crud.get_system_config(db, EXTERNAL_AI_URL_KEY, "")
 
     acc = crud.get_external_account_by_user_id(db, current_user.id)
@@ -258,6 +283,8 @@ def get_my_provision(
     ZH: 回自己的 MYAI 開通狀態。初始密碼**只在保留期內且未確認修改**時才回傳，
         且身分一律由 JWT 推導（不吃任何身分參數）→ 查不到別人的。
     EN: Own provisioning status; initial password only within retention & unacknowledged.
+
+    @node job-scheduler/app/routers/external_ai.py::get_my_provision
     """
     from ..services import myai_sync
     return myai_sync.provision_status(db, current_user)
@@ -268,7 +295,10 @@ def ack_my_provision(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user),
 ) -> Any:
-    """ZH: 學生按「我已修改密碼」→ 立即銷毀暫存的初始密碼（不等保留期到）。"""
+    """ZH: 學生按「我已修改密碼」→ 立即銷毀暫存的初始密碼（不等保留期到）。
+
+    @node job-scheduler/app/routers/external_ai.py::ack_my_provision
+    """
     from ..services import myai_sync
     ok = myai_sync.acknowledge_initial_password(db, current_user)
     if not ok:
@@ -282,7 +312,10 @@ def get_my_balance(
     current_user: models.User = Depends(get_current_user),
 ) -> Any:
     """ZH: 登入者的外部 AI 剩餘點數 + 是否低於門檻（供前端低點數彈窗判斷）。
-       EN: current user's remaining external-AI points + low-balance flag."""
+       EN: current user's remaining external-AI points + low-balance flag.
+
+    @node job-scheduler/app/routers/external_ai.py::get_my_balance
+    """
     points = _current_myai_points(db, current_user)
     threshold = _low_balance_threshold(db)
     guide = crud.get_system_config(db, MYAI_APPLY_GUIDE_KEY, "")
@@ -308,6 +341,8 @@ def get_my_consumption(
       2. 回傳裡**沒有**其他人的姓名/email/序號、沒有 Top 消耗者、沒有逐帳號清單。
       3. **不給排名**：排名會變成比賽/公審，且隱含他人相對位置。全體只以「人均」出現。
       4. 對照數字全是聚合值（人均、佔比），單一使用者無法從中反推特定他人。
+
+    @node job-scheduler/app/routers/external_ai.py::get_my_consumption
     """
     from datetime import datetime, timedelta
     row = _current_myai_account(db, current_user)
@@ -360,6 +395,7 @@ def get_external_url(
     db: Session = Depends(get_db),
     _: models.User = Depends(require_admin),
 ) -> Any:
+    """@node job-scheduler/app/routers/external_ai.py::get_external_url"""
     return schemas.ExternalAiUrl(
         url=crud.get_system_config(db, EXTERNAL_AI_URL_KEY, ""),
         logout_url=crud.get_system_config(db, EXTERNAL_AI_LOGOUT_KEY, DEFAULT_MYAI_LOGOUT_URL),
@@ -372,6 +408,7 @@ def set_external_url(
     db: Session = Depends(get_db),
     _: models.User = Depends(require_admin),
 ) -> Any:
+    """@node job-scheduler/app/routers/external_ai.py::set_external_url"""
     crud.set_system_config(
         db, EXTERNAL_AI_URL_KEY, payload.url.strip(),
         description="外部 AI 平台網址（空=未啟用，退回即將開放）",
@@ -392,7 +429,10 @@ def get_alert_config(
     db: Session = Depends(get_db),
     _: models.User = Depends(require_admin),
 ) -> Any:
-    """ZH: 低點數提醒設定（門檻 + 申請教學連結）。"""
+    """ZH: 低點數提醒設定（門檻 + 申請教學連結）。
+
+    @node job-scheduler/app/routers/external_ai.py::get_alert_config
+    """
     return {
         "low_balance_threshold": _low_balance_threshold(db),
         "apply_guide_url": crud.get_system_config(db, MYAI_APPLY_GUIDE_KEY, ""),
@@ -405,6 +445,7 @@ def set_alert_config(
     db: Session = Depends(get_db),
     _: models.User = Depends(require_admin),
 ) -> Any:
+    """@node job-scheduler/app/routers/external_ai.py::set_alert_config"""
     if payload.low_balance_threshold is not None:
         crud.set_system_config(
             db, MYAI_LOW_BALANCE_KEY, str(max(0, int(payload.low_balance_threshold))),
@@ -430,6 +471,7 @@ def list_accounts(
     db: Session = Depends(get_db),
     _: models.User = Depends(require_admin),
 ) -> Any:
+    """@node job-scheduler/app/routers/external_ai.py::list_accounts"""
     return crud.list_external_accounts(db)
 
 
@@ -439,6 +481,7 @@ def create_account(
     db: Session = Depends(get_db),
     _: models.User = Depends(require_admin),
 ) -> Any:
+    """@node job-scheduler/app/routers/external_ai.py::create_account"""
     try:
         acc = crud.create_external_account(
             db, payload.platform_username.strip(), payload.vendor_username.strip(),
@@ -460,6 +503,7 @@ def update_account(
     db: Session = Depends(get_db),
     _: models.User = Depends(require_admin),
 ) -> Any:
+    """@node job-scheduler/app/routers/external_ai.py::update_account"""
     acc = crud.update_external_account(
         db, account_id,
         vendor_username=(payload.vendor_username.strip() if payload.vendor_username else None),
@@ -482,6 +526,7 @@ def delete_account(
     db: Session = Depends(get_db),
     _: models.User = Depends(require_admin),
 ) -> Any:
+    """@node job-scheduler/app/routers/external_ai.py::delete_account"""
     if not crud.delete_external_account(db, account_id):
         raise HTTPException(status_code=404, detail="mapping not found")
     return {"ok": True}
@@ -498,7 +543,10 @@ def import_accounts_csv(
     _: models.User = Depends(require_admin),
 ) -> Any:
     """ZH: 接收 CSV 文字 (欄位: platform_username,vendor_username)，逐行 upsert。
-       EN: Accept CSV text (cols: platform_username,vendor_username), upsert per row."""
+       EN: Accept CSV text (cols: platform_username,vendor_username), upsert per row.
+
+    @node job-scheduler/app/routers/external_ai.py::import_accounts_csv
+    """
     text = (payload or {}).get("csv", "")
     result = schemas.ExternalAiImportResult()
     if not text or not text.strip():
@@ -537,7 +585,10 @@ async def sync_myai(
     _: models.User = Depends(require_admin),
 ) -> Any:
     """ZH: 立即 headless 登入廠商 → 匯出使用者(含 Token 點數) → 同步進 myai_accounts。
-       EN: Trigger headless login → export → upsert into myai_accounts."""
+       EN: Trigger headless login → export → upsert into myai_accounts.
+
+    @node job-scheduler/app/routers/external_ai.py::sync_myai
+    """
     try:
         return await myai_sync.sync(db)
     except myai_sync.MyaiSyncError as e:
@@ -551,7 +602,10 @@ def list_myai_accounts(
     db: Session = Depends(get_db),
     _: models.User = Depends(require_admin),
 ) -> Any:
-    """ZH: 列出已同步的廠商帳號/Token（供 admin 顯示）| EN: list synced MYAI accounts."""
+    """ZH: 列出已同步的廠商帳號/Token（供 admin 顯示）| EN: list synced MYAI accounts.
+
+    @node job-scheduler/app/routers/external_ai.py::list_myai_accounts
+    """
     rows = (
         db.query(models.MyaiAccount)
         .order_by(models.MyaiAccount.points.desc())
@@ -583,7 +637,10 @@ def auto_match_bindings(
     _: models.User = Depends(require_admin),
 ) -> Any:
     """ZH: 以 email 自動配對 myai 帳號 ↔ 平台使用者，建立/回填綁定（不碰廠商）。
-       EN: Auto-bind myai accounts to platform users by email (our DB only)."""
+       EN: Auto-bind myai accounts to platform users by email (our DB only).
+
+    @node job-scheduler/app/routers/external_ai.py::auto_match_bindings
+    """
     return myai_sync.auto_match(db)
 
 
@@ -593,7 +650,10 @@ def list_bindings(
     _: models.User = Depends(require_admin),
 ) -> Any:
     """ZH: 綁定清單：平台帳號 ↔ myai email ↔ 點數/狀態（join 同步快取）。
-       EN: Binding list: platform user ↔ myai email ↔ points/status."""
+       EN: Binding list: platform user ↔ myai email ↔ points/status.
+
+    @node job-scheduler/app/routers/external_ai.py::list_bindings
+    """
     rows = (
         db.query(models.ExternalAiAccount, models.User.username, models.User.email)
         .join(models.User, models.User.id == models.ExternalAiAccount.user_id)
@@ -634,7 +694,10 @@ def list_unmatched(
 ) -> Any:
     """ZH: 兩邊未配對：① 平台未綁定使用者(標註是否有同 email 的 myai 帳號)
             ② myai 帳號未被任何綁定指向(標註是否有同 email 的平台使用者)。
-       EN: Unmatched on both sides for admin follow-up."""
+       EN: Unmatched on both sides for admin follow-up.
+
+    @node job-scheduler/app/routers/external_ai.py::list_unmatched
+    """
     accs = db.query(models.ExternalAiAccount).all()
     bound_user_ids = {a.user_id for a in accs}
     bound_sns = {a.myai_vendor_sn for a in accs if a.myai_vendor_sn}
@@ -679,7 +742,10 @@ async def sync_transactions_endpoint(
     db: Session = Depends(get_db),
     _: models.User = Depends(require_admin),
 ) -> Any:
-    """ZH: 立即同步廠商交易日誌（逐筆、含模型；不存 IP）| EN: sync tx log now."""
+    """ZH: 立即同步廠商交易日誌（逐筆、含模型；不存 IP）| EN: sync tx log now.
+
+    @node job-scheduler/app/routers/external_ai.py::sync_transactions_endpoint
+    """
     try:
         return await myai_sync.sync_transactions(db, days=days)
     except myai_sync.MyaiSyncError as e:
@@ -699,6 +765,8 @@ def admin_provision_candidates(
           no_email      完全沒有 email → 無從建號，需人工補
           staff_pending 信箱網域屬教職員域但角色仍是學生 → 只提示，不自動升權
     EN: Unbound SSO users split by a fact (has an address or not), never by confidence.
+
+    @node job-scheduler/app/routers/external_ai.py::admin_provision_candidates
     """
     from ..services import myai_sync
     out = myai_sync.provision_candidates(db)
@@ -716,6 +784,8 @@ def admin_live_usage(
         時間窗由系統設定 myai_usage_window_min 控制；⚠ 資料新鮮度受輪詢限制，
         回傳的 last_tx_sync 即上次與廠商同步的時間，前端須顯示以免誤解為即時。
     EN: v3.4 live usage quadrants (monitoring + audit).
+
+    @node job-scheduler/app/routers/external_ai.py::admin_live_usage
     """
     from ..services import myai_sync
     return myai_sync.live_usage_quadrants(
@@ -731,7 +801,10 @@ def consumption_analytics(
 ) -> Any:
     """ZH: 消耗分析 —— 以廠商「交易日誌」逐筆(含模型)計算：期間總消耗、每生消耗、
             Top 消耗者、模型/工具別用量、每日趨勢、登入數。
-       EN: Consumption analytics from the per-event transaction log (real model)."""
+       EN: Consumption analytics from the per-event transaction log (real model).
+
+    @node job-scheduler/app/routers/external_ai.py::consumption_analytics
+    """
     from datetime import datetime, timedelta
     days = int(days or 30)   # ZH: days<=0 代表「全部」(不設下界，即從最早一筆起)
     q = db.query(models.MyaiTransaction).filter(models.MyaiTransaction.occurred_at.isnot(None))
@@ -833,7 +906,10 @@ def user_consumption(
             (消耗/使用/登入、模型別、每日趨勢、近期逐筆) + 同期間「全體人均」對照基準。
             days<=0 = 全部。
        EN: Per-person lookup from the transaction log (by email/name/sn),
-            with a same-window all-accounts average as the comparison baseline."""
+            with a same-window all-accounts average as the comparison baseline.
+
+    @node job-scheduler/app/routers/external_ai.py::user_consumption
+    """
     from datetime import datetime, timedelta
     q = (q or "").strip()
     empty = {"q": q, "matches": [], "summary": {}, "models": [], "recent": [],
@@ -850,6 +926,7 @@ def user_consumption(
     umap = {(u.email or "").strip().lower(): u for u in db.query(models.User).all() if u.email}
 
     def _meta(m):
+        """@node job-scheduler/app/routers/external_ai.py::user_consumption.<nested@852>._meta"""
         u = umap.get((m.email or "").strip().lower())
         return {
             "vendor_sn": m.vendor_sn, "name": m.name, "email": m.email,
@@ -938,7 +1015,10 @@ _NAME_FIX = {"gpt": "GPT", "chatgpt": "ChatGPT", "ai": "AI", "gai": "GAI", "xai"
 
 def _pretty_name(code: str) -> str:
     """ZH: 由代碼猜好讀名稱：連續數字段併成版號（claude_opus_4_8 → Claude Opus 4.8）。
-       EN: guess a friendly name; consecutive numeric tokens join as a version."""
+       EN: guess a friendly name; consecutive numeric tokens join as a version.
+
+    @node job-scheduler/app/routers/external_ai.py::_pretty_name
+    """
     parts = [p for p in (code or "").replace("-", "_").split("_") if p]
     out: list[str] = []
     for p in parts:
@@ -953,7 +1033,10 @@ def _pretty_name(code: str) -> str:
 
 
 def _guess_model_meta(code: str) -> dict:
-    """ZH: 依代碼猜供應商/類別/顯示名稱（僅為建議值，admin 可覆寫）。"""
+    """ZH: 依代碼猜供應商/類別/顯示名稱（僅為建議值，admin 可覆寫）。
+
+    @node job-scheduler/app/routers/external_ai.py::_guess_model_meta
+    """
     low = (code or "").strip().lower()
     provider, category = "其他", "其他"
     if low in _GUESS_EXACT:
@@ -976,7 +1059,10 @@ class ModelMapEntry(BaseModel):
 
 
 def _model_usage_counts(db: Session) -> dict:
-    """ZH: 每個代碼在交易紀錄中的筆數（給對應表顯示，方便判斷哪些真的在用）。"""
+    """ZH: 每個代碼在交易紀錄中的筆數（給對應表顯示，方便判斷哪些真的在用）。
+
+    @node job-scheduler/app/routers/external_ai.py::_model_usage_counts
+    """
     from sqlalchemy import func
     rows = (db.query(models.MyaiTransaction.model, func.count(models.MyaiTransaction.id))
               .filter(models.MyaiTransaction.event_type == "ai_usage",
@@ -991,7 +1077,10 @@ def list_model_map(
     _: models.User = Depends(require_admin),
 ) -> Any:
     """ZH: 列出對應表 + 交易中出現但「未對應」的代碼（除錯用）。
-       EN: list the map plus codes seen in transactions but not mapped."""
+       EN: list the map plus codes seen in transactions but not mapped.
+
+    @node job-scheduler/app/routers/external_ai.py::list_model_map
+    """
     counts = _model_usage_counts(db)
     entries = db.query(models.MyaiModelMap).all()
     mapped = {(e.code or "") for e in entries}
@@ -1019,7 +1108,10 @@ def upsert_model_map(
     db: Session = Depends(get_db),
     _: models.User = Depends(require_admin),
 ) -> Any:
-    """ZH: 新增/更新一列（以 code 為鍵，重複即更新）| EN: upsert one row by code."""
+    """ZH: 新增/更新一列（以 code 為鍵，重複即更新）| EN: upsert one row by code.
+
+    @node job-scheduler/app/routers/external_ai.py::upsert_model_map
+    """
     code = (entry.code or "").strip()
     if not code:
         raise HTTPException(status_code=400, detail="代碼不可空白")
@@ -1041,7 +1133,10 @@ def delete_model_map(
     db: Session = Depends(get_db),
     _: models.User = Depends(require_admin),
 ) -> Any:
-    """ZH: 刪除一列（原始交易資料不受影響）| EN: delete a row (raw tx unaffected)."""
+    """ZH: 刪除一列（原始交易資料不受影響）| EN: delete a row (raw tx unaffected).
+
+    @node job-scheduler/app/routers/external_ai.py::delete_model_map
+    """
     row = db.query(models.MyaiModelMap).filter(models.MyaiModelMap.id == entry_id).first()
     if not row:
         raise HTTPException(status_code=404, detail="找不到該對應")
@@ -1055,7 +1150,10 @@ def seed_model_map(
     _: models.User = Depends(require_admin),
 ) -> Any:
     """ZH: 把交易中「未對應」的代碼用建議值一次帶入（已存在的列不動，不會覆蓋你的修改）。
-       EN: bulk-insert guessed rows for unmapped codes; never overwrites existing rows."""
+       EN: bulk-insert guessed rows for unmapped codes; never overwrites existing rows.
+
+    @node job-scheduler/app/routers/external_ai.py::seed_model_map
+    """
     counts = _model_usage_counts(db)
     mapped = {c for (c,) in db.query(models.MyaiModelMap.code).all()}
     created = 0

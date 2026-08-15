@@ -84,6 +84,8 @@ def submit_job(
     """
     ZH: 提交新的訓練任務
     EN: Submit a new training job
+
+    @node job-scheduler/app/routers/jobs.py::submit_job
     """
     policy = SCHEDULER_POLICY.get("scheduling", {})
 
@@ -199,6 +201,8 @@ def list_jobs(
     """
     ZH: 列出訓練任務 (student 看自己的，admin/teacher 看全部)
     EN: List training jobs (student sees own, admin/teacher sees all)
+
+    @node job-scheduler/app/routers/jobs.py::list_jobs
     """
     if current_user.role in ("admin", "teacher"):
         jobs, total = crud.get_all_jobs(db, status=status_filter, limit=limit, offset=offset)
@@ -245,6 +249,8 @@ def get_pool_availability(
     ZH: 回 {"batch": {available, next_open}, "interactive": {...}}。
         available=false 且 next_open 有值 → 前端顯示「預計 X 開始執行」；
         next_open 為 null → 「等待機器上線」。interactive 已含 batch 墊底語意。
+
+    @node job-scheduler/app/routers/jobs.py::get_pool_availability
     """
     return crud.pool_availability(db)
 
@@ -262,6 +268,8 @@ def get_job_status(
     """
     ZH: 查詢特定訓練任務的詳細狀態
     EN: Query detailed status of a specific training job
+
+    @node job-scheduler/app/routers/jobs.py::get_job_status
     """
     job = crud.get_job(db, job_id=job_id)
     if not job:
@@ -307,6 +315,8 @@ def cancel_job(
     """
     ZH: 取消訓練任務 (僅 pending/queued 可取消)
     EN: Cancel training job (only pending/queued can be cancelled)
+
+    @node job-scheduler/app/routers/jobs.py::cancel_job
     """
     job = crud.get_job(db, job_id=job_id)
     if not job:
@@ -351,6 +361,8 @@ async def stream_job_logs(
     """
     ZH: 串流任務日誌與指標 (SSE)
     EN: Stream job logs and metrics via Server-Sent Events
+
+    @node job-scheduler/app/routers/jobs.py::stream_job_logs
     """
     job = crud.get_job(db, job_id)
     if not job:
@@ -361,6 +373,7 @@ async def stream_job_logs(
 
     async def event_generator():
         # First yield the full history
+        """@node job-scheduler/app/routers/jobs.py::stream_job_logs.<nested@362>.event_generator"""
         history_data = {
             "status": job.status,
             "progress": job.progress,

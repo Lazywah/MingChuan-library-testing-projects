@@ -50,6 +50,8 @@ class ContainerLifecycle(Protocol):
     """
     ZH: 所有容器類型（code-server、未來 Jupyter Kernel）的共通介面
     EN: Common interface for all container types
+
+    @node job-scheduler/app/services/lab_manager.py::ContainerLifecycle
     """
 
     def start(self, user_id: str, config: dict) -> tuple[str, str]: ...
@@ -71,13 +73,17 @@ class CodeServerLifecycle:
     """
     ZH: 用 Docker SDK 啟動 code-server 容器
     EN: Spawns code-server containers via Docker SDK
+
+    @node job-scheduler/app/services/lab_manager.py::CodeServerLifecycle
     """
 
     def __init__(self):
+        """@node job-scheduler/app/services/lab_manager.py::CodeServerLifecycle.__init__"""
         self._client: Optional[docker.DockerClient] = None
 
     @property
     def client(self) -> docker.DockerClient:
+        """@node job-scheduler/app/services/lab_manager.py::CodeServerLifecycle.client"""
         if self._client is None:
             self._client = docker.from_env()
         return self._client
@@ -85,16 +91,23 @@ class CodeServerLifecycle:
     def _container_name(self, user_id: str) -> str:
         # ZH: 容器名稱 cs-<user_id>（user_id 已是 UUID，符合 DNS-safe）
         # EN: Container name cs-<user_id> (user_id is UUID, DNS-safe)
+        """@node job-scheduler/app/services/lab_manager.py::CodeServerLifecycle._container_name"""
         safe = user_id.replace("_", "-")[:60]
         return f"cs-{safe}"
 
     def _volume_name(self, user_id: str) -> str:
-        """ZH: 對應的 home volume 名稱 | EN: Home volume name"""
+        """ZH: 對應的 home volume 名稱 | EN: Home volume name
+
+        @node job-scheduler/app/services/lab_manager.py::CodeServerLifecycle._volume_name
+        """
         safe = user_id.replace("-", "_")[:60]
         return f"home_{safe}"
 
     def _ensure_volume(self, user_id: str) -> str:
-        """ZH: 確保 per-user volume 存在 | EN: Ensure per-user volume exists"""
+        """ZH: 確保 per-user volume 存在 | EN: Ensure per-user volume exists
+
+        @node job-scheduler/app/services/lab_manager.py::CodeServerLifecycle._ensure_volume
+        """
         name = self._volume_name(user_id)
         try:
             self.client.volumes.get(name)
@@ -117,6 +130,8 @@ class CodeServerLifecycle:
             - mem_quota_mb:  int
             - password:      str (one-time password for code-server access)
             - env:           dict[str, str] (secrets 與其他 env)
+
+        @node job-scheduler/app/services/lab_manager.py::CodeServerLifecycle.start
         """
         name = self._container_name(user_id)
         volume_name = self._ensure_volume(user_id)
@@ -164,7 +179,10 @@ class CodeServerLifecycle:
             raise
 
     def stop(self, container_id: str) -> None:
-        """ZH: 停止並移除容器 | EN: Stop and remove container"""
+        """ZH: 停止並移除容器 | EN: Stop and remove container
+
+        @node job-scheduler/app/services/lab_manager.py::CodeServerLifecycle.stop
+        """
         try:
             c = self.client.containers.get(container_id)
             c.stop(timeout=10)
@@ -176,7 +194,10 @@ class CodeServerLifecycle:
             logger.warning("Error stopping container %s: %s", container_id[:12], e)
 
     def status(self, container_id: str) -> str:
-        """ZH: 回傳 running/exited/missing | EN: Returns running/exited/missing"""
+        """ZH: 回傳 running/exited/missing | EN: Returns running/exited/missing
+
+        @node job-scheduler/app/services/lab_manager.py::CodeServerLifecycle.status
+        """
         try:
             c = self.client.containers.get(container_id)
             return c.status
@@ -190,6 +211,7 @@ _codeserver: Optional[CodeServerLifecycle] = None
 
 
 def get_lifecycle() -> CodeServerLifecycle:
+    """@node job-scheduler/app/services/lab_manager.py::get_lifecycle"""
     global _codeserver
     if _codeserver is None:
         _codeserver = CodeServerLifecycle()
@@ -211,7 +233,10 @@ _MAX_TUTOR_FILE_BYTES = 64 * 1024  # ZH: 單檔最多讀 64KB（超過截斷）
 def list_user_files(user_id: str, limit: int = 200) -> dict:
     """ZH: 列出使用者自己容器內 /home/coder 下可挑選的檔（相對路徑）。
        EN: List selectable files under /home/coder in the user's OWN container.
-       回傳 {"running": bool, "files": [rel_path], "reason": str|None}"""
+       回傳 {"running": bool, "files": [rel_path], "reason": str|None}
+
+    @node job-scheduler/app/services/lab_manager.py::list_user_files
+    """
     lc = get_lifecycle()
     name = lc._container_name(user_id)
     try:
@@ -246,7 +271,10 @@ def list_user_files(user_id: str, limit: int = 200) -> dict:
 def read_user_file(user_id: str, rel_path: str) -> dict:
     """ZH: 讀使用者自己容器內 /home/coder/<rel_path> 的文字（安全檢查 + size cap）。
        EN: Read text of /home/coder/<rel_path> from the user's OWN container.
-       回傳 {"ok": bool, "content": str, "path": str, "truncated": bool, "reason": str|None}"""
+       回傳 {"ok": bool, "content": str, "path": str, "truncated": bool, "reason": str|None}
+
+    @node job-scheduler/app/services/lab_manager.py::read_user_file
+    """
     import io
     import tarfile
     import posixpath
@@ -299,7 +327,10 @@ def read_user_file(user_id: str, rel_path: str) -> dict:
 def _wait_until_ready(container_name: str, timeout: float = 25.0, interval: float = 0.7) -> bool:
     """ZH: 輪詢 code-server(容器:8080) 直到能服務，避免容器剛起、前端就開頁面 → 503。
        EN: Poll code-server (container:8080) until it serves, so the new tab won't 503.
-       任何 <500 的 HTTP 回應(200/302/401)都代表 code-server 已在服務。"""
+       任何 <500 的 HTTP 回應(200/302/401)都代表 code-server 已在服務。
+
+    @node job-scheduler/app/services/lab_manager.py::_wait_until_ready
+    """
     import time as _time
     import httpx
     url = f"http://{container_name}:8080/"
@@ -329,6 +360,8 @@ def start_session(db: Session, user_id: str, base_image: Optional[str] = None) -
             "container_name": "cs-<user_id>",
             "started_at": "...",
         }
+
+    @node job-scheduler/app/services/lab_manager.py::start_session
     """
     user = db.query(models.User).filter(models.User.id == user_id).first()
     if not user:
@@ -420,6 +453,8 @@ def stop_session(db: Session, user_id: str, reason: str = "user_requested") -> b
     """
     ZH: 停止使用者的 session，並累加今日已用時長
     EN: Stop user session and accumulate today's usage
+
+    @node job-scheduler/app/services/lab_manager.py::stop_session
     """
     session = db.query(models.LabSession).filter(
         models.LabSession.user_id == user_id,
@@ -454,6 +489,8 @@ def get_status(db: Session, user_id: str) -> dict:
     """
     ZH: 取得使用者目前的 session 完整狀態（給 /lab/status endpoint）
     EN: Get full session status for /lab/status endpoint
+
+    @node job-scheduler/app/services/lab_manager.py::get_status
     """
     session = db.query(models.LabSession).filter(
         models.LabSession.user_id == user_id,
@@ -503,6 +540,8 @@ def touch_activity(db: Session, user_id: str) -> None:
     """
     ZH: 更新 last_activity（heartbeat endpoint 呼叫）
     EN: Update last_activity (called by heartbeat endpoint)
+
+    @node job-scheduler/app/services/lab_manager.py::touch_activity
     """
     session = db.query(models.LabSession).filter(
         models.LabSession.user_id == user_id,
@@ -521,6 +560,8 @@ def scan_and_evict(db: Session) -> int:
 
     Returns:
         關閉的 session 數量 | number of sessions closed
+
+    @node job-scheduler/app/services/lab_manager.py::scan_and_evict
     """
     closed = 0
     now = datetime.now(timezone.utc)
@@ -564,7 +605,10 @@ def scan_and_evict(db: Session) -> int:
 
 def list_all_sessions(db: Session) -> list[dict]:
     """ZH: 列出目前所有(非 stopped) lab sessions，供 admin「Lab 管理」監控。
-       EN: List all non-stopped lab sessions for the admin Lab dashboard."""
+       EN: List all non-stopped lab sessions for the admin Lab dashboard.
+
+    @node job-scheduler/app/services/lab_manager.py::list_all_sessions
+    """
     rows = (
         db.query(models.LabSession)
         .filter(models.LabSession.status != "stopped")
@@ -593,7 +637,10 @@ def list_all_sessions(db: Session) -> list[dict]:
 # EN: v3.3 archive / restore / purge of per-user Lab volumes on account deletion
 # ==============================================================================
 def _volume_size(vol_name: str) -> Optional[int]:
-    """ZH: 由 docker df 取 volume 大小（取不到回 None，不阻斷流程）"""
+    """ZH: 由 docker df 取 volume 大小（取不到回 None，不阻斷流程）
+
+    @node job-scheduler/app/services/lab_manager.py::_volume_size
+    """
     try:
         lc = get_lifecycle()
         for v in (lc.client.df().get("Volumes") or []):
@@ -611,6 +658,8 @@ def archive_user_lab(db: Session, user, retention_days: int, reason: str = "admi
         volume 不存在（從未用過 Lab）→ 回 None。
     EN: Stop/remove the container, keep the volume in place and register it for
         retention-based purge. Returns the archive record dict, or None if no volume.
+
+    @node job-scheduler/app/services/lab_manager.py::archive_user_lab
     """
     lc = get_lifecycle()
     uid = user.id
@@ -660,6 +709,8 @@ def purge_expired_archives(db: Session) -> int:
     EN: Purge expired archives, plus self-heal stale records whose volume is already
         gone — but only when the volume listing actually succeeded (a Docker outage
         would otherwise look like "everything is missing" and wipe all records).
+
+    @node job-scheduler/app/services/lab_manager.py::purge_expired_archives
     """
     lc = get_lifecycle()
     now = datetime.now(timezone.utc)
@@ -704,6 +755,8 @@ def restore_archive(db: Session, volume_name: str, target_user_id: str) -> dict:
         以臨時容器掛載兩個 volume 執行 cp -a；完成後保留封存紀錄（標記 restored）。
     EN: Copy archived volume contents into the target user's current volume via a
         throwaway container (SSO users return with a new uuid, so rename won't do).
+
+    @node job-scheduler/app/services/lab_manager.py::restore_archive
     """
     lc = get_lifecycle()
     rec = db.query(models.ArchivedLabVolume).filter(
@@ -734,7 +787,10 @@ def restore_archive(db: Session, volume_name: str, target_user_id: str) -> dict:
 
 
 def list_archives(db: Session) -> list[dict]:
-    """ZH: 給 admin 檢視封存清單（含目前實際是否還在、剩餘天數）"""
+    """ZH: 給 admin 檢視封存清單（含目前實際是否還在、剩餘天數）
+
+    @node job-scheduler/app/services/lab_manager.py::list_archives
+    """
     lc = get_lifecycle()
     try:
         present = {v.name for v in lc.client.volumes.list()}
@@ -765,7 +821,10 @@ def list_archives(db: Session) -> list[dict]:
 
 
 def delete_archive_now(db: Session, volume_name: str) -> bool:
-    """ZH: admin 立即銷毀某筆封存（不等到期）"""
+    """ZH: admin 立即銷毀某筆封存（不等到期）
+
+    @node job-scheduler/app/services/lab_manager.py::delete_archive_now
+    """
     lc = get_lifecycle()
     rec = db.query(models.ArchivedLabVolume).filter(
         models.ArchivedLabVolume.volume_name == volume_name).first()
@@ -781,7 +840,10 @@ def delete_archive_now(db: Session, volume_name: str) -> bool:
 
 
 def _build_url(user_id: str, session) -> dict:
-    """ZH: 組裝給前端跳轉的 URL | EN: Build URL for frontend redirect"""
+    """ZH: 組裝給前端跳轉的 URL | EN: Build URL for frontend redirect
+
+    @node job-scheduler/app/services/lab_manager.py::_build_url
+    """
     return {
         "url": f"/code/{user_id}/?folder=/home/coder/projects",
         "container_name": session.container_name,
@@ -798,6 +860,8 @@ def is_user_session_alive(db: Session, user_id: str) -> bool:
     """
     ZH: 確認該 user 是否有 running session（auth_request 驗證用）
     EN: Check if user has a running session (for auth_request)
+
+    @node job-scheduler/app/services/lab_manager.py::is_user_session_alive
     """
     session = db.query(models.LabSession).filter(
         models.LabSession.user_id == user_id,

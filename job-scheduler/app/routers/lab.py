@@ -53,6 +53,8 @@ def start_lab(
     EN: Start user's code-server container, returns URL and one-time password
 
     v2.1 修正：base_image 從 query param 改為 JSON body 欄位 (前端 POST body 才會被收到)
+
+    @node job-scheduler/app/routers/lab.py::start_lab
     """
     base_image = (payload or {}).get("base_image")
     try:
@@ -75,7 +77,10 @@ def stop_lab(
     current_user: models.User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """ZH: 主動關閉自己的 session（volume 保留）| EN: Stop own session"""
+    """ZH: 主動關閉自己的 session（volume 保留）| EN: Stop own session
+
+    @node job-scheduler/app/routers/lab.py::stop_lab
+    """
     stopped = lab_manager.stop_session(db, current_user.id, reason="user_requested")
     return {"status": "stopped" if stopped else "no_active_session"}
 
@@ -91,6 +96,8 @@ def lab_status(
     """
     ZH: 回傳完整 session 狀態（給設定頁與 VS Code extension 顯示用）
     EN: Return full session status (for settings page & VS Code extension)
+
+    @node job-scheduler/app/routers/lab.py::lab_status
     """
     info = lab_manager.get_status(db, current_user.id)
     # 補上配額資訊
@@ -106,7 +113,10 @@ def lab_heartbeat(
     current_user: models.User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """ZH: 更新使用者 session 的 last_activity 防 idle timeout"""
+    """ZH: 更新使用者 session 的 last_activity 防 idle timeout
+
+    @node job-scheduler/app/routers/lab.py::lab_heartbeat
+    """
     lab_manager.touch_activity(db, current_user.id)
     return {"status": "ok", "at": datetime.now(timezone.utc).isoformat()}
 
@@ -125,6 +135,8 @@ def lab_nodes(
     EN: List online GPU nodes, filterable by pool_type
 
     Pool types: "batch"（高階 GPU server）/ "interactive"（v2.1 才啟用）
+
+    @node job-scheduler/app/routers/lab.py::lab_nodes
     """
     nodes = crud.get_online_worker_nodes(db, timeout_seconds=90)
     # 依 pool_type 篩選
@@ -160,6 +172,8 @@ def lab_authz(
         1. JWT 必須有效（get_current_user 自動處理）
         2. URI 內的 {user_id} 必須等於 current_user.id
         3. 使用者必須有 running session
+
+    @node job-scheduler/app/routers/lab.py::lab_authz
     """
     # 從 nginx 傳入的 X-Original-URI 取出 user_id
     if not x_original_uri or not x_original_uri.startswith("/code/"):

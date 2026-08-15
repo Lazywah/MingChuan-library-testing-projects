@@ -34,6 +34,7 @@ MAX_SEGMENTS_PER_DAY = 6
 
 
 def _hm_to_min(s: str) -> int:
+    """@node job-scheduler/app/gpu_schedule.py::_hm_to_min"""
     m = _TIME_RE.match(s.strip())
     if not m:
         raise ValueError(f"時間格式須為 HH:MM（收到 {s!r}）")
@@ -47,6 +48,8 @@ def parse_schedule(raw) -> list[tuple[int, int]] | None:
         跨夜段（結束<=開始）視為延伸到隔天，持續 = 到隔天結束時刻。
     EN: Parse to [(start_minute_of_week, duration_minutes), ...]; None = always open.
         Overnight segments (end <= start) extend into the next day.
+
+    @node job-scheduler/app/gpu_schedule.py::parse_schedule
     """
     if raw is None or (isinstance(raw, str) and not raw.strip()):
         return None
@@ -79,12 +82,16 @@ def parse_schedule(raw) -> list[tuple[int, int]] | None:
 
 
 def _minute_of_week(at: datetime) -> int:
+    """@node job-scheduler/app/gpu_schedule.py::_minute_of_week"""
     at = at.astimezone(TZ_TAIPEI)
     return at.weekday() * 1440 + at.hour * 60 + at.minute
 
 
 def _open_at(windows: list[tuple[int, int]], minute: int, buffer_min: int = 0) -> bool:
-    """該週分鐘是否落在任一時段內（buffer 縮短各段結尾）"""
+    """該週分鐘是否落在任一時段內（buffer 縮短各段結尾）
+
+    @node job-scheduler/app/gpu_schedule.py::_open_at
+    """
     for start, dur in windows:
         if (minute - start) % WEEK_MINUTES < max(0, dur - buffer_min):
             return True
@@ -98,6 +105,8 @@ def is_open(windows: list[tuple[int, int]] | None, at: datetime | None = None,
         buffer_min 供派工閘門用（時段結束前 N 分鐘視為關閉）；顯示用請傳 0。
     EN: Whether schedulable now. None → always; [] → never. buffer_min shrinks
         each window's tail (dispatch gate); pass 0 for display.
+
+    @node job-scheduler/app/gpu_schedule.py::is_open
     """
     if windows is None:
         return True
@@ -115,6 +124,8 @@ def next_transition(windows: list[tuple[int, int]] | None,
         本函式只給 admin 狀態欄呼叫，效能無虞。
     EN: (open_now, next state-change datetime). Minute-walk (≤10080 steps) — simple
         and provably correct across overlapping/overnight windows; admin-panel only.
+
+    @node job-scheduler/app/gpu_schedule.py::next_transition
     """
     if windows is None:
         return True, None

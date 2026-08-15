@@ -36,6 +36,8 @@ async def upload_dataset(
     """
     ZH: 上傳資料集，並自動推薦訓練參數
     EN: Upload dataset and auto-suggest training config
+
+    @node job-scheduler/app/routers/datasets.py::upload_dataset
     """
     if not file.filename:
         raise HTTPException(status_code=400, detail="No filename provided")
