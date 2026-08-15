@@ -60,6 +60,17 @@ os.environ["MYAI_BALANCE_POLL_MINUTES"] = "0"         # ZH: 0 = 關閉餘額輪�
 os.environ["IMAP_SERVER"] = ""
 os.environ["IMAP_USERNAME"] = ""
 os.environ["IMAP_PASSWORD"] = ""
+
+# ZH: ── 內部 Token 計量 ──
+#     這一條與上面幾條的性質不同：上面是「不要碰外部服務」，這一條是
+#     **不要讓測試繼承正式環境的功能開關**。
+#     .env 設 INTERNAL_TOKEN_ACCOUNTING=false（正式環境用廠商計量），而
+#     tests/test_chat.py 有兩個測試就是在測內部計量的行為（配額擋下、串流後扣量）。
+#     開關關著時 chat.py 的整段配額檢查被跳過，測試永遠紅 —— 而且錯誤訊息是
+#     「AI 服務尚未啟動」，會把人誤導成「要先起 docker-compose.ai-models.yml」。
+#     實際上那兩個測試連 httpx 都 mock 掉了，不需要任何服務。
+#     測試要測的開關必須由測試自己決定，不能由部署環境決定。
+os.environ["INTERNAL_TOKEN_ACCOUNTING"] = "true"
 # ZH: 為什麼是 127.0.0.1:1 而不是留著預設：預設值 ai-platform-ollama:11434 是 docker
 #     內部主機名，在容器外每個 embedding 請求都要等一次 DNS 解析失敗。啟動時的知識庫
 #     匯入有 40 個 chunk，等於每個測試多花約 60 秒（client fixture 是 function scope，
