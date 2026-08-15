@@ -37,7 +37,29 @@ os.environ["RATELIMIT_ENABLED"] = "False"  # ZH: 測試時停用速率限制，�
 # EN: Tests must never touch real external services; .env holds PRODUCTION SMTP/Ollama.
 #     Direct assignment (not setdefault) — env vars outrank .env in pydantic-settings.
 os.environ["SMTP_SERVER"] = ""                        # ZH: 空值 → send_email 走 mock，不實際寄出
+os.environ["SMTP_USERNAME"] = ""                      # ZH: 測試不該把正式帳密載進記憶體
+os.environ["SMTP_PASSWORD"] = ""
 os.environ["OLLAMA_BASE_URL"] = "http://127.0.0.1:1"  # ZH: 立即連線被拒，不做 DNS 查詢
+
+# ZH: ── MYAI 廠商 API ──
+#     實測踩過：跑測試時 lifespan/scheduler 真的打了
+#     GET https://www.myai168.com/.../export_user_list 並回 200，把廠商的 7 筆
+#     使用者資料同步進測試 DB。**憑證為空**是最有效的閘門——myai_sync 在
+#     _login() 一開頭就檢查，沒有帳密直接放棄，不會發出任何請求。
+#     BASE_URL 指向關閉埠是第二道，防止有人日後改了憑證檢查的位置。
+os.environ["MYAI_ADMIN_EMAIL"] = ""
+os.environ["MYAI_ADMIN_PASSWORD"] = ""
+os.environ["MYAI_BASE_URL"] = "http://127.0.0.1:1"
+os.environ["MYAI_SYNC_INTERVAL_HOURS"] = "0"          # ZH: 0 = 關閉自動同步
+os.environ["MYAI_BALANCE_POLL_MINUTES"] = "0"         # ZH: 0 = 關閉餘額輪詢
+
+# ZH: ── IMAP 退信回收 ──
+#     bounce_reader 的主機預設由 SMTP 主機推導（smtp.x → imap.x），SMTP_SERVER
+#     已清空所以推導不出來；但 .env 若明確設了 IMAP_SERVER 就會繞過推導直接連。
+#     連帶清掉帳密：測試沒有任何理由持有正式信箱的登入資訊。
+os.environ["IMAP_SERVER"] = ""
+os.environ["IMAP_USERNAME"] = ""
+os.environ["IMAP_PASSWORD"] = ""
 # ZH: 為什麼是 127.0.0.1:1 而不是留著預設：預設值 ai-platform-ollama:11434 是 docker
 #     內部主機名，在容器外每個 embedding 請求都要等一次 DNS 解析失敗。啟動時的知識庫
 #     匯入有 40 個 chunk，等於每個測試多花約 60 秒（client fixture 是 function scope，
