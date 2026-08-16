@@ -352,10 +352,91 @@ def _to_int(s: str) -> int:
 
 
 def parse_transactions(html: str) -> list[dict]:
-    """ZH: 解析交易日誌 HTML（廠商新版 kbx-grid 版型）→ list[dict]（不取 IP）。
-       EN: parse the transaction log (vendor's kbx-grid layout). No IP stored.
+    """ZH: 解析交易日誌 HTML → list[dict]（**不取 IP**）。支援兩種版型：
+           v2 表格版（2026-08 廠商改版後的 <table>）優先，解不出來才退回 v1 的 kbx-grid。
+           保留舊版是因為廠商回退或別的分頁沿用舊版時不該又壞一次。
+       EN: dual-layout parser. Table layout first, kbx-grid as fallback. No IP stored.
 
     @node job-scheduler/app/services/myai_sync.py::parse_transactions
+    """
+    rows = _parse_tx_table(html)
+    if rows:
+        return rows
+    return _parse_tx_kbx(html)
+
+
+def tx_row_count(html: str) -> int:
+    """ZH: 頁面上「看起來有幾列交易」——與解析無關，只數 DOM。
+           用來偵測「頁面有資料但一列都解不出來」＝版型又變了（見 sync_transactions）。
+
+    @node job-scheduler/app/services/myai_sync.py::tx_row_count
+    """
+    from lxml import html as lxml_html
+    try:
+        doc = lxml_html.fromstring(html)
+    except Exception:  # noqa: BLE001
+        return 0
+    n = len(doc.xpath("//tbody/tr"))
+    n += len(doc.xpath("//div[contains(concat(' ', normalize-space(@class), ' '), ' kbx-row ')]"))
+    return n
+
+
+def _parse_tx_table(html: str) -> list[dict]:
+    """ZH: v2 表格版型。欄序：時間 / 點數 / 餘額 / 備註 / 帳號 / IP。
+
+       ⚠ 兩個會咬人的細節：
+         1. 時間欄是 `<td>2026-08-16<br>10:23:45</td>`，直接取文字會黏成
+            `2026-08-1610:23:45`——strptime 會炸，dedup_key 也會與舊資料對不上。
+         2. **IP 是第 6 欄，一律不讀不存**（既有原則）。
+
+    @node job-scheduler/app/services/myai_sync.py::_parse_tx_table
+    """
+    from lxml import html as lxml_html
+    try:
+        doc = lxml_html.fromstring(html)
+    except Exception:  # noqa: BLE001
+        return []
+
+    out: list[dict] = []
+    for tr in doc.xpath("//tbody/tr"):
+        tds = tr.xpath("./td")
+        if len(tds) < 5:                      # 少於 5 欄不是交易列（IP 欄可有可無）
+            continue
+        # ZH: 用 itertext 併空白，<br> 造成的斷行才會變成分隔而不是黏在一起
+        t = " ".join(x.strip() for x in tds[0].itertext() if x.strip())
+        pts = _to_int(tds[1].text_content())
+        bal = _to_int(tds[2].text_content())
+        note = tds[3].text_content().strip()
+
+        acct_parts = [x.strip() for x in tds[4].itertext() if x.strip()]
+        email = next((x for x in acct_parts if "@" in x), "")
+        meta = next((x for x in acct_parts if "sn:" in x), "")
+        msn = re.search(r"sn:(\d+)", meta)
+        sn = msn.group(1) if msn else ""
+        name = re.sub(r"・?\s*sn:\d+\s*$", "", meta).strip()
+        # tds[5] 是 IP —— 刻意不讀
+
+        try:
+            occ = datetime.strptime(t, "%Y-%m-%d %H:%M:%S")
+        except ValueError:
+            occ = None
+        if occ is None and not sn:
+            continue                          # 兩個關鍵欄都沒有＝不是交易列（表頭之類）
+        ev, model = _classify(note, pts)
+        out.append({
+            "occurred_at": occ, "vendor_sn": sn, "email": email, "name": name,
+            "points_delta": pts, "balance": bal, "note": note,
+            "event_type": ev, "model": model,
+            # ZH: 去重鍵與 v1 完全相同的組成與格式，舊資料才不會被重複插入
+            "dedup_key": f"{t}|{sn}|{pts}|{note}",
+        })
+    return out
+
+
+def _parse_tx_kbx(html: str) -> list[dict]:
+    """ZH: v1 kbx-grid 版型（2026-08 前）。保留作為 fallback。
+
+    @node job-scheduler/app/services/myai_sync.py::_parse_tx_kbx
     """
     from lxml import html as lxml_html  # ZH: 延遲匯入 | lazy import
 
@@ -454,6 +535,16 @@ async def sync_transactions(db: Session, days: int = 90) -> dict:
     start = end - timedelta(days=days)
     html = await fetch_transactions_html(start.strftime("%Y-%m-%d"), end.strftime("%Y-%m-%d"))
     rows = parse_transactions(html)
+    # ZH: ⚠ 這一段是這次事故的直接教訓。
+    #     2026-08 廠商把交易頁從 kbx-grid 改成 <table>，parser 一列都解不出來，
+    #     但流程只印了 fetched=0——讀起來就像「沒有新資料」，而暑假期間那完全合理，
+    #     於是同步靜靜死了 29 天、漏掉 201 筆，沒有任何人發現。
+    #     所以：頁面上明明有列、卻一列都解不出來，必須**當成錯誤**，不能當成沒資料。
+    seen = tx_row_count(html)
+    if seen and not rows:
+        raise MyaiSyncError(
+            f"交易日誌解析失敗：頁面有 {seen} 列但解出 0 筆，廠商版型可能又改了"
+        )
     existing = {k for (k,) in db.query(models.MyaiTransaction.dedup_key).all()}
     now = datetime.now(timezone.utc)
     created = 0
