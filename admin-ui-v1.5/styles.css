@@ -992,20 +992,24 @@ ion-icon {
 
 
 .form-box-panel {
-    border: 2px solid var(--border-color);
-    border-radius: 20px;
+    /* ZH: v1.5 —— 容器退到背景（與 web-ui-v1.5 同一個決定）。
+       原本 2px 實色靛藍邊框，比裡面的表格與按鈕還搶眼。
+       容器的工作是分組，不是被注視。 */
+    border: 1px solid var(--panel-hairline, rgba(99, 102, 241, 0.18));
+    border-radius: 16px;
     background: var(--bg-panel);
     backdrop-filter: blur(20px);
     -webkit-backdrop-filter: blur(20px);
-    padding: 25px;
+    padding: 24px 26px;
     transition: all 0.4s;
 }
 
 
 
 .widget-header {
-    border-bottom: 2px solid var(--text-primary);
-    margin-bottom: 20px;
+    /* ZH: 原本 2px 實色文字色，一條粗線橫過整張卡，讓標題變成最重的元素。 */
+    border-bottom: 1px solid var(--panel-hairline, rgba(99, 102, 241, 0.18));
+    margin-bottom: 18px;
     padding-bottom: 10px;
 }
 
@@ -2631,4 +2635,75 @@ ion-icon {
 .tutorial-content.login-modal:hover {
     border-color: var(--border-glow-color);
     box-shadow: 0 20px 40px rgba(0, 0, 0, 0.5), 0 0 22px var(--border-glow-color);
+}
+
+
+/* ══════════════════════════════════════════════════════════════
+   ZH: v1.5 —— 管理員登入的輸入框樣式。
+   .input-wrap 這個 class **整份 CSS 都沒有定義**（web-ui 也沒有），
+   所以兩個輸入框一直是瀏覽器原生外觀：字級 13.3px、高度 22px、
+   兩個框寬度還不一樣（156 / 196），而旁邊的登入按鈕是 24px / 56px。
+   實測就是這樣量出來的，不是目測。
+   ══════════════════════════════════════════════════════════════ */
+.input-wrap {
+    position: relative;
+    display: flex;
+    align-items: center;
+    /* ZH: ⚠ 一定要 width:100%。少了它，外層會被內容撐開而不是撐滿表單，
+       於是「密碼框比帳號框寬 26px」——正好等於兩者 padding-right 的差
+       （密碼 40px 讓出位置給眼睛圖示，帳號 14px）。實測 236.16 vs 262.16。
+       輸入框自己的 box-sizing 是對的，問題在外層。 */
+    width: 100%;
+}
+
+.input-wrap > ion-icon {
+    position: absolute;
+    left: 12px;
+    font-size: 18px;
+    color: var(--text-muted, #6b7280);
+    pointer-events: none;   /* ZH: 點在圖示上也要能聚焦到輸入框 */
+}
+
+.input-wrap > input {
+    width: 100%;
+    /* ZH: 44px 是可點擊目標的下限（手指），登入框沒有理由比這更小 */
+    height: 44px;
+    padding: 0 14px 0 38px;
+    font-family: inherit;   /* ZH: 不繼承的話 input 會用瀏覽器預設字體 */
+    font-size: 1rem;
+    color: var(--text-primary);
+    background: var(--card-solid, rgba(255, 255, 255, 0.9));
+    border: 1px solid var(--panel-hairline, rgba(99, 102, 241, 0.28));
+    border-radius: 10px;
+    outline: none;
+    transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.input-wrap > input::placeholder {
+    color: var(--text-muted, #9ca3af);
+}
+
+.input-wrap > input:focus {
+    border-color: var(--accent-glow, #6366f1);
+    /* ZH: 聚焦環用 box-shadow 而非 outline —— 圓角才會跟著彎 */
+    box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.18);
+}
+
+
+/* ══════════════════════════════════════════════════════════════
+   ZH: v1.5 —— 表格是 admin 的主要內容，要浮在容器之上。
+   容器退淡之後，表格若沒有自己的實體感就會整片糊掉。
+   ══════════════════════════════════════════════════════════════ */
+.admin-table-wrap {
+    background: var(--card-solid, rgba(255, 255, 255, 0.72));
+    border: 1px solid var(--panel-hairline, rgba(99, 102, 241, 0.18));
+    border-radius: 10px;
+    box-shadow: 0 1px 2px rgba(30, 27, 75, 0.06);
+}
+
+.admin-table thead th {
+    /* ZH: 表頭要能與資料列分開，但不該重過資料本身 */
+    background: rgba(99, 102, 241, 0.06);
+    font-weight: 600;
+    border-bottom: 1px solid var(--panel-hairline, rgba(99, 102, 241, 0.18));
 }

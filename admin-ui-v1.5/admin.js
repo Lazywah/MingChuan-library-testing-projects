@@ -3,6 +3,21 @@ let authToken = localStorage.getItem('admin_hud_token');
 
 const TRANSLATIONS = {
     zh: {
+        aria_close: "關閉",
+        th_provider: "供應商",
+        th_model_id: "模型辨識碼",
+        th_user: "使用者",
+        th_state: "狀態",
+        th_size: "大小",
+        th_since: "起始",
+        th_action: "動作",
+        th_time: "時間",
+        th_admin: "管理員",
+        th_target: "對象",
+        th_payload: "內容",
+        ph_user_id: "使用者代號",
+        ph_action_filter: "篩選動作…",
+        ph_target_filter: "篩選對象使用者…",
         btn_back_hub: "返回大廳",
         admin_dashboard: "管理員儀表板",
         admin_cluster_status: "叢集資源即時監控",
@@ -356,6 +371,21 @@ const TRANSLATIONS = {
         error_session_expired: "工作階段已過期，請重新登入"
     },
     en: {
+        aria_close: "Close",
+        th_provider: "Provider",
+        th_model_id: "Model ID",
+        th_user: "User",
+        th_state: "State",
+        th_size: "Size",
+        th_since: "Since",
+        th_action: "Action",
+        th_time: "Time",
+        th_admin: "Admin",
+        th_target: "Target",
+        th_payload: "Payload",
+        ph_user_id: "User ID",
+        ph_action_filter: "Filter action…",
+        ph_target_filter: "Filter target user…",
         btn_back_hub: "Back to Hub",
         admin_dashboard: "Admin Dashboard",
         admin_cluster_status: "Cluster Hardware Status",
@@ -737,6 +767,14 @@ function applyTranslations() {
     document.querySelectorAll('[data-i18n-title]').forEach(el => {
         const text = t[el.getAttribute('data-i18n-title')];
         if (text) el.title = text;
+    });
+
+    // ZH: data-i18n-aria —— web-ui 有這個處理器，admin 沒有。
+    //     少了它，只有圖示的按鈕（例如各種關閉鈕）對讀屏軟體就只是「按鈕」，
+    //     而且切語言時 aria-label 不會跟著換。
+    document.querySelectorAll('[data-i18n-aria]').forEach(el => {
+        const text = t[el.getAttribute('data-i18n-aria')];
+        if (text) el.setAttribute('aria-label', text);
     });
 }
 
@@ -4424,7 +4462,7 @@ const adminLab = (() => {
                 <div style="padding:8px 0; font-size:14px;">
                     <strong>${esc(data.user_id)}</strong> · base = ${esc(data.base_quota_gb)} GB · <strong>effective = ${esc(data.effective_quota_gb)} GB</strong>
                 </div>
-                <table class="admin-table"><thead><tr><th>ID</th><th>Extra</th><th>Reason</th><th>Granted</th><th>動作</th></tr></thead><tbody>${grants}</tbody></table>
+                <table class="admin-table"><thead><tr><th>代號</th><th>額外</th><th>原因</th><th>核給時間</th><th>動作</th></tr></thead><tbody>${grants}</tbody></table>
             `;
         } catch (e) { result.innerHTML = `<div style="color:#ef4444;">Error: ${esc(e.message)}</div>`; }
     }
@@ -4564,7 +4602,7 @@ const adminLab = (() => {
             }
             result.innerHTML = `
                 <table class="admin-table">
-                    <thead><tr><th>Name</th><th>Masked</th><th>Updated</th><th>動作</th></tr></thead>
+                    <thead><tr><th>名稱</th><th>遮蔽值</th><th>更新時間</th><th>動作</th></tr></thead>
                     <tbody>${items.map(s => `
                         <tr>
                             <td>${esc(s.name)}</td>
