@@ -1562,6 +1562,15 @@ const gpuNodes = {
                 : `${this._esc(n.effective_pool)} <span style="color:var(--text-muted,#888);">(自報)</span>`;
             const card = document.createElement('div');
             card.style.cssText = 'border:1px solid var(--border-color,#333); border-radius:12px; padding:14px 16px; display:flex; flex-direction:column; gap:8px; background:var(--bg-elevated,rgba(255,255,255,0.03));';
+            // ZH: v1.5 —— 整張卡可點（開編輯器）。
+            //     ⚠ 必須放在 card.style.cssText 之後：cssText 是「整個覆寫 style 屬性」，
+            //     寫在它前面的 cursor 會被洗掉。
+            card.dataset.nodeId = n.node_id;
+            card.style.cursor = 'pointer';
+            card.addEventListener('click', (e) => {
+                if (e.target.closest('button')) return;   // 編輯鈕自己會處理
+                gpuNodes.openEditor(n.node_id);
+            });
             card.innerHTML =
                 `<div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
                     <b style="font-size:15px;">${this._esc(n.display_name || n.node_id)}</b>
@@ -1579,9 +1588,44 @@ const gpuNodes = {
                  </div>
                  <div style="font-size:13px;">時段：${this._fmtNext(n)}${n.dispatch_buffer_min ? `（結束前 ${n.dispatch_buffer_min} 分停派）` : ''}</div>
                  <div style="font-size:13px;">任務：${running ? ('▶ ' + running) : '無執行中'} · 累計 完成 ${n.completed_total} / 失敗 ${n.failed_total}</div>
+                 <div class="node-live" data-node-id="${this._esc(n.node_id)}"></div>
                  <div style="font-size:12px; color:var(--text-muted,#888);">最後心跳：${this._fmtRel(n.last_seen)}</div>`;
             grid.appendChild(card);
         });
+    },
+
+    // ── 即時資訊（由叢集輪詢餵入）──────────────────────
+    // ZH: v1.5 —— 溫度/使用率/記憶體直接顯示在對應的節點卡上。
+    //     刻意「只更新這三行」而不是重繪整張卡：重繪會讓 5 秒一次的輪詢
+    //     造成畫面閃爍，也會丟掉捲動位置。
+    applyLiveStats(stats) {
+        const byNode = {};
+        (stats || []).forEach(g => {
+            (byNode[g.node_id] = byNode[g.node_id] || []).push(g);
+        });
+        let matched = 0;
+        document.querySelectorAll('.node-live').forEach(slot => {
+            const list = byNode[slot.dataset.nodeId];
+            if (!list || !list.length) { slot.innerHTML = ''; return; }
+            matched += list.length;
+            slot.innerHTML = list.map(g => {
+                const memPct = g.memory_total > 0 ? (g.memory_used / g.memory_total) * 100 : 0;
+                const cls = (v, warn, danger) => v > danger ? 'fill-danger' : (v > warn ? 'fill-warning' : '');
+                const row = (label, text, pct, klass) =>
+                    `<div class="stat-row" style="font-size:12.5px;"><span>${label}</span><span>${text}</span></div>` +
+                    `<div class="progress-bar-bg"><div class="progress-bar-fill ${klass}" style="width:${Math.min(pct,100)}%"></div></div>`;
+                return `<div style="margin-top:2px;">` +
+                    row('溫度', `${g.temperature} °C`, g.temperature, cls(g.temperature, 65, 80)) +
+                    row('使用率', `${g.utilization} %`, g.utilization, cls(g.utilization, 75, 90)) +
+                    row('記憶體', `${g.memory_used} / ${g.memory_total} MB`, memPct, cls(memPct, 75, 90)) +
+                    `</div>`;
+            }).join('');
+        });
+        // ZH: 對不到任何節點卡的 GPU 不能無聲消失——把獨立區塊放出來收容它們。
+        const orphan = (stats || []).length - matched;
+        const sec = document.getElementById('sec-cluster');
+        if (sec) sec.style.display = orphan > 0 ? '' : 'none';
+        return orphan;
     },
 
     // ── 編輯 Modal ──────────────────────────────────────────────────────
@@ -2903,6 +2947,8 @@ async function fetchClusterStats() {
         if (res.ok) {
             const stats = await res.json();
             renderClusterStats(stats);
+            // ZH: v1.5 —— 同一份資料同時餵給節點卡（三條即時資訊）
+            if (typeof gpuNodes !== 'undefined') gpuNodes.applyLiveStats(stats);
         }
     } catch (e) {
         console.error("Failed to fetch cluster stats:", e);
