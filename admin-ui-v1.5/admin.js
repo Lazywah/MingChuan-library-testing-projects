@@ -857,6 +857,11 @@ function switchAdminMainTab(tabId) {
         target.style.display = 'block';
         target.classList.add('active');
         
+        // ZH: v1.5 —— 進到 GPU 分頁就立刻抓一次叢集數據，
+        //     不然第一眼看到的可能是最多 5 秒前的舊值。
+        if (tabId === 'gpu-nodes' && typeof fetchClusterStats === 'function') {
+            fetchClusterStats();
+        }
         if (tabId === 'analytics') {
             fetchAnalyticsData();
         } else if (tabId === 'lab') {
@@ -1454,6 +1459,9 @@ async function checkBootstrapAdminBanner() {
 // ==============================================================================
 const gpuNodes = {
     _nodes: [],
+    // ZH: v1.5 —— 快取最近一次叢集數據。沒有它的話，每次 render() 清空插槽後
+    //     就只能空等下一次 5 秒輪詢，使用者會看到三行資訊「慢半拍才出現」。
+    _lastStats: null,
     _editingId: null,
     _DAYS: [["mon","週一"],["tue","週二"],["wed","週三"],["thu","週四"],["fri","週五"],["sat","週六"],["sun","週日"]],
     _authHeaders() {
@@ -1592,6 +1600,8 @@ const gpuNodes = {
                  <div style="font-size:12px; color:var(--text-muted,#888);">最後心跳：${this._fmtRel(n.last_seen)}</div>`;
             grid.appendChild(card);
         });
+        // ZH: 重繪後立刻把快取的即時數據放回去，不要讓使用者空等下一次輪詢。
+        this.applyLiveStats();
     },
 
     // ── 即時資訊（由叢集輪詢餵入）──────────────────────
@@ -1599,6 +1609,9 @@ const gpuNodes = {
     //     刻意「只更新這三行」而不是重繪整張卡：重繪會讓 5 秒一次的輪詢
     //     造成畫面閃爍，也會丟掉捲動位置。
     applyLiveStats(stats) {
+        // ZH: 不帶參數 = 用快取重放（render() 之後會這樣呼叫）
+        if (stats == null) stats = this._lastStats;
+        else this._lastStats = stats;
         const byNode = {};
         (stats || []).forEach(g => {
             (byNode[g.node_id] = byNode[g.node_id] || []).push(g);
