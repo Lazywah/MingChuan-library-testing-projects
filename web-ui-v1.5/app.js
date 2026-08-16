@@ -1387,16 +1387,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
     newChatBtn.addEventListener('click', createNewSession);
 
-    const jobFormHigh = document.getElementById('job-form-high');
-    const jobFormMidLow = document.getElementById('job-form-midlow');
-    if (jobFormHigh) jobFormHigh.addEventListener('submit', (e) => handleJobSubmit(e, 2, 'job-form-high'));
-    if (jobFormMidLow) jobFormMidLow.addEventListener('submit', (e) => handleJobSubmit(e, 1, 'job-form-midlow'));
+    // ZH: v1.5 —— 只剩一份表單，池別由目前分頁決定（見 setComputePool）
+    const jobForm = document.getElementById('job-form');
+    if (jobForm) jobForm.addEventListener('submit', (e) => handleJobSubmit(e));
 
     // v2.1: profile-update-form 已移除 — 不再綁定 handleProfileUpdate
-    const datasetInputHigh = document.getElementById('datasetFile-high');
-    const datasetInputMidLow = document.getElementById('datasetFile-midlow');
-    if (datasetInputHigh) datasetInputHigh.addEventListener('change', (e) => handleDatasetUpload(e, 'high'));
-    if (datasetInputMidLow) datasetInputMidLow.addEventListener('change', (e) => handleDatasetUpload(e, 'midlow'));
+    const datasetInput = document.getElementById('datasetFile');
+    if (datasetInput) datasetInput.addEventListener('change', (e) => handleDatasetUpload(e));
     document.querySelectorAll('.refresh-jobs-btn').forEach(btn => {
         btn.addEventListener('click', fetchJobs);
     });
@@ -1614,7 +1611,15 @@ document.addEventListener('DOMContentLoaded', () => {
             if (targetPage) targetPage.classList.add('active');
             // v3.2 Phase 1.5：切到 GPU 送單頁時更新池可用性提示
             if (targetId === 'compute-high-page' || targetId === 'compute-midlow-page') {
+                setComputePool(targetId === 'compute-high-page' ? 'batch' : 'interactive');
                 refreshPoolHints();
+            }
+            // ZH: 表單只服務 GPU 兩個分頁；切到 Notebook 就收起來，避免使用者
+            //     在 Notebook 分頁看到一個送不出去的表單。
+            const sharedForm = document.getElementById('job-form');
+            if (sharedForm) {
+                sharedForm.closest('.widget').style.display =
+                    (targetId === 'compute-notebook-page') ? 'none' : '';
             }
         });
     });
@@ -2742,8 +2747,9 @@ async function refreshPoolHints() {
         data = await res.json();
     } catch { return; }
     const t = TRANSLATIONS[currentLang] || TRANSLATIONS.zh;
-    [["batch", "high"], ["interactive", "midlow"]].forEach(([pool, suffix]) => {
-        const form = document.getElementById(`job-form-${suffix}`);
+    // ZH: v1.5 —— 表單只剩一份，所以提示也只需要一個，內容依 currentPool 決定。
+    [[currentPool, 'shared']].forEach(([pool, suffix]) => {
+        const form = document.getElementById('job-form');
         if (!form) return;
         let hint = document.getElementById(`pool-hint-${suffix}`);
         if (!hint) {
@@ -2858,16 +2864,36 @@ function renderJobs(jobs) {
     renderToContainer(jobListMidLow, midLowJobs);
 }
 
-async function handleJobSubmit(e, priority, formId) {
+// ZH: v1.5 —— 目前的目標池。'batch' = 高階 GPU，'interactive' = 本地 GPU。
+//     原本這件事編碼在「哪一份表單被送出」裡；表單合併後改成顯式狀態。
+let currentPool = 'batch';
+
+function setComputePool(pool) {
+    currentPool = pool;
+    const form = document.getElementById('job-form');
+    if (form) {
+        form.classList.toggle('pool-batch', pool === 'batch');
+        form.classList.toggle('pool-interactive', pool === 'interactive');
+    }
+    const label = document.getElementById('job-pool-label');
+    if (label) {
+        const key = pool === 'batch' ? 'priority_high_desc' : 'priority_normal_desc';
+        label.setAttribute('data-i18n', key);
+        label.textContent = t(key);
+    }
+}
+
+async function handleJobSubmit(e) {
     e.preventDefault();
-    let suffix = formId === 'job-form-high' ? '-high' : '-midlow';
+    const priority = currentPool === 'batch' ? 2 : 1;
+    const suffix = '';
     const jobData = {
         job_name: document.getElementById('job-name' + suffix).value,
         model_name: document.getElementById('model-name' + suffix).value,
         gpu_required: priority >= 2 ? 1 : 0,
         priority: priority,
         // v3.0 目標節點池：高階 GPU→batch（高階伺服器）、本地 GPU→interactive（服務層 GPU）
-        pool_type: formId === 'job-form-high' ? 'batch' : 'interactive',
+        pool_type: currentPool,
         dataset_path: uploadedDatasetPath,
         config: {
             epochs: parseInt(document.getElementById('job-epochs' + suffix).value),
@@ -2883,7 +2909,7 @@ async function handleJobSubmit(e, priority, formId) {
         });
         if (!res.ok) throw new Error('fail');
         showToast('toast_job_ok');
-        document.getElementById(formId).reset();
+        document.getElementById('job-form').reset();
         const group = document.getElementById('auto-detect-group' + suffix);
         if (group) group.style.display = 'none';
         uploadedDatasetPath = null;
@@ -2894,15 +2920,15 @@ async function handleJobSubmit(e, priority, formId) {
     }
 }
 
-async function handleDatasetUpload(e, type) {
+async function handleDatasetUpload(e) {
     const file = e.target.files[0];
     if (!file) return;
 
     const formData = new FormData();
     formData.append('file', file);
 
-    const suffix = type === 'high' ? '-high' : '-midlow';
-    const btn = document.querySelector(`#job-form-${type} button[type="submit"]`);
+    const suffix = '';
+    const btn = document.querySelector('#job-form button[type="submit"]');
     const originalText = btn.innerHTML;
     btn.innerHTML = `<span class="spinner" style="margin-right:5px"></span><span>${t('msg_uploading')}</span>`;
     btn.disabled = true;
@@ -2923,7 +2949,8 @@ async function handleDatasetUpload(e, type) {
         if (group) group.style.display = 'grid';
 
         if (data.suggested_config) {
-            document.getElementById('model-name' + suffix).value = type === 'high' ? 'LLaMA-3' : 'BERT-Mini';
+            document.getElementById('model-name' + suffix).value =
+                currentPool === 'batch' ? 'LLaMA-3' : 'BERT-Mini';
 
             if (data.suggested_config.epochs) {
                 document.getElementById('job-epochs' + suffix).value = data.suggested_config.epochs;

@@ -20,7 +20,7 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
     <!-- ZH: 引入主任務面板樣式 | EN: Import main stylesheet -->
-    <link rel="stylesheet" href="styles.css?v=v1-5-0004">
+    <link rel="stylesheet" href="styles.css?v=v1-5-0005">
 
     <!-- ZH: 引入 Google Material Icons | EN: Import Google Material Icons -->
     <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
@@ -406,22 +406,22 @@
                     </button>
                 </div>
 
-                <div class="compute-tab-content">
-                    <!-- ZH: 左側: 高算力任務 (Priority >= 2) | EN: Left: High Compute (Priority >= 2) -->
-                    <section class="compute-panel sub-page-view active" id="compute-high-page"
-                        style="background: transparent; box-shadow: none; padding: 0;">
-                        <div style="display: flex; flex-direction: column; gap: 20px;">
-                            <div class="widget form-box-panel">
+                                <!-- ZH: v1.5 —— 建任務表單抽成**共用一份**。
+                     原本 compute-high-page 與 compute-midlow-page 各帶一份約 100 行的
+                     複製品，差異只有 id 後綴、優先權標籤與強調色；改欄位要改兩處，
+                     漏改一處就會兩個池別行為不一致。
+                     池別由目前選中的分頁決定（見 app.js 的 currentPool）。 -->
+<div class="widget form-box-panel">
                                 <div class="widget-header">
                                     <h3 data-i18n="job_compose">New Task</h3>
                                 </div>
-                                <form id="job-form-high" class="job-form"
+                                <form id="job-form" class="job-form pool-batch"
                                     style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; align-items: start;">
                                     <div class="field-group" style="display: flex; flex-direction: column; gap: 8px;">
                                         <label data-i18n="label_job_name"
                                             style="font-size: 13px; color: var(--text-muted);">Job Name</label>
                                         <div style="position: relative;">
-                                            <input type="text" id="job-name-high" required
+                                            <input type="text" id="job-name" required
                                                 data-i18n-placeholder="ph_task_name" placeholder="輸入任務名稱…"
                                                 style="width: 100%; padding: 10px 10px 10px 35px; border: none; border-bottom: 1px solid rgba(255,255,255,0.2); border-radius: 0; background: transparent; color: var(--text-color); box-sizing: border-box; font-family: inherit; font-size: 14px; outline: none; transition: border-color 0.3s;">
                                             <ion-icon name="document-text-outline"
@@ -433,14 +433,14 @@
                                         <label data-i18n="label_dataset"
                                             style="font-size: 13px; color: var(--text-muted);">Dataset Upload</label>
                                         <div style="position: relative;">
-                                            <input type="file" id="datasetFile-high" accept=".zip,.csv,.jsonl"
+                                            <input type="file" id="datasetFile" accept=".zip,.csv,.jsonl"
                                                 style="width: 100%; padding: 10px 10px 10px 35px; border: none; border-bottom: 1px solid rgba(255,255,255,0.2); border-radius: 0; background: transparent; color: var(--text-color); box-sizing: border-box; font-family: inherit; font-size: 14px; cursor: pointer; outline: none; transition: border-color 0.3s;">
                                             <ion-icon name="cloud-upload-outline"
                                                 style="position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: var(--text-muted); font-size: 16px;"></ion-icon>
                                         </div>
                                     </div>
 
-                                    <div id="auto-detect-group-high"
+                                    <div id="auto-detect-group"
                                         style="display: none; grid-column: 1 / -1; grid-template-columns: 1fr 1fr; gap: 20px;">
                                         <div class="field-group"
                                             style="display: flex; flex-direction: column; gap: 8px;">
@@ -448,7 +448,7 @@
                                                 style="font-size: 13px; color: var(--text-muted);">Model Identifier
                                                 (Auto-detected)</label>
                                             <div style="position: relative;">
-                                                <input type="text" id="model-name-high" readonly placeholder=" "
+                                                <input type="text" id="model-name" readonly placeholder=" "
                                                     style="width: 100%; padding: 10px 10px 10px 35px; border: none; border-bottom: 1px solid rgba(255,255,255,0.2); border-radius: 0; background: transparent; color: var(--accent-glow); box-sizing: border-box; font-family: inherit; font-size: 14px; outline: none;">
                                                 <ion-icon name="cube-outline"
                                                     style="position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: var(--text-muted); font-size: 16px;"></ion-icon>
@@ -460,7 +460,7 @@
                                                 <label data-i18n="label_epochs"
                                                     style="font-size: 13px; color: var(--text-muted);">Epochs</label>
                                                 <div style="position: relative;">
-                                                    <input type="number" id="job-epochs-high" readonly placeholder=" "
+                                                    <input type="number" id="job-epochs" readonly placeholder=" "
                                                         style="width: 100%; padding: 10px 10px; border: none; border-bottom: 1px solid rgba(255,255,255,0.2); border-radius: 0; background: transparent; color: var(--text-color); box-sizing: border-box; font-family: inherit; font-size: 14px; outline: none; text-align: center;">
                                                 </div>
                                             </div>
@@ -470,7 +470,7 @@
                                                     style="font-size: 13px; color: var(--text-muted);">Batch
                                                     Size</label>
                                                 <div style="position: relative;">
-                                                    <input type="number" id="job-batch-high" readonly placeholder=" "
+                                                    <input type="number" id="job-batch" readonly placeholder=" "
                                                         style="width: 100%; padding: 10px 10px; border: none; border-bottom: 1px solid rgba(255,255,255,0.2); border-radius: 0; background: transparent; color: var(--text-color); box-sizing: border-box; font-family: inherit; font-size: 14px; outline: none; text-align: center;">
                                                 </div>
                                             </div>
@@ -480,10 +480,9 @@
                                     <div
                                         style="grid-column: 1 / -1; display: flex; justify-content: space-between; align-items: center; border-top: 1px dashed rgba(255,255,255,0.1); padding-top: 15px;">
                                         <span
-                                            style="margin-right: 15px; font-size: 13px; color: var(--accent-glow); flex-shrink: 0;"><ion-icon
+                                            class="job-pool-hint" style="margin-right: 15px; font-size: 13px; flex-shrink: 0;"><ion-icon
                                                 name="analytics-outline" style="vertical-align: middle;"></ion-icon>
-                                            <span data-i18n="priority_high_desc">High Priority GPU
-                                                Processing</span></span>
+                                            <span id="job-pool-label" data-i18n="priority_high_desc">高優先 GPU 處理</span></span>
                                         <button type="submit" class="ready-btn"
                                             style="margin:0; flex: 1; text-align: center;">
                                             <span data-i18n="btn_dispatch">Dispatch Task</span>
@@ -492,6 +491,12 @@
                                 </form>
                             </div>
 
+                <div class="compute-tab-content">
+                    <!-- ZH: 左側: 高算力任務 (Priority >= 2) | EN: Left: High Compute (Priority >= 2) -->
+                    <section class="compute-panel sub-page-view active" id="compute-high-page"
+                        style="background: transparent; box-shadow: none; padding: 0;">
+                        <div style="display: flex; flex-direction: column; gap: 20px;">
+                            
                             <div class="widget form-box-panel">
                                 <div class="widget-header split">
                                     <h3><span data-i18n="compute_high_desc">High Compute Queue (GPU Processing)</span>
@@ -513,89 +518,7 @@
                     <section class="compute-panel sub-page-view" id="compute-midlow-page"
                         style="background: transparent; box-shadow: none; padding: 0;">
                         <div style="display: flex; flex-direction: column; gap: 20px;">
-                            <div class="widget form-box-panel">
-                                <div class="widget-header">
-                                    <h3 data-i18n="job_compose">New Task</h3>
-                                </div>
-                                <form id="job-form-midlow" class="job-form"
-                                    style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; align-items: start;">
-                                    <div class="field-group" style="display: flex; flex-direction: column; gap: 8px;">
-                                        <label data-i18n="label_job_name"
-                                            style="font-size: 13px; color: var(--text-muted);">Job Name</label>
-                                        <div style="position: relative;">
-                                            <input type="text" id="job-name-midlow" required
-                                                data-i18n-placeholder="ph_task_name" placeholder="輸入任務名稱…"
-                                                style="width: 100%; padding: 10px 10px 10px 35px; border: none; border-bottom: 1px solid rgba(255,255,255,0.2); border-radius: 0; background: transparent; color: var(--text-color); box-sizing: border-box; font-family: inherit; font-size: 14px; outline: none; transition: border-color 0.3s;">
-                                            <ion-icon name="document-text-outline"
-                                                style="position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: var(--text-muted); font-size: 16px;"></ion-icon>
-                                        </div>
-                                    </div>
-                                    <div class="field-group dataset-upload-container"
-                                        style="display: flex; flex-direction: column; gap: 8px;">
-                                        <label data-i18n="label_dataset"
-                                            style="font-size: 13px; color: var(--text-muted);">Dataset Upload</label>
-                                        <div style="position: relative;">
-                                            <input type="file" id="datasetFile-midlow" accept=".zip,.csv,.jsonl"
-                                                style="width: 100%; padding: 10px 10px 10px 35px; border: none; border-bottom: 1px solid rgba(255,255,255,0.2); border-radius: 0; background: transparent; color: var(--text-color); box-sizing: border-box; font-family: inherit; font-size: 14px; cursor: pointer; outline: none; transition: border-color 0.3s;">
-                                            <ion-icon name="cloud-upload-outline"
-                                                style="position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: var(--text-muted); font-size: 16px;"></ion-icon>
-                                        </div>
-                                    </div>
-
-                                    <div id="auto-detect-group-midlow"
-                                        style="display: none; grid-column: 1 / -1; grid-template-columns: 1fr 1fr; gap: 20px;">
-                                        <div class="field-group"
-                                            style="display: flex; flex-direction: column; gap: 8px;">
-                                            <label data-i18n="label_model_name"
-                                                style="font-size: 13px; color: var(--text-muted);">Model Identifier
-                                                (Auto-detected)</label>
-                                            <div style="position: relative;">
-                                                <input type="text" id="model-name-midlow" readonly placeholder=" "
-                                                    style="width: 100%; padding: 10px 10px 10px 35px; border: none; border-bottom: 1px solid rgba(255,255,255,0.2); border-radius: 0; background: transparent; color: #3b82f6; box-sizing: border-box; font-family: inherit; font-size: 14px; outline: none;">
-                                                <ion-icon name="cube-outline"
-                                                    style="position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: var(--text-muted); font-size: 16px;"></ion-icon>
-                                            </div>
-                                        </div>
-                                        <div style="display: flex; gap: 20px;">
-                                            <div class="field-group"
-                                                style="display: flex; flex-direction: column; gap: 8px; flex: 1;">
-                                                <label data-i18n="label_epochs"
-                                                    style="font-size: 13px; color: var(--text-muted);">Epochs</label>
-                                                <div style="position: relative;">
-                                                    <input type="number" id="job-epochs-midlow" readonly placeholder=" "
-                                                        style="width: 100%; padding: 10px 10px; border: none; border-bottom: 1px solid rgba(255,255,255,0.2); border-radius: 0; background: transparent; color: var(--text-color); box-sizing: border-box; font-family: inherit; font-size: 14px; outline: none; text-align: center;">
-                                                </div>
-                                            </div>
-                                            <div class="field-group"
-                                                style="display: flex; flex-direction: column; gap: 8px; flex: 1;">
-                                                <label data-i18n="label_batch"
-                                                    style="font-size: 13px; color: var(--text-muted);">Batch
-                                                    Size</label>
-                                                <div style="position: relative;">
-                                                    <input type="number" id="job-batch-midlow" readonly placeholder=" "
-                                                        style="width: 100%; padding: 10px 10px; border: none; border-bottom: 1px solid rgba(255,255,255,0.2); border-radius: 0; background: transparent; color: var(--text-color); box-sizing: border-box; font-family: inherit; font-size: 14px; outline: none; text-align: center;">
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </div>
-
-                                    <div
-                                        style="grid-column: 1 / -1; display: flex; justify-content: space-between; align-items: center; border-top: 1px dashed rgba(255,255,255,0.1); padding-top: 15px;">
-                                        <span
-                                            style="margin-right: 15px; font-size: 13px; color: #3b82f6; flex-shrink: 0;"><ion-icon
-                                                name="analytics-outline" style="vertical-align: middle;"></ion-icon>
-                                            <span data-i18n="priority_normal_desc">Normal Priority
-                                                Processing</span></span>
-                                        <button type="submit" class="ready-btn"
-                                            style="margin:0; flex: 1; border-color: #3b82f6; color: #3b82f6; text-align: center;"
-                                            onmouseover="this.style.background='rgba(59, 130, 246, 0.1)'"
-                                            onmouseout="this.style.background='transparent'">
-                                            <span data-i18n="btn_dispatch">Dispatch Task</span>
-                                        </button>
-                                    </div>
-                                </form>
-                            </div>
-
+                            
                             <div class="widget form-box-panel">
                                 <div class="widget-header split">
                                     <h3><span data-i18n="compute_midlow_desc">Mid/Low Compute Queue (Service Layer
@@ -1600,9 +1523,9 @@
     <!-- ZH: 載入圖標庫與主程式碼 | EN: Load Icon library and Main Logic -->
     <script type="module" src="https://unpkg.com/ionicons@7.1.0/dist/ionicons/ionicons.esm.js"></script>
     <script nomodule src="https://unpkg.com/ionicons@7.1.0/dist/ionicons/ionicons.js"></script>
-    <script src="app.js?v=v1-5-0004"></script>
+    <script src="app.js?v=v1-5-0005"></script>
     <!-- ZH: v2.6 客服／導覽浮動助手 | EN: v2.6 floating support/guide assistant -->
-    <script src="assistant-widget.js?v=v1-5-0004"></script>
+    <script src="assistant-widget.js?v=v1-5-0005"></script>
 </body>
 
 </html>
