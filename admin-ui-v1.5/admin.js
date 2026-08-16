@@ -936,8 +936,25 @@ function _makeSectionCollapsible(id, collapsed) {
     });
 }
 
+// ZH: v1.5 —— 把「叢集資源即時監控」搬進「GPU 節點」分頁。
+//     與 wireAccountsLayout 同一個模式：搬移既有 DOM，不重寫，
+//     所以 fetchClusterStats 的 5 秒輪詢與卡片渲染完全不受影響
+//     （它每次都用 getElementById('cluster-stats-container') 重新查）。
+//     只做一次；重複呼叫是安全的（appendChild 對已在位的節點是 no-op 等效）。
+let _gpuLayoutWired = false;
+
+function wireGpuLayout() {
+    if (_gpuLayoutWired) return;
+    const el = document.getElementById('sec-cluster');
+    const slot = document.getElementById('gpu-slot-cluster');
+    if (!el || !slot) return;          // 兩者都在才搬，缺一就維持原狀
+    slot.appendChild(el);
+    _gpuLayoutWired = true;
+}
+
 function initAccountsTab() {
     wireAccountsLayout();
+    wireGpuLayout();
     externalAi.loadMyai();
     externalAi.refresh();
     externalAi.loadBindings();
@@ -3538,7 +3555,8 @@ async function deleteModel(modelId, modelName) {
 let _adminRefreshInterval = null;
 
 function initAdminDashboard() {
-    wireAccountsLayout();   // v2.8 立即把使用者/綁定/廠商等 section 搬進「帳號管理」分頁，讓其他分頁瘦身
+    wireAccountsLayout();
+    wireGpuLayout();   // v2.8 立即把使用者/綁定/廠商等 section 搬進「帳號管理」分頁，讓其他分頁瘦身
     fetchClusterStats();
     fetchAdminData();
     systemSettings.load();   // v3.1 step 6：系統設定在 management 分頁（預設分頁）
@@ -4101,7 +4119,8 @@ async function submitProvision(e) {
 }
 
 document.addEventListener('DOMContentLoaded', () => {
-    wireAccountsLayout();   // v2.8 純 DOM 搬移，不需登入即可執行；保證任何進入路徑都會把 section 搬進帳號管理分頁
+    wireAccountsLayout();
+    wireGpuLayout();   // v2.8 純 DOM 搬移，不需登入即可執行；保證任何進入路徑都會把 section 搬進帳號管理分頁
     const loginForm = document.getElementById('admin-login-form');
     if (loginForm) {
         loginForm.addEventListener('submit', handleAdminLogin);
