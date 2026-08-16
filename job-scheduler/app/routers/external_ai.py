@@ -348,10 +348,13 @@ def get_my_consumption(
     row = _current_myai_account(db, current_user)
     if not row:
         # ZH: 沒綁定廠商帳號（或還沒同步到）→ 前端顯示友善說明，不是錯誤
-        return {"bound": False, "days": int(days or 30), "summary": {}, "series": [],
+        return {"bound": False, "days": (30 if days is None else int(days)), "summary": {}, "series": [],
                 "models": [], "peer": {}, "account": {}}
 
-    days = int(days or 30)
+    # ZH: 不能用 `days or 30` —— 0 在 Python 是 falsy，前端「全部」送的正是 0，
+    #     會被悄悄換成 30，導致「全部」實際只看近 30 天（同頁的「個人查詢」
+    #     用 `days or 0` 反而是對的，兩個面板同一個詞卻不同行為）。
+    days = 30 if days is None else int(days)
     since = datetime.now() - timedelta(days=min(days, 3650)) if days > 0 else None
     mmap = {m.code: m for m in db.query(models.MyaiModelMap).all()}
     own = _own_usage(db, {row.vendor_sn}, since, mmap)
@@ -806,7 +809,11 @@ def consumption_analytics(
     @node job-scheduler/app/routers/external_ai.py::consumption_analytics
     """
     from datetime import datetime, timedelta
-    days = int(days or 30)   # ZH: days<=0 代表「全部」(不設下界，即從最早一筆起)
+    # ZH: 不能用 `days or 30` —— 0 在 Python 是 falsy，前端「全部」送的正是 0，
+    #     會被悄悄換成 30，導致「全部」實際只看近 30 天（同頁的「個人查詢」
+    #     用 `days or 0` 反而是對的，兩個面板同一個詞卻不同行為）。
+    #     days<=0 代表「全部」(不設下界，即從最早一筆起)
+    days = 30 if days is None else int(days)
     q = db.query(models.MyaiTransaction).filter(models.MyaiTransaction.occurred_at.isnot(None))
     if days > 0:
         days = min(days, 3650)
