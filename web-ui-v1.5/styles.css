@@ -1,0 +1,3508 @@
+/* ============================================================
+   v2.2: 全域隱藏滾動軸視覺（滾動性保留 — 滑鼠滾輪 / 觸控仍可用）
+   依使用者要求：主內容 + sidebar + modal + 所有區域
+   ============================================================ */
+* {
+    scrollbar-width: none;             /* Firefox */
+    -ms-overflow-style: none;           /* IE / 舊 Edge */
+}
+*::-webkit-scrollbar {                  /* Chromium / Safari */
+    width: 0;
+    height: 0;
+    display: none;
+}
+
+:root {
+    /* ZH: 預設暗黑模式與 Chess 風格變數 | EN: DEFAULT DARK MODE & CHESS-STYLE VARIABLES */
+    --bg-universe: radial-gradient(circle at 10% 50%, rgba(68, 26, 167, 0.4), transparent 60%),
+        radial-gradient(circle at 90% 10%, rgba(62, 62, 192, 0.5), transparent 60%),
+        linear-gradient(to bottom, rgb(14, 3, 42) 0%, rgba(68, 26, 167, 0.8) 50%, #000 100%);
+
+    --bg-panel: rgba(0, 0, 0, 0.4);
+    --bg-solid: #111118;
+    --bg-input: transparent;
+    --border-color: #c8c8c8;
+    --border-glow-color: rgba(255, 255, 255, 0.8);
+    --accent-glow: #ffffff;
+
+    --text-primary: #ffffff;
+    --text-muted: #d1d5db;
+    /* v2.3: --text-color 是先前漏定義的變數（多處 var(--text-color) 與個人資訊/密碼彈窗的
+       .profile-section-title 用到），未定義時在淺色模式會 fallback 成淺紫 #e0e0ff → 白底看不見。
+       設為 --text-primary 的別名後，深淺模式都正確（深=白、淺=深藍）。 */
+    --text-color: var(--text-primary);
+    /* ZH: v1.5 —— 從襯線改為無襯線。
+   標楷體是書法字體（學校印習字帖與公文用），配上 Times New Roman 之後
+   整個介面讀起來像「一份列印出來的文件」而不是「一個可以操作的工具」。
+   Noto Sans TC 放第一順位：跨平台一致，且繁中字形完整。 */
+    /* ZH: v1.5 字體。與學校 Moodle 的 Latin 字體一致（Open Sans），
+       中文則**明確釘住**微軟正黑 —— 這一點刻意與 Moodle 不同：
+       Moodle 只寫了 'Open Sans', sans-serif，而 Open Sans 沒有中文字符，
+       所以它的中文掉到瀏覽器預設，每台機器長得不一樣（實測這台落在
+       Noto Sans TC，一般 Windows 會落到微軟正黑甚至新細明體）。
+       那是 Moodle 的疏漏，不該照抄。
+       字體 fallback 是逐字生效的，所以 Latin 走 Open Sans、中文走微軟正黑。
+       Open Sans 載不到時（校內網路連不出去）會 fallback 到微軟正黑，不會壞。 */
+    --font-main: 'Open Sans', 'Microsoft JhengHei', 'PingFang TC',
+                 'Noto Sans TC', -apple-system, 'Segoe UI', sans-serif;
+
+    /* v2.2: 補上之前被誤用的 vars (info-tip / tutorial / secrets / badges 等用到) */
+    --bg-card: #1a1f2e;                            /* 比 bg-solid 稍亮的卡片底 (popover/modal panel) */
+    --bg-soft: rgba(255, 255, 255, 0.04);          /* 微弱面板高光 (hint / details body) */
+    --border-soft: rgba(255, 255, 255, 0.12);      /* 比 border-color 更淺的邊 (popover/modal) */
+    --neon-cyan: #63b3ed;                          /* 連結與強調用的青藍色 */
+    --accent-primary: #6366f1;                     /* 主強調 (indigo-500) — legacy hub-sub-card hover 用 */
+}
+
+[data-theme='light'] {
+    /* ZH: 亮色模式風格變數 | EN: LIGHT MODE VARIANTS */
+    --bg-universe: radial-gradient(circle at 10% 50%, rgba(135, 126, 219, 0.2), transparent 50%),
+        radial-gradient(circle at 90% 10%, rgba(100, 100, 240, 0.3), transparent 50%),
+        linear-gradient(to bottom, #f0f4f8 0%, #dbeafe 50%, #e0e7ff 100%);
+
+    --bg-panel: rgba(255, 255, 255, 0.6);
+    --bg-solid: #ffffff;
+    --border-color: #6366f1;
+    --border-glow-color: rgba(99, 102, 241, 0.6);
+    --accent-glow: #4f46e5;
+
+    --text-primary: #1e1b4b;
+    --text-muted: #4338ca;
+
+    /* v2.2: 亮模式對應 */
+    --bg-card: #ffffff;                            /* modal/popover 白底 */
+    --bg-soft: rgba(99, 102, 241, 0.06);           /* 微紫色面板高光 */
+    --border-soft: rgba(99, 102, 241, 0.20);       /* 更淺的紫邊 */
+    --neon-cyan: #4f46e5;                          /* 亮模式用主強調 indigo */
+    --accent-primary: #4f46e5;
+}
+
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+    font-family: var(--font-main);
+}
+
+body {
+    background: var(--bg-universe);
+    color: var(--text-primary);
+    height: 100vh;
+    width: 100vw;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    overflow: hidden;
+    transition: background 0.6s ease, color 0.6s ease;
+}
+
+/* 
+======================================================
+ ZH: 使用者自訂背景 (保留供未來看情況放置背景圖片)
+ EN: USER CUSTOM BACKGROUND (Reserved for future custom background image placement)
+ ZH: 可以在此覆蓋 --bg-universe 變數 或是 疊加實體圖片
+ EN: You can override --bg-universe variable or overlay a physical image here
+======================================================
+.custom-bg {
+    background-image: url('image/background/11.jpg');
+    background-size: cover;
+    background-position: center;
+    position: fixed;
+    top:0; left:0; right:0; bottom:0;
+    z-index: -1;
+}
+*/
+.empty {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: -1;
+    pointer-events: none;
+}
+
+/* ZH: 彈出的表單視窗面板 | EN: Form Window (Active Popup) */
+.form-box {
+    position: relative;
+    width: 360px;
+    padding: 40px;
+    border: 2px solid var(--border-color);
+    border-radius: 20px;
+    background: var(--bg-panel);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    transition: transform 0.6s ease, border-color 0.5s ease, background 0.6s ease;
+}
+
+/* ZH: 游標懸停時引發高光動畫 | EN: Trigger glow animation on hover */
+.form-box:hover,
+.form-box-panel:hover {
+    border-color: var(--border-glow-color);
+    animation: border-glow 1s infinite alternate;
+}
+
+@keyframes border-glow {
+    from {
+        box-shadow: 0 0 10px rgba(255, 255, 255, 0.2);
+    }
+
+    to {
+        box-shadow: 0 0 20px var(--border-glow-color);
+    }
+}
+
+/* v2.3: 個人資訊 / 密碼變更彈窗的 hover 特效（不重播開啟動畫、不閃爍）。
+   背景：.tutorial-content 帶常駐開啟動畫 animation: fadeIn 0.4s。原本 .form-box-panel:hover 會把
+   animation 改成 border-glow，導致滑鼠移開、animation 還原成 fadeIn 時「重播一次」→ 面板淡出又淡入=閃爍。
+   解法(已用 DevTools 實測)：hover 的 animation 釘死成與靜止態相同的 fadeIn，使 animation 屬性自始至終
+   不變、不會重播；hover 視覺改用 border-color + box-shadow 發光(由面板既有 transition:0.4s 平滑漸變)，
+   兩者都不會觸發開啟動畫重播，所以有 hover 反饋又不閃。 */
+.tutorial-content.form-box-panel:hover {
+    animation: 0.4s ease fadeIn;
+    border-color: var(--border-glow-color);
+    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.5), 0 0 22px var(--border-glow-color);
+}
+
+.form-box .close {
+    position: absolute;
+    top: 15px;
+    right: 15px;
+    font-size: 1.875rem;
+    color: var(--text-primary);
+    cursor: pointer;
+    transition: 0.3s;
+}
+
+.form-box .close:hover {
+    color: var(--accent-glow);
+}
+
+form {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+form h1 {
+    font-size: 1.75rem;
+    margin-bottom: 20px;
+    font-weight: 700;
+}
+
+/* ZH: 登入區塊切換邏輯 | EN: Login Section Toggle */
+.login-section {
+    width: 100%;
+}
+
+.login-section.hidden {
+    display: none !important;
+}
+
+.login-section.active {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+/* ZH: 浮動標籤式輸入框 | EN: Floating Label Inputs */
+.input {
+    width: 100%;
+    position: relative;
+    border-bottom: 2px solid var(--text-primary);
+    margin: 25px 0;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.input input {
+    width: 85%;
+    background: none;
+    border: none;
+    outline: none;
+    color: var(--text-primary);
+    font-size: 1rem;
+    padding: 5px 0;
+}
+
+.input label {
+    position: absolute;
+    left: 0;
+    top: 5px;
+    font-size: 1rem;
+    color: var(--text-primary);
+    transition: 0.4s ease;
+    pointer-events: none;
+}
+
+/* ZH: 聚焦或已輸入資料時，標籤往上浮起 | EN: When focused or filled -> label floats */
+.input input:focus~label,
+.input input:not(:placeholder-shown)~label {
+    transform: translateY(-25px);
+    font-size: 0.875rem;
+    color: var(--accent-glow);
+}
+
+.input ion-icon {
+    font-size: 1.25rem;
+    color: var(--text-primary);
+    background: transparent;
+    padding: 2px;
+    border-radius: 4px;
+    transition: all 0.3s ease;
+}
+
+.input ion-icon:hover {
+    color: var(--accent-glow);
+    transform: scale(1.1);
+}
+
+.login-eye span {
+    cursor: pointer;
+}
+
+.login-eye .eye-open {
+    display: none;
+}
+
+.login-eye.open .eye-off {
+    display: none;
+}
+
+.login-eye.open .eye-open {
+    display: inline-block;
+}
+
+.ready-btn {
+    width: 100%;
+    border: 2px solid var(--text-primary);
+    color: var(--text-primary);
+    background-color: transparent;
+    border-radius: 20px;
+    margin: 20px 0;
+    padding: 10px;
+    font-size: 1rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.5s ease;
+}
+
+.ready-btn:hover {
+    background-color: var(--text-primary);
+    color: var(--bg-panel);
+}
+
+.ready-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+/* ZH: 視圖視窗管理 | EN: Views Management */
+.view-container {
+    width: 100%;
+    min-height: 100vh;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    opacity: 1;
+    transition: opacity 0.5s;
+}
+
+.view-container.hidden {
+    opacity: 0;
+    pointer-events: none;
+    display: none;
+}
+
+/* ZH: 儀表板元素設定 | EN: Dashboard Elements Settings */
+.main-content {
+    width: 100%;
+    max-width: 1400px;
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    padding: 20px 40px 40px 40px;
+}
+
+/* ZH: Moodle 風格頁首 | EN: Moodle Style Header */
+.moodle-header {
+    background: var(--bg-panel);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border-radius: 20px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px 40px;
+    height: 80px;
+    z-index: 10;
+    margin-bottom: 40px; /* Make distance from content */
+    border: 1px solid var(--border-color);
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+}
+
+[data-theme='light'] .moodle-header {
+    background: #ffffff;
+    color: #333333;
+}
+
+[data-theme='dark'] .moodle-header {
+    background: #1e1e1e;
+    color: #ffffff;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.moodle-header .header-left {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+}
+
+.moodle-header .logo-image ion-icon {
+    font-size: 2.25rem;
+    color: var(--accent-glow);
+}
+
+.moodle-header .logo {
+    font-size: 1.5rem;
+    font-weight: 700;
+}
+
+.moodle-header .header-right {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+}
+
+.header-right .icon-action {
+    font-size: 1.5rem;
+    color: var(--text-primary);
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    transition: 0.3s;
+}
+
+.header-right .icon-action:hover {
+    color: var(--accent-glow);
+}
+
+/* Header Login Button (shown when not authenticated) */
+.header-login-btn {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 18px;
+    border-radius: 10px;
+    border: 1px solid var(--accent-glow);
+    background: transparent;
+    color: var(--accent-glow);
+    font-size: 0.9375rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s ease;
+}
+
+.header-login-btn ion-icon {
+    font-size: 1.125rem;
+}
+
+.header-login-btn:hover {
+    background: var(--accent-glow);
+    color: #000;
+    transform: scale(1.05);
+}
+
+.moodle-header .user-info {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+/* Removed .nav-sidebar styles as it is merged into .side-drawer */
+
+.header-right .icon-action:hover {
+    opacity: 1;
+    transform: scale(1.1);
+    color: var(--accent-glow);
+    background: rgba(255, 255, 255, 0.1);
+}
+
+/* Global icon improvements */
+ion-icon {
+    background: transparent !important;
+    border: none !important;
+    outline: none !important;
+}
+
+
+/* Action icons in buttons */
+.ready-btn ion-icon,
+.mini-btn ion-icon {
+    font-size: 1rem;
+    margin-right: 4px;
+}
+
+/* Session action icons */
+.session-actions ion-icon {
+    font-size: 0.875rem;
+    color: var(--text-muted);
+    cursor: pointer;
+    transition: color 0.2s ease;
+    padding: 2px;
+    border-radius: 4px;
+    background: transparent;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 20px;
+    transform: none !important;
+    flex-shrink: 0;
+}
+
+.session-actions ion-icon:hover,
+.session-actions ion-icon:focus {
+    color: var(--accent-glow);
+    transform: none !important;
+    background: rgba(255, 255, 255, 0.1);
+}
+
+/* New chat button icon */
+#new-chat-btn ion-icon {
+    font-size: 0.875rem;
+    color: var(--text-primary);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 14px;
+    height: 14px;
+    flex-shrink: 0;
+}
+
+/* Tab button icons - improved sizing */
+.tab-btn ion-icon {
+    font-size: 1.375rem;
+    transition: all 0.3s ease;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+}
+
+.tab-btn:hover ion-icon {
+    transform: scale(1.1);
+}
+
+
+/* Refresh icon */
+.refresh-icon {
+    font-size: 1.5rem;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    background: transparent;
+    padding: 4px;
+    border-radius: 50%;
+}
+
+.refresh-icon:hover {
+    transform: rotate(180deg);
+    color: var(--accent-glow);
+    background: rgba(255, 255, 255, 0.1);
+}
+
+/* Removed old tab-btn styles as they are merged into side-drawer */
+
+/* ZH: 分頁切換控制 | EN: Page View Control */
+.page-view {
+    display: none !important;
+    width: 100%;
+    height: calc(100vh - 120px);
+    opacity: 0;
+    overflow: hidden;
+}
+
+.page-view.active {
+    display: block !important;
+    opacity: 1;
+    animation: fadeIn 0.4s ease forwards;
+}
+
+/* ZH: v2.1 P0 安全 — 未登入時強制隱藏需登入頁面，即使被誤加 .active 也擋下 */
+/* EN: v2.1 P0 security — force-hide auth-gated panes even if .active is mistakenly added */
+.page-view.auth-locked,
+.page-view.auth-locked.active {
+    display: none !important;
+    opacity: 0 !important;
+}
+
+#settings-page.active,
+#admin-page.active {
+    display: block !important;
+    overflow-y: auto;
+}
+
+#assistant-page.active {
+    display: block !important;
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* ZH: AI 助手專用版面 (全螢幕) | EN: Assistant Page Layout (Full Screen) */
+.assistant-container {
+    width: 100%;
+    height: 100%;
+}
+
+.chat-layout {
+    display: grid;
+    grid-template-columns: 300px 1fr;
+    gap: 25px;
+    height: 100%;
+}
+
+/* ZH: v2.3 P1 — chat-layout / presentation-layout 共用 .chat-layout，需讓
+       .hidden 真正隱藏，否則兩個面板會同時 display:grid 上下堆疊。
+   EN: v2.3 P1 — chat-layout & presentation-layout share .chat-layout; make
+       .hidden actually hide so the two panes don't both render (stacked). */
+.chat-layout.hidden {
+    display: none !important;
+}
+
+/* ZH: 文書簡報視圖無左側 session 欄，單欄填滿（chat-layout 預設 300px 1fr 會
+       把唯一 .chat-main 擠進 300px 欄）。
+   EN: Presentation view has no session sidebar — make it a single full-width
+       column (chat-layout's 300px 1fr would squeeze the lone .chat-main). */
+#presentation-layout {
+    grid-template-columns: 1fr;
+}
+
+.chat-sidebar {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+}
+
+.sidebar-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+}
+
+.session-list {
+    flex: 1;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.session-item {
+    padding: 10px 12px;
+    border-radius: 12px;
+    border: 1px solid transparent;
+    cursor: pointer;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    transition: background 0.3s ease, border-color 0.3s ease;
+    background: rgba(255, 255, 255, 0.05);
+    min-height: 44px;
+    max-height: 44px;
+    height: 44px;
+    box-sizing: border-box;
+}
+
+.session-item:hover {
+    background: rgba(255, 255, 255, 0.1);
+    transform: none;
+    min-height: 44px;
+    max-height: 44px;
+    height: 44px;
+}
+
+.session-item.active {
+    background: rgba(255, 255, 255, 0.15);
+    border-color: var(--accent-glow);
+}
+
+.session-item.new-chat-btn {
+    background: rgba(79, 70, 229, 0.1);
+    border: 1px solid rgba(79, 70, 229, 0.3);
+    gap: 8px;
+    min-height: 44px;
+    max-height: 44px;
+    height: 44px;
+    padding: 8px 12px;
+}
+
+.session-item.new-chat-btn:hover {
+    background: rgba(79, 70, 229, 0.2);
+    border-color: var(--accent-glow);
+    transform: none;
+    min-height: 44px;
+    max-height: 44px;
+    height: 44px;
+}
+
+.session-item.new-chat-btn:focus {
+    transform: none;
+    box-shadow: none;
+    min-height: 44px;
+    max-height: 44px;
+    height: 44px;
+    outline: none;
+}
+
+.session-item.new-chat-btn ion-icon {
+    font-size: 0.875rem;
+    color: var(--accent-glow);
+    width: 14px;
+    height: 14px;
+    flex-shrink: 0;
+}
+
+.session-item.new-chat-btn span {
+    font-weight: 500;
+    color: var(--text-primary);
+    font-size: 0.8125rem;
+}
+
+.session-name {
+    flex: 1;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    font-size: 0.875rem;
+}
+
+.session-actions {
+    display: none;
+    gap: 8px;
+}
+
+.session-item:hover .session-actions {
+    display: flex;
+}
+
+.chat-main {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    position: relative;
+    border: 1px solid var(--border-color);
+    border-radius: 20px;
+    background: var(--bg-panel);
+    overflow: hidden;
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.4);
+}
+
+.chat-history {
+    flex: 1;
+    overflow-y: auto;
+    padding: 30px;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
+/* Chat bubble positioning */
+.user-bubble {
+    display: flex;
+    justify-content: flex-end;
+    margin-left: 20%;
+}
+
+.ai-bubble {
+    display: flex;
+    justify-content: flex-start;
+    margin-right: 20%;
+}
+
+.bubble-content {
+    max-width: 100%;
+    padding: 12px 16px;
+    border-radius: 16px;
+    font-size: 0.875rem;
+    line-height: 1.4;
+    word-wrap: break-word;
+}
+
+.user-bubble .bubble-content {
+    background: rgba(99, 102, 241, 0.2);
+    border: 1px solid var(--border-color);
+    color: var(--text-primary);
+}
+
+.ai-bubble .bubble-content {
+    background: rgba(255, 255, 255, 0.1);
+    border: 1px solid var(--accent-glow);
+    color: var(--text-primary);
+}
+
+[data-theme='light'] .user-bubble .bubble-content {
+    background: rgba(99, 102, 241, 0.1);
+    border-color: #6366f1;
+}
+
+[data-theme='light'] .ai-bubble .bubble-content {
+    background: rgba(79, 70, 229, 0.05);
+    border-color: #4f46e5;
+}
+
+/* ZH: 輸入區域 | EN: Input Area */
+.chat-input-area {
+    padding: 20px 30px;
+    background: transparent;
+    border-top: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.chat-form {
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+    max-width: 1200px;
+    margin: 0 auto;
+}
+
+.chat-input-row {
+    display: flex;
+    gap: 20px;
+    width: 100%;
+    align-items: flex-end;
+}
+
+.send-btn {
+    background: transparent;
+    border: 2px solid #ffffff;
+    border-radius: 12px;
+    width: 40px;
+    height: 40px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    flex-shrink: 0;
+    overflow: visible;
+}
+
+.send-btn:hover {
+    transform: scale(1.05);
+    background: rgba(255, 255, 255, 0.1);
+}
+
+.send-btn .material-icons {
+    font-size: 1.25rem;
+    color: #ffffff;
+    /* 機頭朝右上 (Points to top-right) */
+    transform: rotate(-45deg);
+    /* 調整旋轉後的中心點偏移 (Adjust center after rotation if needed, usually slightly off) */
+    margin-left: 4px;
+    margin-bottom: 2px;
+}
+
+.send-btn:hover .material-icons {
+    color: #ffffff;
+}
+
+/* 淺色模式 */
+[data-theme='light'] .send-btn {
+    border-color: var(--accent-glow);
+    /* 紫色邊框 */
+    background: var(--accent-glow);
+    /* 紫色背景 */
+}
+
+[data-theme='light'] .send-btn:hover {
+    background: rgba(79, 70, 229, 0.8);
+}
+
+[data-theme='light'] .send-btn .material-icons {
+    color: #ffffff;
+    /* 白色圖示 */
+}
+
+[data-theme='light'] .send-btn:hover .material-icons {
+    color: #ffffff;
+}
+
+.chat-form textarea {
+    flex: 1;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid var(--border-color);
+    border-radius: 16px;
+    color: var(--text-primary);
+    padding: 10px 20px;
+    resize: none;
+    height: 42.4px;
+    min-height: 42.4px;
+    /* 單行高度 22.4px + padding 20px */
+    max-height: 87.2px;
+    /* 三行高度 67.2px + padding 20px */
+    font-size: 1rem;
+    outline: none;
+    transition: border-color 0.3s ease, box-shadow 0.3s ease;
+    line-height: 1.4;
+    overflow-y: auto;
+    box-sizing: border-box;
+}
+
+.chat-form textarea::-webkit-scrollbar {
+    width: 6px;
+}
+
+.chat-form textarea::-webkit-scrollbar-thumb {
+    background-color: rgba(255, 255, 255, 0.2);
+    border-radius: 3px;
+}
+
+.chat-form textarea::-webkit-scrollbar-thumb:hover {
+    background-color: rgba(255, 255, 255, 0.4);
+}
+
+.chat-form textarea:not(:hover)::-webkit-scrollbar-thumb {
+    background-color: transparent;
+}
+
+.chat-controls-bar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0 5px;
+}
+
+.mini-select {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+}
+
+.mini-select label {
+    font-size: 0.8125rem;
+    color: var(--text-muted);
+}
+
+.mini-select select {
+    width: 220px;
+    height: 36px;
+    padding: 0 12px;
+    font-size: 0.8125rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.mini-select select option {
+    padding: 10px;
+    white-space: normal;
+    overflow: visible;
+    text-overflow: unset;
+    max-width: none;
+}
+
+.chat-actions .mini-btn {
+    padding: 6px 15px;
+    margin: 0;
+    font-size: 0.8125rem;
+    border-radius: 8px;
+    background: rgba(251, 113, 133, 0.1);
+    border-color: #fb7185;
+    color: #fb7185;
+}
+
+.chat-actions .mini-btn:hover {
+    background: #fb7185;
+    color: #fff;
+}
+
+/* ZH: 捲軸美化 | EN: Scrollbar的美術 */
+.scrollbar-custom::-webkit-scrollbar {
+    width: 6px;
+}
+
+.scrollbar-custom::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.scrollbar-custom::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.2);
+    border-radius: 3px;
+}
+
+@media (max-width: 900px) {
+    .chat-layout {
+        grid-template-columns: 1fr;
+    }
+
+    .chat-sidebar {
+        display: none;
+    }
+}
+
+@media (max-width: 1200px) {
+}
+
+@media (max-width: 800px) {
+    .main-content {
+        padding: 15px 20px 30px 20px;
+    }
+
+    header {
+        flex-direction: column;
+        height: auto;
+        padding: 15px;
+        gap: 15px;
+    }
+
+    .header-center {
+        flex-wrap: wrap;
+        justify-content: center;
+    }
+
+    .tab-btn {
+        font-size: 0.875rem;
+        padding: 6px 12px;
+    }
+
+    .chat-layout {
+        grid-template-columns: 1fr;
+    }
+
+    .chat-sidebar {
+        display: none;
+    }
+}
+
+@media (max-width: 600px) {
+    .form-box {
+        width: 90%;
+        padding: 30px 20px;
+    }
+
+    .main-content {
+        padding: 10px 15px 20px 15px;
+    }
+
+    header {
+        padding: 10px;
+    }
+
+    .header-left .logo {
+        font-size: 1.125rem;
+    }
+
+    .tab-btn {
+        font-size: 0.75rem;
+        padding: 4px 8px;
+        gap: 4px;
+    }
+
+    .tab-btn ion-icon {
+        font-size: 1rem;
+    }
+
+    .chat-input-row {
+        flex-direction: column;
+        gap: 10px;
+    }
+
+    .chat-controls-bar {
+        flex-direction: column;
+        gap: 10px;
+        align-items: stretch;
+    }
+
+    .mini-select {
+        justify-content: space-between;
+    }
+
+    .settings-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
+.badge {
+    border: 1px solid var(--text-primary);
+    border-radius: 12px;
+    padding: 2px 8px;
+    font-size: 0.75rem;
+}
+
+
+
+.form-box-panel {
+    /* ZH: v1.5 —— 容器退到背景。
+       原本是 2px 實色靛藍邊框，比裡面「真的可以點的東西」還搶眼。
+       容器的工作是分組，不是被注視；所以邊框改成極淡，只留分組作用。 */
+    border: 1px solid var(--panel-hairline, rgba(99, 102, 241, 0.18));
+    border-radius: 16px;
+    background: var(--bg-panel);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    padding: 24px 26px;
+    transition: all 0.4s;
+}
+
+
+
+.widget-header {
+    /* ZH: 原本是 2px 實色文字色，一條粗黑線橫過整個卡片，
+       視覺上把「標題」變成整張卡最重的元素。改成細淡線，只做分隔。 */
+    border-bottom: 1px solid var(--panel-hairline, rgba(99, 102, 241, 0.18));
+    margin-bottom: 18px;
+    padding-bottom: 10px;
+}
+
+.widget-header.split {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.refresh-icon {
+    font-size: 1.75rem;
+    cursor: pointer;
+    transition: 0.3s;
+}
+
+.refresh-icon:hover {
+    transform: rotate(180deg);
+    color: var(--accent-glow);
+}
+
+/* ZH: Token 環狀與資料顯示 | EN: Token Progress and Data Display */
+.token-display {
+    display: flex;
+    align-items: center;
+    gap: 50px;
+}
+
+.token-ring-container {
+    position: relative;
+    width: 120px;
+    height: 120px;
+}
+
+.progress-ring__circle {
+    stroke-dasharray: 314;
+    stroke-dashoffset: 314;
+    transition: stroke-dashoffset 1s ease;
+    transform: rotate(-90deg);
+    transform-origin: 50% 50%;
+}
+
+.token-percentage {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    font-size: 1.375rem;
+    font-weight: bold;
+    color: var(--accent-glow);
+}
+
+.stat-row {
+    font-size: 1.125rem;
+    margin-bottom: 8px;
+}
+
+.stat-row .highlight {
+    font-weight: bold;
+}
+
+/* ZH: 遞交任務表單特殊修飾 | EN: Submitting Form overrides */
+.job-form .input {
+    margin: 20px 0;
+    border-bottom-width: 1px;
+}
+
+.row {
+    display: flex;
+    gap: 20px;
+}
+
+.mini-input {
+    width: 50%;
+}
+
+.input-select-group select {
+    width: 100%;
+    background: transparent;
+    border: 1px solid var(--text-primary);
+    color: var(--text-primary);
+    padding: 8px;
+    border-radius: 8px;
+}
+
+.input-select-group select option {
+    background: var(--bg-panel);
+    color: var(--text-primary);
+}
+
+[data-theme='light'] .input-select-group select option {
+    background: #ffffff;
+    color: #1e1b4b;
+}
+
+/* ZH: 任務列表顯示 | EN: JobList Display */
+.job-list-container {
+    max-height: 400px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+    padding-right: 10px;
+}
+
+.job-list-container::-webkit-scrollbar {
+    width: 8px;
+}
+
+.job-list-container::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.job-list-container::-webkit-scrollbar-thumb {
+    background: var(--border-color);
+    border-radius: 4px;
+}
+
+.job-card {
+    border: 1px solid var(--border-color);
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 10px;
+    padding: 15px;
+    position: relative;
+    transition: 0.3s;
+}
+
+.job-card:hover {
+    background: rgba(255, 255, 255, 0.2);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+.job-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 8px;
+}
+
+.job-info {
+    flex: 1;
+}
+
+.job-title {
+    font-weight: bold;
+    font-size: 1rem;
+    display: block;
+    margin-bottom: 4px;
+}
+
+.job-id {
+    font-size: 0.6875rem;
+    opacity: 0.7;
+    color: var(--text-muted);
+}
+
+.job-meta {
+    display: flex;
+    gap: 15px;
+    font-size: 0.75rem;
+    margin-bottom: 10px;
+    opacity: 0.8;
+}
+
+.job-model,
+.job-priority {
+    background: rgba(255, 255, 255, 0.05);
+    padding: 2px 6px;
+    border-radius: 4px;
+}
+
+.job-status {
+    padding: 4px 8px;
+    border-radius: 8px;
+    font-size: 0.6875rem;
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.job-progress-bar {
+    height: 6px;
+    background: rgba(255, 255, 255, 0.2);
+    border-radius: 3px;
+    margin-top: 10px;
+    overflow: hidden;
+}
+
+.job-progress-fill {
+    height: 100%;
+    background: var(--accent-glow);
+    width: 0%;
+    transition: 0.5s;
+}
+
+/* ZH: 提示彈窗 (Toast) | EN: Notification Toast */
+.toast {
+    position: fixed;
+    bottom: 40px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: var(--bg-panel);
+    border: 2px solid var(--border-color);
+    padding: 15px 30px;
+    border-radius: 30px;
+    backdrop-filter: blur(10px);
+    font-size: 1.125rem;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    z-index: 99999;
+    transition: 0.4s;
+    box-shadow: 0 0 20px rgba(0, 0, 0, 0.5);
+}
+
+.toast.hidden {
+    opacity: 0;
+    transform: translate(-50%, 50px);
+}
+
+/* ZH: 設定分頁樣式 | EN: Settings Page Styles */
+.settings-container {
+    height: 100%;
+    overflow-y: auto;
+    padding-right: 15px; /* Prevent scrollbar from overlapping content */
+}
+
+.settings-grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 30px;
+}
+
+.settings-option {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px 0;
+}
+
+/* v2.3: 介面字體大小控制 */
+.font-size-option {
+    flex-wrap: wrap;
+    gap: 10px;
+}
+.font-size-control {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex: 1;
+    justify-content: flex-end;
+    min-width: 220px;
+}
+.font-size-control input[type="range"] {
+    flex: 1;
+    max-width: 180px;
+    accent-color: var(--accent-glow);
+    cursor: pointer;
+}
+.font-scale-value {
+    font-family: monospace;
+    font-size: 0.9em;
+    color: var(--text-primary);
+    min-width: 44px;
+    text-align: right;
+}
+
+@media (max-width: 800px) {
+
+
+    .settings-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
+/* ==========================================================================
+   AI Hub Layout (四宮格面板導覽)
+   ========================================================================== */
+.ai-hub-container {
+    display: none;
+    padding: 20px;
+    height: 100%;
+    overflow-y: auto;
+    width: 100%;
+    animation: fadeIn 0.4s ease forwards;
+}
+.ai-hub-container.active {
+    display: block;
+}
+
+/* v2.5 外部 AI 導流中介頁 | External AI redirect landing */
+.external-ai-landing {
+    display: none;
+    width: 100%;
+    height: 100%;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+}
+.external-ai-landing.active {
+    display: flex;
+    animation: fadeIn 0.4s ease forwards;
+}
+.external-ai-card {
+    max-width: 440px;
+    width: 100%;
+    text-align: center;
+    padding: 36px 32px;
+}
+.external-ai-card h2 {
+    margin: 12px 0 8px;
+    color: var(--text-primary);
+}
+.external-ai-icon {
+    font-size: 48px;
+    color: var(--accent-glow, #8b5cf6);
+    line-height: 1;
+}
+.external-ai-desc {
+    color: var(--text-secondary, #9aa0c0);
+    font-size: 0.95rem;
+    margin-bottom: 20px;
+}
+.external-ai-account-row {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    margin-bottom: 14px;
+    flex-wrap: wrap;
+}
+.external-ai-account-label {
+    color: var(--text-secondary, #9aa0c0);
+    font-size: 0.9rem;
+}
+.external-ai-account-row code {
+    background: var(--bg-input, rgba(255,255,255,0.06));
+    border: 1px solid var(--border-color, rgba(255,255,255,0.15));
+    border-radius: 8px;
+    padding: 6px 12px;
+    color: var(--text-primary);
+    font-size: 1rem;
+    font-weight: 600;
+    letter-spacing: 0.3px;
+}
+.external-ai-notice {
+    color: var(--text-secondary, #9aa0c0);
+    font-size: 0.82rem;
+    margin-bottom: 20px;
+}
+/* v2.8 廠商 Token 餘額 pill */
+.external-ai-balance {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    margin: 0 auto 16px;
+    padding: 7px 16px;
+    border-radius: 999px;
+    background: var(--bg-input, rgba(255,255,255,0.06));
+    border: 1px solid var(--border-color, rgba(255,255,255,0.15));
+    color: var(--text-secondary, #9aa0c0);
+    font-size: 0.9rem;
+}
+.external-ai-balance ion-icon { color: #38bdf8; font-size: 1.1rem; }
+.external-ai-balance b { color: var(--text-primary); font-size: 1.05rem; letter-spacing: 0.3px; }
+.external-ai-balance-expiry { color: var(--text-secondary, #9aa0c0); font-size: 0.8rem; }
+/* v2.8 共用機台換手：提醒 + 結束使用按鈕 */
+.external-ai-shared-notice {
+    margin: 16px auto 8px;
+    padding: 10px 14px;
+    max-width: 420px;
+    border-radius: 10px;
+    background: rgba(251, 191, 36, 0.08);
+    border: 1px solid rgba(251, 191, 36, 0.3);
+    color: var(--text-secondary, #9aa0c0);
+    font-size: 0.8rem;
+    line-height: 1.5;
+}
+.external-ai-logout-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 7px;
+    margin: 0 auto;
+    padding: 8px 18px;
+    border-radius: 10px;
+    background: transparent;
+    border: 1px solid rgba(251, 113, 133, 0.5);
+    color: #fb7185;
+    font-family: inherit;
+    font-size: 0.9rem;
+    cursor: pointer;
+    transition: background 0.2s;
+}
+.external-ai-logout-btn:hover { background: rgba(251, 113, 133, 0.1); }
+.external-ai-logout-btn ion-icon { font-size: 1.05rem; }
+.external-ai-go-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    width: 100%;
+    padding: 12px 20px;
+    border: none;
+    border-radius: 12px;
+    background: linear-gradient(135deg, #6366f1, #8b5cf6);
+    color: #fff;
+    font-size: 1rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+.external-ai-go-btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 20px rgba(99, 102, 241, 0.4);
+}
+.external-ai-go-btn ion-icon {
+    font-size: 1.2rem;
+}
+
+.hub-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    grid-gap: 20px;
+    max-width: 1200px;
+    margin: 0 auto;
+}
+
+@media (max-width: 900px) {
+    .hub-grid { grid-template-columns: 1fr; }
+}
+
+.hub-section {
+    background: var(--bg-panel);
+    border: 1px solid var(--border-color);
+    border-radius: 16px;
+    padding: 20px;
+    box-shadow: 0 8px 32px var(--shadow-color);
+    backdrop-filter: blur(10px);
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+}
+
+.hub-section-header h3 {
+    font-size: 1.125rem;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: var(--text-primary);
+    margin-bottom: 5px;
+}
+.hub-section-header p {
+    font-size: 0.8125rem;
+    color: var(--text-secondary);
+}
+
+.hub-cards {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 15px;
+}
+
+.hub-sub-card {
+    background: var(--bg-input);
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    padding: 10px;
+    cursor: pointer;
+    text-align: center;
+    transition: all 0.3s ease;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+}
+
+.hub-sub-card:hover {
+    transform: translateY(-5px) scale(1.02);
+    box-shadow: 0 0 15px var(--accent-glow);
+    border-color: var(--accent-primary);
+}
+
+.hub-sub-card .card-bg {
+    width: 100%;
+    aspect-ratio: 1; /* Square shape for the image representation */
+    border-radius: 8px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    font-size: 2.5rem;
+    color: #fff;
+    box-shadow: inset 0 0 10px rgba(0,0,0,0.3);
+}
+
+.hub-sub-card .card-title {
+    font-size: 0.8125rem;
+    font-weight: 500;
+    color: var(--text-primary);
+}
+
+/* ==========================================================================
+   v2.2: AI Hub stub vs functional card 視覺區分
+   --------------------------------------------------------------------------
+   只用 CSS attribute selector 區分 — HTML/JS 完全不動
+   - data-target="chat-layout"         → 已上線 (綠 badge)
+   - data-target="presentation-layout" → 已上線 (綠 badge, v2.3 P1)
+   - data-target="coming-soon-layout"  → 提案中 (灰 badge + 降低不透明度)
+   ========================================================================== */
+.hub-sub-card {
+    position: relative;   /* 給 ::after badge 定位用 */
+}
+
+/* 已上線 — 綠色 badge */
+.hub-sub-card[data-target="chat-layout"]::after,
+.hub-sub-card[data-target="presentation-layout"]::after {
+    content: "已上線";
+    position: absolute;
+    top: 8px; right: 8px;
+    background: rgba(16, 185, 129, 0.85);   /* emerald-500 透明 */
+    color: #fff;
+    font-size: 0.625rem;
+    font-weight: 600;
+    padding: 2px 7px;
+    border-radius: 8px;
+    letter-spacing: 1px;
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
+    pointer-events: none;
+}
+
+/* 提案中 — 灰 badge + 降不透明度 */
+.hub-sub-card[data-target="coming-soon-layout"] {
+    opacity: 0.55;
+    filter: saturate(0.7);
+    transition: opacity 0.25s ease, filter 0.25s ease;
+}
+.hub-sub-card[data-target="coming-soon-layout"]:hover {
+    opacity: 0.85;
+    filter: saturate(1);
+}
+.hub-sub-card[data-target="coming-soon-layout"]::after {
+    content: "提案中";
+    position: absolute;
+    top: 8px; right: 8px;
+    background: rgba(100, 116, 139, 0.75);   /* slate-500 透明 */
+    color: #fff;
+    font-size: 0.625rem;
+    font-weight: 600;
+    padding: 2px 7px;
+    border-radius: 8px;
+    letter-spacing: 1px;
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
+    pointer-events: none;
+}
+
+/* 待開發佔位版面 */
+.coming-soon-layout {
+    display: none;
+    width: 100%;
+    height: 100%;
+    justify-content: center;
+    align-items: center;
+    animation: fadeIn 0.4s ease forwards;
+}
+.coming-soon-layout.active { display: flex; }
+
+.coming-soon-content {
+    text-align: center;
+    padding: 50px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 20px;
+    max-width: 500px;
+}
+.coming-soon-content ion-icon {
+    font-size: 4rem;
+    color: var(--accent-primary);
+}
+.back-to-hub-btn {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+}
+
+/* ==========================================================================
+   Compute Tasks - Split Row Layout (左右分欄)
+   ========================================================================== */
+#dashboard-page.active {
+    display: flex !important;
+    flex-direction: column;
+    overflow-y: auto;
+    padding-right: 10px;
+}
+
+.compute-split-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 25px;
+    flex: 1;
+    min-height: 0;
+}
+
+.compute-panel {
+    display: flex;
+    flex-direction: column;
+}
+
+.compute-panel .job-list-container {
+    flex: 1;
+    min-height: 200px;
+}
+
+@media (max-width: 900px) {
+    .compute-split-row {
+        grid-template-columns: 1fr;
+    }
+}
+
+/* ==========================================================================
+   Admin Grid & Tables
+   ========================================================================== */
+.admin-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 25px;
+}
+
+@media (max-width: 1000px) {
+    .admin-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
+.admin-table-wrap {
+    max-height: 400px;
+    overflow-y: auto;
+}
+
+.admin-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.8125rem;
+}
+
+.admin-table th,
+.admin-table td {
+    padding: 10px 12px;
+    text-align: left;
+    border-bottom: 1px solid rgba(255,255,255,0.1);
+    white-space: nowrap;
+}
+
+.admin-table th {
+    font-weight: 600;
+    color: var(--accent-glow);
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.admin-table tbody tr:hover {
+    background: rgba(255,255,255,0.05);
+}
+
+.admin-status-badge {
+    display: inline-block;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    margin-right: 6px;
+}
+
+.admin-status-badge.online { background: #10b981; box-shadow: 0 0 6px #10b981; }
+.admin-status-badge.offline { background: #6b7280; }
+
+/* ==========================================================================
+   Tutorial Modal (教學導覽彈窗)
+   ========================================================================== */
+.tutorial-modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 9999;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    animation: fadeIn 0.3s ease;
+    pointer-events: auto; /* Block clicks behind it */
+}
+
+.tutorial-modal.hidden {
+    display: none !important;
+}
+
+.tutorial-backdrop {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.4);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    pointer-events: auto; /* Block clicks */
+}
+
+/* Glass Modal for Login */
+.glass-modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 9999;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    animation: fadeIn 0.3s ease;
+    pointer-events: auto;
+}
+
+.glass-modal.hidden {
+    display: none !important;
+}
+
+.glass-backdrop {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.4);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    pointer-events: auto;
+}
+
+.tutorial-content {
+    position: relative;
+    max-width: 520px;
+    width: 90%;
+    z-index: 1;
+    animation: fadeIn 0.4s ease;
+    pointer-events: auto; /* Make the actual floating page clickable */
+    box-shadow: 0 20px 40px rgba(0,0,0,0.5); /* Emphasize floating effect */
+    border: 1px solid var(--accent-glow);
+}
+
+.tutorial-content h2 {
+    display: flex;
+    align-items: center;
+    font-size: 1.375rem;
+    margin-bottom: 20px;
+}
+
+.tutorial-close {
+    position: absolute;
+    top: 15px;
+    right: 15px;
+    background: transparent;
+    border: none;
+    font-size: 1.5rem;
+    color: var(--text-primary);
+    cursor: pointer;
+    transition: 0.3s;
+}
+
+.tutorial-close:hover {
+    color: #fb7185;
+    transform: scale(1.2);
+}
+
+.tutorial-body {
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+    margin-bottom: 20px;
+}
+
+.tutorial-step {
+    display: flex;
+    gap: 14px;
+    align-items: flex-start;
+    padding: 12px;
+    border-radius: 12px;
+    background: rgba(255,255,255,0.05);
+    border: 1px solid rgba(255,255,255,0.08);
+}
+
+.tutorial-step h4 {
+    font-size: 0.9375rem;
+    margin-bottom: 4px;
+    font-weight: 600;
+}
+
+.tutorial-step p {
+    font-size: 0.8125rem;
+    color: var(--text-muted);
+    line-height: 1.5;
+}
+
+.tutorial-dismiss {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.875rem;
+    cursor: pointer;
+    color: var(--text-muted);
+}
+
+.tutorial-dismiss input[type="checkbox"] {
+    accent-color: var(--accent-glow);
+}
+
+/* =========================================
+   ZH: 介面重構追加樣式 (Moodle UI Refactor)
+   EN: Refactored UI Additional Styles
+   ========================================= */
+
+/* Side Drawer */
+.side-drawer {
+    position: fixed;
+    top: 0;
+    right: 0;
+    width: 350px;
+    height: 100vh;
+    background: var(--bg-panel);
+    backdrop-filter: blur(20px);
+    border-left: 1px solid var(--border-color);
+    z-index: 1000;
+    transition: transform 0.4s ease;
+    display: flex;
+    flex-direction: column;
+    box-shadow: -5px 0 20px rgba(0,0,0,0.5);
+}
+
+.side-drawer.closed {
+    transform: translateX(350px);
+}
+
+/* Sidebar Pull Tab */
+.side-drawer .sidebar-pull-tab {
+    position: absolute;
+    left: -36px;
+    top: 50vh;
+    transform: translateY(-50%);
+    width: 36px;
+    height: 80px;
+    background: var(--bg-panel);
+    border: 1px solid var(--border-color);
+    border-right: none;
+    border-radius: 10px 0 0 10px;
+    color: var(--text-primary);
+    font-size: 1.5rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    box-shadow: -4px 0 6px rgba(0,0,0,0.3);
+    transition: background 0.3s, color 0.3s;
+}
+
+.side-drawer .sidebar-pull-tab:hover {
+    background: rgba(255,255,255,0.1);
+    color: var(--accent-glow);
+}
+
+.side-drawer:not(.closed) .sidebar-pull-tab ion-icon {
+    transform: rotate(180deg);
+}
+
+/* Sidebar Menu */
+.side-drawer .sidebar-menu {
+    border-bottom: 1px dashed rgba(255,255,255,0.2);
+    margin-bottom: 20px;
+    padding-bottom: 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+}
+
+.side-drawer .tab-btn {
+    background: transparent;
+    border: none;
+    color: var(--text-muted);
+    padding: 12px 15px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    font-size: 1rem;
+    transition: 0.3s;
+    border-left: 4px solid transparent;
+    width: 100%;
+}
+
+.side-drawer .tab-btn ion-icon { 
+    font-size: 1.375rem; 
+}
+
+.side-drawer .tab-btn:hover { 
+    background: rgba(255,255,255,0.05); 
+    color: var(--text-primary); 
+}
+
+.side-drawer .tab-btn.active { 
+    border-left-color: var(--accent-glow); 
+    background: rgba(255,255,255,0.08); 
+    color: var(--text-primary); 
+}
+
+.drawer-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 20px;
+    border-bottom: 1px solid rgba(255,255,255,0.1);
+}
+
+.drawer-header h3 {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 1.125rem;
+}
+
+.drawer-content {
+    flex: 1;
+    padding: 20px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 25px;
+}
+
+/* Drawer Footer - pinned at bottom */
+.drawer-footer {
+    padding: 12px 20px;
+    border-top: 1px solid rgba(255,255,255,0.1);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    /* v2.1: 容納 3 個按鈕（資訊 / 主題 / 語言） */
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.drawer-info-btn {
+    width: 38px;
+    height: 38px;
+    border-radius: 50%;
+    border: 1px solid var(--border-color);
+    background: transparent;
+    color: var(--text-muted);
+    font-size: 1.375rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.3s ease;
+}
+
+.drawer-info-btn:hover {
+    color: var(--accent-glow);
+    border-color: var(--accent-glow);
+    background: rgba(255,255,255,0.05);
+    transform: scale(1.1);
+}
+
+.drawer-widget h4 {
+    margin-bottom: 10px;
+    padding-bottom: 5px;
+    border-bottom: 1px solid var(--accent-glow);
+    font-size: 1rem;
+    color: var(--accent-glow);
+}
+
+/* ZH: v3.0 Token 區塊可點開「我的使用量」—— 給明確的 hover/focus 回饋，
+       否則使用者不會知道這塊能點 | EN: clickable affordance for the token widget */
+.drawer-token-clickable {
+    border-radius: 10px;
+    padding: 8px;
+    margin: -8px -8px 8px;
+    transition: background 0.2s, box-shadow 0.2s;
+}
+
+.drawer-token-clickable:hover {
+    background: rgba(255, 255, 255, 0.06);
+    box-shadow: inset 0 0 0 1px var(--accent-glow);
+}
+
+.drawer-token-clickable:focus-visible {
+    outline: none;
+    box-shadow: inset 0 0 0 2px var(--accent-glow);
+}
+
+/* Token donut chart layout */
+.drawer-token-visual {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+}
+
+.token-donut {
+    flex-shrink: 0;
+}
+
+.donut-fill {
+    transition: stroke-dashoffset 0.6s ease;
+}
+
+.donut-text {
+    fill: var(--text-primary);
+    font-size: 0.625rem;
+    font-weight: 700;
+}
+
+/* Home Page Layout */
+.home-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 25px;
+    padding: 10px;
+}
+
+.home-top-row {
+    display: flex;
+    gap: 25px;
+}
+
+.home-main-col {
+    flex: 2;
+}
+
+.home-side-col {
+    flex: 1;
+}
+
+.bottom-quick-links {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 15px;
+    margin-top: 15px;
+}
+
+/* ZH: ⚠ 這一份**不會生效** —— 本檔後面（約 2340 行）還有一份同名定義，
+   CSS 後者勝出。v1.5 的實際樣式寫在那裡。這裡保留是為了不動到原始結構，
+   但任何改動都必須改後面那一份。 */
+.quick-link-card {
+    /* ZH: v1.5 —— 內容浮上來。
+       原本背景只有 3% 不透明度、邊框 10%，在淡紫底上等於沒有邊界，
+       三張卡看起來像「平鋪的文字」而不是「三個可以點的東西」。
+       整張卡可點（見 app.js 的 quick-link-card 綁定），所以要有可按的實體感。 */
+    background: var(--card-solid, rgba(255, 255, 255, 0.72));
+    border: 1px solid var(--panel-hairline, rgba(99, 102, 241, 0.18));
+    border-radius: 12px;
+    padding: 18px 16px;
+    text-align: center;
+    cursor: pointer;
+    box-shadow: 0 1px 2px rgba(30, 27, 75, 0.06);
+    transition: box-shadow 0.2s ease, transform 0.2s ease, border-color 0.2s ease;
+}
+
+.quick-link-card:hover {
+    border-color: var(--accent-glow);
+    /* ZH: 位移縮小到 2px —— 原本 5px 在三張卡並排時會讓相鄰卡片看起來在跳。
+       抬起感主要交給陰影，位移只是輔助。 */
+    transform: translateY(-2px);
+    box-shadow: 0 6px 16px rgba(30, 27, 75, 0.12);
+}
+
+.quick-link-card:focus-within {
+    border-color: var(--accent-glow);
+}
+
+.quick-link-card .ql-icon {
+    font-size: 2rem;
+    color: var(--accent-glow);
+    margin-bottom: 10px;
+}
+
+.quick-link-card h4 {
+    margin-bottom: 5px;
+    font-size: 1rem;
+    color: var(--text-primary);
+}
+
+.quick-link-card p {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    margin-bottom: 15px;
+}
+
+.drawer-token-stats .stat {
+    margin: 5px 0;
+    display: flex;
+    justify-content: space-between;
+}
+
+.feature-list {
+    list-style: none;
+    padding: 0;
+}
+
+.feature-list li {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin: 8px 0;
+}
+
+.announcement-item {
+    background: rgba(255,255,255,0.05);
+    padding: 10px;
+    border-radius: 8px;
+    border-left: 4px solid #f59e0b;
+}
+
+.announcement-item .date {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    display: block;
+    margin-bottom: 5px;
+}
+
+/* Compute Sub Tabs */
+.compute-sub-tabs {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 20px;
+    border-bottom: 2px solid rgba(255,255,255,0.1);
+    padding-bottom: 10px;
+}
+
+.sub-tab-btn {
+    background: transparent;
+    border: none;
+    color: var(--text-muted);
+    font-size: 1rem;
+    padding: 10px 20px;
+    cursor: pointer;
+    border-radius: 8px 8px 0 0;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    transition: all 0.3s;
+}
+
+.sub-tab-btn.active {
+    color: var(--text-primary);
+    background: rgba(255,255,255,0.1);
+    border-bottom: 3px solid var(--accent-glow);
+}
+
+/* ==========================================================================
+   ZH: v3.0 運算任務分頁的滑鼠停留說明。內容來自 data-tip（由 applyTranslations
+       的 data-i18n-tip 寫入），純 CSS 以 attr() 畫出、不需 JS 定位。
+       用 [data-tip] 限定：i18n 還沒寫入前不會冒出一個空框。
+       :focus-visible 一併支援 —— 需要說明的不會只有滑鼠使用者。
+   EN: v3.0 hover tooltips for the compute sub-tabs. Text comes from data-tip
+       (written by the data-i18n-tip pass); pure CSS via attr(), no JS layout.
+   ========================================================================== */
+.has-tip {
+    position: relative;
+}
+
+/* 「這裡有說明」的提示圖示 —— 沒有它使用者不會知道可以停留 */
+.tip-hint {
+    font-size: 13px;
+    opacity: 0.4;
+    transition: opacity 0.2s;
+}
+
+.has-tip:hover .tip-hint,
+.has-tip:focus-visible .tip-hint {
+    opacity: 0.95;
+}
+
+.has-tip[data-tip]::after {
+    content: attr(data-tip);
+    position: absolute;
+    top: calc(100% + 10px);
+    left: 0;
+    z-index: 60;
+    width: max-content;
+    max-width: min(320px, 78vw);
+    padding: 10px 12px;
+    border-radius: 8px;
+    background: var(--bg-solid, #1a1a24);
+    border: 1px solid var(--accent-glow);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.55);
+    color: var(--text-primary);
+    font-size: 12px;
+    font-weight: 400;
+    line-height: 1.7;
+    text-align: left;
+    white-space: normal;
+    opacity: 0;
+    visibility: hidden;
+    transform: translateY(-4px);
+    transition: opacity 0.18s ease, transform 0.18s ease, visibility 0.18s;
+    pointer-events: none;   /* 說明框本身不擋滑鼠，才不會擋到下面的內容 */
+}
+
+.has-tip[data-tip]:hover::after,
+.has-tip[data-tip]:focus-visible::after {
+    opacity: 1;
+    visibility: visible;
+    transform: translateY(0);
+}
+
+/* 最後一個分頁改成靠右展開，否則說明框會衝出視窗右緣 */
+.compute-sub-tabs .has-tip[data-tip]:last-child::after {
+    left: auto;
+    right: 0;
+}
+
+.sub-page-view {
+    display: none;
+}
+.sub-page-view.active {
+    display: block;
+    animation: fadeIn 0.3s ease;
+}
+
+/* Bottom Quick Links Grid */
+.bottom-quick-links {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+    gap: 20px;
+    margin-top: 40px;
+    padding-top: 20px;
+    border-top: 1px dashed rgba(255,255,255,0.2);
+}
+
+/* ZH: ⚠ 這是 .quick-link-card 的**第二份**定義（另一份在本檔約 2116 行）。
+   同一個 class 定義兩次，後面這份才生效——改上面那份不會有任何效果。
+   v1.5 的視覺層級翻轉寫在這裡，因為只有這裡的值真的會被瀏覽器採用。 */
+.quick-link-card {
+    /* ZH: v1.5 —— 內容浮上來。
+       原本背景 3% 不透明、邊框 10%，在淡紫底上等於沒有邊界：
+       三張卡看起來像「平鋪的文字」，而不是「三個可以點的東西」。 */
+    background: rgba(255, 255, 255, 0.75);
+    border: 1px solid rgba(99, 102, 241, 0.22);
+    border-radius: 12px;
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    cursor: pointer;
+    box-shadow: 0 1px 2px rgba(30, 27, 75, 0.06);
+    transition: transform 0.2s, border-color 0.2s, box-shadow 0.2s, background 0.2s;
+}
+
+.quick-link-card:hover {
+    /* ZH: 位移從 5px 收到 2px —— 三張卡並排時 5px 會讓相鄰卡片看起來在跳。
+       「抬起來」的感覺主要交給陰影，位移只是輔助。 */
+    transform: translateY(-2px);
+    border-color: var(--accent-glow);
+    background: rgba(255, 255, 255, 0.95);
+    box-shadow: 0 6px 16px rgba(30, 27, 75, 0.12);
+}
+
+.quick-link-card:focus-within {
+    border-color: var(--accent-glow);
+    box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.18);
+}
+
+.quick-link-card .ql-icon {
+    font-size: 2rem;
+    color: var(--accent-glow);
+    margin-bottom: 10px;
+}
+
+.quick-link-card h4 {
+    margin-bottom: 8px;
+    font-size: 1.125rem;
+}
+
+.quick-link-card p {
+    color: var(--text-muted);
+    font-size: 0.875rem;
+    margin-bottom: 15px;
+    flex: 1;
+}
+
+/* Home Page Styles */
+
+.home-main-col, .home-side-col {
+    display: flex;
+    flex-direction: column;
+    gap: 25px;
+}
+
+.announcement-list {
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+    margin-top: 15px;
+}
+
+.announcement-item {
+    background: rgba(255,255,255,0.05);
+    padding: 15px;
+    border-radius: 12px;
+    border-left: 4px solid var(--accent-glow);
+    transition: transform 0.3s, background 0.3s;
+}
+
+.announcement-item:hover {
+    background: rgba(255,255,255,0.08);
+    transform: translateX(5px);
+}
+
+.announcement-item .date {
+    font-size: 0.8125rem;
+    color: var(--text-muted);
+    display: block;
+    margin-bottom: 8px;
+    font-weight: 600;
+}
+
+.announcement-item p {
+    font-size: 0.9375rem;
+    color: var(--text-primary);
+    line-height: 1.5;
+}
+
+.bottom-quick-links.vertical-layout {
+    display: flex;
+    flex-direction: column;
+    margin-top: 0;
+    padding-top: 0;
+    border-top: none;
+    gap: 15px;
+}
+
+.bottom-quick-links.vertical-layout .quick-link-card {
+    padding: 15px;
+}
+
+
+/* ==============================================================================
+   v2.0 LAB LAUNCHER STYLES (code-server)
+   ============================================================================== */
+
+.lab-launcher {
+    padding: 32px;
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+    max-width: 880px;
+    margin: 0 auto;
+}
+
+.lab-launcher-header {
+    display: flex;
+    align-items: flex-start;
+    gap: 20px;
+}
+
+.lab-launcher-icon {
+    font-size: 3rem;
+    color: var(--accent-glow, #7c3aed);
+    flex-shrink: 0;
+}
+
+.lab-launcher-header h2 {
+    margin: 0 0 6px;
+    font-size: 1.5rem;
+    color: var(--text-color);
+}
+
+.lab-launcher-subtitle {
+    margin: 0;
+    color: var(--text-muted);
+    line-height: 1.5;
+}
+
+.lab-status-card {
+    padding: 16px 20px;
+    border-radius: 8px;
+    background: rgba(124, 58, 237, 0.06);
+    border: 1px solid rgba(124, 58, 237, 0.2);
+}
+
+.lab-status-row {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+    font-size: 0.875rem;
+}
+
+.lab-status-row + .lab-status-row {
+    margin-top: 8px;
+}
+
+.lab-status-text {
+    font-weight: 600;
+}
+
+.lab-status-text[data-kind="ok"]    { color: #10b981; }
+.lab-status-text[data-kind="warn"]  { color: #f59e0b; }
+.lab-status-text[data-kind="error"] { color: #ef4444; }
+.lab-status-text[data-kind="info"]  { color: var(--text-muted); }
+
+.lab-meta-value {
+    color: var(--accent-glow, #7c3aed);
+    font-family: 'Fira Code', monospace;
+    font-size: 0.8125rem;
+}
+
+.lab-config {
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.lab-config-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.lab-config-row label {
+    flex-shrink: 0;
+    width: 120px;
+    color: var(--text-muted);
+}
+
+.lab-select {
+    flex: 1;
+    padding: 8px 12px;
+    border-radius: 6px;
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    background: rgba(0, 0, 0, 0.2);
+    color: var(--text-color);
+    font-size: 0.875rem;
+}
+
+.lab-actions {
+    display: flex;
+    gap: 12px;
+    justify-content: center;
+}
+
+.lab-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 12px 24px;
+    border: none;
+    border-radius: 8px;
+    font-size: 0.9375rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.lab-btn:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+.lab-btn-primary {
+    background: var(--accent-glow, #7c3aed);
+    color: #fff;
+}
+
+.lab-btn-primary:hover:not(:disabled) {
+    background: #6d28d9;
+    transform: translateY(-1px);
+}
+
+.lab-btn-danger {
+    background: rgba(239, 68, 68, 0.15);
+    color: #ef4444;
+    border: 1px solid rgba(239, 68, 68, 0.3);
+}
+
+.lab-btn-danger:hover:not(:disabled) {
+    background: rgba(239, 68, 68, 0.25);
+}
+
+.lab-btn ion-icon {
+    font-size: 1.125rem;
+}
+
+.lab-tips {
+    padding: 16px 20px;
+    background: rgba(255, 255, 255, 0.04);
+    border-left: 3px solid var(--accent-glow, #7c3aed);
+    border-radius: 4px;
+}
+
+.lab-tips p {
+    margin: 0;
+    font-size: 0.8125rem;
+    color: var(--text-muted);
+    line-height: 1.5;
+}
+
+.lab-tips p + p {
+    margin-top: 8px;
+}
+
+.lab-tips code {
+    background: rgba(0, 0, 0, 0.3);
+    padding: 2px 6px;
+    border-radius: 3px;
+    font-size: 0.75rem;
+    color: var(--accent-glow, #7c3aed);
+}
+
+/* ==============================================================================
+   v2.0 SECRETS SETTINGS STYLES
+   ============================================================================== */
+
+.secrets-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-top: 12px;
+}
+
+.secret-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 14px;
+    background: rgba(255, 255, 255, 0.04);
+    border-radius: 6px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.secret-name {
+    flex: 1;
+    font-family: 'Fira Code', monospace;
+    color: var(--text-color);
+}
+
+.secret-masked-value {
+    color: var(--text-muted);
+    font-family: 'Fira Code', monospace;
+    font-size: 0.75rem;
+}
+
+.secret-delete-btn {
+    background: transparent;
+    border: none;
+    color: #ef4444;
+    cursor: pointer;
+    font-size: 1.125rem;
+    padding: 4px 8px;
+    border-radius: 4px;
+}
+
+.secret-delete-btn:hover {
+    background: rgba(239, 68, 68, 0.1);
+}
+
+.secret-add-row {
+    display: grid;
+    grid-template-columns: 1fr 2fr auto;
+    gap: 8px;
+    margin-top: 12px;
+}
+
+.secret-add-row input {
+    padding: 8px 12px;
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    background: rgba(0, 0, 0, 0.2);
+    color: var(--text-color);
+    border-radius: 6px;
+    font-family: 'Fira Code', monospace;
+    font-size: 0.8125rem;
+}
+
+.secret-add-row button {
+    padding: 8px 16px;
+    background: var(--accent-glow, #7c3aed);
+    color: #fff;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    font-weight: 600;
+}
+
+.secret-add-row button:hover {
+    background: #6d28d9;
+}
+
+
+
+/* v1 .nb-* styles removed in Phase E along with the pseudo-Notebook IIFE. */
+
+
+/* ==============================================================================
+   v2.1 Profile Modal — 我的帳號資訊豐富版
+   ============================================================================== */
+
+.profile-section {
+    margin-bottom: 22px;
+    padding: 14px 16px;
+    background: rgba(255, 255, 255, 0.03);
+    border-radius: 8px;
+    border-left: 3px solid var(--neon-blue, #60a5fa);
+}
+
+.profile-section-title {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin: 0 0 12px;
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: var(--text-color, #e0e0ff);
+    letter-spacing: 0.5px;
+}
+
+.profile-section-title ion-icon {
+    font-size: 1.125rem;
+    color: var(--neon-blue, #60a5fa);
+}
+
+.profile-info-grid {
+    display: grid;
+    grid-template-columns: 110px 1fr;
+    gap: 8px 14px;
+    margin: 0;
+    font-size: 0.8125rem;
+    line-height: 1.5;
+}
+
+.profile-info-grid dt {
+    color: var(--text-muted);
+    font-weight: 500;
+}
+
+.profile-info-grid dd {
+    margin: 0;
+    color: var(--text-color);
+    font-family: 'Fira Code', monospace;
+    word-break: break-all;
+}
+
+.profile-badge {
+    display: inline-block;
+    padding: 2px 10px;
+    border-radius: 12px;
+    font-size: 0.75rem;
+    font-family: inherit;
+    background: rgba(96, 165, 250, 0.15);
+    color: var(--neon-blue, #60a5fa);
+    border: 1px solid rgba(96, 165, 250, 0.3);
+}
+
+.profile-badge-auth {
+    background: rgba(168, 85, 247, 0.15);
+    color: #c084fc;
+    border-color: rgba(168, 85, 247, 0.3);
+}
+
+/* 不同 role 顏色 */
+.profile-badge[data-role="student"]  { background: rgba(96,165,250,.15); color:#60a5fa; border-color: rgba(96,165,250,.3); }
+.profile-badge[data-role="teacher"]  { background: rgba(74,222,128,.15); color:#4ade80; border-color: rgba(74,222,128,.3); }
+.profile-badge[data-role="admin"]    { background: rgba(251,191,36,.15); color:#fbbf24; border-color: rgba(251,191,36,.3); }
+
+/* Token 用量條 */
+.profile-usage-bar-wrap {
+    margin-bottom: 12px;
+}
+
+.profile-usage-bar {
+    width: 100%;
+    height: 10px;
+    background: rgba(0, 0, 0, 0.3);
+    border-radius: 5px;
+    overflow: hidden;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.profile-usage-fill {
+    height: 100%;
+    background: linear-gradient(90deg, #60a5fa, #a855f7);
+    transition: width 0.4s ease;
+    border-radius: 5px;
+}
+
+/* 接近滿時轉紅 */
+.profile-usage-fill.warning { background: linear-gradient(90deg, #fbbf24, #f97316); }
+.profile-usage-fill.danger  { background: linear-gradient(90deg, #f97316, #ef4444); }
+
+.profile-usage-text {
+    margin-top: 6px;
+    font-size: 0.75rem;
+    color: var(--text-color);
+    font-family: 'Fira Code', monospace;
+    text-align: right;
+}
+
+
+/* ==============================================================================
+   v2.1 Password Modal 強度提示與確認密碼
+   ============================================================================== */
+
+.password-strength-bar {
+    width: 100%;
+    height: 5px;
+    background: rgba(0, 0, 0, 0.3);
+    border-radius: 3px;
+    overflow: hidden;
+}
+
+.password-strength-fill {
+    height: 100%;
+    background: #ef4444; /* 預設紅（最弱） */
+    transition: width 0.3s ease, background 0.3s ease;
+    border-radius: 3px;
+}
+
+.password-strength-fill.weak     { background: #ef4444; }    /* 紅 */
+.password-strength-fill.medium   { background: #f59e0b; }    /* 黃 */
+.password-strength-fill.strong   { background: #10b981; }    /* 綠 */
+.password-strength-fill.vstrong  { background: #06b6d4; }    /* 青 */
+
+.password-strength-text {
+    display: inline-block;
+    margin-top: 4px;
+    font-size: 0.6875rem;
+    color: var(--text-muted);
+    font-family: 'Fira Code', monospace;
+}
+
+.password-strength-text[data-level="weak"]     { color: #ef4444; }
+.password-strength-text[data-level="medium"]   { color: #f59e0b; }
+.password-strength-text[data-level="strong"]   { color: #10b981; }
+.password-strength-text[data-level="vstrong"]  { color: #06b6d4; }
+
+
+
+/* ==========================================================================
+   v2.2 — info-tip-btn + 浮動 popover（Token / Secrets 概念說明）
+   --------------------------------------------------------------------------
+   ZH: 標題旁邊的 ℹ️ 小按鈕；按下後 popover 浮動顯示，點外面關閉
+   EN: ℹ️ next to section titles; popover toggles on click, closes on outside click
+   ========================================================================== */
+.info-tip-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 22px;
+    padding: 0;
+    border: none;
+    border-radius: 50%;
+    background: rgba(99, 179, 237, 0.15);
+    color: var(--neon-cyan, #63b3ed);
+    cursor: pointer;
+    font-size: 0.875rem;
+    line-height: 1;
+    transition: background 0.15s, transform 0.15s;
+}
+.info-tip-btn:hover { background: rgba(99, 179, 237, 0.30); transform: scale(1.08); }
+.info-tip-btn ion-icon { font-size: 1rem; }
+
+.info-tip-popover {
+    position: fixed;
+    z-index: 9999;
+    max-width: 360px;
+    min-width: 260px;
+    background: var(--bg-card, #1a1f2e);
+    color: var(--text-primary, #e4e7eb);
+    border: 1px solid var(--border-soft, rgba(255,255,255,0.1));
+    border-radius: 10px;
+    box-shadow: 0 8px 28px rgba(0,0,0,0.45);
+    padding: 14px 16px;
+    font-size: 0.8125rem;
+    line-height: 1.65;
+    opacity: 1;
+    transform: translateY(0);
+    transition: opacity 0.16s, transform 0.16s;
+}
+.info-tip-popover.hidden {
+    display: none;
+}
+.info-tip-popover-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding-bottom: 8px;
+    margin-bottom: 8px;
+    border-bottom: 1px solid var(--border-soft, rgba(255,255,255,0.08));
+}
+.info-tip-popover-header strong {
+    font-size: 0.875rem;
+    color: var(--neon-cyan, #63b3ed);
+}
+.info-tip-popover-header button {
+    background: transparent;
+    border: none;
+    color: var(--text-muted, #8b95a3);
+    cursor: pointer;
+    padding: 2px;
+    display: inline-flex;
+}
+.info-tip-popover-header button:hover { color: var(--text-primary, #e4e7eb); }
+.info-tip-popover-body { white-space: pre-line; }
+.info-tip-popover-body code {
+    background: rgba(255,255,255,0.08);
+    padding: 1px 5px;
+    border-radius: 4px;
+    font-size: 0.75rem;
+}
+
+/* ============================================================
+   v2.2 Day 9-10 — 教學中心 (Tutorial Center) — modal 版
+   由 sidebar 底 (i) 按鈕觸發；不再佔用 page slot
+   ============================================================ */
+
+/* --- modal 容器 --- */
+.tutorial-center-modal {
+    position: fixed;
+    inset: 0;
+    z-index: 9998;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    animation: fadeIn 0.25s ease;
+    pointer-events: auto;
+}
+.tutorial-center-modal.hidden { display: none !important; }
+.tutorial-center-backdrop {
+    position: absolute;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.45);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+}
+.tutorial-center-panel {
+    position: relative;
+    z-index: 1;
+    width: min(92%, 880px);
+    max-height: 88vh;
+    overflow-y: auto;
+    padding: 28px 32px 32px;
+    border-radius: 18px;
+    background: var(--bg-panel);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border: 1px solid var(--accent-glow);
+    box-shadow: 0 24px 48px rgba(0, 0, 0, 0.5);
+    color: var(--text-primary);
+}
+.tutorial-center-close {
+    position: absolute;
+    top: 14px; right: 16px;
+    background: transparent;
+    border: none;
+    color: var(--text-primary);
+    cursor: pointer;
+    font-size: 1.5rem;
+    padding: 4px;
+    border-radius: 6px;
+    transition: color 0.2s, background 0.2s;
+}
+.tutorial-center-close:hover {
+    color: var(--accent-glow);
+    background: var(--bg-soft);
+}
+
+.tutorial-center-header {
+    margin-bottom: 24px;
+}
+.tutorial-center-header h2 {
+    display: flex;
+    align-items: center;
+    font-size: 1.5rem;
+    margin-bottom: 6px;
+}
+.tutorial-center-header p {
+    color: var(--text-muted);
+    font-size: 0.875rem;
+    line-height: 1.6;
+}
+.tutorial-unit-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+    gap: 16px;
+}
+.tutorial-unit-card {
+    background: var(--bg-soft);
+    border: 1px solid var(--border-soft);
+    border-radius: 14px;
+    padding: 18px 18px 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    position: relative;
+    color: var(--text-primary);
+    transition: transform 0.15s, border-color 0.2s, background 0.2s;
+}
+.tutorial-unit-card:hover {
+    transform: translateY(-2px);
+    border-color: var(--accent-glow);
+}
+.tutorial-unit-card .unit-icon {
+    font-size: 1.75rem;
+    color: var(--accent-glow);
+    margin-bottom: 2px;
+}
+.tutorial-unit-card h4 {
+    font-size: 1rem;
+    font-weight: 700;
+    color: var(--text-primary);
+}
+.tutorial-unit-card .unit-meta {
+    display: flex;
+    gap: 10px;
+    color: var(--text-muted);
+    font-size: 0.75rem;
+}
+.tutorial-unit-card .unit-desc {
+    color: var(--text-muted);
+    font-size: 0.8125rem;
+    line-height: 1.55;
+    flex: 1;
+}
+.tutorial-unit-card .unit-action {
+    margin-top: 8px;
+}
+.tutorial-unit-card .unit-action button {
+    width: 100%;
+    background: linear-gradient(135deg, #6366f1, #8b5cf6);
+    color: #fff;
+    border: none;
+    padding: 9px 14px;
+    border-radius: 8px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: opacity 0.2s;
+}
+.tutorial-unit-card .unit-action button:hover { opacity: 0.85; }
+.tutorial-unit-card.completed::before {
+    content: "✓ 已完成";
+    position: absolute;
+    top: 12px; right: 12px;
+    background: rgba(16, 185, 129, 0.85);
+    color: #fff;
+    font-size: 0.625rem;
+    padding: 3px 8px;
+    border-radius: 6px;
+    font-weight: 600;
+    letter-spacing: 0.5px;
+}
+
+/* --- v2.2 教學引導: floating highlight ring ---
+   - 用 position:fixed 浮在 body 層，不掛在元素上 → 不受任何 parent overflow:hidden 影響
+   - JS 在 _showStep 時讀目標 getBoundingClientRect()，設 top/left/width/height
+   - 與目標元素本身有 5px outset gap（border-box 外圍 5px 留白）
+*/
+.tutorial-highlight-ring {
+    position: fixed;
+    z-index: 10000;
+    border: 3px solid #fbbf24;
+    border-radius: 10px;
+    pointer-events: none;
+    box-shadow: 0 0 24px rgba(251, 191, 36, 0.55);
+    transition: top 0.15s ease, left 0.15s ease, width 0.15s ease, height 0.15s ease;
+    animation: tutorialRingPulse 1.8s ease-in-out infinite;
+}
+.tutorial-highlight-ring.hidden { display: none !important; }
+@keyframes tutorialRingPulse {
+    0%, 100% { box-shadow: 0 0 24px rgba(251, 191, 36, 0.55), 0 0 0 2px rgba(251, 191, 36, 0.20); }
+    50%      { box-shadow: 0 0 36px rgba(251, 191, 36, 0.80), 0 0 0 4px rgba(251, 191, 36, 0.30); }
+}
+
+/* --- 教學氣泡 (跟隨被高亮元素旁顯示) --- */
+.tutorial-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 10001;
+    pointer-events: none;   /* 整層不擋點擊；只 bubble 自己可點 */
+}
+.tutorial-overlay.hidden { display: none; }
+/* v2.2: wrapper 分層 — wrap 接定位 transform，bubble 接內容 + 動畫 transform，互不衝突 */
+.tutorial-bubble-wrap {
+    pointer-events: auto;
+    position: absolute;
+    /* 預設居中；highlight step 由 JS 改寫成 top/left 像素值 + transform: '' */
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    /* 切 step 時平滑移動到新位置 (不影響內層 bubble 動畫) */
+    transition: top 0.18s ease, left 0.18s ease;
+}
+.tutorial-overlay-bubble {
+    background: var(--bg-card, #1a1f2e);
+    color: var(--text-primary, #fff);
+    border: 1px solid var(--border-soft, rgba(255,255,255,0.15));
+    border-radius: 12px;
+    box-shadow: 0 14px 32px rgba(0,0,0,0.5);
+    padding: 16px 18px;
+    min-width: 280px;
+    max-width: 360px;
+    line-height: 1.6;
+    font-size: 0.8125rem;
+}
+/* 進場動畫 — 只動 opacity + 一個位移 8px，wrapper 的 translate 完全不受影響 */
+.tutorial-overlay-bubble.animate-in {
+    animation: tutBubbleIn 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+}
+@keyframes tutBubbleIn {
+    from { opacity: 0; transform: translateY(8px) scale(0.97); }
+    to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+.tutorial-bubble-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 8px;
+}
+.tutorial-step-badge {
+    background: rgba(99, 102, 241, 0.2);
+    color: var(--neon-cyan, #63b3ed);
+    padding: 3px 9px;
+    border-radius: 10px;
+    font-size: 0.6875rem;
+    font-weight: 600;
+    letter-spacing: 0.5px;
+}
+.tutorial-bubble-header button {
+    background: transparent;
+    border: none;
+    color: var(--text-muted);
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+}
+.tutorial-bubble-header button:hover { color: var(--text-primary, #fff); }
+#tutorial-bubble-title {
+    font-size: 0.9375rem;
+    font-weight: 700;
+    margin: 0 0 8px;
+}
+#tutorial-bubble-body {
+    margin: 0 0 14px;
+    color: var(--text-muted);
+}
+.tutorial-bubble-actions {
+    display: flex;
+    justify-content: space-between;
+    gap: 8px;
+}
+.tutorial-bubble-actions button {
+    padding: 6px 14px;
+    font-size: 0.8125rem;
+    margin: 0;
+}
+
+/* v2.3: inline px 字級 rebasing -> rem，跟隨根層 font-size 縮放
+ (涵蓋 username / email / 學系 / 任務資訊等以 inline style 設定字級的內容；只改字級不動版面) */
+[style*="font-size:11px"],[style*="font-size: 11px"]{font-size:0.6875rem !important;}
+[style*="font-size:12px"],[style*="font-size: 12px"]{font-size:0.75rem !important;}
+[style*="font-size:13px"],[style*="font-size: 13px"]{font-size:0.8125rem !important;}
+[style*="font-size:14px"],[style*="font-size: 14px"]{font-size:0.875rem !important;}
+[style*="font-size:16px"],[style*="font-size: 16px"]{font-size:1rem !important;}
+[style*="font-size:18px"],[style*="font-size: 18px"]{font-size:1.125rem !important;}
+[style*="font-size:20px"],[style*="font-size: 20px"]{font-size:1.25rem !important;}
+[style*="font-size:22px"],[style*="font-size: 22px"]{font-size:1.375rem !important;}
+[style*="font-size:24px"],[style*="font-size: 24px"]{font-size:1.5rem !important;}
+[style*="font-size:28px"],[style*="font-size: 28px"]{font-size:1.75rem !important;}
+[style*="font-size:30px"],[style*="font-size: 30px"]{font-size:1.875rem !important;}
+[style*="font-size:48px"],[style*="font-size: 48px"]{font-size:3rem !important;}
+
+
+/* v2.4: 非教學彈窗統一為「使用者介面登入彈窗(.form-box)」風格 —
+   2px 邊框 + 20px 圓角 + 玻璃面板(bg-panel + blur20)。
+   只套用帶 .login-modal 的彈窗(profile/password/job-details)；引導式教學
+   (tutorial center / overlay / 歡迎 modal) 不帶此 class，故不受影響。
+   hover 發光沿用既有 .tutorial-content.form-box-panel:hover 修正(無閃爍)。 */
+.tutorial-content.login-modal {
+    border: 2px solid var(--border-color);
+    border-radius: 20px;
+    background: var(--bg-panel);
+    -webkit-backdrop-filter: blur(20px);
+    backdrop-filter: blur(20px);
+    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.5);
+}
+
+/* ==========================================================================
+   ZH: v2.6 客服／導覽浮動助手 widget | EN: v2.6 floating support/guide assistant
+   ========================================================================== */
+#aibot-root {
+    position: fixed;
+    right: 24px;
+    bottom: 24px;
+    z-index: 10000;
+    font-family: inherit;
+}
+
+#aibot-fab {
+    width: 60px;
+    height: 60px;
+    border-radius: 50%;
+    border: none;
+    cursor: pointer;
+    background: linear-gradient(135deg, #6366f1, #8b5cf6);
+    color: #fff;
+    box-shadow: 0 8px 24px rgba(99, 102, 241, 0.45);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 26px;
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+#aibot-fab:hover { transform: scale(1.08); }
+#aibot-fab.aibot-open { transform: scale(0.92); opacity: 0.85; }
+
+#aibot-panel {
+    position: absolute;
+    right: 0;
+    bottom: 74px;
+    width: 360px;
+    max-width: calc(100vw - 32px);
+    height: 520px;
+    max-height: calc(100vh - 120px);
+    display: flex;
+    flex-direction: column;
+    background: var(--bg-solid);
+    border: 1px solid var(--border-soft);
+    border-radius: 16px;
+    box-shadow: 0 16px 48px rgba(0, 0, 0, 0.45);
+    overflow: hidden;
+    animation: aibot-pop 0.18s ease-out;
+}
+#aibot-panel.aibot-hidden { display: none; }
+
+@keyframes aibot-pop {
+    from { opacity: 0; transform: translateY(12px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+
+.aibot-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 14px;
+    background: linear-gradient(135deg, #6366f1, #8b5cf6);
+    color: #fff;
+    flex-shrink: 0;
+}
+.aibot-title { display: flex; align-items: center; gap: 10px; }
+.aibot-title strong { display: block; font-size: 15px; line-height: 1.2; }
+.aibot-title small { display: block; font-size: 11px; opacity: 0.85; }
+.aibot-avatar { font-size: 24px; }
+#aibot-close {
+    background: transparent;
+    border: none;
+    color: #fff;
+    font-size: 16px;
+    cursor: pointer;
+    opacity: 0.85;
+    padding: 4px 6px;
+}
+#aibot-close:hover { opacity: 1; }
+
+.aibot-log {
+    flex: 1;
+    overflow-y: auto;
+    padding: 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    background: var(--bg-soft);
+}
+
+.aibot-bubble {
+    max-width: 85%;
+    padding: 9px 12px;
+    border-radius: 14px;
+    font-size: 14px;
+    line-height: 1.55;
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+.aibot-user {
+    align-self: flex-end;
+    background: var(--accent-glow);
+    color: var(--bg-solid);
+    border-bottom-right-radius: 4px;
+}
+.aibot-assistant {
+    align-self: flex-start;
+    background: var(--bg-solid);
+    color: var(--text-primary);
+    border: 1px solid var(--border-soft);
+    border-bottom-left-radius: 4px;
+}
+.aibot-assistant.aibot-typing { color: var(--text-muted); }
+.aibot-assistant.aibot-error { color: #ff4d4f; border-color: rgba(255, 77, 79, 0.4); }
+.aibot-sources {
+    align-self: flex-start;
+    font-size: 11px;
+    color: var(--text-muted);
+    padding: 0 4px;
+    max-width: 90%;
+}
+
+.aibot-form {
+    display: flex;
+    align-items: flex-end;
+    gap: 8px;
+    padding: 10px;
+    border-top: 1px solid var(--border-soft);
+    background: var(--bg-solid);
+    flex-shrink: 0;
+}
+#aibot-input {
+    flex: 1;
+    resize: none;
+    border: 1px solid var(--border-soft);
+    border-radius: 10px;
+    padding: 9px 12px;
+    font-family: inherit;
+    font-size: 14px;
+    line-height: 1.4;
+    background: var(--bg-soft);
+    color: var(--text-primary);
+    outline: none;
+    max-height: 120px;
+}
+#aibot-input:focus { border-color: var(--accent-glow); }
+#aibot-send {
+    width: 38px;
+    height: 38px;
+    flex-shrink: 0;
+    border: none;
+    border-radius: 10px;
+    cursor: pointer;
+    background: linear-gradient(135deg, #6366f1, #8b5cf6);
+    color: #fff;
+    font-size: 16px;
+}
+#aibot-send:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* v2.7 模式切換 + 程式家教附檔 | mode switch + code-tutor attach */
+.aibot-modes {
+    display: flex;
+    gap: 6px;
+    padding: 8px 10px;
+    background: var(--bg-solid);
+    border-bottom: 1px solid var(--border-soft);
+    flex-shrink: 0;
+}
+.aibot-mode-btn {
+    flex: 1;
+    padding: 6px 10px;
+    border: 1px solid var(--border-soft);
+    border-radius: 8px;
+    background: var(--bg-soft);
+    color: var(--text-muted);
+    font-size: 13px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+.aibot-mode-btn:hover { color: var(--text-primary); }
+.aibot-mode-btn.aibot-mode-active {
+    background: linear-gradient(135deg, #6366f1, #8b5cf6);
+    color: #fff;
+    border-color: transparent;
+}
+
+.aibot-attach {
+    padding: 8px 10px;
+    background: var(--bg-solid);
+    border-bottom: 1px solid var(--border-soft);
+    flex-shrink: 0;
+}
+.aibot-attach.aibot-hidden { display: none; }
+#aibot-attach-btn {
+    border: 1px dashed var(--border-soft);
+    border-radius: 8px;
+    background: var(--bg-soft);
+    color: var(--text-primary);
+    font-size: 13px;
+    padding: 6px 10px;
+    cursor: pointer;
+}
+#aibot-attach-btn:hover { border-color: var(--accent-glow); }
+.aibot-file-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    margin-left: 8px;
+    padding: 4px 8px;
+    border-radius: 999px;
+    background: var(--accent-glow);
+    color: var(--bg-solid);
+    font-size: 12px;
+    max-width: 200px;
+}
+.aibot-file-chip.aibot-hidden { display: none; }
+.aibot-file-chip #aibot-file-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#aibot-file-clear {
+    border: none;
+    background: transparent;
+    color: inherit;
+    cursor: pointer;
+    font-size: 12px;
+    padding: 0;
+    line-height: 1;
+}
+.aibot-file-list {
+    margin-top: 8px;
+    max-height: 160px;
+    overflow-y: auto;
+    border: 1px solid var(--border-soft);
+    border-radius: 8px;
+    background: var(--bg-soft);
+}
+.aibot-file-list.aibot-hidden { display: none; }
+.aibot-file-item {
+    display: block;
+    width: 100%;
+    text-align: left;
+    border: none;
+    border-bottom: 1px solid var(--border-soft);
+    background: transparent;
+    color: var(--text-primary);
+    font-size: 12.5px;
+    font-family: monospace;
+    padding: 7px 10px;
+    cursor: pointer;
+}
+.aibot-file-item:last-child { border-bottom: none; }
+.aibot-file-item:hover { background: var(--bg-solid); }
+.aibot-file-notice {
+    padding: 10px;
+    font-size: 12.5px;
+    color: var(--text-muted);
+}
+
+/* v2.7 Lab 內嵌檢視（iframe 內嵌 code-server）| embedded Lab view */
+.lab-embed-wrap {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    height: calc(100vh - 200px);
+    min-height: 520px;
+    border: 1px solid var(--border-soft);
+    border-radius: 12px;
+    overflow: hidden;
+    background: #1e1e1e;
+}
+.lab-embed-wrap.hidden { display: none; }
+.lab-embed-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 8px 12px;
+    background: var(--bg-solid);
+    border-bottom: 1px solid var(--border-soft);
+    flex-shrink: 0;
+}
+.lab-embed-title {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+.lab-embed-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.lab-embed-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 6px 12px;
+    border: 1px solid var(--border-soft);
+    border-radius: 8px;
+    background: var(--bg-soft);
+    color: var(--text-primary);
+    font-size: 13px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+.lab-embed-btn:hover { border-color: var(--accent-glow); }
+.lab-embed-btn.lab-embed-danger { color: #fb7185; }
+.lab-embed-btn.lab-embed-danger:hover { border-color: #fb7185; }
+.lab-iframe {
+    flex: 1;
+    width: 100%;
+    border: 0;
+    background: #1e1e1e;
+}
+/* 全螢幕：固定覆蓋整個視窗（小基泡泡 z-index 10000 仍在其上）*/
+.lab-embed-wrap.lab-embed-fullscreen-on {
+    position: fixed;
+    inset: 0;
+    z-index: 4000;
+    height: 100vh;
+    border-radius: 0;
+    border: 0;
+}
+
+
+/* ══════════════════════════════════════════════════════════════
+   ZH: v1.5 第 7 項 —— Lab 的四條提示改成可展開。
+   內容沒有刪，只是不再永遠佔著版面。
+   新手第一次會點開，之後就不必每次都用眼睛跳過它。
+   ══════════════════════════════════════════════════════════════ */
+details.lab-tips > summary {
+    cursor: pointer;
+    list-style: none;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 12px;
+    border-radius: 8px;
+    font-size: 0.9em;
+    color: var(--text-muted, #6b7280);
+    background: rgba(99, 102, 241, 0.06);
+    border: 1px solid var(--panel-hairline, rgba(99, 102, 241, 0.18));
+    user-select: none;
+}
+details.lab-tips > summary::-webkit-details-marker { display: none; }
+details.lab-tips > summary::before {
+    content: "\25B8";           /* ▸ */
+    transition: transform 0.15s ease;
+    display: inline-block;
+}
+details.lab-tips[open] > summary::before { transform: rotate(90deg); }
+details.lab-tips > summary:hover { background: rgba(99, 102, 241, 0.12); }
+details.lab-tips[open] > summary { margin-bottom: 10px; }

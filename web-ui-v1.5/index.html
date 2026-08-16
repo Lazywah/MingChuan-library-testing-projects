@@ -1,0 +1,1608 @@
+<!DOCTYPE html>
+<!-- ZH: AI 訓練平台主前端面版 | EN: AI Training Platform Main Frontend Dashboard -->
+<html lang="zh-Hant" data-theme="dark">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Training Platform</title>
+    <!-- ZH: 引入 Google 字體 | EN: Import Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <!-- <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet"> -->
+    <!-- ZH: Open Sans —— 與學校 Moodle 的 Latin 字體一致。
+         原本這裡載的是 Playpen Sans，但整份 CSS 沒有任何地方用到它，
+         是一個純浪費的網路請求，已一併換掉。
+         display=swap：字體載入前先用 fallback 顯示，不會白畫面。 -->
+    <link href="https://fonts.googleapis.com/css2?family=Open+Sans:wght@400;600;700&display=swap" rel="stylesheet">
+
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+    <!-- ZH: 引入主任務面板樣式 | EN: Import main stylesheet -->
+    <link rel="stylesheet" href="styles.css?v=v1-5-0004">
+
+    <!-- ZH: 引入 Google Material Icons | EN: Import Google Material Icons -->
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+</head>
+
+<body>
+    <!-- ZH: 裝飾背景區域（由 CSS 控制，可自訂圖片） | EN: Decorative background area (Controlled by CSS, custom image ready) -->
+    <div class="empty bg-grad custom-bg" id="main-bg"></div>
+
+    <!-- ZH: 系統提示訊息 | EN: System notification toast -->
+    <div id="toast" class="toast hidden">
+        <span id="toast-icon"></span>
+        <span id="toast-msg">Notification Message</span>
+    </div>
+
+    <!-- ZH: 視圖: 登入面板 | EN: VIEW: Login panel -->
+    <div id="login-view" class="glass-modal hidden">
+        <div class="glass-backdrop"></div>
+        <!-- ZH: 獨立的登入操作列 | EN: Independent login action bar -->
+        <div class="login-actions"
+            style="position: absolute; top: 20px; right: 30px; display: flex; gap: 15px; z-index: 10;">
+            <!-- ZH: 語言切換 | EN: Language Toggle -->
+            <button class="icon-action toggle-lang-btn" data-i18n-title="tooltip_toggle_lang" title="切換語言"
+                style="font-size:30px; background:transparent; border:none; cursor:pointer; color:var(--text-primary); transition:0.3s;">
+                <ion-icon name="language-outline"></ion-icon>
+            </button>
+            <!-- ZH: 主題切換 | EN: Theme Toggle -->
+            <button class="icon-action toggle-theme-btn" data-i18n-title="tooltip_toggle_theme" title="切換主題"
+                style="font-size:30px; background:transparent; border:none; cursor:pointer; color:var(--text-primary); transition:0.3s;">
+                <ion-icon name="moon-outline"></ion-icon>
+            </button>
+        </div>
+
+        <div class="form-box active-popup" id="login-form-box">
+            <span class="close" title="Mock close button">
+                <ion-icon name="close-circle-outline"></ion-icon>
+            </span>
+            <!--
+              v2.1 SSO 整合（v1.2 純淨入口設計）：
+              - User UI 只有「使用學校帳號登入」一個按鈕（OIDC 啟用時）
+              - OIDC 未啟用時顯示 fallback 訊息
+              - Admin 走獨立的 admin UI (port 8888) 做本機登入
+              - Mock SSO 不曝光於 UI（dev 環境直接打 /api/v1/sso/login）
+              - 既有 username/password form 已移除（admin 從 port 8888 進）
+            -->
+            <form id="login-form">
+                <h1 data-i18n="login_title">登入系統</h1>
+
+                <!-- ZH: OIDC 啟用時顯示 | EN: Shown when OIDC enabled -->
+                <div id="sso-section" style="display: none; flex-direction: column; gap: 15px; width: 100%;">
+                    <button type="button" id="sso-oidc-btn" class="ready-btn"
+                            style="display: flex; align-items: center; justify-content: center; gap: 10px;">
+                        <ion-icon name="school-outline" style="font-size: 22px;"></ion-icon>
+                        <span data-i18n="sso_school_login">使用學校帳號登入</span>
+                    </button>
+                    <p class="sso-hint"
+                       style="text-align: center; color: var(--text-muted); font-size: 0.9em; line-height: 1.5; margin: 0;">
+                        <span data-i18n="sso_hint">學生 / 老師請使用學校 Microsoft 帳號（學號@mcu.edu.tw）</span>
+                    </p>
+                </div>
+
+                <!-- ZH: OIDC 尚未配置時 fallback | EN: Fallback when OIDC pending -->
+                <div id="sso-pending" style="display: none; flex-direction: column; gap: 12px; width: 100%; text-align: center;">
+                    <ion-icon name="time-outline"
+                              style="font-size: 48px; color: var(--text-muted); margin: 10px auto;"></ion-icon>
+                    <p style="color: var(--text-primary); font-size: 1.05em; font-weight: 600; margin: 0;"
+                       data-i18n="sso_pending_msg">系統登入功能尚在設定中</p>
+                    <p style="color: var(--text-muted); font-size: 0.9em; line-height: 1.5; margin: 0;"
+                       data-i18n="sso_pending_hint">若您是管理員，請透過管理介面登入</p>
+                </div>
+
+                <!-- ZH: 載入中佔位（fetch /providers 期間）| EN: Loading placeholder -->
+                <div id="sso-loading" style="display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 20px 0;">
+                    <div class="spinner"
+                         style="width: 32px; height: 32px; border: 3px solid rgba(255,255,255,0.2); border-top-color: var(--neon-blue); border-radius: 50%; animation: spin 0.8s linear infinite;"></div>
+                    <p style="color: var(--text-muted); font-size: 0.85em; margin: 0;" data-i18n="sso_loading">載入中…</p>
+                </div>
+                <style>
+                    @keyframes spin { to { transform: rotate(360deg); } }
+                </style>
+
+            </form>
+
+            <!-- v2.2: 本機帳號 fallback 登入表單（移到 <form> 外，避免 Enter 觸發外層 form submit） -->
+            <details id="local-login-details" style="margin-top: 24px; width: 100%;">
+                <summary style="cursor: pointer; color: var(--text-muted); font-size: 0.85em; text-align: center; padding: 8px;"
+                         data-i18n="local_login_summary">沒有學校帳號？</summary>
+                <div style="display: flex; flex-direction: column; gap: 12px; margin-top: 16px; padding: 16px; background: rgba(255,255,255,0.03); border-radius: 8px;">
+                    <p style="color: var(--text-muted); font-size: 0.8em; margin: 0 0 6px 0; line-height: 1.5;"
+                       data-i18n="local_login_hint">本機帳號登入 — 請聯絡老師或管理員取得帳號。</p>
+                    <div class="input">
+                        <input type="text" id="local-username" placeholder=" " autocomplete="username">
+                        <label data-i18n="label_username">帳號</label>
+                        <ion-icon name="person-outline"></ion-icon>
+                    </div>
+                    <div class="input login-eye" style="position: relative;">
+                        <input type="password" id="local-password" placeholder=" " autocomplete="current-password">
+                        <label data-i18n="label_password">密碼</label>
+                        <ion-icon name="lock-closed-outline"></ion-icon>
+                        <span class="eye-toggle-pwd" data-target="local-password"
+                              style="position:absolute; right:15px; top:50%; transform:translateY(-50%); cursor:pointer; color:var(--text-muted); z-index:2;">
+                            <ion-icon name="eye-off-outline"></ion-icon>
+                        </span>
+                    </div>
+                    <button type="button" id="local-login-btn" class="ready-btn"
+                            style="display: flex; align-items: center; justify-content: center; gap: 8px;">
+                        <ion-icon name="log-in-outline" style="font-size: 18px;"></ion-icon>
+                        <span data-i18n="btn_local_login">登入</span>
+                    </button>
+                    <p id="local-login-error" style="color: var(--neon-pink); font-size: 0.85em; margin: 0; min-height: 1em; text-align: center;"></p>
+                </div>
+            </details>
+        </div>
+    </div>
+
+    <!-- ZH: 忘記密碼面板 | EN: Forgot Password Modal -->
+    <div id="forgot-pwd-modal" class="glass-modal hidden">
+        <div class="glass-backdrop"></div>
+        <div class="form-box active-popup" id="forgot-pwd-form-box">
+            <span class="close" id="forgot-pwd-close-btn" title="Close">
+                <ion-icon name="close-circle-outline"></ion-icon>
+            </span>
+            <form id="forgot-pwd-form">
+                <h1 data-i18n="forgot_password">Forgot Password</h1>
+                <p style="text-align: center; font-size: 13px; color: var(--text-muted); margin-bottom: 20px;" data-i18n="forgot_password_desc">Please enter your Username and Email to reset.</p>
+                <div class="input">
+                    <input type="text" id="forgot-username" required autocomplete="off" placeholder=" ">
+                    <label data-i18n="label_username">Username</label>
+                    <ion-icon name="person-outline"></ion-icon>
+                </div>
+                <div class="input">
+                    <input type="email" id="forgot-email" required autocomplete="off" placeholder=" ">
+                    <label data-i18n="th_email">Email</label>
+                    <ion-icon name="mail-outline"></ion-icon>
+                </div>
+                <button type="submit" class="ready-btn" id="forgot-pwd-submit-btn">
+                    <span data-i18n="btn_reset_pwd">Reset Password</span>
+                </button>
+            </form>
+            <div id="temp-pwd-result" class="hidden" style="margin-top: 20px; padding: 15px; border-radius: 8px; background: rgba(0,255,0,0.1); border: 1px solid rgba(0,255,0,0.3); text-align: center;">
+                <!-- C-11: description text is updated dynamically by app.js based on SMTP config -->
+                <p style="font-size: 13px; color: var(--text-primary); margin-bottom: 8px;" data-i18n="temp_pwd_desc">Your temporary password is:</p>
+                <code id="temp-pwd-display" style="font-size: 20px; font-weight: bold; color: #10b981; letter-spacing: 2px;"></code>
+                <p style="font-size: 12px; color: var(--text-muted); margin-top: 10px;" data-i18n="temp_pwd_warning">Please login and change it immediately.</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- ZH: Moodle 風格側邊抽屜 | EN: Moodle Side Drawer -->
+    <!-- v2.2: 預設展開 sidebar，避免新使用者迷路找不到主功能；點外面或漢堡可收起 -->
+    <div id="side-drawer" class="side-drawer">
+        <button id="nav-sidebar-toggle" class="sidebar-pull-tab">
+            <ion-icon name="chevron-back-outline"></ion-icon>
+        </button>
+        <div class="drawer-header">
+            <h3><ion-icon name="apps-outline"></ion-icon> <span data-i18n="drawer_title">Info Board</span></h3>
+        </div>
+        <div class="drawer-content scrollbar-custom">
+
+            <!-- Navigation Menu -->
+            <div class="sidebar-menu">
+                <button class="tab-btn active" id="tab-home" data-tab="home">
+                    <ion-icon name="home-outline"></ion-icon>
+                    <span data-i18n="nav_home">Home</span>
+                </button>
+                <button class="tab-btn" id="tab-dash" data-tab="dashboard">
+                    <ion-icon name="server-outline"></ion-icon>
+                    <span data-i18n="nav_compute">Compute Tasks</span>
+                </button>
+                <button class="tab-btn" id="tab-chat" data-tab="assistant">
+                    <ion-icon name="chatbubbles-outline"></ion-icon>
+                    <span data-i18n="nav_assistant">Assistant</span>
+                </button>
+                <!-- v2.2 Day 9-10: 教學中心已搬到 sidebar 底 (i) 按鈕觸發的 modal -->
+                <button class="tab-btn" id="nav-doc-lib" data-tab="docs">
+                    <ion-icon name="library-outline"></ion-icon>
+                    <span data-i18n="nav_docs">Document Library</span>
+                </button>
+                <button class="tab-btn" id="tab-settings" data-tab="settings">
+                    <ion-icon name="settings-outline"></ion-icon>
+                    <span data-i18n="nav_settings">Settings</span>
+                </button>
+            </div>
+
+            <!-- Token Usage Summary with Pie Chart -->
+            <!-- ZH: v3.0 整塊可點 → 開「我的使用量」。用 role/tabindex 讓鍵盤也能觸發（不是只有滑鼠）。 -->
+            <div class="drawer-widget drawer-token-clickable" id="drawer-token-widget"
+                 role="button" tabindex="0" title="查看我的使用量" style="cursor:pointer;">
+                <h4 style="display:flex; align-items:center; gap:6px;">
+                    <span data-i18n="drawer_token">Token Usage</span>
+                    <ion-icon name="stats-chart-outline" style="font-size:14px; opacity:0.75; margin-left:auto;"></ion-icon>
+                </h4>
+                <div class="drawer-token-visual">
+                    <svg class="token-donut" viewBox="0 0 36 36" width="80" height="80">
+                        <circle class="donut-bg" cx="18" cy="18" r="15.9" fill="none" stroke="rgba(255,255,255,0.1)"
+                            stroke-width="3" />
+                        <circle class="donut-fill" id="drawer-token-ring" cx="18" cy="18" r="15.9" fill="none"
+                            stroke="var(--accent-glow)" stroke-width="3" stroke-dasharray="100" stroke-dashoffset="100"
+                            stroke-linecap="round" transform="rotate(-90 18 18)" />
+                        <text x="18" y="19" text-anchor="middle" dominant-baseline="middle" class="donut-text"
+                            id="drawer-token-percent">0%</text>
+                    </svg>
+                    <div class="drawer-token-stats">
+                        <div class="stat" style="display: flex; justify-content: space-between; align-items: center;">
+                            <span><span data-i18n="token_used">Used</span>:</span>
+                            <b id="drawer-token-used" style="font-family: monospace; white-space: pre;">        0</b>
+                        </div>
+                        <div class="stat" style="display: flex; justify-content: space-between; align-items: center;">
+                            <span><span data-i18n="token_limit">Limit</span>:</span>
+                            <b id="drawer-token-limit" style="font-family: monospace; white-space: pre;">        0</b>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <!-- Available Features -->
+            <div class="drawer-widget">
+                <h4 data-i18n="drawer_features">Available Features</h4>
+                <ul class="feature-list">
+                    <li><ion-icon name="checkmark-circle-outline" style="color:var(--accent-glow)"></ion-icon> <span
+                            data-i18n="feat_1">High Compute GPU</span></li>
+                    <li><ion-icon name="checkmark-circle-outline" style="color:var(--accent-glow)"></ion-icon> <span
+                            data-i18n="feat_2">AI Text Assistant</span></li>
+                    <li><ion-icon name="close-circle-outline" style="color:#fb7185"></ion-icon> <span
+                            data-i18n="feat_3">Image Gen (Soon)</span></li>
+                </ul>
+            </div>
+        </div>
+        <!-- ZH: 底部資訊按鈕 + 快速主題/語言切換 (v2.1)
+             EN: Bottom info button + quick theme/lang toggles (v2.1) -->
+        <div class="drawer-footer">
+            <button class="drawer-info-btn" id="nav-quick-tutorial" data-i18n-title="btn_quick_tutorial" title="快速教學">
+                <ion-icon name="information-circle-outline"></ion-icon>
+            </button>
+            <!-- v2.1: sidebar 底部快速切換主題 -->
+            <button class="drawer-info-btn toggle-theme-btn" data-i18n-title="tooltip_toggle_theme" title="切換主題">
+                <ion-icon name="moon-outline"></ion-icon>
+            </button>
+            <!-- v2.1: sidebar 底部快速切換語言 -->
+            <button class="drawer-info-btn toggle-lang-btn" data-i18n-title="tooltip_toggle_lang" title="切換語言">
+                <ion-icon name="language-outline"></ion-icon>
+            </button>
+            <!-- v2.7: 問題回報移到 Side Bar -->
+            <button class="drawer-info-btn" id="nav-report-issue" data-i18n-title="ql_support_title" title="問題回報">
+                <ion-icon name="help-buoy-outline"></ion-icon>
+            </button>
+        </div>
+    </div>
+
+    <!-- ZH: 視圖: HUD 介面主容器 | EN: VIEW: MAIN HUD Container -->
+    <div id="dashboard-view" class="view-container">
+        <div class="hud-container main-content">
+
+            <!-- Moodle-style Top Header -->
+            <div class="moodle-header">
+                <span class="header-left">
+                    <div class="logo-image">
+                        <ion-icon name="hardware-chip-outline"></ion-icon>
+                    </div>
+                    <div class="logo">MCU AI_BASE</div>
+                </span>
+                <nav class="header-right">
+                    <!-- ZH: 未登入時顯示登入按鈕 | EN: Show login button when not authenticated -->
+                    <button class="header-login-btn" id="header-login-btn">
+                        <ion-icon name="log-in-outline"></ion-icon>
+                        <span data-i18n="btn_login">Login</span>
+                    </button>
+                    <!-- ZH: 登入後顯示使用者資訊 + 下拉選單 | EN: Show user info + dropdown after login -->
+                    <div class="user-dropdown-wrapper" id="user-info-display" style="display:none; position: relative;">
+                        <button class="user-dropdown-toggle" id="user-dropdown-toggle" style="display: flex; align-items: center; gap: 8px; background: transparent; border: none; cursor: pointer; color: var(--text-color); font-family: inherit; font-size: 14px; padding: 6px 12px; border-radius: 8px; transition: background 0.2s;">
+                            <ion-icon name="person-circle-outline" style="font-size: 22px;"></ion-icon>
+                            <span id="user-display">USER</span>
+                            <span id="user-role" class="badge">ROLE</span>
+                            <ion-icon name="chevron-down-outline" style="font-size: 14px; opacity: 0.6;"></ion-icon>
+                        </button>
+                        <div class="user-dropdown-menu" id="user-dropdown-menu" style="display: none; position: absolute; top: calc(100% + 8px); right: 0; min-width: 220px; background: var(--bg-solid, #1a1a24); border: 2px solid var(--border-glow-color, rgba(255,255,255,0.2)); border-radius: 8px; box-shadow: 0 8px 32px rgba(0,0,0,0.8); z-index: 9999; overflow: hidden;">
+                            <div style="display: flex; flex-direction: column;">
+                                <!-- User Profile -->
+                                <button class="dropdown-item-btn" id="nav-profile-btn" style="display: flex; align-items: center; gap: 10px; width: 100%; padding: 12px 16px; background: transparent; border: none; border-bottom: 1px solid rgba(255,255,255,0.05); color: var(--text-color); font-family: inherit; font-size: 14px; cursor: pointer; transition: background 0.2s; text-align: left;" onmouseover="this.style.background='rgba(255,255,255,0.1)'" onmouseout="this.style.background='transparent'">
+                                    <ion-icon name="person-outline" style="font-size: 16px;"></ion-icon>
+                                    <span data-i18n="settings_profile">User Profile</span>
+                                </button>
+                                <!-- ZH: v3.0 我的使用量（只看自己的 + 全體人均對照） -->
+                                <button class="dropdown-item-btn" id="nav-usage-btn" style="display: flex; align-items: center; gap: 10px; width: 100%; padding: 12px 16px; background: transparent; border: none; border-bottom: 1px solid rgba(255,255,255,0.05); color: var(--text-color); font-family: inherit; font-size: 14px; cursor: pointer; transition: background 0.2s; text-align: left;" onmouseover="this.style.background='rgba(255,255,255,0.1)'" onmouseout="this.style.background='transparent'">
+                                    <ion-icon name="stats-chart-outline" style="font-size: 16px;"></ion-icon>
+                                    <span data-i18n="usage_title">我的使用量</span>
+                                </button>
+                                <!-- Change Password -->
+                                <button class="dropdown-item-btn" id="nav-password-btn" style="display: flex; align-items: center; gap: 10px; width: 100%; padding: 12px 16px; background: transparent; border: none; border-bottom: 1px solid rgba(255,255,255,0.05); color: var(--text-color); font-family: inherit; font-size: 14px; cursor: pointer; transition: background 0.2s; text-align: left;" onmouseover="this.style.background='rgba(255,255,255,0.1)'" onmouseout="this.style.background='transparent'">
+                                    <ion-icon name="key-outline" style="font-size: 16px;"></ion-icon>
+                                    <span data-i18n="label_new_password">Change Password</span>
+                                </button>
+                                <!-- Admin Panel (Hidden by default, shown for admins) -->
+                                <button class="dropdown-item-btn" id="nav-admin-btn" style="display: none; align-items: center; gap: 10px; width: 100%; padding: 12px 16px; background: transparent; border: none; border-bottom: 1px solid rgba(255,255,255,0.05); color: #10b981; font-family: inherit; font-size: 14px; cursor: pointer; transition: background 0.2s; text-align: left;" onmouseover="this.style.background='rgba(16,185,129,0.1)'" onmouseout="this.style.background='transparent'">
+                                    <ion-icon name="shield-checkmark-outline" style="font-size: 16px;"></ion-icon>
+                                    <span data-i18n="nav_admin">Admin Panel</span>
+                                </button>
+                                <!-- Logout -->
+                                <button class="dropdown-item-btn" id="logout-btn" style="display: flex; align-items: center; gap: 10px; width: 100%; padding: 12px 16px; background: transparent; border: none; color: #fb7185; font-family: inherit; font-size: 14px; cursor: pointer; transition: background 0.2s; text-align: left;" onmouseover="this.style.background='rgba(251,113,133,0.1)'" onmouseout="this.style.background='transparent'">
+                                    <ion-icon name="log-out-outline" style="font-size: 16px;"></ion-icon>
+                                    <span data-i18n="btn_logout">Logout</span>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </nav>
+            </div>
+
+            <!-- ZH: 分頁 0: 首頁 | EN: PAGE 0: Home -->
+            <main id="home-page" class="page-view active">
+                <div class="home-grid">
+                    <section class="widget form-box-panel">
+                        <div class="widget-header">
+                            <h3><ion-icon name="link-outline"></ion-icon> <span data-i18n="ql_section_title">快速入口</span></h3>
+                        </div>
+                        <div class="bottom-quick-links">
+                            <!-- v2.7: Quick Links 改為 AI 助手 / AI Base Lab / 文件庫 -->
+                            <div class="quick-link-card">
+                                <ion-icon name="chatbubbles-outline" class="ql-icon"></ion-icon>
+                                <h4 data-i18n="ql_assistant_title">AI 助手</h4>
+                                <p data-i18n="ql_assistant_desc">文字聊天、文書簡報等 AI 工具</p>
+                                <button class="ready-btn mini-btn" id="ql-assistant-go"><span data-i18n="ql_go_assistant">開啟助手</span> <ion-icon
+                                        name="arrow-forward-outline"></ion-icon></button>
+                            </div>
+                            <div class="quick-link-card">
+                                <ion-icon name="rocket-outline" class="ql-icon"></ion-icon>
+                                <h4 data-i18n="ql_lab_title">AI Base Lab</h4>
+                                <p data-i18n="ql_lab_desc">VS Code in Browser + Run on GPU</p>
+                                <button class="ready-btn mini-btn" id="ql-lab-go"><span data-i18n="ql_go_lab">開啟 Lab</span> <ion-icon
+                                        name="arrow-forward-outline"></ion-icon></button>
+                            </div>
+                            <div class="quick-link-card">
+                                <ion-icon name="library-outline" class="ql-icon"></ion-icon>
+                                <h4 data-i18n="ql_docs_title">文件庫</h4>
+                                <p data-i18n="ql_docs_desc">作品集、問題解法、教學與校網</p>
+                                <button class="ready-btn mini-btn" id="ql-docs-go"><span data-i18n="ql_go_docs">開啟文件庫</span> <ion-icon
+                                        name="arrow-forward-outline"></ion-icon></button>
+                            </div>
+                        </div>
+                    </section>
+                    <section class="widget form-box-panel">
+                        <div class="widget-header">
+                            <h3><ion-icon name="megaphone-outline"></ion-icon> <span
+                                    data-i18n="drawer_announcements">Announcements & Updates</span></h3>
+                        </div>
+                        <!-- v2.2: 動態公告 (admin 在 admin UI 編輯) -->
+                        <div class="announcement-list" id="announcement-list">
+                            <div class="announcement-item" data-loading="1">
+                                <p style="color: var(--text-muted); text-align: center; padding: 20px;" data-i18n="anno_loading">載入公告中...</p>
+                            </div>
+                        </div>
+                    </section>
+
+                </div>
+            </main>
+
+            <!-- ZH: 分頁 1: 運算任務視圖 | EN: PAGE 1: Compute Tasks -->
+            <main id="dashboard-page" class="page-view">
+
+                <!-- ZH: 頂部: 新增任務表單 | EN: TOP: Submit New Job -->
+                <!-- ZH: 運算任務分頁 (高算力 / 中低算力 / Notebook) | EN: Compute Task Sub-tabs -->
+                <!-- ZH: v3.0 三個分頁加滑鼠停留說明（data-i18n-tip → data-tip，CSS 以 attr() 畫出）。
+                         說明重點是「用不用 GPU」，因為分頁名字看不出這個差別。 -->
+                <div class="compute-sub-tabs">
+                    <button class="sub-tab-btn active has-tip" id="sub-tab-high" data-subtab="compute-high"
+                            data-i18n-tip="compute_high_tip">
+                        <ion-icon name="flash-outline" style="color:#f59e0b;"></ion-icon> <span
+                            data-i18n="compute_high">High Compute</span>
+                        <ion-icon name="help-circle-outline" class="tip-hint"></ion-icon>
+                    </button>
+                    <button class="sub-tab-btn has-tip" id="sub-tab-midlow" data-subtab="compute-midlow"
+                            data-i18n-tip="compute_mid_low_tip">
+                        <ion-icon name="speedometer-outline" style="color:#3b82f6;"></ion-icon> <span
+                            data-i18n="compute_mid_low">Mid / Low Compute</span>
+                        <ion-icon name="help-circle-outline" class="tip-hint"></ion-icon>
+                    </button>
+                    <!-- ZH: v2.0 Lab launcher（沿用既有 sub-tab id 與 i18n 鍵） -->
+                    <!-- EN: v2.0 Lab launcher (reuses existing sub-tab id and i18n key) -->
+                    <button class="sub-tab-btn has-tip" id="sub-tab-notebook" data-subtab="compute-notebook"
+                            data-i18n-tip="compute_notebook_tip">
+                        <ion-icon name="rocket-outline" style="color:#a78bfa;"></ion-icon> <span
+                            data-i18n="compute_notebook">Notebook</span>
+                        <ion-icon name="help-circle-outline" class="tip-hint"></ion-icon>
+                    </button>
+                </div>
+
+                <div class="compute-tab-content">
+                    <!-- ZH: 左側: 高算力任務 (Priority >= 2) | EN: Left: High Compute (Priority >= 2) -->
+                    <section class="compute-panel sub-page-view active" id="compute-high-page"
+                        style="background: transparent; box-shadow: none; padding: 0;">
+                        <div style="display: flex; flex-direction: column; gap: 20px;">
+                            <div class="widget form-box-panel">
+                                <div class="widget-header">
+                                    <h3 data-i18n="job_compose">New Task</h3>
+                                </div>
+                                <form id="job-form-high" class="job-form"
+                                    style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; align-items: start;">
+                                    <div class="field-group" style="display: flex; flex-direction: column; gap: 8px;">
+                                        <label data-i18n="label_job_name"
+                                            style="font-size: 13px; color: var(--text-muted);">Job Name</label>
+                                        <div style="position: relative;">
+                                            <input type="text" id="job-name-high" required
+                                                data-i18n-placeholder="ph_task_name" placeholder="輸入任務名稱…"
+                                                style="width: 100%; padding: 10px 10px 10px 35px; border: none; border-bottom: 1px solid rgba(255,255,255,0.2); border-radius: 0; background: transparent; color: var(--text-color); box-sizing: border-box; font-family: inherit; font-size: 14px; outline: none; transition: border-color 0.3s;">
+                                            <ion-icon name="document-text-outline"
+                                                style="position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: var(--text-muted); font-size: 16px;"></ion-icon>
+                                        </div>
+                                    </div>
+                                    <div class="field-group dataset-upload-container"
+                                        style="display: flex; flex-direction: column; gap: 8px;">
+                                        <label data-i18n="label_dataset"
+                                            style="font-size: 13px; color: var(--text-muted);">Dataset Upload</label>
+                                        <div style="position: relative;">
+                                            <input type="file" id="datasetFile-high" accept=".zip,.csv,.jsonl"
+                                                style="width: 100%; padding: 10px 10px 10px 35px; border: none; border-bottom: 1px solid rgba(255,255,255,0.2); border-radius: 0; background: transparent; color: var(--text-color); box-sizing: border-box; font-family: inherit; font-size: 14px; cursor: pointer; outline: none; transition: border-color 0.3s;">
+                                            <ion-icon name="cloud-upload-outline"
+                                                style="position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: var(--text-muted); font-size: 16px;"></ion-icon>
+                                        </div>
+                                    </div>
+
+                                    <div id="auto-detect-group-high"
+                                        style="display: none; grid-column: 1 / -1; grid-template-columns: 1fr 1fr; gap: 20px;">
+                                        <div class="field-group"
+                                            style="display: flex; flex-direction: column; gap: 8px;">
+                                            <label data-i18n="label_model_name"
+                                                style="font-size: 13px; color: var(--text-muted);">Model Identifier
+                                                (Auto-detected)</label>
+                                            <div style="position: relative;">
+                                                <input type="text" id="model-name-high" readonly placeholder=" "
+                                                    style="width: 100%; padding: 10px 10px 10px 35px; border: none; border-bottom: 1px solid rgba(255,255,255,0.2); border-radius: 0; background: transparent; color: var(--accent-glow); box-sizing: border-box; font-family: inherit; font-size: 14px; outline: none;">
+                                                <ion-icon name="cube-outline"
+                                                    style="position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: var(--text-muted); font-size: 16px;"></ion-icon>
+                                            </div>
+                                        </div>
+                                        <div style="display: flex; gap: 20px;">
+                                            <div class="field-group"
+                                                style="display: flex; flex-direction: column; gap: 8px; flex: 1;">
+                                                <label data-i18n="label_epochs"
+                                                    style="font-size: 13px; color: var(--text-muted);">Epochs</label>
+                                                <div style="position: relative;">
+                                                    <input type="number" id="job-epochs-high" readonly placeholder=" "
+                                                        style="width: 100%; padding: 10px 10px; border: none; border-bottom: 1px solid rgba(255,255,255,0.2); border-radius: 0; background: transparent; color: var(--text-color); box-sizing: border-box; font-family: inherit; font-size: 14px; outline: none; text-align: center;">
+                                                </div>
+                                            </div>
+                                            <div class="field-group"
+                                                style="display: flex; flex-direction: column; gap: 8px; flex: 1;">
+                                                <label data-i18n="label_batch"
+                                                    style="font-size: 13px; color: var(--text-muted);">Batch
+                                                    Size</label>
+                                                <div style="position: relative;">
+                                                    <input type="number" id="job-batch-high" readonly placeholder=" "
+                                                        style="width: 100%; padding: 10px 10px; border: none; border-bottom: 1px solid rgba(255,255,255,0.2); border-radius: 0; background: transparent; color: var(--text-color); box-sizing: border-box; font-family: inherit; font-size: 14px; outline: none; text-align: center;">
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div
+                                        style="grid-column: 1 / -1; display: flex; justify-content: space-between; align-items: center; border-top: 1px dashed rgba(255,255,255,0.1); padding-top: 15px;">
+                                        <span
+                                            style="margin-right: 15px; font-size: 13px; color: var(--accent-glow); flex-shrink: 0;"><ion-icon
+                                                name="analytics-outline" style="vertical-align: middle;"></ion-icon>
+                                            <span data-i18n="priority_high_desc">High Priority GPU
+                                                Processing</span></span>
+                                        <button type="submit" class="ready-btn"
+                                            style="margin:0; flex: 1; text-align: center;">
+                                            <span data-i18n="btn_dispatch">Dispatch Task</span>
+                                        </button>
+                                    </div>
+                                </form>
+                            </div>
+
+                            <div class="widget form-box-panel">
+                                <div class="widget-header split">
+                                    <h3><span data-i18n="compute_high_desc">High Compute Queue (GPU Processing)</span>
+                                    </h3>
+                                    <ion-icon name="refresh-circle-outline" class="refresh-icon refresh-jobs-btn"
+                                        data-i18n-title="btn_refresh" title="重新整理"></ion-icon>
+                                </div>
+                                <div class="job-list-container scrollbar-custom" id="job-list-high">
+                                    <div class="empty-state">
+                                        <ion-icon name="radio-outline"></ion-icon>
+                                        <p data-i18n="msg_no_signal">No Signal / Queue Empty</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </section>
+
+                    <!-- ZH: 右側: 中低算力任務 (Priority 0, 1) | EN: Right: Mid/Low Compute (Priority 0, 1) -->
+                    <section class="compute-panel sub-page-view" id="compute-midlow-page"
+                        style="background: transparent; box-shadow: none; padding: 0;">
+                        <div style="display: flex; flex-direction: column; gap: 20px;">
+                            <div class="widget form-box-panel">
+                                <div class="widget-header">
+                                    <h3 data-i18n="job_compose">New Task</h3>
+                                </div>
+                                <form id="job-form-midlow" class="job-form"
+                                    style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; align-items: start;">
+                                    <div class="field-group" style="display: flex; flex-direction: column; gap: 8px;">
+                                        <label data-i18n="label_job_name"
+                                            style="font-size: 13px; color: var(--text-muted);">Job Name</label>
+                                        <div style="position: relative;">
+                                            <input type="text" id="job-name-midlow" required
+                                                data-i18n-placeholder="ph_task_name" placeholder="輸入任務名稱…"
+                                                style="width: 100%; padding: 10px 10px 10px 35px; border: none; border-bottom: 1px solid rgba(255,255,255,0.2); border-radius: 0; background: transparent; color: var(--text-color); box-sizing: border-box; font-family: inherit; font-size: 14px; outline: none; transition: border-color 0.3s;">
+                                            <ion-icon name="document-text-outline"
+                                                style="position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: var(--text-muted); font-size: 16px;"></ion-icon>
+                                        </div>
+                                    </div>
+                                    <div class="field-group dataset-upload-container"
+                                        style="display: flex; flex-direction: column; gap: 8px;">
+                                        <label data-i18n="label_dataset"
+                                            style="font-size: 13px; color: var(--text-muted);">Dataset Upload</label>
+                                        <div style="position: relative;">
+                                            <input type="file" id="datasetFile-midlow" accept=".zip,.csv,.jsonl"
+                                                style="width: 100%; padding: 10px 10px 10px 35px; border: none; border-bottom: 1px solid rgba(255,255,255,0.2); border-radius: 0; background: transparent; color: var(--text-color); box-sizing: border-box; font-family: inherit; font-size: 14px; cursor: pointer; outline: none; transition: border-color 0.3s;">
+                                            <ion-icon name="cloud-upload-outline"
+                                                style="position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: var(--text-muted); font-size: 16px;"></ion-icon>
+                                        </div>
+                                    </div>
+
+                                    <div id="auto-detect-group-midlow"
+                                        style="display: none; grid-column: 1 / -1; grid-template-columns: 1fr 1fr; gap: 20px;">
+                                        <div class="field-group"
+                                            style="display: flex; flex-direction: column; gap: 8px;">
+                                            <label data-i18n="label_model_name"
+                                                style="font-size: 13px; color: var(--text-muted);">Model Identifier
+                                                (Auto-detected)</label>
+                                            <div style="position: relative;">
+                                                <input type="text" id="model-name-midlow" readonly placeholder=" "
+                                                    style="width: 100%; padding: 10px 10px 10px 35px; border: none; border-bottom: 1px solid rgba(255,255,255,0.2); border-radius: 0; background: transparent; color: #3b82f6; box-sizing: border-box; font-family: inherit; font-size: 14px; outline: none;">
+                                                <ion-icon name="cube-outline"
+                                                    style="position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: var(--text-muted); font-size: 16px;"></ion-icon>
+                                            </div>
+                                        </div>
+                                        <div style="display: flex; gap: 20px;">
+                                            <div class="field-group"
+                                                style="display: flex; flex-direction: column; gap: 8px; flex: 1;">
+                                                <label data-i18n="label_epochs"
+                                                    style="font-size: 13px; color: var(--text-muted);">Epochs</label>
+                                                <div style="position: relative;">
+                                                    <input type="number" id="job-epochs-midlow" readonly placeholder=" "
+                                                        style="width: 100%; padding: 10px 10px; border: none; border-bottom: 1px solid rgba(255,255,255,0.2); border-radius: 0; background: transparent; color: var(--text-color); box-sizing: border-box; font-family: inherit; font-size: 14px; outline: none; text-align: center;">
+                                                </div>
+                                            </div>
+                                            <div class="field-group"
+                                                style="display: flex; flex-direction: column; gap: 8px; flex: 1;">
+                                                <label data-i18n="label_batch"
+                                                    style="font-size: 13px; color: var(--text-muted);">Batch
+                                                    Size</label>
+                                                <div style="position: relative;">
+                                                    <input type="number" id="job-batch-midlow" readonly placeholder=" "
+                                                        style="width: 100%; padding: 10px 10px; border: none; border-bottom: 1px solid rgba(255,255,255,0.2); border-radius: 0; background: transparent; color: var(--text-color); box-sizing: border-box; font-family: inherit; font-size: 14px; outline: none; text-align: center;">
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div
+                                        style="grid-column: 1 / -1; display: flex; justify-content: space-between; align-items: center; border-top: 1px dashed rgba(255,255,255,0.1); padding-top: 15px;">
+                                        <span
+                                            style="margin-right: 15px; font-size: 13px; color: #3b82f6; flex-shrink: 0;"><ion-icon
+                                                name="analytics-outline" style="vertical-align: middle;"></ion-icon>
+                                            <span data-i18n="priority_normal_desc">Normal Priority
+                                                Processing</span></span>
+                                        <button type="submit" class="ready-btn"
+                                            style="margin:0; flex: 1; border-color: #3b82f6; color: #3b82f6; text-align: center;"
+                                            onmouseover="this.style.background='rgba(59, 130, 246, 0.1)'"
+                                            onmouseout="this.style.background='transparent'">
+                                            <span data-i18n="btn_dispatch">Dispatch Task</span>
+                                        </button>
+                                    </div>
+                                </form>
+                            </div>
+
+                            <div class="widget form-box-panel">
+                                <div class="widget-header split">
+                                    <h3><span data-i18n="compute_midlow_desc">Mid/Low Compute Queue (Service Layer
+                                            Processing)</span></h3>
+                                    <ion-icon name="refresh-circle-outline" class="refresh-icon refresh-jobs-btn"
+                                        data-i18n-title="btn_refresh" title="重新整理"></ion-icon>
+                                </div>
+                                <div class="job-list-container scrollbar-custom" id="job-list-midlow">
+                                    <div class="empty-state">
+                                        <ion-icon name="radio-outline"></ion-icon>
+                                        <p data-i18n="msg_no_signal">No Signal / Queue Empty</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </section>
+
+                    <!-- ZH: Notebook 面板 | EN: Notebook Panel -->
+                    <!-- ZH: v2.0 Lab — code-server 啟動面板 | EN: v2.0 Lab — code-server launcher -->
+                    <section class="compute-panel sub-page-view" id="compute-notebook-page"
+                        style="background: transparent; box-shadow: none; padding: 0; width: 100%;">
+
+                        <div class="lab-launcher widget">
+                            <div class="lab-launcher-header">
+                                <ion-icon name="rocket-outline" class="lab-launcher-icon"></ion-icon>
+                                <div>
+                                    <h2 data-i18n="lab_title">AI Base Lab</h2>
+                                    <p data-i18n="lab_subtitle" class="lab-launcher-subtitle">
+                                        在瀏覽器內使用完整的 VS Code 環境，含終端機、檔案總管、Notebook 編輯與 Run on GPU。
+                                    </p>
+                                </div>
+                            </div>
+
+                            <div class="lab-status-card" id="lab-status-card">
+                                <div class="lab-status-row">
+                                    <span data-i18n="lab_status_label">狀態 Status：</span>
+                                    <span id="lab-status-text" class="lab-status-text" data-i18n="lab_status_loading">載入中…</span>
+                                </div>
+                                <div class="lab-status-row" id="lab-meta" style="display:none;">
+                                    <span data-i18n="lab_image_label">Image：</span>
+                                    <span id="lab-meta-image" class="lab-meta-value">—</span>
+                                    <span style="margin-left:16px;" data-i18n="lab_quota_label">配額 Quota：</span>
+                                    <span id="lab-meta-quota" class="lab-meta-value">—</span>
+                                    <span style="margin-left:16px;" data-i18n="lab_remaining_label">今日剩餘 Remaining：</span>
+                                    <span id="lab-meta-remaining" class="lab-meta-value">—</span>
+                                </div>
+                            </div>
+
+                            <div class="lab-config widget">
+                                <div class="lab-config-row">
+                                    <label data-i18n="lab_image_select">選擇 Image：</label>
+                                    <!-- v2.2: 分組 + 描述，讓學生看得懂該選哪個 -->
+                                    <select id="lab-image-select" class="lab-select">
+                                        <optgroup label="🟢 新手推薦 (CPU)">
+                                            <option value="aibase/code-server:2026-spring">Code Editor — 純編輯環境，最快啟動</option>
+                                            <option value="aibase/dev-tools:2026-spring">Dev Tools — Python / C++ / Java 通用</option>
+                                        </optgroup>
+                                        <optgroup label="🔵 深度學習 (CUDA GPU)">
+                                            <option value="aibase/pytorch:2026-spring">PyTorch (CUDA 12.8) — 深度學習入門推薦</option>
+                                            <option value="aibase/pytorch-legacy:2026-spring">PyTorch (CUDA 11.8 Legacy) — 舊驅動環境</option>
+                                            <option value="aibase/tensorflow:2026-spring">TensorFlow — Google 系深度學習</option>
+                                        </optgroup>
+                                        <optgroup label="🟣 LLM 微調與推論">
+                                            <option value="aibase/huggingface:2026-spring">HuggingFace — 微調大語言模型</option>
+                                            <option value="aibase/llamacpp:2026-spring">llama.cpp — 量化版 LLaMA 本地推論</option>
+                                            <option value="aibase/vllm:2026-spring">vLLM — 高效能 LLM 線上推論</option>
+                                        </optgroup>
+                                    </select>
+                                </div>
+                            </div>
+
+                            <div class="lab-actions">
+                                <button id="lab-open-btn" class="lab-btn lab-btn-primary">
+                                    <ion-icon name="open-outline"></ion-icon>
+                                    <span data-i18n="lab_open">開啟 Notebook</span>
+                                </button>
+                                <button id="lab-stop-btn" class="lab-btn lab-btn-danger hidden">
+                                    <ion-icon name="stop-outline"></ion-icon>
+                                    <span data-i18n="lab_stop">停止 Session</span>
+                                </button>
+                                <!-- v2.7: 開啟程式家教小基（code 模式，可附 Lab 檔） -->
+                                <button id="lab-tutor-btn" class="lab-btn" type="button"
+                                    onclick="window.AibotWidget && window.AibotWidget.openCodeMode()">
+                                    <ion-icon name="chatbubbles-outline"></ion-icon>
+                                    <span data-i18n="lab_ask_tutor">問程式家教</span>
+                                </button>
+                            </div>
+
+                            <details class="lab-tips">
+                                <summary data-i18n="lab_tips_summary">使用說明與注意事項（4 則）</summary>
+                                <p data-i18n="lab_tip_1">
+                                    💡 第一次開啟會約 5–10 秒建立容器；之後 idle 30 分鐘自動關閉，檔案永久保留於個人 volume。
+                                </p>
+                                <p data-i18n="lab_tip_2">
+                                    💡 在 code-server 內寫完程式碼後，右鍵「AI Base: Run on GPU」即可送到 GPU 訓練，輸出會串流回 VS Code Output Panel。
+                                </p>
+                                <p data-i18n="lab_tip_3">
+                                    💡 共用模型快取在 <code>/opt/models</code>（read-only），自己的 pip 套件用 <code>pip install --user</code> 安裝到 <code>~/.local/</code> 永久保留。
+                                </p>
+                                <p>
+                                    <span data-i18n="lab_tip_secrets">🔐 需要 API 金鑰嗎？在下方「Secrets 管理」新增（例：HF_TOKEN、OPENAI_API_KEY），啟動 Lab / 送 GPU 任務時會自動以環境變數注入容器。</span>
+                                    <a href="#" id="lab-jump-to-secrets" style="color:var(--neon-cyan); text-decoration:underline; margin-left:4px;" data-i18n="lab_tip_secrets_link">↓ 跳到下方</a>
+                                </p>
+                            </details>
+                        </div>
+
+                        <!-- ZH: v2.7 Lab 內嵌檢視（iframe 內嵌 code-server，小基泡泡可浮在上面） -->
+                        <!-- EN: v2.7 Embedded Lab view (code-server in iframe; 小基 widget floats over it) -->
+                        <div id="lab-embed-wrap" class="lab-embed-wrap hidden">
+                            <div class="lab-embed-toolbar">
+                                <span class="lab-embed-title">
+                                    <ion-icon name="terminal-outline"></ion-icon>
+                                    <span data-i18n="lab_title">AI Base Lab</span>
+                                </span>
+                                <div class="lab-embed-actions">
+                                    <button type="button" id="lab-embed-collapse" class="lab-embed-btn">
+                                        <ion-icon name="chevron-up-outline"></ion-icon>
+                                        <span data-i18n="lab_collapse">收合</span>
+                                    </button>
+                                    <button type="button" id="lab-embed-fullscreen" class="lab-embed-btn">
+                                        <ion-icon name="expand-outline"></ion-icon>
+                                        <span data-i18n="lab_fullscreen">全螢幕</span>
+                                    </button>
+                                    <button type="button" id="lab-embed-newtab" class="lab-embed-btn">
+                                        <ion-icon name="open-outline"></ion-icon>
+                                        <span data-i18n="lab_newtab">新分頁開啟</span>
+                                    </button>
+                                    <button type="button" id="lab-embed-stop" class="lab-embed-btn lab-embed-danger">
+                                        <ion-icon name="stop-outline"></ion-icon>
+                                        <span data-i18n="lab_stop">停止 Session</span>
+                                    </button>
+                                </div>
+                            </div>
+                            <iframe id="lab-iframe" class="lab-iframe" title="AI Base Lab"
+                                    allow="clipboard-read; clipboard-write"></iframe>
+                        </div>
+
+                        <!-- ZH: v2.2 Secrets 管理（搬自 Settings） | EN: v2.2 Secrets (moved from Settings) -->
+                        <div class="lab-section" id="secrets-section" style="margin-top: 20px; padding: 18px; background: var(--bg-soft); border-radius: 12px; border: 1px solid var(--border-soft);">
+                            <h3 style="margin: 0 0 10px; display:flex; align-items:center; gap:6px;">
+                                <ion-icon name="key-outline"></ion-icon>
+                                <span data-i18n="settings_secrets">Secrets 管理</span>
+                                <button type="button" class="info-tip-btn" data-tip="tip_secrets" data-tip-title="tip_secrets_title" aria-label="說明" title="說明">
+                                    <ion-icon name="information-circle-outline"></ion-icon>
+                                </button>
+                            </h3>
+                            <p data-i18n="secrets_desc" style="margin: 0 0 12px; color: var(--text-muted); font-size: 13px; line-height: 1.5;">
+                                在這裡新增 API key 等敏感資訊（HF_TOKEN、WANDB_API_KEY、OPENAI_API_KEY 等），啟動 Lab 或提交 GPU 任務時會自動以「環境變數」注入容器，程式可用 <code>os.environ["KEY_NAME"]</code> 讀取。
+                            </p>
+                            <p data-i18n="secrets_skip_hint" style="margin: 0 0 12px; padding: 8px 12px; background: rgba(245, 158, 11, 0.08); border-left: 3px solid #f59e0b; color: var(--text-muted); font-size: 12px; line-height: 1.6;">
+                                💡 不確定自己需不需要？只有要呼叫 OpenAI / Claude / HuggingFace 等付費 API 才用得到；一般 Python 作業 / 學習用途可以略過。
+                            </p>
+                            <details style="margin: 0 0 12px; color: var(--text-muted); font-size: 12px;">
+                                <summary style="cursor:pointer;" data-i18n="secrets_help_summary">什麼是環境變數？為什麼這樣設計？</summary>
+                                <div style="padding: 8px 12px; background: var(--bg-soft); border-radius: 8px; margin-top: 6px; line-height: 1.6;" data-i18n="secrets_help_body">
+                                    環境變數是程式啟動時從作業系統環境讀的「鍵 = 值」對。把金鑰寫死在程式碼會被誤 commit 到 git 外洩，所以業界做法是統一存在 Secrets 機制中、執行時注入。可以類比 Chrome 密碼管理員 — 程式不用知道密碼，只在需要時自動填入。本平台用 AES-256-GCM 加密儲存，僅在 Lab 容器啟動 / GPU 任務執行時解密注入。
+                                </div>
+                            </details>
+                            <div id="secrets-list" class="secrets-list">
+                                <div class="secret-item" style="justify-content: center; color: var(--text-muted);" data-i18n="secrets_empty">尚未設定任何 secret</div>
+                            </div>
+                            <div class="secret-add-row">
+                                <input type="text" id="secret-name-input" data-i18n-placeholder="secrets_name_placeholder" placeholder="名稱（例：HF_TOKEN）" />
+                                <input type="password" id="secret-value-input" data-i18n-placeholder="secrets_value_placeholder" placeholder="值（vault 加密儲存）" />
+                                <button id="secret-add-btn"><span data-i18n="secrets_add">新增</span></button>
+                            </div>
+                        </div>
+
+                    </section>
+                </div>
+
+            </main>
+
+            <!-- ZH: 分頁 2: AI 助手視圖 (全螢幕) | EN: PAGE 2: Assistant View (Full Screen) -->
+            <main id="assistant-page" class="assistant-container page-view">
+                <!-- ZH: 新增 AI 大廳 面板 (預設顯示) | EN: AI Hub Panel -->
+                <div id="ai-hub-container" class="ai-hub-container active">
+                    <div class="hub-grid">
+                        <div class="hub-section">
+                            <div class="hub-section-header">
+                                <h3><ion-icon name="chatbubbles-outline"></ion-icon> <span
+                                        data-i18n="hub_title_models">AI 模型</span></h3>
+                                <p data-i18n="hub_desc_models">文字、圖片辨識、搜尋、歸納、解任務！</p>
+                            </div>
+                            <div class="hub-cards">
+                                <div class="hub-sub-card" data-target="chat-layout">
+                                    <div class="card-bg" style="background: linear-gradient(135deg, #6366f1, #8b5cf6);">
+                                        <ion-icon name="chatbox-ellipses"></ion-icon>
+                                    </div>
+                                    <span class="card-title" data-i18n="hub_card_chat">文字聊天</span>
+                                </div>
+                                <div class="hub-sub-card" data-target="coming-soon-layout">
+                                    <div class="card-bg" style="background: linear-gradient(135deg, #0ea5e9, #2563eb);">
+                                        <ion-icon name="search-outline"></ion-icon>
+                                    </div>
+                                    <span class="card-title" data-i18n="hub_card_search">上網搜尋</span>
+                                </div>
+                                <div class="hub-sub-card" data-target="coming-soon-layout">
+                                    <div class="card-bg" style="background: linear-gradient(135deg, #10b981, #059669);">
+                                        <ion-icon name="scan-outline"></ion-icon>
+                                    </div>
+                                    <span class="card-title" data-i18n="hub_card_vision">圖片辨識</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="hub-section">
+                            <div class="hub-section-header">
+                                <h3><ion-icon name="document-text-outline"></ion-icon> <span
+                                        data-i18n="hub_title_writing">文書寫作</span></h3>
+                                <p data-i18n="hub_desc_writing">文字作業、歸納、會議紀錄整理、語音轉換！</p>
+                            </div>
+                            <div class="hub-cards">
+                                <div class="hub-sub-card" data-target="coming-soon-layout">
+                                    <div class="card-bg" style="background: linear-gradient(135deg, #ec4899, #d946ef);">
+                                        <ion-icon name="create-outline"></ion-icon>
+                                    </div>
+                                    <span class="card-title" data-i18n="hub_card_editor">AI小編</span>
+                                </div>
+                                <div class="hub-sub-card" data-target="coming-soon-layout">
+                                    <div class="card-bg" style="background: linear-gradient(135deg, #f59e0b, #ea580c);">
+                                        <ion-icon name="document-attach-outline"></ion-icon>
+                                    </div>
+                                    <span class="card-title" data-i18n="hub_card_pdf">PDF合約</span>
+                                </div>
+                                <div class="hub-sub-card" data-target="presentation-layout">
+                                    <div class="card-bg" style="background: linear-gradient(135deg, #ef4444, #b91c1c);">
+                                        <ion-icon name="easel-outline"></ion-icon>
+                                    </div>
+                                    <span class="card-title" data-i18n="hub_card_ppt">文書簡報</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="hub-section">
+                            <div class="hub-section-header">
+                                <h3><ion-icon name="color-wand-outline"></ion-icon> <span
+                                        data-i18n="hub_title_media">影音創作</span></h3>
+                                <p data-i18n="hub_desc_media">生成圖片、生成影片、生成歌曲！</p>
+                            </div>
+                            <div class="hub-cards">
+                                <div class="hub-sub-card" data-target="coming-soon-layout">
+                                    <div class="card-bg" style="background: linear-gradient(135deg, #8b5cf6, #d946ef);">
+                                        <ion-icon name="image-outline"></ion-icon>
+                                    </div>
+                                    <span class="card-title" data-i18n="hub_card_image">生成圖片</span>
+                                </div>
+                                <div class="hub-sub-card" data-target="coming-soon-layout">
+                                    <div class="card-bg" style="background: linear-gradient(135deg, #f43f5e, #e11d48);">
+                                        <ion-icon name="videocam-outline"></ion-icon>
+                                    </div>
+                                    <span class="card-title" data-i18n="hub_card_video">生成影片</span>
+                                </div>
+                                <div class="hub-sub-card" data-target="coming-soon-layout">
+                                    <div class="card-bg" style="background: linear-gradient(135deg, #14b8a6, #0f766e);">
+                                        <ion-icon name="musical-notes-outline"></ion-icon>
+                                    </div>
+                                    <span class="card-title" data-i18n="hub_card_music">生成歌曲</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="hub-section">
+                            <div class="hub-section-header">
+                                <h3><ion-icon name="language-outline"></ion-icon> <span
+                                        data-i18n="hub_title_life">生活/翻譯</span></h3>
+                                <p data-i18n="hub_desc_life">多語翻譯、衛教知識、專屬知識庫！</p>
+                            </div>
+                            <div class="hub-cards">
+                                <div class="hub-sub-card" data-target="coming-soon-layout">
+                                    <div class="card-bg" style="background: linear-gradient(135deg, #3b82f6, #4f46e5);">
+                                        <ion-icon name="earth-outline"></ion-icon>
+                                    </div>
+                                    <span class="card-title" data-i18n="hub_card_translate">多語翻譯</span>
+                                </div>
+                                <div class="hub-sub-card" data-target="coming-soon-layout">
+                                    <div class="card-bg" style="background: linear-gradient(135deg, #10b981, #3b82f6);">
+                                        <ion-icon name="medkit-outline"></ion-icon>
+                                    </div>
+                                    <span class="card-title" data-i18n="hub_card_health">衛生教育</span>
+                                </div>
+                                <div class="hub-sub-card" data-target="coming-soon-layout">
+                                    <div class="card-bg" style="background: linear-gradient(135deg, #64748b, #475569);">
+                                        <ion-icon name="library-outline"></ion-icon>
+                                    </div>
+                                    <span class="card-title" data-i18n="hub_card_kb">知識庫</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ZH: v2.5 外部 AI 導流中介頁 (非 admin 角色顯示，預設隱藏) -->
+                <!-- EN: v2.5 External AI redirect landing (shown for non-admin roles, hidden by default) -->
+                <div id="external-ai-landing" class="external-ai-landing">
+                    <div class="external-ai-card login-modal">
+                        <div class="external-ai-icon"><ion-icon name="sparkles-outline"></ion-icon></div>
+                        <h2 data-i18n="ext_ai_title">AI 助手</h2>
+                        <p class="external-ai-desc" data-i18n="ext_ai_desc">本平台的 AI 助手由MYAI教育平台提供，將於新分頁開啟。</p>
+
+                        <!-- v2.8 廠商 Token 餘額（以 email 對應，有資料才顯示） -->
+                        <div id="external-ai-balance" class="external-ai-balance hidden">
+                            <ion-icon name="diamond-outline"></ion-icon>
+                            <span data-i18n="ext_ai_balance">AI 點數餘額</span>
+                            <b id="external-ai-points">—</b>
+                            <span id="external-ai-balance-expiry" class="external-ai-balance-expiry"></span>
+                        </div>
+
+                        <!-- 有指派帳號 | Has assigned account -->
+                        <div id="external-ai-active" class="hidden">
+                            <div class="external-ai-account-row">
+                                <span class="external-ai-account-label" data-i18n="ext_ai_account">你的帳號</span>
+                                <code id="external-ai-account">—</code>
+                            </div>
+                            <p class="external-ai-notice" data-i18n="ext_ai_no_store_notice">提醒：對話內容不會儲存在本平台。</p>
+                            <button id="external-ai-go-btn" class="external-ai-go-btn">
+                                <ion-icon name="open-outline"></ion-icon>
+                                <span data-i18n="ext_ai_go">前往 AI 助手</span>
+                            </button>
+                            <!-- v2.8 共用機台：前往時自動登出前一位 → 開登入頁，確保以自己帳號登入 -->
+                            <p class="external-ai-shared-notice" data-i18n="ext_ai_fresh_login_notice">
+                                點「前往」會先登出前一位使用者、再開啟登入頁，請以自己的帳號登入。
+                            </p>
+                        </div>
+
+                        <!-- v3.3 自動開通：初始密碼一次性提示（僅本人可見、保留期內顯示） -->
+                        <div id="ext-ai-initpwd" class="hidden" style="margin-top:14px; padding:14px 16px; border:1px solid #f59e0b; border-radius:10px; background:rgba(245,158,11,0.10);">
+                            <p style="margin:0 0 8px; font-size:13px; color:#f59e0b;">
+                                <ion-icon name="key-outline" style="vertical-align:middle;"></ion-icon>
+                                <b data-i18n="ext_ai_initpwd_title">已為你開通 AI 助手帳號</b>
+                            </p>
+                            <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap; font-size:13px; margin-bottom:6px;">
+                                <span data-i18n="ext_ai_initpwd_pwd">初始密碼</span>
+                                <code id="ext-ai-initpwd-value" style="font-size:15px; letter-spacing:1px; user-select:all;">—</code>
+                                <button type="button" id="ext-ai-initpwd-copy" class="external-ai-go-btn"
+                                        style="width:auto; padding:3px 12px; font-size:12px; margin:0;">
+                                    <ion-icon name="copy-outline"></ion-icon> <span data-i18n="btn_copy">複製</span>
+                                </button>
+                            </div>
+                            <p style="margin:0 0 10px; font-size:12px; opacity:.85;" data-i18n="ext_ai_initpwd_hint">
+                                請盡快登入 AI 助手並修改密碼。此密碼僅暫存一段時間，之後將自動清除（屆時可用該平台的「忘記密碼」以你的學校信箱重設）。
+                            </p>
+                            <button type="button" id="ext-ai-initpwd-ack" class="external-ai-go-btn"
+                                    style="width:auto; padding:5px 14px; font-size:12px; margin:0;">
+                                <ion-icon name="checkmark-circle-outline"></ion-icon>
+                                <span data-i18n="ext_ai_initpwd_ack">我已修改密碼，不再顯示</span>
+                            </button>
+                        </div>
+
+                        <!-- 未開通 / 即將開放 | Not provisioned / coming soon -->
+                        <div id="external-ai-empty" class="hidden">
+                            <p id="external-ai-empty-msg" class="external-ai-notice"></p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ZH: 待開發功能佔位版面 (預設隱藏) | EN: Coming Soon Placeholder -->
+                <div id="coming-soon-layout" class="coming-soon-layout hidden">
+                    <div class="coming-soon-content form-box-panel">
+                        <ion-icon name="construct-outline"></ion-icon>
+                        <h2 data-i18n="hub_coming_soon_title">🚧 此功能即將推出 🚧</h2>
+                        <p data-i18n="hub_coming_soon_desc">我們正在努力開發此模組，敬請期待未來更新！</p>
+                        <button class="back-to-hub-btn ready-btn" data-i18n-aria="btn_back_hub"
+                            aria-label="返回大廳"><ion-icon name="arrow-back-outline"></ion-icon> <span
+                                data-i18n="btn_back_hub">返回大廳</span></button>
+                    </div>
+                </div>
+
+                <!-- ZH: 聊天主要視圖 (預設變為隱藏) | EN: Chat Layout -->
+                <div id="chat-layout" class="chat-layout hidden">
+                    <!-- ZH: 聊天室列表 | EN: Chatroom Sessions Sidebar -->
+                    <aside class="chat-sidebar form-box-panel">
+                        <div class="sidebar-header" style="justify-content: flex-start; gap: 10px;">
+                            <button class="icon-btn back-to-hub-btn" data-i18n-aria="btn_back_hub" aria-label="返回大廳"
+                                style="background: transparent; border: none; color: var(--text-primary); cursor: pointer; font-size: 20px;"><ion-icon
+                                    name="arrow-back-outline"></ion-icon></button>
+                            <h3 data-i18n="chat_sessions">Sessions</h3>
+                        </div>
+                        <div class="session-list scrollbar-custom" id="session-list">
+                            <!-- ZH: 由 JS 動態注入對話室 | EN: Session items injected by JS -->
+                            <button class="session-item new-chat-btn" id="new-chat-btn">
+                                <ion-icon name="add-circle-outline"></ion-icon>
+                                <span data-i18n="btn_new_chat">開始新對話</span>
+                            </button>
+                        </div>
+                    </aside>
+
+                    <!-- ZH: 聊天主要區域 | EN: Chat Main Area -->
+                    <div class="chat-main">
+                        <div id="chat-history" class="chat-history scrollbar-custom">
+                            <!-- ZH: 對話內容將由 JS 注入 | EN: Chat content injected by JS -->
+                            <div class="ai-bubble intro">
+                                <div class="bubble-content" data-i18n="chat_welcome">Hello! How can I help you with your
+                                    AI research today?</div>
+                            </div>
+                        </div>
+
+                        <div class="chat-input-area">
+                            <form id="chat-form" class="chat-form">
+                                <div class="chat-input-row">
+                                    <textarea id="chat-input" data-i18n-placeholder="placeholder_chat"
+                                        data-i18n-placeholder="ph_chat_message" placeholder="在這裡輸入訊息…" required></textarea>
+                                    <button type="submit" id="send-chat-btn" class="send-btn" data-i18n-aria="aria_send" aria-label="送出訊息">
+                                        <span class="material-icons">send</span>
+                                    </button>
+                                </div>
+                                <div class="chat-controls-bar">
+                                    <div class="input-select-group mini-select">
+                                        <label data-i18n="label_ai_model">AI Model</label>
+                                        <!-- v2.4: 選項由 JS 依 tool_type=chat 動態載入（populateModelSelect） -->
+                                        <select id="chat-model-select" class="select-box"></select>
+                                    </div>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ZH: v2.3 P1 文書簡報專項 agent 視圖 | EN: Presentation agent layout -->
+                <div id="presentation-layout" class="chat-layout hidden">
+                    <div class="chat-main" style="width:100%;">
+                        <div class="sidebar-header"
+                            style="justify-content: flex-start; gap: 10px; padding: 14px 18px; border-bottom: 1px solid var(--border-soft);">
+                            <button class="icon-btn back-to-hub-btn" data-i18n-aria="btn_back_hub" aria-label="返回大廳"
+                                style="background: transparent; border: none; color: var(--text-primary); cursor: pointer; font-size: 20px;"><ion-icon
+                                    name="arrow-back-outline"></ion-icon></button>
+                            <ion-icon name="easel-outline" style="color:#ef4444;font-size:20px;"></ion-icon>
+                            <h3 data-i18n="pres_title">文書簡報生成</h3>
+                        </div>
+                        <div id="presentation-history" class="chat-history scrollbar-custom">
+                            <div class="ai-bubble intro">
+                                <div class="bubble-content" data-i18n="pres_welcome">嗨！我可以幫你把想法做成 PowerPoint
+                                    簡報。先告訴我主題、用途，以及大概幾張投影片吧！</div>
+                            </div>
+                        </div>
+                        <div class="chat-input-area">
+                            <form id="presentation-form" class="chat-form">
+                                <div class="chat-input-row">
+                                    <textarea id="presentation-input" data-i18n-placeholder="pres_placeholder"
+                                        placeholder="例如：幫我做一份 10 張的機器學習報告，主題 CNN，給同學看" required></textarea>
+                                    <button type="submit" id="send-presentation-btn" class="send-btn"
+                                        data-i18n-aria="aria_send" aria-label="送出訊息">
+                                        <span class="material-icons">send</span>
+                                    </button>
+                                </div>
+                                <div class="chat-controls-bar">
+                                    <div class="input-select-group mini-select">
+                                        <label data-i18n="label_ai_model">AI Model</label>
+                                        <!-- v2.4: 選項由 JS 依 tool_type=presentation 動態載入 -->
+                                        <select id="presentation-model-select" class="select-box"></select>
+                                    </div>
+                                    <span style="color:var(--text-muted);font-size:12px;" data-i18n="pres_hint">
+                                        生成的 .pptx 會存到你的 Notebook /home/coder/outputs/（請先啟動 Notebook 容器）
+                                    </span>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+            </main>
+
+            <!-- ZH: 分頁: 文件庫 | EN: PAGE: Document Library -->
+            <main id="docs-page" class="page-view">
+                <div class="settings-grid">
+                    <section class="widget form-box-panel">
+                        <div class="widget-header">
+                            <h3><ion-icon name="briefcase-outline" style="margin-right:6px;color:#f59e0b;"></ion-icon>
+                                <span data-i18n="doc_portfolio_title">未來作品集</span>
+                            </h3>
+                        </div>
+                        <p style="color:var(--text-muted);line-height:1.6;" data-i18n="doc_portfolio_desc">展示您的 AI
+                            訓練成果與模型作品。</p>
+                        <div class="empty-state" style="margin-top:10px;">
+                            <ion-icon name="construct-outline"></ion-icon>
+                            <p data-i18n="doc_coming_soon">內容建置中，敬請期待...</p>
+                        </div>
+                    </section>
+
+                    <section class="widget form-box-panel">
+                        <div class="widget-header">
+                            <h3><ion-icon name="bulb-outline" style="margin-right:6px;color:#6366f1;"></ion-icon> <span
+                                    data-i18n="doc_solutions_title">問題解法</span></h3>
+                        </div>
+                        <p style="color:var(--text-muted);line-height:1.6;" data-i18n="doc_solutions_desc">
+                            常見問題的解決方案與除錯技巧。</p>
+                        <div class="empty-state" style="margin-top:10px;">
+                            <ion-icon name="construct-outline"></ion-icon>
+                            <p data-i18n="doc_coming_soon">內容建置中，敬請期待...</p>
+                        </div>
+                    </section>
+
+                    <section class="widget form-box-panel">
+                        <div class="widget-header">
+                            <h3><ion-icon name="school-outline" style="margin-right:6px;color:#10b981;"></ion-icon>
+                                <span data-i18n="doc_tutorial_title">模型製作教學</span>
+                            </h3>
+                        </div>
+                        <p style="color:var(--text-muted);line-height:1.6;" data-i18n="doc_tutorial_desc">從零開始學習如何訓練與部署
+                            AI 模型。</p>
+                        <div class="empty-state" style="margin-top:10px;">
+                            <ion-icon name="construct-outline"></ion-icon>
+                            <p data-i18n="doc_coming_soon">內容建置中，敬請期待...</p>
+                        </div>
+                    </section>
+
+                    <!-- v2.7: 學校首頁 移入文件庫 -->
+                    <section class="widget form-box-panel">
+                        <div class="widget-header">
+                            <h3><ion-icon name="globe-outline" style="margin-right:6px;color:#0ea5e9;"></ion-icon>
+                                <span data-i18n="ql_school_title">學校首頁</span>
+                            </h3>
+                        </div>
+                        <p style="color:var(--text-muted);line-height:1.6;" data-i18n="ql_school_desc">前往 MCU 官方網站</p>
+                        <button class="ready-btn mini-btn" style="margin-top:10px;"
+                            onclick="window.open('https://www.mcu.edu.tw/', '_blank')">
+                            <span data-i18n="ql_school_go">前往</span> <ion-icon name="arrow-forward-outline"></ion-icon>
+                        </button>
+                    </section>
+                </div>
+            </main>
+
+            <!-- ZH: 教學中心 modal (v2.2 Day 9-10 — 由 sidebar 底 (i) 按鈕觸發) -->
+            <div id="tutorial-center-modal" class="tutorial-center-modal hidden" role="dialog" aria-modal="true">
+                <div class="tutorial-center-backdrop" id="tutorial-center-backdrop"></div>
+                <div class="tutorial-center-panel form-box-panel">
+                    <button type="button" class="tutorial-center-close" id="tutorial-center-close" aria-label="關閉">
+                        <ion-icon name="close-outline"></ion-icon>
+                    </button>
+                    <div class="tutorial-center-header">
+                        <h2><ion-icon name="book-outline" style="margin-right:8px;"></ion-icon><span data-i18n="tut_center_title">教學中心</span></h2>
+                        <p data-i18n="tut_center_subtitle">不知道從哪開始？點下面任一單元，平台會帶你一步一步走過實際操作。每個單元 5 分鐘以內。</p>
+                    </div>
+                    <div class="tutorial-unit-grid" id="tutorial-unit-grid">
+                        <!-- 卡片由 TutorialEngine.renderCenter() 動態插入 -->
+                    </div>
+                </div>
+            </div>
+
+            <!-- v2.2 教學引導 floating ring (position:fixed，不會被 sidebar overflow 切) -->
+            <div id="tutorial-highlight-ring" class="tutorial-highlight-ring hidden"></div>
+
+            <!-- 教學引導 overlay 容器 (Engine 啟動時 toggle) -->
+            <!-- v2.2: wrapper 分層 — wrap 負責定位 transform，bubble 內層只動畫，兩個 transform 不衝突 -->
+            <div id="tutorial-overlay" class="tutorial-overlay hidden" role="dialog" aria-modal="false">
+                <div id="tutorial-bubble-wrap" class="tutorial-bubble-wrap">
+                    <div class="tutorial-overlay-bubble" id="tutorial-bubble">
+                        <div class="tutorial-bubble-header">
+                            <span class="tutorial-step-badge" id="tutorial-step-badge">Step 1 / 5</span>
+                            <button type="button" id="tutorial-abort-btn" aria-label="結束教學"><ion-icon name="close-outline"></ion-icon></button>
+                        </div>
+                        <h3 id="tutorial-bubble-title"></h3>
+                        <p id="tutorial-bubble-body"></p>
+                        <div class="tutorial-bubble-actions">
+                            <button type="button" id="tutorial-prev-btn" class="ready-btn" style="width:auto; min-width:80px;">
+                                <ion-icon name="arrow-back-outline"></ion-icon> <span data-i18n="tut_prev">上一步</span>
+                            </button>
+                            <button type="button" id="tutorial-next-btn" class="ready-btn" style="width:auto; min-width:100px;">
+                                <span data-i18n="tut_next">下一步</span> <ion-icon name="arrow-forward-outline"></ion-icon>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ZH: 分頁 3: 設定視圖 | EN: PAGE 3: Settings View -->
+            <main id="settings-page" class="settings-container page-view">
+                <div class="settings-grid">
+
+                    <!-- ZH: Token 資源概況 (從儀表板移來) | EN: Token Resources (moved from dashboard) -->
+                    <section class="widget form-box-panel">
+                        <div class="widget-header">
+                            <h3 style="display:flex; align-items:center; gap:6px;">
+                                <span data-i18n="token_overview">Token Resources</span>
+                                <button type="button" class="info-tip-btn" data-tip="tip_tokens" data-tip-title="tip_tokens_title" aria-label="說明" title="說明">
+                                    <ion-icon name="information-circle-outline"></ion-icon>
+                                </button>
+                            </h3>
+                        </div>
+                        <div class="token-display">
+                            <div class="token-ring-container">
+                                <svg class="progress-ring" width="120" height="120">
+                                    <circle class="progress-ring__bg" stroke="rgba(255,255,255,0.1)" stroke-width="10"
+                                        fill="transparent" r="50" cx="60" cy="60" />
+                                    <circle id="token-ring-fill" class="progress-ring__circle"
+                                        stroke="var(--accent-glow)" stroke-width="10" fill="transparent" r="50" cx="60"
+                                        cy="60" />
+                                </svg>
+                                <div class="token-percentage" id="token-percent">0%</div>
+                            </div>
+                            <div class="token-details">
+                                <div class="stat-row"><span class="stat-label" data-i18n="token_used">Used:</span> <span
+                                        class="stat-value highlight" id="token-used">0</span></div>
+                                <div class="stat-row"><span class="stat-label" data-i18n="token_limit">Limit:</span>
+                                    <span class="stat-value" id="token-limit">0</span>
+                                </div>
+                                <div class="stat-row"><span class="stat-label" data-i18n="token_reset">Reset
+                                        Date:</span> <span class="stat-value warning" id="token-reset">--</span></div>
+                            </div>
+                        </div>
+                    </section>
+
+                    <section class="widget form-box-panel">
+                        <div class="widget-header">
+                            <h3 data-i18n="settings_appearance">Appearance</h3>
+                        </div>
+                        <div class="settings-option">
+                            <span data-i18n="label_theme">Theme Mode</span>
+                            <button class="ready-btn toggle-theme-btn" style="width:auto; min-width:120px;"><ion-icon
+                                    name="moon-outline"></ion-icon> <span data-i18n="btn_toggle_theme">Toggle
+                                    Theme</span></button>
+                        </div>
+                        <!-- v2.3: 介面字體大小調整（透過根層 zoom，連 px 文字一起縮放） -->
+                        <div class="settings-option font-size-option">
+                            <span data-i18n="label_font_size">Interface Font Size</span>
+                            <div class="font-size-control">
+                                <ion-icon name="text-outline" style="font-size:14px; color:var(--text-muted);"></ion-icon>
+                                <input type="range" id="font-scale-slider" min="80" max="150" step="5" value="100"
+                                       data-i18n-aria="aria_font_size" aria-label="字體大小">
+                                <ion-icon name="text-outline" style="font-size:22px; color:var(--text-muted);"></ion-icon>
+                                <span id="font-scale-value" class="font-scale-value">100%</span>
+                                <button class="ready-btn" id="font-scale-reset" style="width:auto; min-width:auto; padding:6px 12px; font-size:0.85em;"
+                                        data-i18n="btn_font_reset">Reset</button>
+                            </div>
+                        </div>
+                    </section>
+
+                    <section class="widget form-box-panel">
+                        <div class="widget-header">
+                            <h3 data-i18n="settings_language">Localization</h3>
+                        </div>
+                        <div class="settings-option">
+                            <span data-i18n="label_lang">System Language</span>
+                            <button class="ready-btn toggle-lang-btn" style="width:auto; min-width:120px;"><ion-icon
+                                    name="language-outline"></ion-icon> <span data-i18n="btn_toggle_lang">Switch
+                                    Language</span></button>
+                        </div>
+                    </section>
+
+                    <!-- ZH: 教學導覽 | EN: Tutorial Guide -->
+                    <section class="widget form-box-panel">
+                        <div class="widget-header">
+                            <h3 data-i18n="settings_tutorial">Tutorial Guide</h3>
+                        </div>
+                        <div class="settings-option">
+                            <span data-i18n="label_reopen_tutorial">Onboarding Guide</span>
+                            <button class="ready-btn" id="reopen-tutorial-btn"
+                                style="width:auto; min-width:120px;"><ion-icon name="book-outline"></ion-icon> <span
+                                    data-i18n="btn_reopen_tutorial">Show Tutorial</span></button>
+                        </div>
+                    </section>
+
+                    <!-- ZH: v2.2 Secrets 管理已搬到「運算任務 → Notebook」分頁 | EN: v2.2 Secrets moved to Notebook tab -->
+                    <section class="widget form-box-panel" id="secrets-moved-notice">
+                        <div class="widget-header">
+                            <h3>
+                                <ion-icon name="key-outline" style="margin-right:6px;"></ion-icon>
+                                <span data-i18n="settings_secrets">Secrets 管理</span>
+                            </h3>
+                        </div>
+                        <p style="margin: 0; color: var(--text-muted); font-size: 13px; line-height: 1.7;">
+                            <span data-i18n="secrets_moved_notice">🔐 Secrets 管理已搬到「運算任務 → Notebook」分頁，更貼近實際使用情境（啟動 Lab / 送 GPU 任務時用得到）。</span>
+                            <br>
+                            <a href="#" id="settings-jump-to-secrets" style="color:var(--neon-cyan); text-decoration:underline;" data-i18n="secrets_moved_link">→ 前往 Notebook 分頁的 Secrets 區塊</a>
+                        </p>
+                    </section>
+
+
+                </div>
+            </main>
+
+        </div>
+    </div>
+
+    <!-- ZH: 教學導覽浮動面板 | EN: Onboarding Tutorial Modal -->
+    <div id="tutorial-modal" class="tutorial-modal hidden">
+        <div class="tutorial-backdrop"></div>
+        <div class="tutorial-content form-box-panel">
+            <button class="tutorial-close" id="tutorial-close-btn"><ion-icon name="close-outline"></ion-icon></button>
+            <h2><ion-icon name="school-outline" style="margin-right:8px;"></ion-icon> <span
+                    data-i18n="tutorial_title">Welcome to AI Base!</span></h2>
+            <div class="tutorial-body">
+                <div class="tutorial-step">
+                    <ion-icon name="server-outline" style="font-size:28px; color:#f59e0b;"></ion-icon>
+                    <div>
+                        <h4 data-i18n="tutorial_step1_title">Compute Tasks</h4>
+                        <p data-i18n="tutorial_step1_desc">Submit high or mid/low compute tasks and monitor your job
+                            queue in real time.</p>
+                    </div>
+                </div>
+                <div class="tutorial-step">
+                    <ion-icon name="chatbubbles-outline" style="font-size:28px; color:#6366f1;"></ion-icon>
+                    <div>
+                        <h4 data-i18n="tutorial_step2_title">AI Assistant</h4>
+                        <p data-i18n="tutorial_step2_desc">Access various AI models for text chat, image recognition,
+                            web search and more.</p>
+                    </div>
+                </div>
+                <div class="tutorial-step">
+                    <ion-icon name="settings-outline" style="font-size:28px; color:#10b981;"></ion-icon>
+                    <div>
+                        <h4 data-i18n="tutorial_step3_title">Settings</h4>
+                        <p data-i18n="tutorial_step3_desc">Check your token quota, switch themes & language, and manage
+                            your account.</p>
+                    </div>
+                </div>
+            </div>
+            <label class="tutorial-dismiss">
+                <input type="checkbox" id="tutorial-dismiss-check"> <span data-i18n="tutorial_dismiss">Don't show
+                    again</span>
+            </label>
+            <button class="ready-btn" id="tutorial-ok-btn" style="margin-top:10px;"><span data-i18n="tutorial_ok">Got
+                    it!</span></button>
+        </div>
+    </div>
+
+    <!-- ZH: 個人資訊浮動面板 | EN: Profile Modal -->
+    <!-- v2.1 升級：從單一 email 表單擴充為「我的帳號資訊」豐富版 -->
+    <!-- ZH: v3.0 我的使用量 —— 只看得到自己的用量 + 全體「人均」對照（無排名、無他人資訊）。
+             入口：右側抽屜的「外部 AI 點數」區塊、或 Header 使用者下拉的「我的使用量」。 -->
+    <div id="usage-modal" class="tutorial-modal hidden">
+        <div class="tutorial-backdrop" id="usage-backdrop"></div>
+        <div class="tutorial-content form-box-panel login-modal" style="max-width: 720px; width: 94%; max-height: 90vh; overflow-y: auto;">
+            <button class="tutorial-close" id="usage-close-btn"><ion-icon name="close-outline"></ion-icon></button>
+            <h2 style="margin-bottom: 6px;">
+                <ion-icon name="stats-chart-outline" style="margin-right:8px;"></ion-icon>
+                <span data-i18n="usage_title">我的使用量</span>
+            </h2>
+            <p style="color:var(--text-muted); font-size:12px; margin:0 0 16px;" data-i18n="usage_hint">
+                這裡只顯示你自己的外部 AI 使用紀錄，以及全體的平均值作為對照。看不到其他人的資料。
+            </p>
+
+            <!-- 期間切換 -->
+            <div style="display:flex; gap:8px; align-items:center; margin-bottom:14px; flex-wrap:wrap;">
+                <span style="font-size:12px; color:var(--text-muted);" data-i18n="usage_period">期間</span>
+                <select id="usage-days" style="padding:4px 10px; border-radius:8px;">
+                    <option value="30" data-i18n="usage_30d">近 30 天</option>
+                    <option value="90" data-i18n="usage_90d">近 90 天</option>
+                    <option value="0" data-i18n="usage_all">全部</option>
+                </select>
+                <span id="usage-balance" style="margin-left:auto; font-size:12px; color:var(--text-muted);"></span>
+            </div>
+
+            <div id="usage-body">
+                <p style="color:var(--text-muted); font-size:13px; text-align:center; padding:24px;" data-i18n="usage_loading">載入中…</p>
+            </div>
+        </div>
+    </div>
+
+    <div id="profile-modal" class="tutorial-modal hidden">
+        <div class="tutorial-backdrop" id="profile-backdrop"></div>
+        <div class="tutorial-content form-box-panel login-modal" style="max-width: 540px; width: 92%; max-height: 90vh; overflow-y: auto;">
+            <button class="tutorial-close" id="profile-close-btn"><ion-icon name="close-outline"></ion-icon></button>
+            <h2 style="margin-bottom: 20px;">
+                <ion-icon name="person-circle-outline" style="margin-right:8px;"></ion-icon>
+                <span data-i18n="settings_profile">我的帳號資訊</span>
+            </h2>
+
+            <!-- ── 區塊 1：基本資訊（read-only） ── -->
+            <section class="profile-section">
+                <h3 class="profile-section-title">
+                    <ion-icon name="id-card-outline"></ion-icon>
+                    <span data-i18n="profile_basic">基本資訊</span>
+                </h3>
+                <dl class="profile-info-grid">
+                    <dt data-i18n="label_username">使用者名稱</dt>
+                    <dd id="profile-info-username">—</dd>
+
+                    <dt data-i18n="label_email">電子郵件</dt>
+                    <dd id="profile-info-email">—</dd>
+
+                    <dt data-i18n="label_role">角色</dt>
+                    <dd><span id="profile-info-role" class="profile-badge">—</span></dd>
+
+                    <dt data-i18n="label_department">學系</dt>
+                    <dd id="profile-info-department">—</dd>
+                </dl>
+            </section>
+
+            <!-- ── 區塊 2：認證資訊（read-only） ── -->
+            <section class="profile-section">
+                <h3 class="profile-section-title">
+                    <ion-icon name="shield-checkmark-outline"></ion-icon>
+                    <span data-i18n="profile_auth">認證與登入</span>
+                </h3>
+                <dl class="profile-info-grid">
+                    <dt data-i18n="label_auth_source">認證來源</dt>
+                    <dd><span id="profile-info-auth-source" class="profile-badge profile-badge-auth">—</span></dd>
+
+                    <dt data-i18n="label_last_login">最後登入</dt>
+                    <dd id="profile-info-last-login">—</dd>
+
+                    <dt data-i18n="label_last_ip">登入 IP</dt>
+                    <dd id="profile-info-last-ip">—</dd>
+
+                    <dt data-i18n="label_login_count">累計登入次數</dt>
+                    <dd id="profile-info-login-count">—</dd>
+
+                    <dt data-i18n="label_created_at">帳號建立</dt>
+                    <dd id="profile-info-created-at">—</dd>
+                </dl>
+            </section>
+
+            <!-- ── 區塊 3：Token 用量（read-only，從 /api/v1/auth/usage 拿） ── -->
+            <section class="profile-section">
+                <h3 class="profile-section-title">
+                    <ion-icon name="speedometer-outline"></ion-icon>
+                    <span data-i18n="profile_usage">Token 用量</span>
+                </h3>
+                <div class="profile-usage-bar-wrap">
+                    <div class="profile-usage-bar">
+                        <div id="profile-usage-fill" class="profile-usage-fill" style="width: 0%;"></div>
+                    </div>
+                    <div class="profile-usage-text">
+                        <span id="profile-usage-used">0</span> /
+                        <span id="profile-usage-limit">0</span>
+                        <span style="color: var(--text-muted);">(<span id="profile-usage-pct">0%</span>)</span>
+                    </div>
+                </div>
+                <dl class="profile-info-grid">
+                    <dt data-i18n="label_lifetime_tokens">歷史累計用量</dt>
+                    <dd id="profile-info-lifetime">—</dd>
+
+                    <dt data-i18n="label_reset_date">下次重置</dt>
+                    <dd id="profile-info-reset-date">—</dd>
+                </dl>
+            </section>
+
+            <!-- ZH: v2.1 修正 — 移除「變更個人資訊」區塊
+                 個人資訊應由管理者或學校 SSO 端進行變更，user UI 不提供自助修改入口
+                 EN: v2.1 fix — removed self-edit section; profile changes must go through admin or school SSO -->
+        </div>
+    </div>
+
+    <!-- ZH: 密碼變更浮動面板 | EN: Password Change Modal -->
+    <!--
+      v2.1: 依使用者的 auth_source 顯示不同 UI（JS 動態切換 #password-local / #password-sso）：
+      - local 帳號 → 顯示新密碼輸入框（既有 form）
+      - sso_oidc / sso_cas / sso_mock → 顯示 IdP 連結 + 為什麼不能改的說明
+    -->
+    <div id="password-modal" class="tutorial-modal hidden">
+        <div class="tutorial-backdrop" id="password-backdrop"></div>
+        <div class="tutorial-content form-box-panel login-modal" style="max-width: 460px; width: 90%;">
+            <button class="tutorial-close" id="password-close-btn"><ion-icon name="close-outline"></ion-icon></button>
+            <h2 style="margin-bottom: 20px;"><ion-icon name="key-outline" style="margin-right:8px;"></ion-icon> <span data-i18n="label_new_password">Change Password</span></h2>
+
+            <!-- ZH: 模式 1 — 本機帳號（既有 form） | EN: Mode 1 — local account -->
+            <form id="password-change-form" style="display: flex; flex-direction: column; gap: 15px;">
+                <div class="input login-eye">
+                    <input type="password" id="profile-password" placeholder=" " autocomplete="new-password" minlength="8">
+                    <label data-i18n="label_new_password">New Password</label>
+                    <span class="eye-toggle-pwd" data-target="profile-password" style="position:absolute; right:15px; top:50%; transform:translateY(-50%); cursor:pointer; color:var(--text-muted);">
+                        <ion-icon name="eye-off-outline"></ion-icon>
+                    </span>
+                </div>
+
+                <!-- v2.1: 密碼強度提示條 -->
+                <div id="password-strength-wrap" class="hidden" style="margin-top: -8px;">
+                    <div class="password-strength-bar">
+                        <div id="password-strength-fill" class="password-strength-fill" style="width: 0%;"></div>
+                    </div>
+                    <span id="password-strength-text" class="password-strength-text" data-i18n="password_strength_weak">弱</span>
+                </div>
+
+                <!-- v2.1: 確認新密碼 -->
+                <div class="input login-eye">
+                    <input type="password" id="profile-password-confirm" placeholder=" " autocomplete="new-password" minlength="8">
+                    <label data-i18n="label_confirm_password">確認新密碼</label>
+                    <span class="eye-toggle-pwd" data-target="profile-password-confirm" style="position:absolute; right:15px; top:50%; transform:translateY(-50%); cursor:pointer; color:var(--text-muted);">
+                        <ion-icon name="eye-off-outline"></ion-icon>
+                    </span>
+                </div>
+                <p id="password-mismatch-hint" class="hidden" style="color: #ef4444; font-size: 12px; margin: -8px 0 0;" data-i18n="password_mismatch">
+                    ⚠ 兩次輸入的密碼不一致
+                </p>
+
+                <div style="color: var(--text-muted); font-size: 13px; line-height: 1.5;" data-i18n="password_desc">
+                    請輸入新密碼以保護您的帳號。建議至少 8 字元並混合字母、數字與符號。
+                </div>
+                <button type="submit" class="ready-btn" id="password-submit-btn" disabled>
+                    <ion-icon name="shield-checkmark-outline" style="margin-right:6px;"></ion-icon>
+                    <span data-i18n="btn_update_password">變更密碼</span>
+                </button>
+            </form>
+
+            <!-- ZH: 模式 2 — SSO 帳號（顯示 IdP 連結） | EN: Mode 2 — SSO account -->
+            <div id="password-change-sso" class="hidden" style="display: flex; flex-direction: column; gap: 15px;">
+                <div style="display: flex; gap: 12px; padding: 14px; background: rgba(96, 165, 250, 0.1); border-radius: 8px; border-left: 3px solid var(--neon-blue);">
+                    <ion-icon name="information-circle-outline" style="font-size: 24px; color: var(--neon-blue); flex-shrink: 0;"></ion-icon>
+                    <p id="password-sso-msg" style="margin: 0; color: var(--text-primary); font-size: 14px; line-height: 1.5;" data-i18n="password_sso_msg">
+                        您使用學校 Microsoft 帳號登入,密碼由學校統一管理。
+                    </p>
+                </div>
+
+                <a id="password-sso-link" href="#" target="_blank" rel="noopener" class="ready-btn"
+                   style="display: flex; align-items: center; justify-content: center; gap: 8px; text-decoration: none;">
+                    <ion-icon name="open-outline" style="font-size: 18px;"></ion-icon>
+                    <span data-i18n="password_sso_open">前往 Microsoft 變更密碼(新分頁)</span>
+                </a>
+
+                <a id="password-sso-reset-link" href="#" target="_blank" rel="noopener"
+                   style="text-align: center; color: var(--neon-blue); font-size: 13px; text-decoration: none; padding: 5px;">
+                    <ion-icon name="refresh-outline" style="vertical-align: middle;"></ion-icon>
+                    <span data-i18n="password_sso_forgot">忘記密碼?點此重設</span>
+                </a>
+
+                <details style="margin-top: 5px; padding: 8px; background: rgba(255,255,255,0.03); border-radius: 6px;">
+                    <summary style="cursor: pointer; color: var(--text-muted); font-size: 13px;" data-i18n="password_sso_why">
+                        為什麼不能在這裡改?
+                    </summary>
+                    <p style="margin: 10px 0 0; padding-left: 5px; color: var(--text-muted); font-size: 12px; line-height: 1.6;" data-i18n="password_sso_why_explain">
+                        學校採用單一登入 (SSO) 機制,您的密碼存在學校的 Microsoft 系統,本平台從未拿到您的密碼。這是業界標準的安全設計 (Slack / Notion / Figma 等使用 SSO 的服務都是如此)。
+                    </p>
+                </details>
+            </div>
+        </div>
+    </div>
+
+    <!-- ZH: 任務詳情浮動面板 (即時日誌與指標) | EN: Job Details Modal (Real-time logs & metrics) -->
+    <div id="job-details-modal" class="tutorial-modal hidden">
+        <div class="tutorial-backdrop" id="job-details-backdrop"></div>
+        <div class="tutorial-content form-box-panel login-modal"
+            style="max-width: 800px; width: 90%; max-height: 90vh; display: flex; flex-direction: column;">
+            <button class="tutorial-close" id="job-details-close-btn"><ion-icon
+                    name="close-outline"></ion-icon></button>
+            <h2 style="margin-bottom: 15px;"><ion-icon name="pulse-outline" style="margin-right:8px;"></ion-icon> <span
+                    data-i18n="job_details_title">任務詳情 (Job Details)</span> - <span id="detail-job-id"
+                    style="font-size: 0.7em; color: var(--neon-blue);"></span></h2>
+
+            <div
+                style="display: flex; gap: 10px; margin-bottom: 15px; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 10px;">
+                <button class="tab-btn active" id="tab-btn-logs" data-i18n="tab_logs">終端日誌 (Console Logs)</button>
+                <button class="tab-btn" id="tab-btn-metrics" data-i18n="tab_metrics">收斂曲線 (Loss Curve)</button>
+            </div>
+
+            <div id="job-details-body"
+                style="flex: 1; overflow: hidden; display: flex; flex-direction: column; min-height: 300px;">
+                <!-- Logs View -->
+                <div id="view-logs" style="flex: 1; display: flex; flex-direction: column; height: 100%;">
+                    <pre id="job-logs-container" class="scrollbar-custom"
+                        style="flex: 1; background: #000; color: #0f0; padding: 15px; border-radius: 8px; font-family: monospace; overflow-y: auto; margin: 0; white-space: pre-wrap; font-size: 0.9em; border: 1px solid rgba(0, 255, 0, 0.2);"></pre>
+                    <div style="margin-top: 10px; text-align: right;">
+                        <label
+                            style="font-size: 0.9em; cursor: pointer; color: rgba(255,255,255,0.7); display: flex; align-items: center; justify-content: flex-end; gap: 5px;">
+                            <input type="checkbox" id="auto-scroll-logs" checked>
+                            <span data-i18n="label_auto_scroll">自動捲動 (Auto-scroll)</span>
+                        </label>
+                    </div>
+                </div>
+
+                <!-- Metrics View -->
+                <div id="view-metrics" class="hidden" style="flex: 1; height: 100%; position: relative;">
+                    <canvas id="lossChart"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- v2.8 外部 AI 低點數提醒彈窗（登入/進大廳/前往前檢查，本次登入只顯示一次） -->
+    <div id="lowbal-modal" class="tutorial-modal hidden">
+        <div class="tutorial-backdrop" id="lowbal-backdrop"></div>
+        <div class="tutorial-content form-box-panel login-modal" style="max-width: 440px; width: 90%;">
+            <button class="tutorial-close" id="lowbal-close-btn"><ion-icon name="close-outline"></ion-icon></button>
+            <h2 style="margin-bottom: 14px; display:flex; align-items:center; gap:8px;">
+                <ion-icon name="warning-outline" style="color:#fbbf24;"></ion-icon>
+                <span data-i18n="lowbal_title">外部 AI 點數偏低</span>
+            </h2>
+            <p style="color:var(--text-muted); font-size:14px; line-height:1.6; margin:0 0 14px;" data-i18n="lowbal_desc">
+                你的外部 AI（MYAI）剩餘點數偏低，可能很快就無法使用。如需繼續使用，請申請加值。
+            </p>
+            <div style="background:rgba(251,191,36,0.1); border:1px solid rgba(251,191,36,0.35); border-radius:10px; padding:12px 14px; margin-bottom:18px;">
+                <div style="font-size:12px; color:var(--text-muted);" data-i18n="lowbal_remaining">目前剩餘點數</div>
+                <div style="font-size:24px; font-weight:700; font-family:monospace;"><span id="lowbal-points">—</span></div>
+            </div>
+            <div style="display:flex; gap:10px; flex-wrap:wrap;">
+                <a id="lowbal-guide-btn" class="ready-btn" target="_blank" rel="noopener" style="flex:1 1 140px; text-align:center; text-decoration:none; display:none;">
+                    <ion-icon name="school-outline" style="margin-right:6px;"></ion-icon><span data-i18n="lowbal_apply">申請教學</span>
+                </a>
+                <button id="lowbal-goto-btn" class="ready-btn" style="flex:1 1 120px; display:none;">
+                    <ion-icon name="open-outline" style="margin-right:6px;"></ion-icon><span data-i18n="lowbal_goto">仍要前往</span>
+                </button>
+                <button id="lowbal-ok-btn" class="ready-btn" style="flex:1 1 100px;">
+                    <span data-i18n="lowbal_ok">知道了</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ZH: v2.2 概念說明浮動 tooltip | EN: v2.2 concept tooltip popover -->
+    <div id="info-tip-popover" class="info-tip-popover hidden" role="dialog" aria-modal="false">
+        <div class="info-tip-popover-header">
+            <strong id="info-tip-popover-title">說明</strong>
+            <button type="button" id="info-tip-close" aria-label="關閉">
+                <ion-icon name="close-outline"></ion-icon>
+            </button>
+        </div>
+        <div id="info-tip-popover-body" class="info-tip-popover-body"></div>
+    </div>
+
+    <!-- ZH: Monaco Editor (語法高亮程式碼編輯器) | EN: Monaco Editor (syntax-highlighting code editor) -->
+    <script src="https://cdn.jsdelivr.net/npm/monaco-editor@0.44.0/min/vs/loader.js"></script>
+
+    <!-- ZH: 載入圖標庫與主程式碼 | EN: Load Icon library and Main Logic -->
+    <script type="module" src="https://unpkg.com/ionicons@7.1.0/dist/ionicons/ionicons.esm.js"></script>
+    <script nomodule src="https://unpkg.com/ionicons@7.1.0/dist/ionicons/ionicons.js"></script>
+    <script src="app.js?v=v1-5-0004"></script>
+    <!-- ZH: v2.6 客服／導覽浮動助手 | EN: v2.6 floating support/guide assistant -->
+    <script src="assistant-widget.js?v=v1-5-0004"></script>
+</body>
+
+</html>

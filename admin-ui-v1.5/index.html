@@ -1,0 +1,1665 @@
+<!DOCTYPE html>
+<!-- ZH: AI 訓練平台 - 管理員介面 | EN: AI Training Platform - Admin Interface -->
+<html lang="zh-Hant" data-theme="dark">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Training Platform - Admin</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <!-- ZH: Open Sans（與 Moodle 的 Latin 一致）。原本載的 Playpen Sans 全站未使用。 -->
+    <link href="https://fonts.googleapis.com/css2?family=Open+Sans:wght@400;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="styles.css?v=v1-5-0001">
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        /* v2.3: .admin-layout / .admin-nav 樣式已移至 styles.css（改為左 Side Bar + 右內容兩欄）；
+           原置中 max-width 容器與頂部 nav bar 規則移除，避免覆蓋新版版面。
+           .admin-content 內容區自帶 max-width 約束見下方。 */
+        .admin-content > .admin-tab-content {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        /* v2.8 帳號管理：可收合區塊（點標題列展開/收合，預設收合 區塊3/4） */
+        .acct-collapsible > .widget-header { cursor: pointer; display: flex; align-items: center; }
+        .acct-collapsible.collapsed > *:not(.widget-header) { display: none !important; }
+        .acct-collapsible .acct-chev { margin-left: auto; transition: transform .2s ease; }
+        .acct-collapsible.collapsed .acct-chev { transform: rotate(-90deg); }
+        /* slot 內多個 section 之間補間隔（搬進 slot 後失去 admin-grid 的 gap） */
+        #acct-slot-users, #acct-slot-bindings, #acct-slot-sync { display: flex; flex-direction: column; gap: 20px; }
+
+        .back-link {
+            color: var(--text-primary);
+            text-decoration: none;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            font-weight: 600;
+        }
+
+        .back-link:hover {
+            color: var(--neon-blue);
+        }
+
+        .cluster-stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 15px;
+            margin-top: 15px;
+        }
+
+        .stat-card {
+            background: var(--bg-panel);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 15px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .stat-card h4 {
+            margin: 0;
+            color: var(--neon-blue);
+            font-size: 1.1em;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .stat-row {
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.9em;
+        }
+
+        .progress-bar-bg {
+            background: rgba(128, 128, 128, 0.2);
+            height: 6px;
+            border-radius: 3px;
+            overflow: hidden;
+            margin-top: 5px;
+        }
+
+        .progress-bar-fill {
+            height: 100%;
+            background: var(--neon-blue);
+            transition: width 0.3s ease, background-color 0.3s ease;
+        }
+
+        .fill-danger {
+            background: var(--neon-pink);
+        }
+
+        .fill-warning {
+            background: var(--neon-yellow);
+        }
+    </style>
+</head>
+
+<body>
+    <div class="empty bg-grad custom-bg" id="main-bg"></div>
+
+    <!-- v2.3: 語言 / 主題切換已移入管理側邊欄（Side Bar）底部（避免與右側 Side Bar 重疊）；
+         登入頁沿用上次儲存的主題 / 語言（localStorage）。 -->
+
+    <div id="toast" class="toast hidden">
+        <span id="toast-icon"></span>
+        <span id="toast-msg">Notification Message</span>
+    </div>
+
+    <!-- Admin Login Modal -->
+    <div id="admin-login-modal" class="modal-overlay" style="display: flex; position: fixed; inset: 0; background: rgba(0,0,0,0.8); z-index: 9999; justify-content: center; align-items: center;">
+        <div class="form-box-panel" style="width: 100%; max-width: 400px; padding: 30px;">
+            <div style="text-align: center; margin-bottom: 20px;">
+                <ion-icon name="shield-checkmark-outline" style="font-size: 48px; color: var(--neon-pink);"></ion-icon>
+                <h2 style="margin: 10px 0; color: var(--text-primary);" data-i18n="admin_login_title">Admin Login</h2>
+            </div>
+            <form id="admin-login-form" style="display: flex; flex-direction: column; gap: 15px;">
+                <div class="input-wrap">
+                    <ion-icon name="person-outline"></ion-icon>
+                    <input type="text" id="admin-username" required placeholder="Administrator Username" data-i18n="admin_username">
+                </div>
+                <div class="input-wrap" style="position: relative;">
+                    <ion-icon name="lock-closed-outline"></ion-icon>
+                    <input type="password" id="admin-password" required placeholder="Administrator Password" data-i18n="admin_password" style="padding-right: 40px;">
+                    <span id="admin-eye-toggle" style="position: absolute; right: 10px; top: 50%; transform: translateY(-50%); cursor: pointer; color: rgba(255,255,255,0.5);">
+                        <ion-icon name="eye-off-outline" class="eye-off"></ion-icon>
+                        <ion-icon name="eye-outline" class="eye-open" style="display: none;"></ion-icon>
+                    </span>
+                </div>
+                <button type="submit" class="ready-btn" style="margin-top: 10px;" data-i18n="btn_login">Login</button>
+            </form>
+        </div>
+    </div>
+
+    <div class="admin-layout" id="admin-main-layout" style="display: none;">
+        <!-- v2.3: 三個主分頁改用左側 Side Bar 呈現（對齊使用者介面的 side-drawer 體驗） -->
+        <aside class="admin-sidebar">
+            <div class="admin-sidebar-head">
+                <ion-icon name="shield-checkmark-outline" style="color: var(--neon-pink); font-size: 1.4em;"></ion-icon>
+                <span data-i18n="admin_dashboard">管理中心</span>
+            </div>
+
+            <nav class="admin-sidebar-nav">
+                <button id="nav-tab-management" class="admin-side-tab active" onclick="switchAdminMainTab('management')">
+                    <ion-icon name="grid-outline"></ion-icon> <span data-i18n="tab_management">管理介面</span>
+                </button>
+                <button id="nav-tab-analytics" class="admin-side-tab" onclick="switchAdminMainTab('analytics')">
+                    <ion-icon name="bar-chart-outline"></ion-icon> <span data-i18n="tab_analytics">數據分析</span>
+                </button>
+                <button id="nav-tab-lab" class="admin-side-tab" onclick="switchAdminMainTab('lab')">
+                    <ion-icon name="flask-outline"></ion-icon> <span data-i18n="tab_lab_admin">Lab 管理</span>
+                </button>
+                <button id="nav-tab-external-ai" class="admin-side-tab" onclick="switchAdminMainTab('external-ai')">
+                    <ion-icon name="link-outline"></ion-icon> <span data-i18n="tab_external_ai">外部 AI</span>
+                </button>
+                <button id="nav-tab-accounts" class="admin-side-tab" onclick="switchAdminMainTab('accounts')">
+                    <ion-icon name="people-circle-outline"></ion-icon> <span data-i18n="tab_accounts">帳號管理</span>
+                </button>
+                <button id="nav-tab-gpu-nodes" class="admin-side-tab" onclick="switchAdminMainTab('gpu-nodes')">
+                    <ion-icon name="hardware-chip-outline"></ion-icon> <span data-i18n="tab_gpu_nodes">GPU 節點</span>
+                </button>
+            </nav>
+
+            <div class="admin-sidebar-footer">
+                <!-- v2.3: 介面字體大小（根層 zoom，含 px 文字一起縮放） -->
+                <div class="admin-font-control">
+                    <span class="admin-font-label" data-i18n="label_font_size">字體大小</span>
+                    <div class="admin-font-stepper">
+                        <button id="admin-font-dec" type="button" title="A-">A−</button>
+                        <span id="admin-font-value">100%</span>
+                        <button id="admin-font-inc" type="button" title="A+">A+</button>
+                    </div>
+                </div>
+                <!-- v2.3: 主題 / 語言 / 管理導覽 移入 Side Bar -->
+                <div class="admin-sidebar-actions">
+                    <button class="admin-side-action toggle-theme-btn" title="切換主題 / Toggle Theme">
+                        <ion-icon name="moon-outline"></ion-icon>
+                    </button>
+                    <button class="admin-side-action toggle-lang-btn" title="切換語言 / Toggle Language">
+                        <ion-icon name="language-outline"></ion-icon>
+                    </button>
+                    <button class="admin-side-action" id="admin-tutorial-btn" data-i18n-title="admin_guide" title="管理導覽 / Admin Guide">
+                        <ion-icon name="information-circle-outline"></ion-icon>
+                    </button>
+                </div>
+                <a href="javascript:void(0);" onclick="window.location.href = window.location.protocol + '//' + window.location.hostname + '/train/';" class="admin-side-link">
+                    <ion-icon name="arrow-back-outline"></ion-icon> <span data-i18n="btn_back_hub">返回大廳</span>
+                </a>
+                <button id="admin-logout-btn" class="admin-side-link admin-side-logout">
+                    <ion-icon name="log-out-outline"></ion-icon> <span data-i18n="btn_logout">登出</span>
+                </button>
+            </div>
+        </aside>
+
+        <main class="admin-content">
+        <div id="tab-management" class="admin-tab-content active">
+            <div class="admin-grid">
+            <!-- ZH: 叢集資源監控 | EN: Cluster Status -->
+            <section class="widget form-box-panel" style="grid-column: 1 / -1;">
+                <div class="widget-header">
+                    <h3><ion-icon name="hardware-chip-outline" style="margin-right:6px;"></ion-icon> <span
+                            data-i18n="admin_cluster_status">叢集資源即時監控</span></h3>
+                </div>
+                <div id="cluster-stats-container" class="cluster-stats-grid">
+                    <!-- Cards will be injected by JS -->
+                    <div style="padding: 20px; text-align: center; color: rgba(255,255,255,0.5);"
+                        data-i18n="msg_loading">載入中...</div>
+                </div>
+            </section>
+
+            <!-- ZH: 使用者管理表格 | EN: User Management Table (v2.8: 由 JS 搬入「帳號管理」分頁 #acct-slot-users) -->
+            <section id="sec-users" class="widget form-box-panel" style="grid-column: 1 / -1;">
+                <div class="widget-header split">
+                    <h3><ion-icon name="people-outline" style="margin-right:6px;"></ion-icon> <span
+                            data-i18n="admin_users">使用者管理</span></h3>
+                    <div style="display:flex; gap:10px; align-items:center;">
+                        <input type="text" id="admin-user-search" class="config-select" data-i18n="placeholder_search_users" placeholder="Search users... (Passwords are encrypted)" style="padding: 4px 10px; width: 250px; border-radius: 8px; font-size: 13px;">
+                        <label style="font-size:12px; display:flex; align-items:center; gap:4px; color:var(--text-muted); cursor:pointer;">
+                            <input type="checkbox" id="auto-refresh-users" checked> <span data-i18n="label_auto_refresh">Auto Refresh</span>
+                        </label>
+                        <!-- v2.2: 最後更新時間徽章 - 讓 admin 知道 polling 正在跑 -->
+                        <span style="font-size:12px; color:var(--text-muted); font-family:monospace;" title="最後更新時間 (auto refresh 每 5s)">
+                            <ion-icon name="time-outline" style="vertical-align:middle; font-size:14px;"></ion-icon>
+                            <span id="admin-users-last-updated">--:--:--</span>
+                        </span>
+                        <ion-icon name="refresh-circle-outline" id="refresh-admin-btn" class="refresh-icon" title="Refresh"></ion-icon>
+                    </div>
+                </div>
+                <!-- v2.1: 依 auth_source 分頁的 tab bar -->
+                <div class="admin-user-tabs" style="display:flex; gap:6px; padding: 8px 15px 0; border-bottom: 1px solid var(--border-color);">
+                    <button class="user-source-tab active" data-source="local">
+                        <span data-i18n="auth_tab_local">本機帳號</span>
+                        <span class="user-source-count" id="user-source-count-local">0</span>
+                    </button>
+                    <button class="user-source-tab" data-source="sso_oidc">
+                        <span data-i18n="auth_tab_oidc">學校 SSO</span>
+                        <span class="user-source-count" id="user-source-count-sso_oidc">0</span>
+                    </button>
+                    <button class="user-source-tab" data-source="sso_mock">
+                        <span data-i18n="auth_tab_mock">Mock SSO</span>
+                        <span class="user-source-count" id="user-source-count-sso_mock">0</span>
+                    </button>
+                </div>
+                <div class="admin-table-wrap scrollbar-custom">
+                    <table class="admin-table" id="admin-users-table">
+                        <thead>
+                            <tr>
+                                <th data-i18n="th_username">Username</th>
+                                <th data-i18n="th_email">Email</th>
+                                <th data-i18n="th_department">Department</th>
+                                <th data-i18n="th_role">Role</th>
+                                <th data-i18n="th_status">Status</th>
+                                <th data-i18n="th_last_ip">Last IP</th>
+                                <th data-i18n="th_last_login">Last Login</th>
+                                <th data-i18n="th_created_at">Created At</th>
+                                <th data-i18n="th_tokens" style="display:none;">Tokens</th>
+                                <th data-i18n="th_actions">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="admin-users-body"><!-- JS --></tbody>
+                    </table>
+                </div>
+                <!-- Batch Token Limit Update（v2.8：內部 Token 計量已停用，整組隱藏） -->
+                <div style="padding: 10px 15px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+                    <span style="font-size: 13px; color: var(--text-muted); display:none;" data-i18n="batch_token_label">Batch set all users' token limit:</span>
+                    <input type="number" id="batch-token-limit" class="config-select" style="width: 160px; padding: 6px 10px; border-radius: 8px; display:none;" data-i18n="placeholder_batch_token" placeholder="e.g. 5000000" value="100000">
+                    <button id="btn-batch-tokens" class="ready-btn config-save-btn" style="width: auto; padding: 6px 16px; font-size: 13px; display:none;" data-i18n="btn_batch_apply">Apply to All</button>
+                    <button id="btn-batch-reset-usage" class="ready-btn" style="width: auto; padding: 6px 16px; font-size: 13px; border-color: var(--neon-yellow); color: var(--neon-yellow); background: rgba(250,204,21,0.08); display:none;" data-i18n="btn_reset_all_usage">
+                        <ion-icon name="refresh-outline" style="margin-right:4px; vertical-align:middle;"></ion-icon>Reset All Usage
+                    </button>
+                    <div style="flex-grow:1;"></div>
+                    <!-- v2.2: 匯出 Excel / CSV 按鈕 -->
+                    <button id="btn-export-users" class="ready-btn" style="width: auto; margin: 0; padding: 6px 16px; font-size: 13px; border-color: var(--neon-cyan); color: var(--neon-cyan); background: rgba(34, 211, 238, 0.08);" data-i18n="btn_export_users">
+                        <ion-icon name="download-outline" style="margin-right:4px; vertical-align:middle;"></ion-icon>匯出 Excel / CSV
+                    </button>
+                    <button id="btn-provision-user" class="ready-btn config-save-btn" style="width: auto; margin: 0; padding: 6px 16px; font-size: 13px;" data-i18n="btn_add_test">
+                        <ion-icon name="person-add-outline" style="margin-right:4px;"></ion-icon>Provision User
+                    </button>
+                </div>
+            </section>
+
+            <!-- v2.2: 匯出使用者資料 Modal -->
+            <div id="export-modal" class="tutorial-modal hidden">
+                <div class="tutorial-backdrop" id="export-backdrop"></div>
+                <div class="tutorial-content login-modal" style="max-width: 560px; padding: 30px;">
+                    <button class="tutorial-close" id="export-close-btn"><ion-icon name="close-outline"></ion-icon></button>
+                    <h2 style="margin-bottom: 16px; display: flex; align-items: center; gap: 8px;">
+                        <ion-icon name="document-text-outline"></ion-icon>
+                        <span data-i18n="export_title">匯出使用者資料</span>
+                    </h2>
+
+                    <!-- 範圍 -->
+                    <div style="margin-bottom: 18px;">
+                        <label style="font-size: 13px; color: var(--text-muted); display: block; margin-bottom: 6px;" data-i18n="export_scope_label">範圍：</label>
+                        <div style="display: flex; gap: 16px; font-size: 14px;">
+                            <label style="cursor:pointer;">
+                                <input type="radio" name="export-scope" value="filter" checked> <span data-i18n="export_scope_filter">目前篩選結果（依 3-tab 與搜尋）</span>
+                            </label>
+                            <label style="cursor:pointer;">
+                                <input type="radio" name="export-scope" value="all"> <span data-i18n="export_scope_all">全部使用者</span>
+                            </label>
+                        </div>
+                    </div>
+
+                    <!-- 欄位勾選（動態載入） -->
+                    <div style="margin-bottom: 18px;">
+                        <label style="font-size: 13px; color: var(--text-muted); display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                            <span data-i18n="export_columns_label">要包含的欄位：</span>
+                            <span style="font-size: 12px;">
+                                <a href="#" id="export-select-all" data-i18n="export_select_all">全選</a> ·
+                                <a href="#" id="export-select-none" data-i18n="export_select_none">全不選</a>
+                            </span>
+                        </label>
+                        <div id="export-columns-list" style="display: grid; grid-template-columns: 1fr 1fr; gap: 6px 12px; max-height: 240px; overflow-y: auto; padding: 8px; border: 1px solid var(--border-color); border-radius: 6px;">
+                            <!-- JS 動態填入 -->
+                            <div style="grid-column: 1 / -1; color: var(--text-muted); font-size: 13px; text-align: center; padding: 10px;" data-i18n="msg_loading">載入中...</div>
+                        </div>
+                    </div>
+
+                    <!-- 格式 -->
+                    <div style="margin-bottom: 22px;">
+                        <label style="font-size: 13px; color: var(--text-muted); display: block; margin-bottom: 6px;" data-i18n="export_format_label">格式：</label>
+                        <div style="display: flex; gap: 16px; font-size: 14px;">
+                            <label style="cursor:pointer;">
+                                <input type="radio" name="export-format" value="xlsx" checked> <span data-i18n="export_format_xlsx">Excel (.xlsx)</span>
+                            </label>
+                            <label style="cursor:pointer;">
+                                <input type="radio" name="export-format" value="csv"> <span data-i18n="export_format_csv">CSV (UTF-8 BOM)</span>
+                            </label>
+                        </div>
+                    </div>
+
+                    <div style="display: flex; gap: 10px; justify-content: flex-end;">
+                        <button id="export-cancel-btn" class="ready-btn" style="width: auto; padding: 8px 18px; font-size: 13px;" data-i18n="btn_cancel">取消</button>
+                        <button id="export-confirm-btn" class="ready-btn config-save-btn" style="width: auto; padding: 8px 22px; font-size: 13px;" data-i18n="btn_export_confirm">
+                            <ion-icon name="download-outline" style="margin-right:4px; vertical-align:middle;"></ion-icon>匯出
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Provision User Modal -->
+            <div id="provision-modal" class="tutorial-modal hidden">
+                <div class="tutorial-backdrop" id="provision-backdrop"></div>
+                <div class="tutorial-content login-modal" style="max-width: 480px; padding: 30px;">
+                    <button class="tutorial-close" id="provision-close-btn"><ion-icon name="close-outline"></ion-icon></button>
+                    <h2 style="margin-bottom: 20px; display: flex; align-items: center; gap: 8px;">
+                        <ion-icon name="person-add-outline"></ion-icon>
+                        <span data-i18n="add_test_title">Add Test Account</span>
+                    </h2>
+                    <form id="provision-form" style="display: flex; flex-direction: column; gap: 15px;">
+                        <div class="input-wrap">
+                            <ion-icon name="person-outline"></ion-icon>
+                            <input type="text" id="provision-username" required data-i18n="th_username" placeholder="Username">
+                        </div>
+                        <div class="input-wrap">
+                            <ion-icon name="mail-outline"></ion-icon>
+                            <input type="email" id="provision-email" required data-i18n="th_email" placeholder="Email">
+                        </div>
+                        <div class="input-wrap">
+                            <ion-icon name="lock-closed-outline"></ion-icon>
+                            <input type="text" id="provision-password" data-i18n-placeholder="add_test_custom_password" placeholder="Password (Leave blank to auto-generate)">
+                        </div>
+                        <div class="input-wrap">
+                            <ion-icon name="business-outline"></ion-icon>
+                            <input type="text" id="provision-department" data-i18n-placeholder="placeholder_dept" placeholder="Department (Optional)">
+                        </div>
+                        <div class="input-wrap" style="flex: 1;">
+                            <ion-icon name="shield-outline"></ion-icon>
+                            <select id="provision-role" class="config-select" style="width: 100%; padding: 10px; border-radius: 8px;">
+                                <option value="student" data-i18n="role_student">學生</option>
+                                <option value="teacher" data-i18n="role_teacher">教師</option>
+                                <option value="admin"   data-i18n="role_admin">管理員</option>
+                            </select>
+                        </div>
+                        <button type="submit" class="ready-btn config-save-btn" style="width: 100%;" data-i18n="btn_add_test_submit">Create Account</button>
+                    </form>
+                    <!-- Temp password result -->
+                    <div id="provision-result" class="hidden" style="margin-top: 15px; padding: 15px; border-radius: 8px; background: var(--bg-panel); border: 1px solid var(--border-color);">
+                        <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 8px;" data-i18n="add_test_temp_password">Temporary Password (shown once):</p>
+                        <code id="provision-temp-pw" style="font-size: 16px; font-weight: bold; color: #10b981; word-break: break-all;"></code>
+                    </div>
+                </div>
+            </div>
+
+            <!-- User Edit Modal -->
+            <div id="user-edit-modal" class="tutorial-modal hidden">
+                <div class="tutorial-backdrop" id="user-edit-backdrop"></div>
+                <div class="tutorial-content login-modal" style="max-width: 480px; padding: 30px;">
+                    <button class="tutorial-close" id="user-edit-close-btn"><ion-icon name="close-outline"></ion-icon></button>
+                    <h2 style="margin-bottom: 20px; display: flex; align-items: center; gap: 8px;">
+                        <ion-icon name="person-circle-outline"></ion-icon>
+                        <span data-i18n="view_user_title">View User</span>
+                    </h2>
+                    <form id="user-edit-form" style="display: flex; flex-direction: column; gap: 15px;">
+                        <input type="hidden" id="edit-user-id">
+                        <div class="input-wrap">
+                            <ion-icon name="person-outline"></ion-icon>
+                            <input type="text" id="edit-username" disabled style="opacity: 0.6;" data-i18n="th_username" placeholder="Username">
+                        </div>
+                        <div class="input-wrap">
+                            <ion-icon name="mail-outline"></ion-icon>
+                            <input type="email" id="edit-email" disabled data-i18n="th_email" placeholder="Email">
+                        </div>
+                        <div class="input-wrap" id="edit-dept-container" style="display: none;">
+                            <ion-icon name="business-outline"></ion-icon>
+                            <input type="text" id="edit-department" data-i18n-placeholder="placeholder_dept" placeholder="Department (Optional)">
+                        </div>
+                        <div class="input-wrap" id="edit-pwd-container" style="display: none;">
+                            <ion-icon name="key-outline"></ion-icon>
+                            <input type="text" id="edit-password" data-i18n="edit_new_password" placeholder="New Password (leave blank to keep)">
+                        </div>
+                        <div style="display: flex; gap: 10px;">
+                            <div class="input-wrap" style="flex: 1;">
+                                <ion-icon name="shield-outline"></ion-icon>
+                                <select id="edit-role" disabled class="config-select" style="width: 100%; padding: 10px; border-radius: 8px;">
+                                    <option value="student" data-i18n="role_student">學生</option>
+                                    <option value="teacher" data-i18n="role_teacher">教師</option>
+                                    <option value="admin"   data-i18n="role_admin">管理員</option>
+                                </select>
+                            </div>
+                            <div class="input-wrap" style="flex: 1;">
+                                <ion-icon name="toggle-outline"></ion-icon>
+                                <select id="edit-active" disabled class="config-select" style="width: 100%; padding: 10px; border-radius: 8px;">
+                                    <option value="1" data-i18n="status_active">Active</option>
+                                    <option value="0" data-i18n="status_disabled">Disabled</option>
+                                </select>
+                            </div>
+                        </div>
+                        <!-- v2.8：內部 Token 計量已停用，編輯視窗的 Token 上限/用量整組隱藏 -->
+                        <div class="input-wrap" style="display:none;">
+                            <ion-icon name="wallet-outline"></ion-icon>
+                            <input type="number" id="edit-tokens-limit" disabled data-i18n="edit_tokens_limit" placeholder="Token Monthly Limit">
+                        </div>
+                        <div style="display: none; gap: 10px; margin-top: 5px; align-items: center;">
+                            <div style="flex: 1; font-size: 13px; color: var(--text-muted);">
+                                <span data-i18n="edit_tokens_used">Used</span>: <strong id="edit-tokens-used-display">0</strong>
+                            </div>
+                            <button type="button" id="btn-reset-user-usage" class="ready-btn" style="width: auto; padding: 4px 12px; font-size: 12px; border-color: var(--neon-yellow); color: var(--neon-yellow); background: rgba(250,204,21,0.08);" data-i18n="btn_reset_usage">
+                                <ion-icon name="refresh-outline" style="vertical-align:middle; margin-right:3px;"></ion-icon>Reset Usage
+                            </button>
+                        </div>
+                        <button type="button" id="btn-unlock-edit" class="ready-btn" style="width: 100%; background: var(--bg-card); color: var(--text-color); border: 1px solid var(--border-color);"><ion-icon name="lock-open-outline" style="vertical-align: middle; margin-right: 5px;"></ion-icon><span data-i18n="btn_unlock_edit">Unlock Edit</span></button>
+                        <button type="submit" id="btn-save-edit" class="ready-btn config-save-btn" style="width: 100%; display: none;" data-i18n="btn_save_config">Save Changes</button>
+                    </form>
+                    <button type="button" id="btn-delete-user" class="ready-btn" style="width: 100%; border-color: #fb7185; color: #fb7185; margin: 0; margin-top: 15px;" data-i18n="btn_delete_user">Delete Account</button>
+                </div>
+            </div>
+
+            <!-- ZH: 個人數據分析 Modal | EN: User Analytics Modal -->
+            <div id="user-analytics-modal" class="tutorial-modal hidden">
+                <div class="tutorial-backdrop" id="ua-backdrop"></div>
+                <div class="tutorial-content login-modal" style="max-width: 700px; padding: 30px; max-height: 85vh; overflow-y: auto;">
+                    <button class="tutorial-close" id="ua-close-btn"><ion-icon name="close-outline"></ion-icon></button>
+                    <h2 style="margin-bottom: 20px; display: flex; align-items: center; gap: 8px;">
+                        <ion-icon name="bar-chart-outline"></ion-icon>
+                        <span data-i18n="analytics_title">使用者數據分析</span>
+                    </h2>
+                    <!-- User Info Header -->
+                    <div style="display: flex; gap: 20px; flex-wrap: wrap; margin-bottom: 20px; padding: 15px; background: rgba(128,128,128,0.1); border-radius: 8px;">
+                        <div>
+                            <div style="color:var(--text-muted); font-size:12px;" data-i18n="th_username">帳號</div>
+                            <strong id="ua-username">—</strong>
+                        </div>
+                        <div>
+                            <div style="color:var(--text-muted); font-size:12px;" data-i18n="th_email">信箱</div>
+                            <strong id="ua-email">—</strong>
+                        </div>
+                        <div>
+                            <div style="color:var(--text-muted); font-size:12px;" data-i18n="th_role">權限</div>
+                            <strong id="ua-role">—</strong>
+                        </div>
+                        <div>
+                            <div style="color:var(--text-muted); font-size:12px;" data-i18n="th_department">學系</div>
+                            <strong id="ua-department">—</strong>
+                        </div>
+                    </div>
+                    <!-- Stat Cards -->
+                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin-bottom: 20px;">
+                        <div class="stat-card">
+                            <h4 data-i18n="ua_monthly_tokens">本月 Tokens</h4>
+                            <div style="font-size: 1.5em; font-weight: bold;" id="ua-tokens-pct">—</div>
+                            <div class="progress-bar-bg"><div class="progress-bar-fill" id="ua-tokens-bar" style="width:0%;"></div></div>
+                            <div style="font-size: 11px; color: var(--text-muted);" id="ua-tokens-detail">— / —</div>
+                        </div>
+                        <div class="stat-card">
+                            <h4 data-i18n="ua_lifetime_tokens">累計 Tokens</h4>
+                            <div style="font-size: 1.5em; font-weight: bold; color: var(--text-primary);" id="ua-lifetime-tokens">—</div>
+                        </div>
+                        <div class="stat-card">
+                            <h4 data-i18n="ua_login_count">登入次數</h4>
+                            <div style="font-size: 1.5em; font-weight: bold; color: var(--text-primary);" id="ua-login-count">—</div>
+                        </div>
+                        <div class="stat-card">
+                            <h4 data-i18n="ua_sessions">對話數</h4>
+                            <div style="font-size: 1.5em; font-weight: bold; color: var(--text-primary);" id="ua-sessions-count">—</div>
+                        </div>
+                    </div>
+                    <!-- Tool Breakdown Chart -->
+                    <div style="margin-bottom: 20px;">
+                        <h4 style="margin: 0 0 8px; font-size: 1em;" data-i18n="ua_tool_breakdown">工具使用分布</h4>
+                        <div style="background: rgba(128,128,128,0.1); border-radius: 8px; padding: 15px; height: 180px; position: relative;">
+                            <canvas id="ua-tool-chart"></canvas>
+                        </div>
+                    </div>
+                    <!-- Top Sessions Table -->
+                    <div>
+                        <h4 style="margin: 0 0 8px; font-size: 1em;" data-i18n="ua_top_sessions">前 10 對話（依 Token 用量排序）</h4>
+                        <div class="admin-table-wrap scrollbar-custom" style="max-height: 220px; overflow-y: auto;">
+                            <table class="admin-table">
+                                <thead>
+                                    <tr>
+                                        <th data-i18n="ua_session_id">對話 ID</th>
+                                        <th data-i18n="ua_started_at">開始時間</th>
+                                        <th data-i18n="ua_messages">訊息數</th>
+                                        <th data-i18n="ua_tokens">Tokens</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="ua-sessions-body"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ZH: 模型管理 (API/本地 分頁) | EN: Model Management (API/Local Tabs) -->
+            <section class="widget form-box-panel" style="grid-column: 1 / -1;">
+                <div class="widget-header split">
+                    <h3><ion-icon name="cube-outline" style="margin-right:6px;"></ion-icon> <span
+                            data-i18n="admin_models">模型管理</span></h3>
+                    <div style="display:flex; gap:10px; align-items:center;">
+                        <button id="btn-add-model" class="ready-btn config-save-btn" style="width: auto; padding: 6px 16px; font-size: 13px;" onclick="openModelModal()">
+                            <ion-icon name="add-circle-outline" style="margin-right:4px;"></ion-icon><span data-i18n="btn_add_model">新增模型</span>
+                        </button>
+                    </div>
+                </div>
+                <!-- Tab Buttons -->
+                <div style="display:flex; gap:0; border-bottom: 1px solid var(--border-color); padding: 0 15px;">
+                    <button id="tab-api-models" class="admin-job-tab active" onclick="switchModelTab('api')">
+                        <ion-icon name="cloud-outline"></ion-icon> <span data-i18n="tab_api_models">API 模型</span>
+                    </button>
+                    <button id="tab-local-models" class="admin-job-tab" onclick="switchModelTab('local')">
+                        <ion-icon name="server-outline"></ion-icon> <span data-i18n="tab_local_models">本地模型</span>
+                    </button>
+                </div>
+                <!-- API Models Table -->
+                <div id="admin-models-api-panel" class="admin-table-wrap scrollbar-custom" style="max-height: 350px; overflow-y: auto;">
+                    <table class="admin-table sticky-header">
+                        <thead>
+                            <tr>
+                                <th data-i18n="th_name">名稱</th>
+                                <th>Provider</th>
+                                <th>Model ID</th>
+                                <th>描述</th>
+                                <th data-i18n="th_public">公開</th>
+                                <th data-i18n="th_actions">操作</th>
+                            </tr>
+                        </thead>
+                        <tbody id="admin-models-api-body"><!-- JS --></tbody>
+                    </table>
+                </div>
+                <!-- Local Models Table -->
+                <div id="admin-models-local-panel" class="admin-table-wrap scrollbar-custom" style="max-height: 350px; overflow-y: auto; display: none;">
+                    <table class="admin-table sticky-header">
+                        <thead>
+                            <tr>
+                                <th data-i18n="th_name">名稱</th>
+                                <th data-i18n="th_framework">框架</th>
+                                <th>描述</th>
+                                <th>儲存路徑</th>
+                                <th data-i18n="th_public">公開</th>
+                                <th data-i18n="th_actions">操作</th>
+                            </tr>
+                        </thead>
+                        <tbody id="admin-models-local-body"><!-- JS --></tbody>
+                    </table>
+                </div>
+            </section>
+
+            <!-- Model Edit/Add Modal -->
+            <div id="model-modal" class="tutorial-modal hidden">
+                <div class="tutorial-backdrop" id="model-modal-backdrop"></div>
+                <div class="tutorial-content login-modal" style="max-width: 520px; padding: 30px;">
+                    <button class="tutorial-close" id="model-modal-close-btn" onclick="closeModelModal()"><ion-icon name="close-outline"></ion-icon></button>
+                    <h2 style="margin-bottom: 20px; display: flex; align-items: center; gap: 8px;">
+                        <ion-icon name="cube-outline"></ion-icon>
+                        <span id="model-modal-title" data-i18n="btn_add_model">新增模型</span>
+                    </h2>
+                    <form id="model-form" style="display: flex; flex-direction: column; gap: 15px;" onsubmit="submitModelForm(event)">
+                        <input type="hidden" id="model-edit-id">
+                        <!-- Model Type Selector -->
+                        <div class="input-wrap" style="flex: 1;">
+                            <ion-icon name="swap-horizontal-outline"></ion-icon>
+                            <select id="model-type" class="config-select" style="width: 100%; padding: 10px; border-radius: 8px;" onchange="toggleModelTypeFields()">
+                                <option value="api"   data-i18n="opt_model_api">API 模型（雲端）</option>
+                                <option value="local" data-i18n="opt_model_local">本地模型</option>
+                            </select>
+                        </div>
+                        <!-- Common Fields -->
+                        <div class="input-wrap">
+                            <ion-icon name="text-outline"></ion-icon>
+                            <input type="text" id="model-name" required data-i18n="placeholder_model_name" placeholder="模型名稱">
+                        </div>
+                        <div class="input-wrap">
+                            <ion-icon name="document-text-outline"></ion-icon>
+                            <input type="text" id="model-description" data-i18n="placeholder_model_desc" placeholder="描述">
+                        </div>
+                        <!-- API-specific Fields -->
+                        <div id="model-api-fields">
+                            <div style="display: flex; flex-direction: column; gap: 15px;">
+                                <div class="input-wrap" style="flex: 1;">
+                                    <ion-icon name="cloud-outline"></ion-icon>
+                                    <select id="model-api-provider" class="config-select" style="width: 100%; padding: 10px; border-radius: 8px;">
+                                        <option value="openai"    data-i18n="opt_provider_openai">OpenAI</option>
+                                        <option value="anthropic" data-i18n="opt_provider_anthropic">Anthropic (Claude)</option>
+                                        <option value="google"    data-i18n="opt_provider_google">Google (Gemini)</option>
+                                        <option value="ollama"    data-i18n="opt_provider_ollama">Ollama（本地 API）</option>
+                                        <option value="other"     data-i18n="opt_provider_other">其他</option>
+                                    </select>
+                                </div>
+                                <div class="input-wrap">
+                                    <ion-icon name="link-outline"></ion-icon>
+                                    <input type="text" id="model-api-endpoint" data-i18n="placeholder_model_endpoint" placeholder="API Endpoint (e.g. https://api.openai.com/v1)">
+                                </div>
+                                <div class="input-wrap">
+                                    <ion-icon name="pricetag-outline"></ion-icon>
+                                    <input type="text" id="model-api-model-id" data-i18n="placeholder_model_id" placeholder="上游模型 ID (e.g. gpt-4o, claude-3.5-sonnet)">
+                                </div>
+                            </div>
+                        </div>
+                        <!-- Local-specific Fields -->
+                        <div id="model-local-fields" style="display: none;">
+                            <div style="display: flex; flex-direction: column; gap: 15px;">
+                                <div class="input-wrap">
+                                    <ion-icon name="code-slash-outline"></ion-icon>
+                                    <input type="text" id="model-framework" data-i18n="placeholder_model_framework" placeholder="框架 (e.g. PyTorch, TensorFlow, ONNX)">
+                                </div>
+                                <div class="input-wrap">
+                                    <ion-icon name="folder-outline"></ion-icon>
+                                    <input type="text" id="model-storage-path" data-i18n="placeholder_model_storage" placeholder="儲存路徑">
+                                </div>
+                            </div>
+                        </div>
+                        <div class="input-wrap" style="flex: 1;">
+                            <ion-icon name="eye-outline"></ion-icon>
+                            <select id="model-is-public" class="config-select" style="width: 100%; padding: 10px; border-radius: 8px;">
+                                <option value="0" data-i18n="opt_visibility_private">私有</option>
+                                <option value="1" data-i18n="opt_visibility_public">公開</option>
+                            </select>
+                        </div>
+                        <!-- v2.4: 適用工具（決定此模型出現在哪些 AI 工具的下拉） -->
+                        <div style="display:flex; flex-direction:column; gap:8px;">
+                            <label style="font-size:0.85em; color:var(--text-muted);" data-i18n="label_tool_types">適用工具</label>
+                            <div style="display:flex; gap:18px; flex-wrap:wrap;">
+                                <label style="display:flex; align-items:center; gap:6px; cursor:pointer;">
+                                    <input type="checkbox" class="model-tool-type" value="chat" checked>
+                                    <span data-i18n="tool_chat">文字聊天</span>
+                                </label>
+                                <label style="display:flex; align-items:center; gap:6px; cursor:pointer;">
+                                    <input type="checkbox" class="model-tool-type" value="presentation">
+                                    <span data-i18n="tool_presentation">文書簡報</span>
+                                </label>
+                            </div>
+                        </div>
+                        <button type="submit" class="ready-btn config-save-btn" style="width: 100%;" data-i18n="btn_save_config">儲存</button>
+                    </form>
+                </div>
+            </div>
+
+            <!-- ZH: 全域排程管理 (分層分頁) | EN: Global Job Queue (Tabbed Tiers) -->
+            <section class="widget form-box-panel" style="grid-column: 1 / -1;">
+                <div class="widget-header split">
+                    <h3><ion-icon name="list-outline" style="margin-right:6px;"></ion-icon> <span
+                            data-i18n="admin_jobs">全域任務</span></h3>
+                    <div style="display:flex; gap:10px; align-items:center;">
+                        <select id="admin-jobs-status-filter" class="config-select" style="padding: 4px 10px; border-radius: 8px; font-size: 13px;" onchange="filterAdminJobs()">
+                            <option value="all" data-i18n="filter_all">全部</option>
+                            <option value="pending" data-i18n="filter_pending">Pending</option>
+                            <option value="running" data-i18n="filter_running">Running</option>
+                            <option value="completed" data-i18n="filter_completed">Completed</option>
+                            <option value="failed" data-i18n="filter_failed">Failed</option>
+                            <option value="cancelled" data-i18n="filter_cancelled">Cancelled</option>
+                        </select>
+                    </div>
+                </div>
+                <!-- Tab Buttons -->
+                <div style="display:flex; gap:0; border-bottom: 1px solid var(--border-color); padding: 0 15px;">
+                    <button id="tab-high-compute" class="admin-job-tab active" onclick="switchJobTab('high')">
+                        <ion-icon name="flash-outline"></ion-icon> <span data-i18n="tab_high_compute">高階 GPU</span>
+                    </button>
+                    <button id="tab-midlow-compute" class="admin-job-tab" onclick="switchJobTab('midlow')">
+                        <ion-icon name="layers-outline"></ion-icon> <span data-i18n="tab_midlow_compute">本地 GPU</span>
+                    </button>
+                </div>
+                <!-- High-end GPU Table -->
+                <div id="admin-jobs-high-panel" class="admin-table-wrap scrollbar-custom" style="max-height: 420px; overflow-y: auto;">
+                    <table class="admin-table sticky-header" id="admin-jobs-high-table">
+                        <thead>
+                            <tr>
+                                <th data-i18n="th_job">任務</th>
+                                <th data-i18n="th_user">使用者</th>
+                                <th data-i18n="th_status">狀態</th>
+                                <th data-i18n="th_priority">優先級</th>
+                                <th>進度</th>
+                                <th data-i18n="th_actions">操作</th>
+                            </tr>
+                        </thead>
+                        <tbody id="admin-jobs-high-body"><!-- JS --></tbody>
+                    </table>
+                </div>
+                <!-- Local GPU Table -->
+                <div id="admin-jobs-midlow-panel" class="admin-table-wrap scrollbar-custom" style="max-height: 420px; overflow-y: auto; display: none;">
+                    <table class="admin-table sticky-header" id="admin-jobs-midlow-table">
+                        <thead>
+                            <tr>
+                                <th data-i18n="th_job">任務</th>
+                                <th data-i18n="th_user">使用者</th>
+                                <th data-i18n="th_status">狀態</th>
+                                <th data-i18n="th_priority">優先級</th>
+                                <th>進度</th>
+                                <th data-i18n="th_actions">操作</th>
+                            </tr>
+                        </thead>
+                        <tbody id="admin-jobs-midlow-body"><!-- JS --></tbody>
+                    </table>
+                </div>
+            </section>
+
+            <!-- v2.2: 公告管理 -->
+            <section class="widget form-box-panel" style="grid-column: 1 / -1;">
+                <div class="widget-header split">
+                    <h3><ion-icon name="megaphone-outline" style="margin-right:6px;"></ion-icon> <span data-i18n="admin_announcements">公告管理</span></h3>
+                    <button id="btn-new-announcement" class="ready-btn config-save-btn" style="width:auto; padding: 6px 14px; font-size: 13px;">
+                        <ion-icon name="add-outline" style="margin-right:4px; vertical-align:middle;"></ion-icon>
+                        <span data-i18n="btn_new_announcement">新增公告</span>
+                    </button>
+                </div>
+                <div class="admin-table-wrap scrollbar-custom">
+                    <table class="admin-table">
+                        <thead>
+                            <tr>
+                                <th style="width:60px;" data-i18n="th_pinned">置頂</th>
+                                <th data-i18n="th_title">標題</th>
+                                <th data-i18n="th_posted_at">發布時間</th>
+                                <th style="width:80px;" data-i18n="th_visible">顯示</th>
+                                <th style="width:140px;" data-i18n="th_actions">操作</th>
+                            </tr>
+                        </thead>
+                        <tbody id="announcements-body">
+                            <tr><td colspan="5" style="text-align:center; color:var(--text-muted); padding: 16px;" data-i18n="msg_loading">載入中...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+
+            <!-- v2.2: 公告編輯 Modal -->
+            <div id="announcement-modal" class="tutorial-modal hidden">
+                <div class="tutorial-backdrop" id="announcement-backdrop"></div>
+                <div class="tutorial-content login-modal" style="max-width: 560px; padding: 30px;">
+                    <button class="tutorial-close" id="announcement-close-btn"><ion-icon name="close-outline"></ion-icon></button>
+                    <h2 id="announcement-modal-title" style="margin-bottom: 16px; display: flex; align-items: center; gap: 8px;">
+                        <ion-icon name="megaphone-outline"></ion-icon>
+                        <span data-i18n="announcement_new_title">新增公告</span>
+                    </h2>
+                    <form id="announcement-form" style="display:flex; flex-direction:column; gap:12px;">
+                        <input type="hidden" id="announcement-id" value="">
+                        <div class="input-wrap">
+                            <ion-icon name="text-outline"></ion-icon>
+                            <input type="text" id="announcement-title" required maxlength="200" data-i18n-placeholder="placeholder_announcement_title" placeholder="標題">
+                        </div>
+                        <textarea id="announcement-body" required rows="5" data-i18n-placeholder="placeholder_announcement_body" placeholder="公告內容"
+                                  style="width:100%; padding:10px; border-radius:8px; background:rgba(255,255,255,0.05); border:1px solid var(--border-color); color:var(--text-primary); font-family:inherit; font-size:14px; resize:vertical;"></textarea>
+                        <div style="display:flex; gap:18px; font-size:14px;">
+                            <label style="cursor:pointer; display:flex; align-items:center; gap:6px;">
+                                <input type="checkbox" id="announcement-pinned">
+                                <span data-i18n="label_pinned">置頂顯示</span>
+                            </label>
+                            <label style="cursor:pointer; display:flex; align-items:center; gap:6px;">
+                                <input type="checkbox" id="announcement-visible" checked>
+                                <span data-i18n="label_visible">公開可見</span>
+                            </label>
+                        </div>
+                        <div style="display:flex; gap:10px; justify-content:flex-end; margin-top:6px;">
+                            <button type="button" id="announcement-cancel-btn" class="ready-btn" style="width:auto; padding:8px 18px; font-size:13px;" data-i18n="btn_cancel">取消</button>
+                            <button type="submit" class="ready-btn config-save-btn" style="width:auto; padding:8px 22px; font-size:13px;" data-i18n="btn_save">儲存</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+
+            <!-- ZH: 系統設定管理（開發中）| EN: System Config Management (Coming Soon) -->
+            <section class="widget form-box-panel" style="grid-column: 1 / -1;">
+                <div class="widget-header">
+                    <h3><ion-icon name="settings-outline" style="margin-right:6px;"></ion-icon> <span
+                            data-i18n="admin_configs">系統設定</span></h3>
+                </div>
+                <div style="padding: 16px 20px;">
+                    <p style="font-size: 0.82rem; color: var(--text-muted, #888); margin: 0 0 14px;">
+                        營運型旋鈕即時生效（存 SystemConfig，runtime 讀取）；欄位<b>留空＝回退到 .env 預設值</b>。
+                    </p>
+                    <div id="system-settings-fields" style="display:flex; flex-direction:column; gap:12px;">
+                        <span style="color: var(--text-muted, #888);">載入中…</span>
+                    </div>
+                    <div style="margin-top: 16px; text-align: right;">
+                        <button type="button" class="ready-btn" style="width:auto; padding:8px 22px; font-size:13px;"
+                                onclick="systemSettings.save()">儲存</button>
+                    </div>
+                </div>
+            </section>
+        </div>
+        </div> <!-- End of tab-management -->
+
+        <!-- Analytics Tab Content -->
+        <div id="tab-analytics" class="admin-tab-content" style="display: none;">
+            <div class="admin-grid">
+                <section class="widget form-box-panel" style="grid-column: 1 / -1;">
+                    <div class="widget-header split">
+                        <h3><ion-icon name="stats-chart-outline" style="margin-right:6px;"></ion-icon> <span data-i18n="analytics_overview">數據總覽（外部 AI / myai）</span></h3>
+                        <div style="display:flex; gap:10px; align-items:center;">
+                            <span id="analytics-synced-at" style="font-size:12px; color:var(--text-muted);"></span>
+                            <button class="ready-btn config-save-btn" onclick="exportAnalyticsCharts()" style="padding: 4px 12px; font-size: 13px; width: auto;" data-i18n="btn_export_chart"><ion-icon name="download-outline" style="margin-right: 4px;"></ion-icon>匯出圖表</button>
+                            <ion-icon name="refresh-circle-outline" onclick="fetchAnalyticsData()" class="refresh-icon" title="Refresh"></ion-icon>
+                        </div>
+                    </div>
+                    <div id="analytics-stats-container" class="cluster-stats-grid">
+                        <div class="stat-card">
+                            <h4 data-i18n="stat_total_users">管理者帳號</h4>
+                            <div class="stat-row" style="font-size: 1.8em; font-weight: bold; color: var(--text-primary);" id="stat-total-users">-</div>
+                        </div>
+                        <div class="stat-card">
+                            <h4 data-i18n="stat_total_logins">使用者帳號</h4>
+                            <div class="stat-row" style="font-size: 1.8em; font-weight: bold; color: var(--text-primary);" id="stat-total-logins">-</div>
+                        </div>
+                        <div class="stat-card">
+                            <h4 data-i18n="stat_total_tokens">總剩餘點數</h4>
+                            <div class="stat-row" style="font-size: 1.8em; font-weight: bold; color: var(--text-primary);" id="stat-total-tokens">-</div>
+                        </div>
+                    </div>
+                </section>
+                
+                <section class="widget form-box-panel" style="grid-column: 1 / 2;">
+                    <div class="widget-header">
+                        <h3><ion-icon name="bar-chart-outline" style="margin-right:6px;"></ion-icon> <span data-i18n="chart_dept_usage">點數 Top 10 帳號</span></h3>
+                    </div>
+                    <div style="padding: 20px; background: rgba(128,128,128,0.1); border-radius: 8px; position: relative;">
+                        <canvas id="deptUsageChart"></canvas>
+                    </div>
+                </section>
+                
+                <section class="widget form-box-panel" style="grid-column: 2 / 3;">
+                    <div class="widget-header split">
+                        <h3><ion-icon name="pie-chart-outline" style="margin-right:6px;"></ion-icon>
+                            <span id="pie-view-title" data-i18n="chart_tool_usage">帳號狀態分佈</span></h3>
+                        <div style="display:flex; gap:6px; align-items:center;">
+                            <select id="pie-view-select" class="config-select" style="padding:3px 8px; border-radius:8px; font-size:12px; width:auto;" onchange="switchPieView(this.value)">
+                                <option value="status" data-i18n="pie_view_status">帳號狀態</option>
+                                <option value="model" data-i18n="pie_view_model">工具／模型</option>
+                                <option value="role" data-i18n="pie_view_role">師生用量</option>
+                                <option value="dept" data-i18n="pie_view_dept">學系用量</option>
+                            </select>
+                            <select id="pie-metric-select" class="config-select" style="padding:3px 8px; border-radius:8px; font-size:12px; width:auto;" onchange="switchPieMetric(this.value)" title="僅工具／模型視角適用">
+                                <option value="points" data-i18n="metric_points">Token 點數</option>
+                                <option value="count" data-i18n="metric_count">呼叫次數</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div style="padding: 20px; background: rgba(128,128,128,0.1); border-radius: 8px; display:flex; justify-content:center; position: relative;">
+                        <canvas id="toolUsageChart" style="max-height: 300px;"></canvas>
+                    </div>
+                </section>
+
+                <!-- v2.8 點數消耗分析（以快照差 Δ 推算，廠商不給逐筆消耗） -->
+                <section class="widget form-box-panel" id="consumption-section" style="grid-column: 1 / -1;">
+                    <div class="widget-header split">
+                        <h3><ion-icon name="trending-down-outline" style="margin-right:6px;"></ion-icon>
+                            <span data-i18n="consumption_title">點數消耗分析</span>
+                            <!-- v3.0 聚焦中提示：整段改看單一個人時，必須讓人一眼看出「這不是全體數字」 -->
+                            <!-- 注意：本專案沒有通用的 .hidden 規則（只有 .tutorial-modal.hidden 之類的限定版），
+                                 所以這裡直接用 inline display 控制，由 applyConsumptionView() 切換。 -->
+                            <span id="consumption-focus-chip"
+                                  style="display:none; margin-left:10px; padding:2px 10px; border-radius:999px; font-size:12px; font-weight:500;
+                                         background:rgba(244,114,182,0.18); color:#f472b6; border:1px solid rgba(244,114,182,0.5);
+                                         cursor:pointer; vertical-align:middle;"
+                                  onclick="exitConsumptionFocus()" title="點此返回全體檢視"></span>
+                        </h3>
+                        <div style="display:flex; gap:10px; align-items:center;">
+                            <select id="consumption-days" class="config-select" style="padding:4px 10px; border-radius:8px;" onchange="fetchConsumptionData()">
+                                <option value="7" data-i18n="consumption_7d">近 7 天</option>
+                                <option value="30" selected data-i18n="consumption_30d">近 30 天</option>
+                                <option value="90" data-i18n="consumption_90d">近 90 天</option>
+                                <option value="0" data-i18n="consumption_all">全部</option>
+                            </select>
+                            <ion-icon name="refresh-circle-outline" onclick="fetchConsumptionData()" class="refresh-icon" title="Refresh"></ion-icon>
+                        </div>
+                    </div>
+                    <p style="color:var(--text-muted); font-size:12px; margin-bottom:10px;" data-i18n="consumption_hint">
+                        資料來源：廠商「交易日誌」逐筆事件（含使用的模型/工具）。消耗＝AI 使用的扣點加總；不儲存 IP。
+                    </p>
+                    <div class="cluster-stats-grid" style="margin-bottom:14px;">
+                        <div class="stat-card"><h4 data-i18n="consumption_total">期間總消耗點數</h4>
+                            <div class="stat-row" style="font-size:1.8em; font-weight:bold; color:var(--text-primary);" id="consumption-total">-</div></div>
+                        <div class="stat-card"><h4 data-i18n="consumption_accounts">AI 使用次數</h4>
+                            <div class="stat-row" style="font-size:1.8em; font-weight:bold; color:var(--text-primary);" id="consumption-accounts">-</div></div>
+                        <div class="stat-card"><h4 data-i18n="consumption_snapshots">登入次數</h4>
+                            <div class="stat-row" style="font-size:1.8em; font-weight:bold; color:var(--text-primary);" id="consumption-snapshots">-</div></div>
+                    </div>
+                    <div style="display:grid; grid-template-columns: 1fr 1fr; gap:16px;">
+                        <div>
+                            <h4 style="font-size:13px; margin:0 0 6px;" data-i18n="consumption_trend">每日消耗趨勢</h4>
+                            <div style="padding:16px; background:rgba(128,128,128,0.1); border-radius:8px; position:relative;">
+                                <canvas id="consumptionTrendChart"></canvas>
+                            </div>
+                        </div>
+                        <div>
+                            <h4 style="font-size:13px; margin:0 0 6px;" data-i18n="consumption_top">Top 消耗者</h4>
+                            <div style="padding:16px; background:rgba(128,128,128,0.1); border-radius:8px; position:relative;">
+                                <canvas id="topConsumersChart"></canvas>
+                            </div>
+                        </div>
+                    </div>
+                    <div style="margin-top:16px;">
+                        <div style="display:flex; justify-content:space-between; align-items:center; margin:0 0 6px;">
+                            <h4 style="font-size:13px; margin:0;" data-i18n="consumption_models">模型／工具別用量</h4>
+                            <div style="display:flex; gap:8px; align-items:center;">
+                                <!-- v2.9 分群維度：依模型 / 依類別 / 依供應商（來自模型對應表） -->
+                                <select id="model-group-select" class="config-select" style="padding:2px 8px; border-radius:8px; font-size:12px; width:auto;" onchange="switchModelGroup(this.value)">
+                                    <option value="model" data-i18n="group_by_model">依模型</option>
+                                    <option value="category" data-i18n="group_by_category">依類別</option>
+                                    <option value="provider" data-i18n="group_by_provider">依供應商</option>
+                                </select>
+                                <select id="model-metric-select" class="config-select" style="padding:2px 8px; border-radius:8px; font-size:12px; width:auto;" onchange="switchModelMetric(this.value)">
+                                    <option value="points" data-i18n="metric_points">Token 點數</option>
+                                    <option value="count" data-i18n="metric_count">呼叫次數</option>
+                                </select>
+                            </div>
+                        </div>
+                        <!-- v3.0 高度由 renderModelBar() 依列數設定（列多時才不會被 autoSkip 砍掉標籤） -->
+                        <div style="padding:16px; background:rgba(128,128,128,0.1); border-radius:8px; position:relative;">
+                            <canvas id="modelBreakdownChart"></canvas>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- v2.8 個人查詢：搜尋某人的使用明細 -->
+                <!-- v3.0 加圖表：三種檢視模式（對照全體／只看個人／聚焦同步上方） -->
+                <section class="widget form-box-panel" style="grid-column: 1 / -1;">
+                    <div class="widget-header split">
+                        <h3><ion-icon name="person-circle-outline" style="margin-right:6px;"></ion-icon>
+                            <span data-i18n="user_query_title">個人查詢</span></h3>
+                        <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+                            <input type="text" id="user-query-input" class="config-select" placeholder="姓名 / Email / 序號" style="padding:4px 10px; border-radius:8px; width:220px;" onkeydown="if(event.key==='Enter')queryUserConsumption()">
+                            <select id="user-query-days" class="config-select" style="padding:4px 8px; border-radius:8px; font-size:12px; width:auto;" onchange="if(_lastUserQuery)queryUserConsumption()">
+                                <option value="0" data-i18n="consumption_all">全部</option>
+                                <option value="30" data-i18n="consumption_30d">近 30 天</option>
+                                <option value="90" data-i18n="consumption_90d">近 90 天</option>
+                            </select>
+                            <select id="user-query-view" class="config-select" style="padding:4px 8px; border-radius:8px; font-size:12px; width:auto;" onchange="switchUserQueryView(this.value)" title="檢視模式">
+                                <option value="compare" data-i18n="uq_view_compare">對照全體人均</option>
+                                <option value="solo" data-i18n="uq_view_solo">只看個人</option>
+                                <option value="focus" data-i18n="uq_view_focus">聚焦（同步上方圖表）</option>
+                            </select>
+                            <button class="ready-btn config-save-btn" style="width:auto; padding:5px 14px; margin:0;" onclick="queryUserConsumption()">
+                                <ion-icon name="search-outline"></ion-icon> <span data-i18n="user_query_btn">查詢</span>
+                            </button>
+                        </div>
+                    </div>
+                    <div id="user-query-result" style="margin-top:6px;">
+                        <p style="color:var(--text-muted); font-size:12px;" data-i18n="user_query_hint">輸入姓名、Email 或序號查詢某人的使用明細（消耗、模型別、逐筆事件）。</p>
+                    </div>
+                </section>
+
+                <!-- v3.0 模型對應表已移至「外部 AI」分頁（廠商代碼屬廠商設定，非分析結果） -->
+
+            </div>
+        </div> <!-- End of tab-analytics -->
+
+        <!-- ZH: v2.0 Lab 管理分頁 | EN: v2.0 Lab management tab -->
+        <div id="tab-lab" class="admin-tab-content" style="display: none;">
+            <div class="admin-grid">
+
+                <!-- ZH: Lab Sessions 監控 | EN: Lab Sessions Monitor -->
+                <section class="widget form-box-panel" style="grid-column: 1 / -1;">
+                    <div class="widget-header split">
+                        <h3><ion-icon name="terminal-outline" style="margin-right:6px;"></ion-icon>
+                            <span data-i18n="lab_admin_sessions">code-server Sessions</span></h3>
+                        <ion-icon name="refresh-circle-outline" onclick="adminLab.refreshSessions()" class="refresh-icon" title="Refresh"></ion-icon>
+                    </div>
+                    <div class="admin-table-wrap scrollbar-custom">
+                        <table class="admin-table" id="admin-lab-sessions-table">
+                            <thead><tr>
+                                <th data-i18n="col_user">使用者</th>
+                                <th data-i18n="col_status">狀態</th>
+                                <th data-i18n="col_image">Image</th>
+                                <th data-i18n="col_started">啟動於</th>
+                                <th data-i18n="col_last_activity">最後活動</th>
+                                <th data-i18n="col_cpu_mem">CPU / RAM</th>
+                                <th data-i18n="col_actions">操作</th>
+                            </tr></thead>
+                            <tbody><tr><td colspan="7" style="text-align:center; color:var(--text-muted);">Loading…</td></tr></tbody>
+                        </table>
+                    </div>
+                </section>
+
+                <!-- ZH: 配額提權 | EN: Quota grants -->
+                <section class="widget form-box-panel" style="grid-column: 1 / 2;">
+                    <div class="widget-header split">
+                        <h3><ion-icon name="server-outline" style="margin-right:6px;"></ion-icon>
+                            <span data-i18n="lab_admin_quota">配額管理</span></h3>
+                    </div>
+                    <div style="display:grid; grid-template-columns: 1fr 100px 100px; gap:8px; margin-bottom:12px;">
+                        <input type="text" id="quota-user-id" placeholder="user_id" />
+                        <input type="number" id="quota-extra-gb" placeholder="GB" min="1" />
+                        <button class="ready-btn" onclick="adminLab.lookupQuota()">查看</button>
+                    </div>
+                    <textarea id="quota-reason" placeholder="提權理由（必填，將寫入 audit log）" rows="2" style="width:100%; margin-bottom:8px;"></textarea>
+                    <div style="display:flex; gap:8px;">
+                        <button class="ready-btn" onclick="adminLab.grantQuota()" style="background: rgba(74, 222, 128, 0.15); color:#4ade80;">
+                            <ion-icon name="add-circle-outline"></ion-icon> 提權
+                        </button>
+                        <button class="ready-btn" onclick="adminLab.revokeQuotaSelected()" style="background: rgba(251,113,133,0.1); color:#fb7185;">
+                            <ion-icon name="close-circle-outline"></ion-icon> 撤銷選定
+                        </button>
+                    </div>
+                    <div id="quota-result" class="admin-table-wrap scrollbar-custom" style="margin-top:12px; max-height: 280px; overflow-y:auto;"></div>
+                </section>
+
+                <!-- ZH: 儲存生命週期 | EN: Storage lifecycle -->
+                <section class="widget form-box-panel" style="grid-column: 2 / 3;">
+                    <div class="widget-header split">
+                        <h3><ion-icon name="archive-outline" style="margin-right:6px;"></ion-icon>
+                            <span data-i18n="lab_admin_storage">儲存生命週期</span></h3>
+                        <ion-icon name="refresh-circle-outline" onclick="adminLab.refreshStorage()" class="refresh-icon" title="Refresh"></ion-icon>
+                    </div>
+                    <div style="display:flex; gap:8px; margin-bottom:12px; flex-wrap:wrap;">
+                        <select id="storage-filter" onchange="adminLab.refreshStorage()">
+                            <option value="">全部 All</option>
+                            <option value="active">Active</option>
+                            <option value="frozen">Frozen</option>
+                            <option value="archived">Archived</option>
+                            <option value="pending_delete">Pending Delete</option>
+                        </select>
+                    </div>
+                    <div class="admin-table-wrap scrollbar-custom" style="max-height: 320px; overflow-y:auto;">
+                        <table class="admin-table" id="admin-storage-table">
+                            <thead><tr>
+                                <th>User</th><th>State</th><th>Size</th><th>Since</th><th>Action</th>
+                            </tr></thead>
+                            <tbody><tr><td colspan="5" style="text-align:center; color:var(--text-muted);">Loading…</td></tr></tbody>
+                        </table>
+                    </div>
+                </section>
+
+                <!-- ZH: Audit Log | EN: Audit log -->
+                <section class="widget form-box-panel" style="grid-column: 1 / -1;">
+                    <div class="widget-header split">
+                        <h3><ion-icon name="document-text-outline" style="margin-right:6px;"></ion-icon>
+                            <span data-i18n="lab_admin_audit">Audit Log</span></h3>
+                        <div style="display:flex; gap:8px;">
+                            <input type="text" id="audit-filter-action" placeholder="action filter…" style="padding:4px 8px;"/>
+                            <input type="text" id="audit-filter-user"   placeholder="target user filter…" style="padding:4px 8px;"/>
+                            <button class="ready-btn config-save-btn" onclick="adminLab.refreshAudit()" style="padding:4px 12px; font-size:13px; width:auto;">查詢</button>
+                            <ion-icon name="refresh-circle-outline" onclick="adminLab.refreshAudit()" class="refresh-icon" title="Refresh"></ion-icon>
+                        </div>
+                    </div>
+                    <div class="admin-table-wrap scrollbar-custom" style="max-height: 420px; overflow-y:auto;">
+                        <table class="admin-table sticky-header" id="admin-audit-table">
+                            <thead><tr>
+                                <th>Time</th><th>Admin</th><th>Action</th><th>Target</th><th>Payload</th><th>IP</th>
+                            </tr></thead>
+                            <tbody><tr><td colspan="6" style="text-align:center; color:var(--text-muted);">Click 查詢 to load…</td></tr></tbody>
+                        </table>
+                    </div>
+                </section>
+
+                <!-- ZH: 使用者 Secrets 名稱（不可看 value） | EN: User secrets (names only, never values) -->
+                <section class="widget form-box-panel" style="grid-column: 1 / -1;">
+                    <div class="widget-header split">
+                        <h3><ion-icon name="key-outline" style="margin-right:6px;"></ion-icon>
+                            <span data-i18n="lab_admin_secrets">使用者 Secrets 監控</span>
+                            <span style="font-size:12px; color:var(--text-muted); margin-left:8px;">（管理員可監控與刪除，但不可查看 value）</span>
+                        </h3>
+                        <div style="display:flex; gap:8px;">
+                            <input type="text" id="admin-secret-user" placeholder="user_id" style="padding:4px 8px;"/>
+                            <button class="ready-btn config-save-btn" onclick="adminLab.listUserSecrets()" style="padding:4px 12px; font-size:13px; width:auto;">列出</button>
+                        </div>
+                    </div>
+                    <div id="admin-secrets-result" class="admin-table-wrap scrollbar-custom" style="max-height: 280px; overflow-y:auto;"></div>
+                </section>
+
+                <!-- v3.4 寄信紀錄：誰、何時、結果（sent 僅代表已交付中繼，非送達） -->
+                <section class="widget form-box-panel" style="grid-column: 1 / -1;">
+                    <div class="widget-header split">
+                        <h3><ion-icon name="mail-outline" style="margin-right:6px;"></ion-icon>
+                            <span data-i18n="email_log_title">寄信紀錄</span></h3>
+                        <div style="display:flex; align-items:center; gap:8px;">
+                            <select id="email-log-filter" onchange="emailLog.load()" style="padding:4px 8px; font-size:12px;">
+                                <option value="">全部狀態</option>
+                                <option value="sent">已交付</option>
+                                <option value="refused">被拒</option>
+                                <option value="failed">失敗</option>
+                                <option value="mock">未寄出(mock)</option>
+                            </select>
+                            <ion-icon name="refresh-circle-outline" onclick="emailLog.load()" class="refresh-icon" title="Refresh"></ion-icon>
+                        </div>
+                    </div>
+                    <p style="font-size:0.8rem; color:var(--text-muted,#888); margin:0 15px 10px;">
+                        <span data-i18n="email_log_hint">⚠️「已交付」只代表中繼伺服器收下，<b>不代表送達</b>：網域存在但信箱不存在會被收下，稍後才非同步退信到寄件人信箱（程式看不到）。本表用途是對照——收到退信時可查出那是誰、哪個功能、何時寄的。</span>
+                        <span id="email-log-meta" style="margin-left:6px;"></span>
+                    </p>
+                    <div style="margin:0 15px 10px;">
+                        <button class="ready-btn config-save-btn" onclick="emailLog.scanBounces()"
+                                style="width:auto; margin:0; padding:6px 14px; font-size:13px;">
+                            <ion-icon name="download-outline"></ion-icon> 立即掃描退信
+                        </button>
+                        <span style="font-size:12px; color:var(--text-muted,#888); margin-left:8px;">
+                            用 IMAP 讀寄件信箱的退信回填狀態。<b>退信·不存在</b>才是「信箱不存在」的事實；
+                            <b>暫時失敗</b>只代表當下沒送成，稍後可能仍會送達。唯讀，不刪信。
+                        </span>
+                    </div>
+                    <div class="admin-table-wrap scrollbar-custom" style="max-height:360px; overflow:auto;">
+                        <table class="admin-table" id="admin-email-log-table">
+                            <thead><tr>
+                                <th>時間</th><th>收件人</th><th>對象</th><th>類型</th><th>結果</th><th>說明</th>
+                            </tr></thead>
+                            <tbody><tr><td colspan="6" style="text-align:center; color:var(--text-muted);" data-i18n="msg_loading">載入中...</td></tr></tbody>
+                        </table>
+                    </div>
+                </section>
+
+                <!-- v3.3 Lab 資料封存：刪除帳號後的緩衝區（可還原 / 立即銷毀 / 到期自動清） -->
+                <section class="widget form-box-panel" style="grid-column: 1 / -1;">
+                    <div class="widget-header split">
+                        <h3><ion-icon name="archive-outline" style="margin-right:6px;"></ion-icon>
+                            <span data-i18n="lab_archive_title">已刪除帳號的 Lab 資料（封存中）</span></h3>
+                        <ion-icon name="refresh-circle-outline" onclick="adminLab.refreshArchives()" class="refresh-icon" title="Refresh"></ion-icon>
+                    </div>
+                    <p style="font-size:0.82rem; color:var(--text-muted,#888); margin:0 15px 10px;">
+                        <span data-i18n="lab_archive_hint">帳號刪除時 Lab 資料不會立即銷毀，而是封存於此，逾期自動清除（期限可於「系統設定」調整）。還原會把資料複製進所選使用者的 Lab。</span>
+                        <span id="lab-archive-summary" style="margin-left:6px; color:var(--text-primary);"></span>
+                    </p>
+                    <div class="admin-table-wrap scrollbar-custom">
+                        <table class="admin-table" id="admin-lab-archives-table">
+                            <thead><tr>
+                                <th data-i18n="col_user">原帳號</th>
+                                <th data-i18n="col_size">大小</th>
+                                <th data-i18n="col_archived_at">封存於</th>
+                                <th data-i18n="col_days_left">剩餘</th>
+                                <th data-i18n="col_status">狀態</th>
+                                <th data-i18n="col_actions">操作</th>
+                            </tr></thead>
+                            <tbody><tr><td colspan="6" style="text-align:center; color:var(--text-muted);" data-i18n="msg_loading">載入中...</td></tr></tbody>
+                        </table>
+                    </div>
+                </section>
+
+            </div>
+        </div> <!-- End of tab-lab -->
+
+        <!-- ZH: v2.5 外部 AI 分流管理 | EN: v2.5 External AI routing admin -->
+        <div id="tab-external-ai" class="admin-tab-content" style="display: none;">
+            <div class="admin-grid">
+
+                <!-- v3.4 MYAI 即時使用狀態（四象限：監控 + 稽核） -->
+                <section class="widget form-box-panel" style="grid-column: 1 / -1;">
+                    <div class="widget-header split">
+                        <h3><ion-icon name="pulse-outline" style="margin-right:6px;"></ion-icon>
+                            <span data-i18n="live_usage_title">MYAI 即時使用狀態</span></h3>
+                        <div style="display:flex; align-items:center; gap:10px;">
+                            <label style="font-size:12px; color:var(--text-muted); display:flex; align-items:center; gap:5px;">
+                                <input type="checkbox" id="live-usage-auto" checked> 自動更新(30s)
+                            </label>
+                            <ion-icon name="refresh-circle-outline" onclick="liveUsage.load()" class="refresh-icon" title="Refresh"></ion-icon>
+                        </div>
+                    </div>
+                    <p style="font-size:0.8rem; color:var(--text-muted,#888); margin:0 15px 10px;">
+                        <span data-i18n="live_usage_hint">交叉比對「MYAI 近期用量」×「平台在線」。資料來自定期向廠商同步，非即時推播。</span>
+                        <span id="live-usage-meta" style="margin-left:6px;"></span>
+                    </p>
+                    <div id="live-usage-cards" style="display:grid; grid-template-columns:repeat(auto-fit,minmax(260px,1fr)); gap:12px; padding:0 15px 15px;">
+                        <span style="color:var(--text-muted,#888);" data-i18n="msg_loading">載入中...</span>
+                    </div>
+                </section>
+
+                <!-- v3.4 MYAI 待開通清單（email 網域規則 → 可信度分流） -->
+                <section class="widget form-box-panel" style="grid-column: 1 / -1;">
+                    <div class="widget-header split">
+                        <h3><ion-icon name="person-add-outline" style="margin-right:6px;"></ion-icon>
+                            <span data-i18n="prov_cand_title">MYAI 待開通清單</span></h3>
+                        <ion-icon name="refresh-circle-outline" onclick="provisionCandidates.load()" class="refresh-icon" title="Refresh"></ion-icon>
+                    </div>
+                    <p style="font-size:0.8rem; color:var(--text-muted,#888); margin:0 15px 10px;" data-i18n="prov_cand_hint">
+                        尚未綁定廠商帳號的 SSO 使用者。信箱來自 SSO，或依網域規則以學號/員編組出
+                        （8 碼數字 → @me.mcu.edu.tw、英文帳號名 → @mail.mcu.edu.tw）。
+                        <b>系統不預判信箱真假</b> —— 有地址就照建、照寄，寄不到的會出現在
+                        「Email 寄送紀錄」的退件裡，那才是事實。只有「完全沒有地址」才無從建號。
+                    </p>
+                    <div id="prov-cand-body" style="padding:0 15px 15px;">
+                        <span style="color:var(--text-muted,#888);" data-i18n="msg_loading">載入中...</span>
+                    </div>
+                </section>
+
+                <!-- 外部 AI 平台網址設定 -->
+                <section class="widget form-box-panel" style="grid-column: 1 / -1;">
+                    <div class="widget-header">
+                        <h3><ion-icon name="globe-outline" style="margin-right:6px;"></ion-icon>
+                            <span data-i18n="ext_admin_url_title">外部 AI 平台網址</span></h3>
+                    </div>
+                    <p style="color:var(--text-muted); font-size:13px; margin-bottom:12px;" data-i18n="ext_admin_url_hint">
+                        留空 = 未啟用，使用者端顯示「即將開放」；填入後非 admin 使用者點「AI 助手」會被導向此網址。
+                    </p>
+                    <div style="display:flex; gap:8px; flex-wrap:wrap;">
+                        <input type="url" id="ext-ai-url" placeholder="https://www.myai168.com/tw/ai/" style="flex:1; min-width:280px;" />
+                        <button class="ready-btn config-save-btn" onclick="externalAi.saveUrl()" style="width:auto; padding:8px 18px;">
+                            <ion-icon name="save-outline"></ion-icon> <span data-i18n="btn_save">儲存</span>
+                        </button>
+                    </div>
+                    <!-- v2.8 廠商登出網址（共用機台「結束使用」會開它殺掉 myai session） -->
+                    <label style="display:block; margin-top:10px; font-size:12px; color:var(--text-muted);" data-i18n="ext_ai_logout_label">廠商登出網址（共用機台換手用）</label>
+                    <input type="url" id="ext-ai-logout-url" placeholder="https://www.myai168.com/mcu/ai/user/logout_info" style="width:100%; margin-top:4px;" />
+                    <div id="ext-ai-url-msg" style="margin-top:8px; font-size:13px;"></div>
+
+                    <!-- v2.8 低點數提醒設定 -->
+                    <hr style="border:none; border-top:1px solid var(--border-color); margin:16px 0;">
+                    <h4 style="margin:0 0 8px; font-size:14px;">
+                        <ion-icon name="warning-outline" style="margin-right:6px; color:#fbbf24; vertical-align:middle;"></ion-icon>
+                        <span data-i18n="alert_cfg_title">低點數提醒</span>
+                    </h4>
+                    <p style="color:var(--text-muted); font-size:12px; margin:0 0 10px;" data-i18n="alert_cfg_hint">
+                        學生外部 AI 剩餘點數低於門檻時，平台內彈窗提醒（每次登入只顯示一次）；可附「申請教學」連結。
+                    </p>
+                    <div style="display:grid; grid-template-columns:auto 1fr; gap:10px 12px; align-items:center; max-width:640px;">
+                        <label style="font-size:13px; color:var(--text-muted);" data-i18n="alert_cfg_threshold">低點數門檻</label>
+                        <input type="number" id="ext-ai-lowbal-threshold" min="0" placeholder="500" style="width:160px; padding:6px 10px; border-radius:8px;" />
+                        <label style="font-size:13px; color:var(--text-muted);" data-i18n="alert_cfg_guide">申請教學連結</label>
+                        <input type="url" id="ext-ai-guide-url" placeholder="https://…（可留空，之後再設定）" style="width:100%;" />
+                    </div>
+                    <div style="display:flex; gap:8px; align-items:center; margin-top:10px;">
+                        <button class="ready-btn config-save-btn" onclick="externalAi.saveAlertConfig()" style="width:auto; padding:8px 18px;">
+                            <ion-icon name="save-outline"></ion-icon> <span data-i18n="btn_save">儲存</span>
+                        </button>
+                        <span id="ext-ai-alert-msg" style="font-size:13px;"></span>
+                    </div>
+                </section>
+
+                <!-- v2.9 模型對應表：廠商原始代碼 ↔ 顯示名稱/供應商/類別（可手動編輯、新增） -->
+                <!-- v3.0 由「數據分析」搬來此處：這是廠商代碼的設定，不是分析結果。 -->
+                <section class="widget form-box-panel" style="grid-column: 1 / -1;">
+                    <div class="widget-header split">
+                        <h3><ion-icon name="swap-horizontal-outline" style="margin-right:6px;"></ion-icon>
+                            <span data-i18n="model_map_title">模型對應表</span></h3>
+                        <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+                            <input type="text" id="model-map-search" class="config-select" placeholder="搜尋代碼／名稱／供應商"
+                                   style="padding:4px 10px; border-radius:8px; width:200px; font-size:12px;" oninput="modelMap.render()">
+                            <button class="ready-btn" style="width:auto; padding:5px 12px; margin:0; font-size:12px;" onclick="modelMap.seed()">
+                                <ion-icon name="sparkles-outline"></ion-icon> <span data-i18n="model_map_seed">自動帶入未對應</span>
+                            </button>
+                            <button class="ready-btn" style="width:auto; padding:5px 12px; margin:0; font-size:12px; background:#10b981;" onclick="modelMap.add()">
+                                <ion-icon name="add-outline"></ion-icon> <span data-i18n="model_map_add">新增代碼</span>
+                            </button>
+                            <ion-icon name="refresh-circle-outline" onclick="modelMap.load()" class="refresh-icon" title="Refresh"></ion-icon>
+                        </div>
+                    </div>
+                    <p style="color:var(--text-muted); font-size:12px; margin:0 0 8px;" data-i18n="model_map_hint">
+                        廠商備註欄給的是原始代碼（如 gpt_5_6_sol）。此表只影響「數據分析的顯示與分群」，不會改寫原始交易紀錄，改錯了隨時改回。紅底＝交易中出現但尚未對應。
+                    </p>
+                    <p id="model-map-stats" style="font-size:12px; margin:0 0 10px; color:var(--text-muted);">-</p>
+                    <div class="admin-table-wrap scrollbar-custom" style="max-height:420px; overflow-y:auto;">
+                        <table class="admin-table">
+                            <thead><tr>
+                                <th data-i18n="model_map_code">廠商原始代碼</th>
+                                <th data-i18n="model_map_name">顯示名稱</th>
+                                <th data-i18n="model_map_provider">供應商</th>
+                                <th data-i18n="model_map_category">類別</th>
+                                <th style="text-align:right;" data-i18n="model_map_tx">交易筆數</th>
+                                <th data-i18n="col_actions">操作</th>
+                            </tr></thead>
+                            <tbody id="model-map-body">
+                                <tr><td colspan="6" style="text-align:center; color:var(--text-muted); padding:14px;">載入中…</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </section>
+
+                <!-- CSV 批次匯入（v2.8：由 JS 搬入「帳號管理」分頁 #acct-slot-bindings） -->
+                <section id="sec-ext-csv" class="widget form-box-panel" style="grid-column: 1 / -1;">
+                    <div class="widget-header">
+                        <h3><ion-icon name="cloud-upload-outline" style="margin-right:6px;"></ion-icon>
+                            <span data-i18n="ext_admin_csv_title">CSV 批次匯入造冊結果</span></h3>
+                    </div>
+                    <div style="padding: 14px 15px 16px;">
+                        <p style="color:var(--text-muted); font-size:12px; margin:0 0 8px;" data-i18n="ext_admin_csv_hint">
+                            每行格式：platform_username,vendor_username（可含表頭，重複者更新）。
+                        </p>
+                        <textarea id="ext-ai-csv" rows="5" placeholder="platform_username,vendor_username&#10;student01,vendorA01&#10;student02,vendorA02" style="width:100%; font-family:monospace; font-size:13px;"></textarea>
+                        <div style="display:flex; gap:8px; margin-top:8px;">
+                            <button class="ready-btn config-save-btn" onclick="externalAi.importCsv()" style="width:auto; padding:8px 16px;">
+                                <ion-icon name="cloud-upload-outline"></ion-icon> <span data-i18n="btn_import">匯入</span>
+                            </button>
+                        </div>
+                        <div id="ext-ai-csv-msg" style="margin-top:8px; font-size:13px; white-space:pre-line;"></div>
+                    </div>
+                </section>
+
+                <!-- 對應表列表（v2.8：已由「帳號總覽」取代，JS 搬入 #acct-slot-bindings 並隱藏，保留供 refresh() 不報錯） -->
+                <section id="sec-ext-map" class="widget form-box-panel" style="grid-column: 1 / -1;">
+                    <div class="widget-header split">
+                        <h3><ion-icon name="list-outline" style="margin-right:6px;"></ion-icon>
+                            <span data-i18n="ext_admin_list_title">帳號對應表</span></h3>
+                        <ion-icon name="refresh-circle-outline" onclick="externalAi.refresh()" class="refresh-icon" title="Refresh"></ion-icon>
+                    </div>
+                    <div class="admin-table-wrap scrollbar-custom" style="max-height:420px; overflow-y:auto;">
+                        <table class="admin-table" id="ext-ai-accounts-table">
+                            <thead><tr>
+                                <th data-i18n="ext_col_platform">平台帳號</th>
+                                <th data-i18n="ext_col_vendor">廠商帳號</th>
+                                <th data-i18n="col_status">狀態</th>
+                                <th data-i18n="col_actions">操作</th>
+                            </tr></thead>
+                            <tbody><tr><td colspan="4" style="text-align:center; color:var(--text-muted);">Loading…</td></tr></tbody>
+                        </table>
+                    </div>
+                </section>
+
+                <!-- v2.8 廠商 Token 同步（唯讀；由 JS 搬入「帳號管理」分頁 #acct-slot-sync） -->
+                <section id="sec-myai-sync" class="widget form-box-panel" style="grid-column: 1 / -1;">
+                    <div class="widget-header split">
+                        <h3><ion-icon name="sync-outline" style="margin-right:6px;"></ion-icon>
+                            <span data-i18n="myai_sync_title">廠商 Token 同步（myai168）</span></h3>
+                        <div style="display:flex; gap:10px; align-items:center;">
+                            <span id="myai-synced-at" style="font-size:12px; color:var(--text-muted);"></span>
+                            <button class="ready-btn config-save-btn" onclick="externalAi.syncMyai()" style="width:auto; padding:6px 14px;">
+                                <ion-icon name="sync-outline"></ion-icon> <span data-i18n="myai_sync_now">立即同步</span>
+                            </button>
+                        </div>
+                    </div>
+                    <p style="color:var(--text-muted); font-size:12px; margin-bottom:10px;" data-i18n="myai_sync_hint">
+                        以管理者帳密（.env）headless 登入 myai168 → 匯出使用者清單 → 顯示每人 Token 點數。唯讀，不回寫廠商。
+                    </p>
+                    <div id="myai-sync-msg" style="margin-bottom:8px; font-size:13px;"></div>
+                    <div class="admin-table-wrap scrollbar-custom" style="max-height:420px; overflow-y:auto;">
+                        <table class="admin-table" id="myai-accounts-table">
+                            <thead><tr>
+                                <th data-i18n="myai_col_sn">編號</th>
+                                <th data-i18n="myai_col_type">身分</th>
+                                <th data-i18n="myai_col_name">名稱</th>
+                                <th data-i18n="admin_col_email">電子郵件</th>
+                                <th data-i18n="myai_col_points">Token 點數</th>
+                                <th data-i18n="myai_col_expiry">有效期間</th>
+                                <th data-i18n="col_status">狀態</th>
+                            </tr></thead>
+                            <tbody><tr><td colspan="7" style="text-align:center; color:var(--text-muted);">尚未同步</td></tr></tbody>
+                        </table>
+                    </div>
+                </section>
+
+                <!-- v2.8 Email 綁定管理（平台帳號 ↔ myai email ↔ 點數；由 JS 搬入「帳號管理」分頁 #acct-slot-bindings） -->
+                <section id="sec-myai-bind" class="widget form-box-panel" style="grid-column: 1 / -1;">
+                    <div class="widget-header split">
+                        <h3><ion-icon name="link-outline" style="margin-right:6px;"></ion-icon>
+                            <span data-i18n="myai_bind_title">Email 綁定管理</span></h3>
+                        <div style="display:flex; gap:10px; align-items:center;">
+                            <button class="ready-btn" onclick="openAddBindingModal()" style="width:auto; padding:6px 14px; border-color:#4ade80; color:#4ade80; background:rgba(74,222,128,0.1);">
+                                <ion-icon name="add-circle-outline"></ion-icon> <span data-i18n="myai_bind_add">新增綁定</span>
+                            </button>
+                            <button class="ready-btn config-save-btn" onclick="externalAi.autoMatch()" style="width:auto; padding:6px 14px;">
+                                <ion-icon name="git-compare-outline"></ion-icon> <span data-i18n="myai_bind_automatch">一鍵 Email 配對</span>
+                            </button>
+                        </div>
+                    </div>
+                    <p style="color:var(--text-muted); font-size:12px; margin-bottom:10px;" data-i18n="myai_bind_hint">
+                        以 email 對應「平台使用者 ↔ myai 帳號」。一鍵配對會把 email 相同且尚未綁定者自動建立綁定（只寫本平台、不碰廠商）。
+                    </p>
+                    <div id="myai-bind-msg" style="margin-bottom:8px; font-size:13px;"></div>
+                    <div class="admin-table-wrap scrollbar-custom" style="max-height:360px; overflow:auto;">
+                        <table class="admin-table" id="myai-bindings-table">
+                            <thead><tr>
+                                <th data-i18n="myai_bind_user">平台帳號</th>
+                                <th data-i18n="myai_bind_email">myai Email</th>
+                                <th data-i18n="myai_col_points">Token 點數</th>
+                                <th data-i18n="col_status">狀態</th>
+                                <th data-i18n="col_actions">操作</th>
+                            </tr></thead>
+                            <tbody><tr><td colspan="5" style="text-align:center; color:var(--text-muted);">尚無綁定</td></tr></tbody>
+                        </table>
+                    </div>
+
+                    <!-- 未配對清單 -->
+                    <div style="display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:16px; margin-top:16px;">
+                        <div style="min-width:0;">
+                            <h4 style="font-size:13px; margin:0 0 6px;">
+                                <span data-i18n="myai_bind_unmatched_users">未綁定的平台使用者</span>
+                                <span id="myai-unmatched-users-count" class="badge" style="margin-left:6px;">0</span>
+                            </h4>
+                            <div class="admin-table-wrap scrollbar-custom" style="max-height:240px; overflow:auto;">
+                                <table class="admin-table" id="myai-unmatched-users-table">
+                                    <thead><tr>
+                                        <th data-i18n="myai_bind_user">平台帳號</th>
+                                        <th data-i18n="admin_col_email">電子郵件</th>
+                                        <th data-i18n="myai_bind_match">可配對</th>
+                                    </tr></thead>
+                                    <tbody></tbody>
+                                </table>
+                            </div>
+                        </div>
+                        <div style="min-width:0;">
+                            <h4 style="font-size:13px; margin:0 0 6px;">
+                                <span data-i18n="myai_bind_unmatched_myai">未配對的 myai 帳號</span>
+                                <span id="myai-unmatched-myai-count" class="badge" style="margin-left:6px;">0</span>
+                            </h4>
+                            <div class="admin-table-wrap scrollbar-custom" style="max-height:240px; overflow:auto;">
+                                <table class="admin-table" id="myai-unmatched-myai-table">
+                                    <thead><tr>
+                                        <th data-i18n="admin_col_email">電子郵件</th>
+                                        <th data-i18n="myai_col_name">名稱</th>
+                                        <th data-i18n="myai_col_points">點數</th>
+                                    </tr></thead>
+                                    <tbody></tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+            </div>
+        </div> <!-- End of tab-external-ai -->
+
+        <!-- v2.8 帳號管理分頁：平台使用者 CRUD + 廠商綁定 + 點數，全部集中一頁。
+             使用者/綁定/廠商同步等既有 section 由 admin.js wireAccountsLayout() 於初始化時搬入下方 slot。 -->
+        <div id="tab-accounts" class="admin-tab-content" style="display: none;">
+            <div class="admin-grid">
+
+                <!-- 區塊 1：帳號總覽（平台 users ⋈ 廠商綁定，前端 join；不加後端端點） -->
+                <section class="widget form-box-panel" style="grid-column: 1 / -1;">
+                    <div class="widget-header split" style="margin-bottom:6px;">
+                        <h3><ion-icon name="people-circle-outline" style="margin-right:6px;"></ion-icon>
+                            <span data-i18n="acct_overview_title">帳號總覽</span></h3>
+                        <span id="acct-overview-stats" style="font-size:12px; color:var(--text-muted);"></span>
+                    </div>
+                    <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap; padding:0 15px 12px;">
+                        <div style="display:flex; align-items:center; gap:8px; background:var(--bg-elevated,rgba(255,255,255,0.05)); border:1px solid var(--border-color); border-radius:9px; padding:6px 12px; flex:1; min-width:220px;">
+                            <ion-icon name="search-outline" style="color:var(--text-muted);"></ion-icon>
+                            <input id="acct-overview-search" oninput="renderAccountsOverview()" data-i18n="acct_search_ph" placeholder="搜尋帳號 / Email / 姓名 / 學系…"
+                                   style="background:none; border:none; outline:none; color:var(--text-primary); width:100%; font-size:13px;">
+                        </div>
+                        <button class="ready-btn" onclick="openAddBindingModal()" style="width:auto; padding:6px 14px; border-color:#4ade80; color:#4ade80; background:rgba(74,222,128,0.1);">
+                            <ion-icon name="add-circle-outline"></ion-icon> <span data-i18n="myai_bind_add">新增綁定</span>
+                        </button>
+                        <button class="ready-btn config-save-btn" onclick="externalAi.autoMatch()" style="width:auto; padding:6px 14px;">
+                            <ion-icon name="git-compare-outline"></ion-icon> <span data-i18n="myai_bind_automatch">一鍵 Email 配對</span>
+                        </button>
+                        <button class="ready-btn" onclick="externalAi.syncMyai()" style="width:auto; padding:6px 14px;">
+                            <ion-icon name="sync-outline"></ion-icon> <span data-i18n="myai_sync_now">立即同步</span>
+                        </button>
+                    </div>
+                    <div class="admin-table-wrap scrollbar-custom" style="max-height:480px; overflow:auto;">
+                        <table class="admin-table" id="acct-overview-table">
+                            <thead><tr>
+                                <th data-i18n="acct_col_user">平台帳號</th>
+                                <th data-i18n="acct_col_role">角色 · 學系</th>
+                                <th data-i18n="admin_col_email">Email</th>
+                                <th data-i18n="acct_col_myai">myai 綁定</th>
+                                <th data-i18n="myai_col_points">點數餘額</th>
+                                <th data-i18n="col_status">狀態</th>
+                                <th data-i18n="col_actions">操作</th>
+                            </tr></thead>
+                            <tbody><tr><td colspan="7" style="text-align:center; color:var(--text-muted);" data-i18n="msg_loading">載入中...</td></tr></tbody>
+                        </table>
+                    </div>
+                </section>
+
+                <!-- 區塊 2：使用者操作（使用者管理 section 由 JS 搬入） -->
+                <div id="acct-slot-users" style="grid-column: 1 / -1;"></div>
+
+                <!-- 區塊 3：綁定細節 · 未配對 · CSV（Email綁定 + CSV section 由 JS 搬入；對應表隱藏保留） -->
+                <div id="acct-slot-bindings" style="grid-column: 1 / -1;"></div>
+
+                <!-- 區塊 4：廠商帳號原始快取（廠商同步 section 由 JS 搬入） -->
+                <div id="acct-slot-sync" style="grid-column: 1 / -1;"></div>
+
+            </div>
+        </div> <!-- End of tab-accounts -->
+
+        <!-- v3.2 GPU 節點管理分頁：可排程時段/開關/池別 + 狀態卡（資料由 gpuNodes.load() 渲染） -->
+        <div id="tab-gpu-nodes" class="admin-tab-content" style="display: none;">
+            <div class="admin-grid">
+                <section class="widget form-box-panel" style="grid-column: 1 / -1;">
+                    <div class="widget-header split" style="margin-bottom:6px;">
+                        <h3><ion-icon name="hardware-chip-outline" style="margin-right:6px;"></ion-icon>
+                            <span data-i18n="gpu_nodes_title">GPU 節點管理</span></h3>
+                        <button class="ready-btn" onclick="gpuNodes.load()" style="width:auto; padding:6px 14px; margin:0;">
+                            <ion-icon name="refresh-outline"></ion-icon> <span data-i18n="btn_refresh">重新整理</span>
+                        </button>
+                    </div>
+                    <p style="font-size:0.82rem; color:var(--text-muted,#888); margin:0 15px 12px;" data-i18n="gpu_nodes_hint">
+                        時段外/停用只擋「新派工」，執行中任務會跑完（drain）。節點第一次心跳會自動出現在此。</p>
+                    <div id="gpu-nodes-grid" style="display:grid; grid-template-columns:repeat(auto-fill,minmax(340px,1fr)); gap:14px; padding:0 15px 15px;">
+                        <span style="color:var(--text-muted,#888);" data-i18n="msg_loading">載入中...</span>
+                    </div>
+                </section>
+            </div>
+        </div> <!-- End of tab-gpu-nodes -->
+        </main> <!-- End of admin-content -->
+    </div> <!-- End of admin-layout -->
+
+    <!-- v2.8 新增 Email 綁定 Modal（平台帳號 ↔ myai Email）；置於頂層避免被隱藏分頁 display:none 連帶隱藏 -->
+    <div id="add-binding-modal" class="tutorial-modal hidden">
+        <div class="tutorial-backdrop" id="add-binding-modal-backdrop" onclick="closeAddBindingModal()"></div>
+        <div class="tutorial-content login-modal" style="max-width: 460px; padding: 30px;">
+            <button class="tutorial-close" onclick="closeAddBindingModal()"><ion-icon name="close-outline"></ion-icon></button>
+            <h2 style="margin-bottom: 8px; display: flex; align-items: center; gap: 8px;">
+                <ion-icon name="link-outline"></ion-icon>
+                <span data-i18n="myai_bind_add">新增綁定</span>
+            </h2>
+            <p style="color:var(--text-muted); font-size:13px; margin-bottom:20px;" data-i18n="myai_bind_add_hint">手動綁定：平台帳號 ↔ myai Email（用於兩邊 email 不同、需手動指定時）。</p>
+            <form onsubmit="externalAi.addMapping(); return false;" style="display:flex; flex-direction:column; gap:15px;">
+                <div class="input-wrap">
+                    <ion-icon name="person-outline"></ion-icon>
+                    <input type="text" id="ext-ai-add-platform" placeholder="平台帳號 platform_username" />
+                </div>
+                <div class="input-wrap">
+                    <ion-icon name="mail-outline"></ion-icon>
+                    <input type="text" id="ext-ai-add-vendor" placeholder="myai Email（廠商帳號）" />
+                </div>
+                <div id="ext-ai-add-msg" style="font-size:13px;"></div>
+                <div style="display:flex; gap:10px; justify-content:flex-end; align-items:center; margin-top:4px;">
+                    <button type="button" class="ready-btn" onclick="closeAddBindingModal()" style="width:auto; min-width:auto; margin:0; padding:8px 18px; font-size:0.9rem; border-radius:10px;">
+                        <span data-i18n="btn_cancel">取消</span>
+                    </button>
+                    <button type="submit" class="ready-btn" style="width:auto; min-width:auto; margin:0; padding:8px 18px; font-size:0.9rem; border-radius:10px; background:#10b981; border-color:#10b981; color:#fff;">
+                        <ion-icon name="checkmark-circle-outline"></ion-icon> <span data-i18n="btn_add">新增</span>
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- v3.2 GPU 節點設定 Modal（開關/池別/緩衝/週時段編輯；置於頂層同 add-binding-modal 理由） -->
+    <div id="gpu-node-modal" class="tutorial-modal hidden">
+        <div class="tutorial-backdrop" onclick="gpuNodes.closeEditor()"></div>
+        <div class="tutorial-content login-modal" style="max-width: 620px; padding: 26px 30px; max-height: 88vh; overflow-y: auto;">
+            <button class="tutorial-close" onclick="gpuNodes.closeEditor()"><ion-icon name="close-outline"></ion-icon></button>
+            <h2 style="margin-bottom: 4px; display:flex; align-items:center; gap:8px;">
+                <ion-icon name="hardware-chip-outline"></ion-icon>
+                <span data-i18n="gpu_node_edit_title">節點設定</span> — <span id="gpu-node-modal-id" style="font-family:monospace;"></span>
+            </h2>
+            <form onsubmit="gpuNodes.save(); return false;" style="display:flex; flex-direction:column; gap:12px; margin-top:14px;">
+                <div style="display:flex; gap:10px; flex-wrap:wrap;">
+                    <label style="flex:1; min-width:200px; font-size:13px;">顯示名稱
+                        <input type="text" id="gpu-node-name" placeholder="例：圖書館 3F-05" style="width:100%; margin-top:4px; padding:6px 8px;">
+                    </label>
+                    <label style="flex:1; min-width:200px; font-size:13px;">備註
+                        <input type="text" id="gpu-node-note" placeholder="位置 / 用途" style="width:100%; margin-top:4px; padding:6px 8px;">
+                    </label>
+                </div>
+                <div style="display:flex; gap:14px; flex-wrap:wrap; align-items:center;">
+                    <label style="font-size:13px; display:flex; align-items:center; gap:6px;">
+                        <input type="checkbox" id="gpu-node-enabled"> 啟用（總開關）
+                    </label>
+                    <label style="font-size:13px;">池別
+                        <select id="gpu-node-pool" style="margin-left:6px; padding:4px 8px;">
+                            <option value="">依 worker 自報</option>
+                            <option value="batch">batch（高階/重量級）</option>
+                            <option value="interactive">interactive（互動輕量）</option>
+                        </select>
+                    </label>
+                    <label style="font-size:13px;">停派緩衝
+                        <input type="number" id="gpu-node-buffer" min="0" max="1440" step="5" value="0" style="width:70px; margin-left:6px; padding:4px 6px;"> 分鐘
+                    </label>
+                </div>
+                <div style="border-top:1px solid var(--border-color,#333); padding-top:10px;">
+                    <label style="font-size:13px; display:flex; align-items:center; gap:6px; margin-bottom:8px;">
+                        <input type="checkbox" id="gpu-node-always" onchange="gpuNodes.toggleAlways()"> 全天可排（不限時段）
+                    </label>
+                    <div id="gpu-node-days-wrap">
+                        <p style="font-size:12px; color:var(--text-muted,#888); margin:0 0 8px;">
+                            各日可加多段。結束時間 ≤ 開始時間 = 跨夜（延伸到隔日）。</p>
+                        <div id="gpu-node-days" style="display:flex; flex-direction:column; gap:6px;"></div>
+                        <p id="gpu-node-never-warn" style="display:none; font-size:12px; color:#f59e0b; margin:8px 0 0;">
+                            ⚠ 未勾「全天可排」且未設任何時段 ＝ 此節點永不開放派工。</p>
+                    </div>
+                </div>
+                <div id="gpu-node-msg" style="font-size:13px;"></div>
+                <div style="display:flex; gap:10px; justify-content:flex-end; margin-top:2px;">
+                    <button type="button" class="ready-btn" onclick="gpuNodes.closeEditor()" style="width:auto; min-width:auto; margin:0; padding:8px 18px; font-size:0.9rem;">
+                        <span data-i18n="btn_cancel">取消</span>
+                    </button>
+                    <button type="submit" class="ready-btn" style="width:auto; min-width:auto; margin:0; padding:8px 18px; font-size:0.9rem; background:#10b981; border-color:#10b981; color:#fff;">
+                        <span data-i18n="btn_save">儲存</span>
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- v3.3 Lab 封存還原 Modal（置於頂層，理由同 add-binding-modal / gpu-node-modal） -->
+    <div id="lab-restore-modal" class="tutorial-modal hidden">
+        <div class="tutorial-backdrop" onclick="adminLab.closeRestore()"></div>
+        <div class="tutorial-content login-modal" style="max-width: 520px; padding: 26px 30px;">
+            <button class="tutorial-close" onclick="adminLab.closeRestore()"><ion-icon name="close-outline"></ion-icon></button>
+            <h2 style="margin-bottom:6px; display:flex; align-items:center; gap:8px;">
+                <ion-icon name="download-outline"></ion-icon>
+                <span data-i18n="lab_restore_title">還原 Lab 資料</span>
+            </h2>
+            <p style="color:var(--text-muted); font-size:13px; margin:0 0 4px;">
+                來源封存：<span id="lab-restore-vol" style="font-family:monospace; font-size:12px;"></span>
+            </p>
+            <p style="color:var(--text-muted); font-size:12px; margin:0 0 16px;">
+                原帳號 <b id="lab-restore-owner"></b> · <span id="lab-restore-size"></span>
+            </p>
+            <form onsubmit="adminLab.doRestore(); return false;" style="display:flex; flex-direction:column; gap:14px;">
+                <label style="font-size:13px;">還原給哪位使用者？
+                    <select id="lab-restore-target" style="width:100%; margin-top:6px; padding:8px;">
+                        <option value="">載入中…</option>
+                    </select>
+                </label>
+                <p style="font-size:12px; color:#f59e0b; margin:0;">
+                    ⚠ 資料會複製進該使用者現有的 Lab；同名檔案會被覆蓋。原封存仍保留，可重複還原。
+                </p>
+                <div id="lab-restore-msg" style="font-size:13px;"></div>
+                <div style="display:flex; gap:10px; justify-content:flex-end;">
+                    <button type="button" class="ready-btn" onclick="adminLab.closeRestore()" style="width:auto; min-width:auto; margin:0; padding:8px 18px; font-size:0.9rem;">
+                        <span data-i18n="btn_cancel">取消</span>
+                    </button>
+                    <button type="submit" class="ready-btn" style="width:auto; min-width:auto; margin:0; padding:8px 18px; font-size:0.9rem; background:#10b981; border-color:#10b981; color:#fff;">
+                        <span data-i18n="lab_restore_confirm">確認還原</span>
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- v2.3: 管理者引導式教學（overlay + 高亮框 + 氣泡；原使用者介面 Unit 6 移入，從 Side Bar ⓘ 導覽開啟） -->
+    <div id="admin-guide-ring" class="tutorial-highlight-ring hidden"></div>
+    <div id="admin-guide-overlay" class="tutorial-overlay hidden" role="dialog" aria-modal="false">
+        <div id="admin-guide-bubble-wrap" class="tutorial-bubble-wrap">
+            <div class="tutorial-overlay-bubble" id="admin-guide-bubble">
+                <div class="tutorial-bubble-header">
+                    <span class="tutorial-step-badge" id="admin-guide-badge">1 / 5</span>
+                    <button type="button" id="admin-guide-abort" aria-label="結束導覽"><ion-icon name="close-outline"></ion-icon></button>
+                </div>
+                <h3 id="admin-guide-step-title"></h3>
+                <p id="admin-guide-step-body"></p>
+                <div class="tutorial-bubble-actions">
+                    <button type="button" id="admin-guide-prev" class="ready-btn" style="width:auto; min-width:80px;">
+                        <ion-icon name="arrow-back-outline"></ion-icon> <span data-i18n="guide_prev">上一步</span>
+                    </button>
+                    <button type="button" id="admin-guide-next" class="ready-btn" style="width:auto; min-width:100px;">
+                        <span data-i18n="guide_next">下一步</span> <ion-icon name="arrow-forward-outline"></ion-icon>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 載入 Ionicons -->
+    <script type="module" src="https://unpkg.com/ionicons@7.1.0/dist/ionicons/ionicons.esm.js"></script>
+    <script nomodule src="https://unpkg.com/ionicons@7.1.0/dist/ionicons/ionicons.js"></script>
+    <!-- 載入 Admin 邏輯 -->
+    <script src="admin.js?v=v1-5-0001"></script>
+</body>
+
+</html>
