@@ -333,7 +333,11 @@ def _classify(note: str, pts: int) -> tuple[str, str | None]:
     low = (note or "").lower()
     if "login" in low:
         return "login", None
-    if note.startswith("Transfer"):
+    # ZH: Transfer(轉點) 與 Top Up(加值) 都是「配點」——前端 transfer 就是顯示成「配點」，
+    #     語意相符，不必新增列舉值。原本 Top Up 落到 other，5 筆加值被歸成「其他」。
+    #     一併改成不分大小寫：原本 startswith("Transfer") 是大小寫敏感，
+    #     而上面的 login 判斷是小寫比對，同一函式兩套規則遲早出事。
+    if low.startswith("transfer") or low.startswith("top up") or low.startswith("topup"):
         return "transfer", None
     if pts < 0:
         return "ai_usage", note.strip() or None
@@ -359,10 +363,31 @@ def parse_transactions(html: str) -> list[dict]:
 
     @node job-scheduler/app/services/myai_sync.py::parse_transactions
     """
-    rows = _parse_tx_table(html)
-    if rows:
-        return rows
-    return _parse_tx_kbx(html)
+    rows = _parse_tx_table(html) or _parse_tx_kbx(html)
+    return _disambiguate_keys(rows)
+
+
+def _disambiguate_keys(rows: list[dict]) -> list[dict]:
+    """ZH: 同一組 (時間|sn|點數|備註) 出現多列時，第 2 筆起加 `|#N` 後綴。
+
+       為什麼需要：實測 202 列只有 194 個相異鍵——8 組是**同一秒的兩次登入**
+       （點數 0、餘額相同，資料上完全同一），會被去重掉，「登入次數」因此少算 8 次。
+
+       ⚠ **第 1 筆刻意不加後綴**，這樣既有資料的 key 完全不變。
+         舊 parser 每組只存得進第 1 筆，所以 DB 裡的就是「第 1 筆」的 key——
+         加了後綴才會與既有 194 筆對不上，下次同步整批重複插入。
+       序號是「組內出現序」，與查詢的日期範圍無關，所以不同窗口算出來一樣。
+
+    @node job-scheduler/app/services/myai_sync.py::_disambiguate_keys
+    """
+    seen: dict[str, int] = {}
+    for r in rows:
+        base = r["dedup_key"]
+        n = seen.get(base, 0) + 1
+        seen[base] = n
+        if n > 1:
+            r["dedup_key"] = f"{base}|#{n}"
+    return rows
 
 
 def tx_row_count(html: str) -> int:
@@ -548,6 +573,19 @@ async def sync_transactions(db: Session, days: int = 90) -> dict:
     existing = {k for (k,) in db.query(models.MyaiTransaction.dedup_key).all()}
     now = datetime.now(timezone.utc)
     created = 0
+    # ZH: 既有列的分類自我修正 —— 去重會跳過已存在的 key，所以「分類規則改了」
+    #     不會回頭修正舊資料（實測：Top Up 的 5 筆一直卡在 other）。
+    #     這裡只比對本次窗口內、且分類與現行規則不符的列，成本與窗口同級。
+    reclassified = 0
+    if rows:
+        by_key = {r["dedup_key"]: r for r in rows}
+        for old in (db.query(models.MyaiTransaction)
+                      .filter(models.MyaiTransaction.dedup_key.in_(list(by_key.keys())))
+                      .all()):
+            r = by_key.get(old.dedup_key)
+            if r and (old.event_type != r["event_type"] or old.model != r["model"]):
+                old.event_type, old.model = r["event_type"], r["model"]
+                reclassified += 1
     for r in rows:
         if r["dedup_key"] in existing:
             continue
@@ -560,9 +598,10 @@ async def sync_transactions(db: Session, days: int = 90) -> dict:
     #     （供低點數提醒即時判斷）；只更新本窗口有活動的人，其餘維持不變。
     bal_updated = _refresh_points_from_tx(db, rows)
 
-    logger.info("MYAI tx-sync: fetched=%d created=%d bal_updated=%d (days=%d)",
-                len(rows), created, bal_updated, days)
+    logger.info("MYAI tx-sync: fetched=%d created=%d reclassified=%d bal_updated=%d (days=%d)",
+                len(rows), created, reclassified, bal_updated, days)
     return {"status": "ok", "fetched": len(rows), "created": created,
+            "reclassified": reclassified,
             "skipped": len(rows) - created, "balance_updated": bal_updated, "days": days}
 
 
