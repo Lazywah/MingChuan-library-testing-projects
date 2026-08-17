@@ -469,14 +469,7 @@ ion-icon {
 
 
 /* Refresh icon */
-.refresh-icon {
-    font-size: 1.5rem;
-    cursor: pointer;
-    transition: all 0.3s ease;
-    background: transparent;
-    padding: 4px;
-    border-radius: 50%;
-}
+/* ZH: .refresh-icon 的這一份已合併到下方（原本同名定義有 2 份，CSS 後者勝出，改這裡不會有任何效果）。 */
 
 .refresh-icon:hover {
     transform: rotate(180deg);
@@ -1020,9 +1013,15 @@ ion-icon {
 }
 
 .refresh-icon {
+    /* ZH: 由 2 份同名定義合併而來（原分散在本檔多處）。
+       合併到最後一份的位置——那是原本實際勝出的位置，
+       搬到前面會改變它與中間規則的先後關係。 */
     font-size: 1.75rem;
     cursor: pointer;
     transition: 0.3s;
+    background: transparent;
+    padding: 4px;
+    border-radius: 50%;
 }
 
 .refresh-icon:hover {
@@ -1062,7 +1061,14 @@ ion-icon {
 }
 
 .stat-row {
-    font-size: 1.125rem;
+    /* ZH: 由 styles.css 與 index.html 的 inline <style> 兩份合併而來。
+       inline <style> 排在 <link styles.css> 之後，原本它勝出——所以這裡的
+       font-size: 1.125rem 是**死的**，改它沒有任何效果。
+       跨檔重複比同檔重複更難發現：在 styles.css 裡 grep 不到另一份。
+       合併後採用原本實際生效的值（0.9em），計算結果不變。 */
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.9em;
     margin-bottom: 8px;
 }
 
@@ -1189,13 +1195,7 @@ ion-icon {
     white-space: nowrap;
 }
 
-.job-progress-bar {
-    height: 6px;
-    background: rgba(255, 255, 255, 0.2);
-    border-radius: 3px;
-    margin-top: 10px;
-    overflow: hidden;
-}
+/* ZH: .job-progress-bar 的這一份已合併到下方（原本同名定義有 2 份，CSS 後者勝出，改這裡不會有任何效果）。 */
 
 .job-progress-fill {
     height: 100%;
@@ -1613,10 +1613,7 @@ ion-icon {
     }
 }
 
-.admin-table-wrap {
-    max-height: 400px;
-    overflow-y: auto;
-}
+/* ZH: .admin-table-wrap 的這一份已合併到下方（原本同名定義有 4 份，CSS 後者勝出，改這裡不會有任何效果）。 */
 
 /* v2.1: 使用者管理依 auth_source 分頁的 tab bar */
 .user-source-tab {
@@ -1653,11 +1650,7 @@ ion-icon {
     color: var(--neon-cyan);
 }
 
-.admin-table {
-    width: 100%;
-    border-collapse: collapse;
-    font-size: 0.8125rem;
-}
+/* ZH: .admin-table 的這一份已合併到下方（原本同名定義有 2 份，CSS 後者勝出，改這裡不會有任何效果）。 */
 
 .admin-table th,
 .admin-table td {
@@ -2108,21 +2101,9 @@ ion-icon {
     flex: 1;
 }
 
-.bottom-quick-links {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-    gap: 15px;
-    margin-top: 15px;
-}
+/* ZH: .bottom-quick-links 的這一份已合併到下方（原本同名定義有 2 份，CSS 後者勝出，改這裡不會有任何效果）。 */
 
-.quick-link-card {
-    background: rgba(0, 0, 0, 0.2);
-    border: 1px solid var(--border-color);
-    border-radius: 12px;
-    padding: 15px;
-    text-align: center;
-    transition: all 0.3s ease;
-}
+/* ZH: .quick-link-card 的這一份已合併到下方（原本同名定義有 2 份，CSS 後者勝出，改這裡不會有任何效果）。 */
 
 .quick-link-card:hover {
     border-color: var(--accent-glow);
@@ -2165,12 +2146,7 @@ ion-icon {
     margin: 8px 0;
 }
 
-.announcement-item {
-    background: rgba(255,255,255,0.05);
-    padding: 10px;
-    border-radius: 8px;
-    border-left: 4px solid #f59e0b;
-}
+/* ZH: .announcement-item 的這一份已合併到下方（原本同名定義有 2 份，CSS 後者勝出，改這裡不會有任何效果）。 */
 
 .announcement-item .date {
     font-size: 0.75rem;
@@ -2218,6 +2194,9 @@ ion-icon {
 
 /* Bottom Quick Links Grid */
 .bottom-quick-links {
+    /* ZH: 由 2 份同名定義合併而來（原分散在本檔多處）。
+       合併到最後一份的位置——那是原本實際勝出的位置，
+       搬到前面會改變它與中間規則的先後關係。 */
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
     gap: 20px;
@@ -2227,14 +2206,18 @@ ion-icon {
 }
 
 .quick-link-card {
+    /* ZH: 由 2 份同名定義合併而來（原分散在本檔多處）。
+       合併到最後一份的位置——那是原本實際勝出的位置，
+       搬到前面會改變它與中間規則的先後關係。 */
     background: rgba(255,255,255,0.03);
     border: 1px solid rgba(255,255,255,0.1);
     border-radius: 12px;
     padding: 20px;
+    text-align: center;
+    transition: transform 0.3s, border-color 0.3s;
     display: flex;
     flex-direction: column;
     align-items: flex-start;
-    transition: transform 0.3s, border-color 0.3s;
 }
 
 .quick-link-card:hover {
@@ -2277,6 +2260,9 @@ ion-icon {
 }
 
 .announcement-item {
+    /* ZH: 由 2 份同名定義合併而來（原分散在本檔多處）。
+       合併到最後一份的位置——那是原本實際勝出的位置，
+       搬到前面會改變它與中間規則的先後關係。 */
     background: rgba(255,255,255,0.05);
     padding: 15px;
     border-radius: 12px;
@@ -2320,9 +2306,7 @@ ion-icon {
    ZH: 管理員表格 — 欄位名固定 (Sticky Header)
    EN: Admin Tables — Sticky Header for all tables
    ========================================================================== */
-.admin-table-wrap {
-    overflow-y: auto;
-}
+/* ZH: .admin-table-wrap 的這一份已合併到下方（原本同名定義有 4 份，CSS 後者勝出，改這裡不會有任何效果）。 */
 
 .admin-table thead th {
     position: sticky;
@@ -2408,12 +2392,16 @@ ion-icon {
 
 /* Job progress bar inside table cell */
 .job-progress-bar {
-    width: 100%;
-    max-width: 120px;
+    /* ZH: 由 2 份同名定義合併而來（原分散在本檔多處）。
+       合併到最後一份的位置——那是原本實際勝出的位置，
+       搬到前面會改變它與中間規則的先後關係。 */
     height: 6px;
     background: rgba(255,255,255,0.1);
     border-radius: 3px;
+    margin-top: 10px;
     overflow: hidden;
+    width: 100%;
+    max-width: 120px;
 }
 
 .job-progress-bar-fill {
@@ -2444,16 +2432,17 @@ ion-icon {
    ==================================================================== */
 
 /* 表格容器在小螢幕一律改為橫向 scroll，避免硬擠斷版 */
-.admin-table-wrap {
-    overflow-x: auto;
-    overflow-y: auto;
-    -webkit-overflow-scrolling: touch;
-}
+/* ZH: .admin-table-wrap 的這一份已合併到下方（原本同名定義有 4 份，CSS 後者勝出，改這裡不會有任何效果）。 */
 .admin-table-wrap::-webkit-scrollbar {
     height: 6px;
 }
 .admin-table {
-    /* 給表格一個下限寬度，配合容器的橫向 scroll */
+    /* ZH: 由 2 份同名定義合併而來（原分散在本檔多處）。
+       合併到最後一份的位置——那是原本實際勝出的位置，
+       搬到前面會改變它與中間規則的先後關係。 */
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.8125rem;
     min-width: 720px;
 }
 
@@ -2695,6 +2684,13 @@ ion-icon {
    容器退淡之後，表格若沒有自己的實體感就會整片糊掉。
    ══════════════════════════════════════════════════════════════ */
 .admin-table-wrap {
+    /* ZH: 由 4 份同名定義合併而來（原分散在本檔多處）。
+       合併到最後一份的位置——那是原本實際勝出的位置，
+       搬到前面會改變它與中間規則的先後關係。 */
+    max-height: 400px;
+    overflow-y: auto;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
     background: var(--card-solid, rgba(255, 255, 255, 0.72));
     border: 1px solid var(--panel-hairline, rgba(99, 102, 241, 0.18));
     border-radius: 10px;

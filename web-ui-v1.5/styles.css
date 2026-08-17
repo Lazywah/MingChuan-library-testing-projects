@@ -498,14 +498,7 @@ ion-icon {
 
 
 /* Refresh icon */
-.refresh-icon {
-    font-size: 1.5rem;
-    cursor: pointer;
-    transition: all 0.3s ease;
-    background: transparent;
-    padding: 4px;
-    border-radius: 50%;
-}
+/* ZH: .refresh-icon 的這一份已合併到下方（原本同名定義有 2 份，CSS 後者勝出，改這裡不會有任何效果）。 */
 
 .refresh-icon:hover {
     transform: rotate(180deg);
@@ -1074,9 +1067,15 @@ ion-icon {
 }
 
 .refresh-icon {
+    /* ZH: 由 2 份同名定義合併而來（原分散在本檔多處）。
+       合併到最後一份的位置——那是原本實際勝出的位置，
+       搬到前面會改變它與中間規則的先後關係。 */
     font-size: 1.75rem;
     cursor: pointer;
     transition: 0.3s;
+    background: transparent;
+    padding: 4px;
+    border-radius: 50%;
 }
 
 .refresh-icon:hover {
@@ -1526,19 +1525,7 @@ ion-icon {
     gap: 15px;
 }
 
-.hub-sub-card {
-    background: var(--bg-input);
-    border: 1px solid var(--border-color);
-    border-radius: 12px;
-    padding: 10px;
-    cursor: pointer;
-    text-align: center;
-    transition: all 0.3s ease;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 10px;
-}
+/* ZH: .hub-sub-card 的這一份已合併到下方（原本同名定義有 2 份，CSS 後者勝出，改這裡不會有任何效果）。 */
 
 .hub-sub-card:hover {
     transform: translateY(-5px) scale(1.02);
@@ -1573,7 +1560,21 @@ ion-icon {
    - data-target="coming-soon-layout"  → 提案中 (灰 badge + 降低不透明度)
    ========================================================================== */
 .hub-sub-card {
-    position: relative;   /* 給 ::after badge 定位用 */
+    /* ZH: 由 2 份同名定義合併而來（原分散在本檔多處）。
+       合併到最後一份的位置——那是原本實際勝出的位置，
+       搬到前面會改變它與中間規則的先後關係。 */
+    background: var(--bg-input);
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    padding: 10px;
+    cursor: pointer;
+    text-align: center;
+    transition: all 0.3s ease;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+    position: relative;
 }
 
 /* 已上線 — 綠色 badge */
@@ -2106,30 +2107,12 @@ ion-icon {
     flex: 1;
 }
 
-.bottom-quick-links {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-    gap: 15px;
-    margin-top: 15px;
-}
+/* ZH: .bottom-quick-links 的這一份已合併到下方（原本同名定義有 2 份，CSS 後者勝出，改這裡不會有任何效果）。 */
 
 /* ZH: ⚠ 這一份**不會生效** —— 本檔後面（約 2340 行）還有一份同名定義，
    CSS 後者勝出。v1.5 的實際樣式寫在那裡。這裡保留是為了不動到原始結構，
    但任何改動都必須改後面那一份。 */
-.quick-link-card {
-    /* ZH: v1.5 —— 內容浮上來。
-       原本背景只有 3% 不透明度、邊框 10%，在淡紫底上等於沒有邊界，
-       三張卡看起來像「平鋪的文字」而不是「三個可以點的東西」。
-       整張卡可點（見 app.js 的 quick-link-card 綁定），所以要有可按的實體感。 */
-    background: var(--card-solid, rgba(255, 255, 255, 0.72));
-    border: 1px solid var(--panel-hairline, rgba(99, 102, 241, 0.18));
-    border-radius: 12px;
-    padding: 18px 16px;
-    text-align: center;
-    cursor: pointer;
-    box-shadow: 0 1px 2px rgba(30, 27, 75, 0.06);
-    transition: box-shadow 0.2s ease, transform 0.2s ease, border-color 0.2s ease;
-}
+/* ZH: .quick-link-card 的這一份已合併到下方（原本同名定義有 2 份，CSS 後者勝出，改這裡不會有任何效果）。 */
 
 .quick-link-card:hover {
     border-color: var(--accent-glow);
@@ -2179,12 +2162,7 @@ ion-icon {
     margin: 8px 0;
 }
 
-.announcement-item {
-    background: rgba(255,255,255,0.05);
-    padding: 10px;
-    border-radius: 8px;
-    border-left: 4px solid #f59e0b;
-}
+/* ZH: .announcement-item 的這一份已合併到下方（原本同名定義有 2 份，CSS 後者勝出，改這裡不會有任何效果）。 */
 
 .announcement-item .date {
     font-size: 0.75rem;
@@ -2295,6 +2273,9 @@ ion-icon {
 
 /* Bottom Quick Links Grid */
 .bottom-quick-links {
+    /* ZH: 由 2 份同名定義合併而來（原分散在本檔多處）。
+       合併到最後一份的位置——那是原本實際勝出的位置，
+       搬到前面會改變它與中間規則的先後關係。 */
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
     gap: 20px;
@@ -2307,19 +2288,20 @@ ion-icon {
    同一個 class 定義兩次，後面這份才生效——改上面那份不會有任何效果。
    v1.5 的視覺層級翻轉寫在這裡，因為只有這裡的值真的會被瀏覽器採用。 */
 .quick-link-card {
-    /* ZH: v1.5 —— 內容浮上來。
-       原本背景 3% 不透明、邊框 10%，在淡紫底上等於沒有邊界：
-       三張卡看起來像「平鋪的文字」，而不是「三個可以點的東西」。 */
+    /* ZH: 由 2 份同名定義合併而來（原分散在本檔多處）。
+       合併到最後一份的位置——那是原本實際勝出的位置，
+       搬到前面會改變它與中間規則的先後關係。 */
     background: rgba(255, 255, 255, 0.75);
     border: 1px solid rgba(99, 102, 241, 0.22);
     border-radius: 12px;
     padding: 20px;
-    display: flex;
-    flex-direction: column;
-    align-items: flex-start;
+    text-align: center;
     cursor: pointer;
     box-shadow: 0 1px 2px rgba(30, 27, 75, 0.06);
     transition: transform 0.2s, border-color 0.2s, box-shadow 0.2s, background 0.2s;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
 }
 
 .quick-link-card:hover {
@@ -2370,6 +2352,9 @@ ion-icon {
 }
 
 .announcement-item {
+    /* ZH: 由 2 份同名定義合併而來（原分散在本檔多處）。
+       合併到最後一份的位置——那是原本實際勝出的位置，
+       搬到前面會改變它與中間規則的先後關係。 */
     background: rgba(255,255,255,0.05);
     padding: 15px;
     border-radius: 12px;
