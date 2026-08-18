@@ -1,0 +1,215 @@
+/* ==============================================================================
+   styles.css — v2 元件樣式
+   ==============================================================================
+   ⚠ 本檔**不得出現任何色碼**。顏色一律走 tokens.css 的第 2 層語意 token。
+     檢查方式：grep -nE "#[0-9a-fA-F]{3,6}|rgb\(" styles.css  應為空。
+   ============================================================================== */
+
+/* ZH: 純色用 background-color（長寫）而非 background 簡寫——
+       簡寫會一併重設 background-image / -position 等，這裡不需要那些。
+       純粹是精確性，不是為了繞過什麼。 */
+
+*, *::before, *::after { box-sizing: border-box; }
+
+html { font-size: 16px; }
+
+body {
+    margin: 0;
+    font-family: var(--font);
+    font-size: 1rem;
+    line-height: 1.65;
+    color: var(--text);
+    background-color: var(--surface-2);
+}
+
+/* ZH: 鍵盤使用者要看得見焦點。用 box-shadow 而非 outline，圓角才會跟著彎。 */
+:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 3px var(--focus-ring);
+    border-radius: var(--radius-sm);
+}
+
+/* ── 版面骨架 ───────────────────────────────────────────────────────── */
+/* ZH: 內容先於外框（design-before-code 的 content-out）——
+       三個畫面定案後只需要頂部一條，不需要側邊欄。 */
+.topbar {
+    display: flex;
+    align-items: center;
+    gap: var(--space-4);
+    padding: 0 var(--space-5);
+    height: 56px;
+    background-color: var(--surface);
+    border-bottom: 1px solid var(--hairline);
+}
+.topbar__brand {
+    font-weight: 700;
+    color: var(--text-strong);
+    letter-spacing: 0.01em;
+}
+.topbar__spacer { flex: 1; }
+
+.page {
+    max-width: var(--content-max);
+    margin: 0 auto;
+    padding: var(--space-6) var(--space-5) var(--space-8);
+}
+
+/* ── 層級 0 · 公告橫幅（條件式，沒有公告時整條不存在）──────────────── */
+.notice {
+    display: flex;
+    align-items: baseline;
+    gap: var(--space-3);
+    padding: var(--space-3) var(--space-4);
+    margin-bottom: var(--space-5);
+    background-color: var(--accent-soft);
+    border: 1px solid var(--hairline);
+    border-radius: var(--radius-md);
+    font-size: 0.9375rem;
+}
+.notice__date { color: var(--text-muted); font-size: 0.875rem; white-space: nowrap; }
+.notice__more { margin-left: auto; white-space: nowrap; }
+
+/* ── 層級 1 · 額度 + 主要動作（主線的核心）────────────────────────── */
+.primary-card {
+    background-color: var(--surface);
+    border: 1px solid var(--hairline);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-1);
+    padding: var(--space-6) var(--space-5);
+    text-align: center;
+}
+.balance__label { font-size: 0.875rem; color: var(--text-muted); }
+.balance__value {
+    font-size: 2.5rem;
+    font-weight: 700;
+    color: var(--text-strong);
+    line-height: 1.2;
+    font-variant-numeric: tabular-nums;   /* ZH: 數字等寬，輪詢更新時不會左右跳 */
+}
+.balance__unit { font-size: 1rem; font-weight: 400; color: var(--text-muted); margin-left: var(--space-1); }
+.balance__meta { font-size: 0.875rem; color: var(--text-muted); }
+.balance__meta a { color: var(--link); }
+
+/* ZH: 低於門檻（/my-balance 的 below 旗標）——視覺上必須不一樣。
+       這不是新機制，是用後端已經算好的判定。 */
+.primary-card[data-low="1"] { border-color: var(--warn); background-color: var(--warn-soft); }
+.primary-card[data-low="1"] .balance__value { color: var(--warn); }
+
+/* 骨架（載入中）——保留高度，避免版面跳動 */
+.skeleton {
+    display: inline-block;
+    min-width: 8ch; height: 1em;
+    background-color: var(--surface-2);
+    border-radius: var(--radius-sm);
+    animation: pulse 1.4s ease-in-out infinite;
+}
+@keyframes pulse { 0%,100% { opacity: 1 } 50% { opacity: 0.55 } }
+@media (prefers-reduced-motion: reduce) { .skeleton { animation: none } }
+
+/* ── 按鈕 ───────────────────────────────────────────────────────────── */
+.btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-2);
+    min-height: var(--tap-min);
+    padding: 0 var(--space-5);
+    font: inherit;
+    font-weight: 600;
+    border: 1px solid transparent;
+    border-radius: var(--radius-md);
+    cursor: pointer;
+    transition: background-color 0.15s ease, border-color 0.15s ease;
+}
+.btn--primary {
+    background-color: var(--accent);
+    color: var(--on-accent);          /* ⚠ 黃底＝深字、藍底＝白字，由 token 決定 */
+    width: 100%;
+    font-size: 1.0625rem;
+    margin-top: var(--space-4);
+}
+.btn--primary:hover:not(:disabled) { background-color: var(--accent-hover); }
+.btn:disabled { opacity: 0.55; cursor: not-allowed; }
+
+.btn--ghost {
+    background: transparent;
+    color: var(--link);
+    border-color: var(--hairline);
+}
+.btn--ghost:hover { background-color: var(--surface-2); }
+
+/* ZH: 主要動作按下後的過渡——V1 修正。
+       實際流程會先開廠商登出頁再轉登入頁，中間有約 1 秒空窗；
+       這一條讓本站在那段時間有話說，而不是「按了沒反應」。 */
+.handoff {
+    margin-top: var(--space-3);
+    font-size: 0.9375rem;
+    color: var(--text-muted);
+}
+.handoff a { color: var(--link); font-weight: 600; }
+
+/* ── 層級 2 · 入口卡 ─────────────────────────────────────────────── */
+.entries { margin-top: var(--space-6); display: grid; gap: var(--space-4); }
+
+.entry {
+    display: block;
+    text-align: left;
+    width: 100%;
+    background-color: var(--surface);
+    border: 1px solid var(--hairline);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-1);
+    padding: var(--space-4) var(--space-5);
+    cursor: pointer;
+    font: inherit;
+    color: inherit;
+    transition: box-shadow 0.2s ease, transform 0.2s ease, border-color 0.2s ease;
+}
+.entry:hover { box-shadow: var(--shadow-2); transform: translateY(-2px); border-color: var(--accent); }
+.entry__title { font-weight: 700; color: var(--text-strong); font-size: 1.0625rem; }
+.entry__desc { font-size: 0.9375rem; color: var(--text-muted); margin-top: var(--space-1); }
+
+/* ZH: 機制甲——GPU 入口卡。文案是成果不是功能名，所以視覺上也該比其他入口重一階。 */
+.entry--feature { border-left: 4px solid var(--accent); }
+
+/* ── 層級 3 · 次要 ──────────────────────────────────────────────── */
+.minor {
+    margin-top: var(--space-6);
+    padding-top: var(--space-4);
+    border-top: 1px solid var(--hairline);
+    font-size: 0.875rem;
+    color: var(--text-muted);
+    display: flex; gap: var(--space-4); flex-wrap: wrap;
+}
+.minor a { color: var(--link); }
+
+/* ── 錯誤區塊（部分失敗不整頁死）──────────────────────────────── */
+.inline-error {
+    font-size: 0.875rem;
+    color: var(--error);
+    background-color: var(--error-soft);
+    border-radius: var(--radius-sm);
+    padding: var(--space-2) var(--space-3);
+    margin-top: var(--space-2);
+}
+
+/* ── 色系切換（開發期展示用；上線擇一後可移除）─────────────────── */
+.theme-switch { display: flex; gap: var(--space-1); }
+.theme-switch button {
+    font: inherit; font-size: 0.8125rem;
+    padding: var(--space-1) var(--space-3);
+    min-height: 32px;
+    border: 1px solid var(--hairline);
+    border-radius: var(--radius-pill);
+    background-color: var(--surface);
+    color: var(--text);
+    cursor: pointer;
+}
+.theme-switch button[aria-pressed="true"] {
+    background-color: var(--accent); color: var(--on-accent); border-color: var(--accent);
+}
+
+@media (max-width: 640px) {
+    .page { padding: var(--space-5) var(--space-4) var(--space-7); }
+    .balance__value { font-size: 2rem; }
+}

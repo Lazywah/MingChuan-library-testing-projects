@@ -23,6 +23,7 @@ services:
       - ./admin-ui:/usr/share/nginx/html/admin-ui:ro
       # ZH: UI v1.5 —— 與上面兩份並存，供新舊對照。改完版本定案後再決定要不要取代。
       - ./web-ui-v1.5:/usr/share/nginx/html/train-v1.5:ro
+      - ./web-ui-v2:/usr/share/nginx/html/train-v2:ro
       - ./admin-ui-v1.5:/usr/share/nginx/html/admin-ui-v1.5:ro
     depends_on:
       job-scheduler:

@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="zh-Hant" data-theme="yellow">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>MCU AI Base</title>
+
+    <!-- ZH: Open Sans —— 與學校 Moodle 的 Latin 字體一致。
+             中文由 tokens.css 的字體堆疊釘住微軟正黑（字體 fallback 逐字生效）。 -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Open+Sans:wght@400;600;700&display=swap" rel="stylesheet">
+
+    <link rel="stylesheet" href="tokens.css?v=667210bd">
+    <link rel="stylesheet" href="styles.css?v=10271671">
+</head>
+<body>
+
+<header class="topbar">
+    <span class="topbar__brand">MCU AI Base</span>
+    <span class="topbar__spacer"></span>
+
+    <!-- ZH: 開發期的色系切換。上線擇一後整塊移除（Decision Log #16）。 -->
+    <div class="theme-switch" role="group" aria-label="色系">
+        <button type="button" data-set-theme="yellow" aria-pressed="true">黃</button>
+        <button type="button" data-set-theme="blue" aria-pressed="false">藍</button>
+    </div>
+</header>
+
+<main class="page">
+
+    <!-- 層級 0 · 公告橫幅：條件式，沒有公告時整塊不存在（不做「目前沒有公告」的卡片） -->
+    <div id="notice" class="notice" hidden>
+        <span class="notice__date" id="notice-date"></span>
+        <span id="notice-title"></span>
+        <a class="notice__more" id="notice-more" href="#" hidden></a>
+    </div>
+
+    <!-- 層級 1 · 額度 + 主要動作 -->
+    <section class="primary-card" id="balance-card" aria-labelledby="balance-label">
+        <div class="balance__label" id="balance-label">我的 AI 額度</div>
+
+        <div class="balance__value">
+            <span id="balance-value"><span class="skeleton" aria-hidden="true"></span></span><span
+                class="balance__unit" id="balance-unit" hidden>Token</span>
+        </div>
+
+        <div class="balance__meta" id="balance-meta"></div>
+
+        <!-- ZH: V1 修正——標籤要講明真實結果。
+                 實際流程是「開廠商登出頁 → 1 秒後轉登入頁」，落地是登入表單不是對話框。 -->
+        <button class="btn btn--primary" id="go-myai" type="button">
+            前往 MYAI 問 AI
+        </button>
+        <div class="handoff" id="handoff" hidden></div>
+    </section>
+
+    <!-- 層級 2 · 入口 -->
+    <div class="entries">
+        <!-- 機制甲：文案是成果，不是功能名。「運算任務」說明不了任何事。 -->
+        <button class="entry entry--feature" type="button" id="go-gpu">
+            <div class="entry__title">訓練你的第一個影像分類模型</div>
+            <div class="entry__desc">用學校的 GPU，從我們準備好的範例開始，約 20 分鐘</div>
+        </button>
+
+        <!-- ZH: 文件庫入口在有內容前不出現（V3 修正）。由 app.js 依內容決定是否插入。 -->
+    </div>
+
+    <!-- 層級 3 · 次要 -->
+    <nav class="minor">
+        <a href="#" id="link-usage">使用量明細</a>
+        <a href="#" id="link-lab">開啟我的 Lab</a>
+        <a href="#" id="link-report">問題回報</a>
+    </nav>
+</main>
+
+<script src="app.js?v=4c39081c"></script>
+</body>
+</html>
