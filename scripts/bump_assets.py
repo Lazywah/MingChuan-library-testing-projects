@@ -29,8 +29,16 @@ except (AttributeError, ValueError):
     pass
 
 ROOT_DIR = Path(__file__).parent.parent.resolve()   # CodeSpace/
-# 要掃描的前端目錄（各自獨立，web 與 admin 互不影響）
-ASSET_DIRS = [ROOT_DIR / "web-ui", ROOT_DIR / "admin-ui"]
+
+# 要掃描的前端目錄（各自獨立，web 與 admin 互不影響）。
+# ZH: 用 glob 自動探索，不要寫死清單 —— 原本寫死 ["web-ui", "admin-ui"] 的結果是
+#     後來新增的 web-ui-v1.5 / admin-ui-v1.5 / web-ui-v2 全都不在掃描範圍內，
+#     --check 也照樣過。漏掉的症狀是「改了 js/css 但使用者拿到舊快取且無任何錯誤」，
+#     跟忘記 bump 一模一樣，只是這次是自動化本身沉默。
+ASSET_DIRS = sorted(
+    d for d in ROOT_DIR.iterdir()
+    if d.is_dir() and (d.name.startswith("web-ui") or d.name.startswith("admin-ui"))
+)
 
 HASH_LEN = 8   # 取 sha256 前 8 碼十六進位
 
