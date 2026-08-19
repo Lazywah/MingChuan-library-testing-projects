@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="zh-Hant" data-theme="yellow">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>問題回報 · MCU AI Base</title>
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Open+Sans:wght@400;600;700&display=swap" rel="stylesheet">
+
+    <link rel="stylesheet" href="tokens.css?v=dd946cc2">
+    <link rel="stylesheet" href="styles.css?v=47333669">
+</head>
+<body>
+
+<header class="topbar">
+    <a class="topbar__back" href="index.html" aria-label="回首頁">‹ 首頁</a>
+    <span class="topbar__brand">MCU AI Base</span>
+    <span class="topbar__spacer"></span>
+    <nav class="topnav" aria-label="主要">
+        <a href="lab.html">Lab</a>
+        <a href="usage.html">使用量</a>
+    </nav>
+    <div class="theme-switch" role="group" aria-label="色系">
+        <button type="button" data-set-theme="yellow" aria-pressed="true">黃</button>
+        <button type="button" data-set-theme="blue" aria-pressed="false">藍</button>
+    </div>
+</header>
+
+<main class="page page--narrow">
+
+    <section class="primary-card" aria-labelledby="rep-title">
+        <h1 class="hero__title" id="rep-title">問題回報</h1>
+
+        <!-- ZH: ⚠ 這段不是客套話，是這個畫面唯一誠實的說法：
+                 後端沒有任何接收回報的端點，也沒有設定任何聯絡地址
+                 （SMTP_FROM_EMAIL 是 noreply@ 佔位）。
+                 做一個「送出」按鈕會是假的；做一個 mailto 要編一個地址。
+                 所以這裡做的是「幫你整理好，你自己交出去」。 -->
+        <p class="hero__sub">
+            目前<strong>還沒有自動回報管道</strong>。這一頁幫你把管理者會問的資訊整理好，
+            複製後交給圖書館 AI 基地的管理者即可。
+        </p>
+
+        <label class="field">
+            <span class="field__label" for="what">發生了什麼事</span>
+            <textarea class="field__input" id="what" rows="5"
+                      placeholder="例：按下「前往 MYAI」之後新分頁是空白的，重試三次都一樣。"></textarea>
+        </label>
+
+        <button class="btn btn--primary" id="copy" type="button">複製問題與診斷資訊</button>
+        <div class="handoff" id="note" hidden></div>
+    </section>
+
+    <h2 class="chart__title">會一起複製的診斷資訊</h2>
+    <!-- ZH: 全部攤開來給使用者看。要別人交出診斷資訊，就不能讓他不知道交了什麼。 -->
+    <pre class="diag" id="diag">整理中…</pre>
+
+</main>
+
+<script src="report.js?v=4919a559"></script>
+</body>
+</html>

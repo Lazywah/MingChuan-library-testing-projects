@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="zh-Hant" data-theme="yellow">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>公告 · MCU AI Base</title>
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Open+Sans:wght@400;600;700&display=swap" rel="stylesheet">
+
+    <link rel="stylesheet" href="tokens.css?v=dd946cc2">
+    <link rel="stylesheet" href="styles.css?v=47333669">
+</head>
+<body>
+
+<header class="topbar">
+    <a class="topbar__back" href="index.html" aria-label="回首頁">‹ 首頁</a>
+    <span class="topbar__brand">MCU AI Base</span>
+    <span class="topbar__spacer"></span>
+    <nav class="topnav" aria-label="主要">
+        <a href="lab.html">Lab</a>
+        <a href="usage.html">使用量</a>
+    </nav>
+    <div class="theme-switch" role="group" aria-label="色系">
+        <button type="button" data-set-theme="yellow" aria-pressed="true">黃</button>
+        <button type="button" data-set-theme="blue" aria-pressed="false">藍</button>
+    </div>
+</header>
+
+<main class="page page--narrow">
+
+    <h1 class="hero__title">公告</h1>
+
+    <div class="inline-error" id="msg" hidden></div>
+
+    <!-- ZH: 骨架保留高度，避免載入完成時整頁跳動。 -->
+    <div id="list" aria-live="polite">
+        <article class="post"><div class="skeleton skeleton--line"></div></article>
+        <article class="post"><div class="skeleton skeleton--line"></div></article>
+    </div>
+
+    <p class="hint" id="more" hidden></p>
+
+</main>
+
+<script src="news.js?v=276a33d9"></script>
+</body>
+</html>

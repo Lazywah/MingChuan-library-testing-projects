@@ -3,9 +3,10 @@
    ==============================================================================
    規格：docs/06-ui-v2-design.md。四個狀態全做，可用 ?state= 強制展示。
 
-   本檔只負責主線首頁。登入 / GPU 引導 / 使用量各自有自己的 HTML+JS。
-   仍未實作的去處（Lab、問題回報、公告列表、開通確認）接到明確的
-   「尚未實作」提示，而不是死連結——連到空頁比沒有連結更糟。
+   本檔只負責主線首頁。其餘畫面各自有自己的 HTML+JS：
+   login / gpu / usage / provision / lab / news / report。
+   首頁上每一個去處現在都有落點，notImplemented() 因此移除——
+   留著一個說「尚未實作」的函式而實際上全都實作了，比沒有更誤導。
    ============================================================================== */
 
 const API = '/api/v1';
@@ -145,7 +146,7 @@ async function loadNotice() {
             const more = $('notice-more');
             more.textContent = '查看全部 ' + list.length + ' 則';
             more.hidden = false;
-            more.addEventListener('click', (ev) => { ev.preventDefault(); notImplemented('公告列表'); });
+            more.addEventListener('click', (ev) => { ev.preventDefault(); location.href = 'news.html'; });
         }
         box.hidden = false;
     } catch (e) {
@@ -184,13 +185,6 @@ async function goMyai() {
     }, 1000);
 }
 
-// ── 尚未實作的去處：明講，不做死連結 ──────────────────────────────────
-function notImplemented(what) {
-    const box = $('handoff');
-    box.hidden = false;
-    box.textContent = '「' + what + '」在 v2 還沒實作（設計已定稿，見 docs/06-ui-v2-design.md）。';
-}
-
 function wireUsageLink() {
     // ZH: 額度區裡的行內連結與底部的「使用量明細」是同一個去處。
     //     漏掉這個的話，同一頁上兩個同名連結一個能用一個說「尚未實作」。
@@ -224,7 +218,7 @@ $('link-lab').addEventListener('click', (ev) => {
 });
 $('link-report').addEventListener('click', (ev) => {
     ev.preventDefault();
-    notImplemented($('link-report').textContent);
+    location.href = 'report.html';
 });
 
 // ZH: 先擋登入。requireLogin() 為 false 時已經在導向了，不要再發請求 ——
