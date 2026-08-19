@@ -10,7 +10,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Open+Sans:wght@400;600;700&display=swap" rel="stylesheet">
 
     <link rel="stylesheet" href="tokens.css?v=dd946cc2">
-    <link rel="stylesheet" href="styles.css?v=47333669">
+    <link rel="stylesheet" href="styles.css?v=53ca03ef">
 </head>
 <body>
 
@@ -73,10 +73,16 @@
 
     <!-- 層級 3 · 次要 -->
     <div class="footnote" id="quota">磁碟配額：讀取中…</div>
-    <!-- ZH: 「看別人做過什麼」僅在文件庫有內容時由 gpu.js 插入（V3 修正）。 -->
+
+    <!-- ZH: 「看別人做過什麼」僅在文件庫有內容時出現（V3 修正）。
+             由 docs-entry.js 統一處理，本頁不做判斷。 -->
+    <nav class="minor">
+        <a href="docs.html" data-docs-entry hidden>看別人做過什麼</a>
+    </nav>
 
 </main>
 
+<script src="docs-entry.js?v=4fa954e4"></script>
 <script src="gpu.js?v=bbefec20"></script>
 </body>
 </html>

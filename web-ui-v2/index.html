@@ -12,7 +12,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Open+Sans:wght@400;600;700&display=swap" rel="stylesheet">
 
     <link rel="stylesheet" href="tokens.css?v=dd946cc2">
-    <link rel="stylesheet" href="styles.css?v=47333669">
+    <link rel="stylesheet" href="styles.css?v=53ca03ef">
 </head>
 <body>
 
@@ -67,7 +67,12 @@
             <div class="entry__desc">用學校的 GPU，從我們準備好的範例開始，約 20 分鐘</div>
         </button>
 
-        <!-- ZH: 文件庫入口在有內容前不出現（V3 修正）。由 app.js 依內容決定是否插入。 -->
+        <!-- ZH: 文件庫入口在有內容前不出現（V3 修正）。
+                 顯示與否由 docs-entry.js 依 docs-content.json 決定，本頁不做判斷。 -->
+        <a class="entry" href="docs.html" data-docs-entry hidden>
+            <div class="entry__title">看別人做過什麼</div>
+            <div class="entry__desc">同學的作品與教學影片</div>
+        </a>
     </div>
 
     <!-- 層級 3 · 次要 -->
@@ -78,6 +83,7 @@
     </nav>
 </main>
 
+<script src="docs-entry.js?v=4fa954e4"></script>
 <script src="app.js?v=fd36531f"></script>
 </body>
 </html>

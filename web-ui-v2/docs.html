@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>公告 · MCU AI Base</title>
+    <title>文件庫 · MCU AI Base</title>
 
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -28,22 +28,22 @@
     </div>
 </header>
 
-<main class="page page--narrow">
+<main class="page">
 
-    <h1 class="hero__title">公告</h1>
+    <h1 class="hero__title">文件庫</h1>
+    <p class="hero__sub" id="lead">別人用這個平台做出了什麼，以及怎麼做。</p>
+
+    <!-- 分類篩選：只在項目夠多時才由 docs.js 插入（少量項目時篩選只是雜訊） -->
+    <div class="seg" id="filters" role="group" aria-label="分類" hidden></div>
 
     <div class="inline-error" id="msg" hidden></div>
 
-    <!-- ZH: 骨架保留高度，避免載入完成時整頁跳動。 -->
-    <div id="list" aria-live="polite">
-        <article class="post"><div class="skeleton skeleton--line"></div></article>
-        <article class="post"><div class="skeleton skeleton--line"></div></article>
-    </div>
+    <div class="cards" id="list" aria-live="polite"></div>
 
     <p class="hint" id="more" hidden></p>
 
 </main>
 
-<script src="news.js?v=276a33d9"></script>
+<script src="docs.js?v=06d21b41"></script>
 </body>
 </html>
