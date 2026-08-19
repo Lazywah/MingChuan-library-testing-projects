@@ -96,9 +96,9 @@ $('go-example').addEventListener('click', async () => {
     btn.textContent = '正在開啟 Lab…';
     try {
         await fetch(`${API}/lab/start`, { method: 'POST', headers: authHeaders() });
-        // ZH: Lab 由既有頁面承接（v2 尚未做自己的 Lab 畫面）。
-        //     不做假的成功畫面 —— 走到真的能用的地方。
-        location.href = '/train/#lab';
+        // ZH: 交給 v2 自己的 Lab 畫面接手 —— 它會輪詢到就緒才開新分頁（D3）。
+        //     這裡不直接開 /code/，因為容器剛送出 start 還沒起來。
+        location.href = 'lab.html';
     } catch (e) {
         setPrimary({
             label: '用範例資料開始',
@@ -110,7 +110,7 @@ $('go-example').addEventListener('click', async () => {
 
 $('link-own-data').addEventListener('click', (ev) => {
     ev.preventDefault();
-    location.href = '/train/#lab';
+    location.href = 'lab.html';
 });
 
 // ── 層級 3：磁碟配額 ─────────────────────────────────────────────────

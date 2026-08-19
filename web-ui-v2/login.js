@@ -86,13 +86,21 @@ $('admin-form').addEventListener('submit', async (ev) => {
     btn.textContent = '登入中…';
 
     try {
+        // ZH: ⚠ 這個端點用 OAuth2PasswordRequestForm，**吃 form-urlencoded 不吃 JSON**。
+        //     送 JSON 會固定回 422，而 422 的訊息長得像「欄位缺少」，
+        //     看起來像表單沒填好，不像格式送錯——我第一版就是這樣寫的。
+        // ZH: credentials 明寫 —— 登入回應會 Set-Cookie `ai_hud_token`，
+        //     而**開新分頁進 /code/ 靠的就是那個 cookie**（nginx auth_request，
+        //     sessionStorage 的 token 帶不進新分頁）。
+        const body = new URLSearchParams({
+            username: $('admin-user').value.trim(),
+            password: $('admin-pass').value,
+        });
         const r = await fetch(`${API}/auth/login`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                username: $('admin-user').value.trim(),
-                password: $('admin-pass').value,
-            }),
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: body.toString(),
+            credentials: 'include',
         });
         const data = await r.json().catch(() => ({}));
         if (!r.ok) throw new Error(data.detail || `登入失敗（HTTP ${r.status}）`);

@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="zh-Hant" data-theme="yellow">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>我的 Lab · MCU AI Base</title>
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Open+Sans:wght@400;600;700&display=swap" rel="stylesheet">
+
+    <link rel="stylesheet" href="tokens.css?v=dd946cc2">
+    <link rel="stylesheet" href="styles.css?v=8587affd">
+</head>
+<body>
+
+<header class="topbar">
+    <a class="topbar__back" href="index.html" aria-label="回首頁">‹ 首頁</a>
+    <span class="topbar__brand">MCU AI Base</span>
+    <span class="topbar__spacer"></span>
+    <nav class="topnav" aria-label="主要">
+        <a href="lab.html" aria-current="page">Lab</a>
+        <a href="usage.html">使用量</a>
+    </nav>
+    <div class="theme-switch" role="group" aria-label="色系">
+        <button type="button" data-set-theme="yellow" aria-pressed="true">黃</button>
+        <button type="button" data-set-theme="blue" aria-pressed="false">藍</button>
+    </div>
+</header>
+
+<main class="page page--narrow">
+
+    <!-- 層級 1 · 現在是什麼狀態 + 唯一的動作 -->
+    <section class="primary-card" aria-labelledby="lab-title">
+        <h1 class="hero__title" id="lab-title">我的 Lab</h1>
+        <p class="hero__sub">瀏覽器裡的 VS Code。檔案永久保留，閒置一段時間會自動關閉。</p>
+
+        <div class="kv">
+            <span class="kv__k">狀態</span>
+            <span class="kv__v" id="state">讀取中…</span>
+        </div>
+
+        <!-- ZH: D3 —— 容器要 5–10 秒。**同頁顯示啟動進度，就緒後才開新分頁**；
+                 直接開新分頁會看到空白，那比等待更糟（使用者不知道是壞了還是還沒好）。 -->
+        <button class="btn btn--primary" id="go" type="button" disabled>讀取中…</button>
+        <div class="handoff" id="note" hidden></div>
+    </section>
+
+    <!-- 層級 2 · 這次 session 的事實 -->
+    <div class="stats" id="meta" hidden>
+        <div class="stat">
+            <div class="stat__label">今日剩餘時間</div>
+            <div class="stat__value" id="m-remaining">—</div>
+        </div>
+        <div class="stat">
+            <div class="stat__label">已執行</div>
+            <div class="stat__value" id="m-elapsed">—</div>
+        </div>
+        <div class="stat">
+            <div class="stat__label">磁碟配額</div>
+            <div class="stat__value" id="m-quota">—</div>
+        </div>
+    </div>
+
+    <p class="hint" id="secrets" hidden></p>
+
+    <!-- 層級 3 · 降級的動作 -->
+    <nav class="minor">
+        <a href="#" id="stop" hidden>停止 Lab</a>
+        <a href="gpu.html">第一次用？看「訓練你的第一個模型」</a>
+    </nav>
+
+</main>
+
+<script src="lab.js?v=49aae4bb"></script>
+</body>
+</html>

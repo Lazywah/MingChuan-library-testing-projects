@@ -218,8 +218,13 @@ $('link-usage').addEventListener('click', (ev) => {
     ev.preventDefault();
     location.href = 'usage.html';
 });
-['link-lab', 'link-report'].forEach((id) => {
-    $(id).addEventListener('click', (ev) => { ev.preventDefault(); notImplemented($(id).textContent); });
+$('link-lab').addEventListener('click', (ev) => {
+    ev.preventDefault();
+    location.href = 'lab.html';
+});
+$('link-report').addEventListener('click', (ev) => {
+    ev.preventDefault();
+    notImplemented($('link-report').textContent);
 });
 
 // ZH: 先擋登入。requireLogin() 為 false 時已經在導向了，不要再發請求 ——
