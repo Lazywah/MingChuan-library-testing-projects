@@ -405,6 +405,32 @@ body {
     border-radius: var(--radius-sm);
 }
 
+/* 鍵值列（開通確認）*/
+.kv {
+    display: flex;
+    align-items: baseline;
+    gap: var(--space-3);
+    padding: var(--space-3) 0;
+    border-bottom: 1px solid var(--hairline);
+}
+.kv__k { font-size: 0.8rem; color: var(--text-muted); min-width: 4.5rem; }
+.kv__v { color: var(--text-strong); word-break: break-all; }
+
+/* ZH: 密碼要能一鍵選取 —— 剪貼簿在非 https 或權限被拒時不可用，
+ *     `user-select: all` 讓使用者點一下就整段選中（沿用 v1.5 的做法）。 */
+.kv__v--pw {
+    font-family: ui-monospace, "Consolas", monospace;
+    font-size: 1.125rem;
+    letter-spacing: 0.02em;
+    user-select: all;
+    background-color: var(--accent-soft);
+    padding: var(--space-2) var(--space-3);
+    border-radius: var(--radius-sm);
+}
+
+/* 兩顆按鈕在同一張卡裡時要有間距 */
+.primary-card .btn + .btn { margin-top: var(--space-3); }
+
 @media (max-width: 640px) {
     .page { padding: var(--space-5) var(--space-4) var(--space-7); }
     .balance__value { font-size: 2rem; }

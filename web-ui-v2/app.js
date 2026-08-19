@@ -59,7 +59,7 @@ async function loadBalance() {
     if (FORCED === 'loading') return;
 
     // 空：MYAI 帳號尚未開通
-    if (FORCED === 'empty') return renderNotProvisioned();
+    if (FORCED === 'empty') return renderProvisioning();
 
     try {
         if (FORCED === 'error') throw new Error('forced');
@@ -69,12 +69,25 @@ async function loadBalance() {
             get('/external-ai/my-provision').catch(() => null),
         ]);
 
-        if (prov && prov.provisioned === false) return renderNotProvisioned();
+        // ZH: 後端契約有**三種**開通狀態，先前只當成兩種，於是在「還沒有帳號」
+        //     的狀態下也顯示「確認我的初始密碼」——點進去是空的。
+        //       provisioned=false                        → 沒有密碼可看，不給動作
+        //       provisioned=true + initial_password       → 有密碼可看
+        //       provisioned=true + initial_password=null  → 已確認或逾期
+        if (prov && prov.provisioned === false) return renderProvisioning();
 
-        if (bal.points == null) return renderNotProvisioned();
+        if (bal.points == null) return renderNoBalance();
 
         value.textContent = bal.points.toLocaleString('en-US');
         unit.hidden = false;
+
+        // ZH: 已開通且保留期內未確認 → 額度照常顯示，另外掛一個入口。
+        //     不取代額度區：他有點數就能用，初始密碼是「還沒處理的事」不是「阻礙」。
+        if (prov && prov.initial_password) {
+            $('handoff').hidden = false;
+            $('handoff').innerHTML =
+                '你的 MYAI 初始密碼還沒改 · <a href="provision.html">查看初始密碼</a>';
+        }
         // ZH: Token 即基準（Decision Log #15）——不換算成「約可再問 N 次」。
         //     但「低於門檻」要看得出來，用的是後端已回傳的 below 旗標。
         card.dataset.low = bal.below ? '1' : '0';
@@ -91,13 +104,20 @@ async function loadBalance() {
     }
 }
 
-function renderNotProvisioned() {
+// ZH: 還沒有 MYAI 帳號 —— **不給動作**。這個狀態下沒有初始密碼，
+//     給一個連結等於帶使用者去看一個空畫面。
+function renderProvisioning() {
+    $('balance-value').textContent = '—';
+    $('balance-unit').hidden = true;
+    $('balance-meta').textContent = '你的 AI 帳號正在開通，完成後這裡會顯示額度。';
+}
+
+// ZH: 已開通但額度讀不到 —— 那是額度的問題，不是開通的問題，兩者文案不能共用。
+function renderNoBalance() {
     $('balance-value').textContent = '—';
     $('balance-unit').hidden = true;
     $('balance-meta').innerHTML =
-        '你的 AI 帳號正在開通 · <a href="#" id="link-provision">確認我的初始密碼</a>';
-    const a = $('link-provision');
-    if (a) a.addEventListener('click', (ev) => { ev.preventDefault(); notImplemented('開通確認'); });
+        '<span class="inline-error">暫時取不到額度，不影響使用</span>';
 }
 
 // ── 公告（層級 0，條件式）──────────────────────────────────────────────

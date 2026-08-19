@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="zh-Hant" data-theme="yellow">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>你的 AI 帳號 · MCU AI Base</title>
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Open+Sans:wght@400;600;700&display=swap" rel="stylesheet">
+
+    <link rel="stylesheet" href="tokens.css?v=dd946cc2">
+    <link rel="stylesheet" href="styles.css?v=15b6a896">
+</head>
+<body>
+
+<header class="topbar">
+    <a class="topbar__back" href="index.html" aria-label="回首頁">‹ 首頁</a>
+    <span class="topbar__brand">MCU AI Base</span>
+    <span class="topbar__spacer"></span>
+    <div class="theme-switch" role="group" aria-label="色系">
+        <button type="button" data-set-theme="yellow" aria-pressed="true">黃</button>
+        <button type="button" data-set-theme="blue" aria-pressed="false">藍</button>
+    </div>
+</header>
+
+<main class="page page--narrow">
+
+    <!-- 訊息區：沒有密碼可看（未開通／已確認／逾期）與錯誤都落在這 -->
+    <div class="inline-error" id="msg" hidden></div>
+
+    <section class="primary-card" id="card" hidden aria-labelledby="pw-label">
+        <h1 class="hero__title">你的 MYAI 初始密碼</h1>
+        <p class="hero__sub" id="intro"></p>
+
+        <div class="kv">
+            <span class="kv__k">帳號</span>
+            <span class="kv__v" id="acct">—</span>
+        </div>
+
+        <!-- ZH: 層級 1 —— 使用者就是為了這一行來的。
+                 user-select:all 讓剪貼簿不可用時仍能一鍵選取（v1.5 的做法，沿用）。 -->
+        <div class="kv">
+            <span class="kv__k" id="pw-label">初始密碼</span>
+            <code class="kv__v kv__v--pw" id="pw">—</code>
+        </div>
+
+        <button class="btn btn--ghost" id="copy" type="button">複製密碼</button>
+
+        <!-- ZH: 主要動作（唯一）。按下即**立即銷毀**伺服器上暫存的密碼，
+                 不等保留期到。文案必須講明這是不可逆的。 -->
+        <button class="btn btn--primary" id="ack" type="button">我已經改好密碼了</button>
+        <div class="handoff" id="note" hidden></div>
+    </section>
+
+    <p class="hint" id="how" hidden>
+        改密碼的地方在 MYAI 平台本身，不在這裡——
+        <a href="#" id="go-myai">前往 MYAI</a>，用上面的帳號密碼登入後即可修改。
+    </p>
+
+</main>
+
+<script src="provision.js?v=ce60c185"></script>
+</body>
+</html>
