@@ -209,7 +209,126 @@ body {
     background-color: var(--accent); color: var(--on-accent); border-color: var(--accent);
 }
 
+/* ==========================================================================
+ * 登入 / GPU 引導（第二批畫面）
+ * ========================================================================== */
+
+/* ZH: 這兩個畫面只有一件事，內容比首頁窄一些，視線不用左右掃。 */
+.page--narrow { max-width: 34rem; }
+
+.topbar__back {
+    color: var(--text-muted);
+    text-decoration: none;
+    font-size: 0.9rem;
+    margin-right: var(--space-4);
+    padding: var(--space-2);
+    min-height: var(--tap-min);
+    display: inline-flex;
+    align-items: center;
+}
+.topbar__back:hover { color: var(--text); }
+
+.hero__title {
+    margin: 0 0 var(--space-3);
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: var(--text-strong);
+    line-height: 1.3;
+}
+.hero__sub {
+    margin: 0 0 var(--space-5);
+    color: var(--text-muted);
+    line-height: 1.7;
+}
+
+/* ── 摺疊區（管理者本機登入）────────────────────────────────────────
+ * ZH: 預設收合，且**錯誤時不自動展開**（C2 修正）。展開與否只由使用者決定。 */
+.fold {
+    margin-top: var(--space-5);
+    border-top: 1px solid var(--hairline);
+    padding-top: var(--space-4);
+}
+.fold__summary {
+    cursor: pointer;
+    color: var(--text-muted);
+    font-size: 0.9rem;
+    padding: var(--space-2) 0;
+    min-height: var(--tap-min);
+    display: flex;
+    align-items: center;
+}
+.fold__summary:hover { color: var(--text); }
+.fold__summary:focus-visible { outline: var(--focus-ring); outline-offset: 2px; }
+.fold__body {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+    padding: var(--space-4) 0 var(--space-2);
+}
+.fold__link {
+    color: var(--link);
+    font-size: 0.85rem;
+    align-self: flex-start;
+    padding: var(--space-2) 0;
+}
+
+/* ── 表單欄位 ─────────────────────────────────────────────────────
+ * ZH: ⚠ `width:100%` + `border-box` 缺一不可。少了它們，兩個輸入框會因為
+ *     各自的 padding 不同而**長度不一** —— v1.5 就是這樣被使用者一眼看出來的。 */
+.field { display: flex; flex-direction: column; gap: var(--space-2); }
+.field__label { font-size: 0.85rem; color: var(--text-muted); }
+.field__input {
+    width: 100%;
+    box-sizing: border-box;
+    min-height: var(--tap-min);
+    padding: var(--space-3);
+    font: inherit;
+    color: var(--text);
+    background-color: var(--surface);
+    border: 1px solid var(--hairline);
+    border-radius: var(--radius-sm);
+}
+.field__input:focus-visible { outline: var(--focus-ring); outline-offset: 1px; }
+
+/* ── 三步驟預覽（純說明、不可點）───────────────────────────────────
+ * ZH: 刻意不做成卡片或按鈕。它們不是入口，做得像入口會搶走主要動作的注意力
+ *     （Von Restorff：一個畫面只能有一個被隔離的東西）。 */
+.steps {
+    list-style: none;
+    margin: var(--space-5) 0 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+}
+.steps__item {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    grid-template-areas: "n t" "n d";
+    gap: 0 var(--space-3);
+    align-items: baseline;
+}
+.steps__n {
+    grid-area: n;
+    width: 1.5rem; height: 1.5rem;
+    display: inline-flex; align-items: center; justify-content: center;
+    border-radius: 50%;
+    background-color: var(--accent-soft);
+    color: var(--text-strong);
+    font-size: 0.8rem;
+    font-weight: 600;
+}
+.steps__t { grid-area: t; color: var(--text-strong); font-weight: 600; }
+.steps__d { grid-area: d; color: var(--text-muted); font-size: 0.9rem; line-height: 1.6; }
+
+.footnote {
+    margin-top: var(--space-5);
+    color: var(--text-muted);
+    font-size: 0.85rem;
+}
+
 @media (max-width: 640px) {
     .page { padding: var(--space-5) var(--space-4) var(--space-7); }
     .balance__value { font-size: 2rem; }
+    .hero__title { font-size: 1.3rem; }
 }

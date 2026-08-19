@@ -175,12 +175,29 @@ function wireUsageLink() {
     if (a) a.addEventListener('click', (ev) => { ev.preventDefault(); notImplemented('使用量明細'); });
 }
 
+// ── 未登入 → 回登入頁 ─────────────────────────────────────────────────
+// ZH: 主線流程是「登入 → 首頁」。沒有這段的話登入頁是孤兒頁，
+//     而首頁會用「暫時取不到額度」來表達「你根本沒登入」—— 那是錯的訊息：
+//     線框裡那句是給**已登入但額度讀取失敗**的人看的，兩者不能共用。
+//
+// ⚠ 有 ?state= 時不導向 —— 那是四狀態的檢視用途，導走就看不到了。
+function requireLogin() {
+    const t = sessionStorage.getItem('ai_hud_token') || localStorage.getItem('ai_hud_token');
+    if (t || FORCED) return true;
+    location.replace('login.html');
+    return false;
+}
+
 // ── 啟動 ─────────────────────────────────────────────────────────────
 $('go-myai').addEventListener('click', goMyai);
-$('go-gpu').addEventListener('click', () => notImplemented('GPU 引導'));
+$('go-gpu').addEventListener('click', () => { location.href = 'gpu.html'; });
 ['link-usage', 'link-lab', 'link-report'].forEach((id) => {
     $(id).addEventListener('click', (ev) => { ev.preventDefault(); notImplemented($(id).textContent); });
 });
 
-loadBalance();
-loadNotice();
+// ZH: 先擋登入。requireLogin() 為 false 時已經在導向了，不要再發請求 ——
+//     那些請求必定 401，只會在 console 留下看起來像壞掉的紅字。
+if (requireLogin()) {
+    loadBalance();
+    loadNotice();
+}

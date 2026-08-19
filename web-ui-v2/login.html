@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="zh-Hant" data-theme="yellow">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>登入 · MCU AI Base</title>
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Open+Sans:wght@400;600;700&display=swap" rel="stylesheet">
+
+    <link rel="stylesheet" href="tokens.css?v=667210bd">
+    <link rel="stylesheet" href="styles.css?v=43b4e98d">
+</head>
+<body>
+
+<header class="topbar">
+    <span class="topbar__brand">MCU AI Base</span>
+    <span class="topbar__spacer"></span>
+    <!-- ZH: 開發期的色系切換。上線擇一後整塊移除（Decision Log #16）。 -->
+    <div class="theme-switch" role="group" aria-label="色系">
+        <button type="button" data-set-theme="yellow" aria-pressed="true">黃</button>
+        <button type="button" data-set-theme="blue" aria-pressed="false">藍</button>
+    </div>
+</header>
+
+<main class="page page--narrow">
+
+    <!-- 層級 1 · 這是什麼（給第一次來的人）—— 線框只允許這一項在第一眼 -->
+    <section class="primary-card" aria-labelledby="hero-title">
+        <h1 class="hero__title" id="hero-title">銘傳大學圖書館 AI 基地</h1>
+        <p class="hero__sub">用學校帳號登入，就能問 AI、用學校的 GPU 訓練模型。</p>
+
+        <!-- 主要動作（唯一）。載入中／錯誤都在這顆按鈕上表達，不用整頁 spinner。 -->
+        <button class="btn btn--primary" id="go-sso" type="button" disabled>
+            用學校帳號登入
+        </button>
+        <div class="handoff" id="sso-note">正在確認登入方式…</div>
+    </section>
+
+    <!-- ZH: 層級 3 —— 管理者本機登入。**預設收合，且錯誤時不自動展開**（C2 修正）：
+             自動展開會把管理者通道曝光給學生，而 admin 本來就知道它在哪。 -->
+    <details class="fold" id="admin-fold">
+        <summary class="fold__summary">管理者本機登入</summary>
+
+        <form class="fold__body" id="admin-form" autocomplete="on">
+            <label class="field">
+                <span class="field__label" for="admin-user">帳號</span>
+                <input class="field__input" id="admin-user" name="username"
+                       type="text" autocomplete="username" required>
+            </label>
+
+            <label class="field">
+                <span class="field__label" for="admin-pass">密碼</span>
+                <input class="field__input" id="admin-pass" name="password"
+                       type="password" autocomplete="current-password" required>
+            </label>
+
+            <button class="btn btn--ghost" id="admin-submit" type="submit">登入</button>
+            <div class="inline-error" id="admin-error" hidden></div>
+
+            <a class="fold__link" href="#" id="forgot">忘記密碼</a>
+        </form>
+    </details>
+
+</main>
+
+<script src="login.js?v=35d62ddc"></script>
+</body>
+</html>

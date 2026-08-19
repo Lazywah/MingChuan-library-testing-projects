@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="zh-Hant" data-theme="yellow">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>訓練你的第一個模型 · MCU AI Base</title>
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Open+Sans:wght@400;600;700&display=swap" rel="stylesheet">
+
+    <link rel="stylesheet" href="tokens.css?v=667210bd">
+    <link rel="stylesheet" href="styles.css?v=43b4e98d">
+</head>
+<body>
+
+<header class="topbar">
+    <a class="topbar__back" href="index.html" aria-label="回首頁">‹ 首頁</a>
+    <span class="topbar__brand">MCU AI Base</span>
+    <span class="topbar__spacer"></span>
+    <div class="theme-switch" role="group" aria-label="色系">
+        <button type="button" data-set-theme="yellow" aria-pressed="true">黃</button>
+        <button type="button" data-set-theme="blue" aria-pressed="false">藍</button>
+    </div>
+</header>
+
+<main class="page page--narrow">
+
+    <!-- 層級 1 · 做完會得到什麼 + 需要準備什麼。這兩句是這個畫面存在的理由。 -->
+    <section class="primary-card" aria-labelledby="gpu-title">
+        <h1 class="hero__title" id="gpu-title">做出一個能分辨貓和狗的模型</h1>
+        <p class="hero__sub">
+            用學校的 GPU，大約 20 分鐘。<br>
+            需要一包分好類的圖片——<strong>或直接用我們準備好的範例</strong>。
+        </p>
+
+        <!-- 主要動作（唯一）。刻意不是「上傳你的資料」：
+             第一次來的人沒有資料，要求他先準備等於在入口就流失。 -->
+        <button class="btn btn--primary" id="go-example" type="button" disabled>
+            檢查算力中…
+        </button>
+        <div class="handoff" id="pool-note" hidden></div>
+    </section>
+
+    <!-- 層級 2 · 三步驟預覽（純說明、不可點）。
+         ZH: 用 <ol> 而非按鈕，因為它們不是入口，是預期管理。 -->
+    <ol class="steps" aria-label="流程預覽">
+        <li class="steps__item">
+            <span class="steps__n">1</span>
+            <span class="steps__t">準備資料</span>
+            <span class="steps__d">每個類別一個資料夾。用範例的話這步跳過。</span>
+        </li>
+        <li class="steps__item">
+            <span class="steps__n">2</span>
+            <span class="steps__t">在 Lab 裡跑</span>
+            <span class="steps__d">開啟後已經有寫好的程式，逐格執行即可。</span>
+        </li>
+        <li class="steps__item">
+            <span class="steps__n">3</span>
+            <span class="steps__t">看結果</span>
+            <span class="steps__d">正確率、以及模型判斷錯的那幾張圖。</span>
+        </li>
+    </ol>
+
+    <!-- 層級 2 · 已有資料的人的旁路（文字連結，不是第二顆按鈕） -->
+    <nav class="minor">
+        <a href="#" id="link-own-data">我已經有資料了，直接開 Lab</a>
+    </nav>
+
+    <!-- 層級 3 · 次要 -->
+    <div class="footnote" id="quota">磁碟配額：讀取中…</div>
+    <!-- ZH: 「看別人做過什麼」僅在文件庫有內容時由 gpu.js 插入（V3 修正）。 -->
+
+</main>
+
+<script src="gpu.js?v=80a49879"></script>
+</body>
+</html>
