@@ -327,8 +327,87 @@ body {
     font-size: 0.85rem;
 }
 
+/* ==========================================================================
+ * 使用量明細
+ * ========================================================================== */
+
+/* 期間切換 —— 分段控制項，一次只有一個生效 */
+.seg {
+    display: flex;
+    gap: 0;
+    margin: var(--space-5) 0 var(--space-4);
+    border: 1px solid var(--hairline);
+    border-radius: var(--radius-sm);
+    overflow: hidden;
+    width: fit-content;
+}
+.seg button {
+    font: inherit;
+    font-size: 0.875rem;
+    padding: var(--space-2) var(--space-4);
+    min-height: var(--tap-min);
+    border: 0;
+    border-right: 1px solid var(--hairline);
+    background-color: var(--surface);
+    color: var(--text);
+    cursor: pointer;
+}
+.seg button:last-child { border-right: 0; }
+.seg button[aria-pressed="true"] {
+    background-color: var(--accent);
+    color: var(--on-accent);
+    font-weight: 600;
+}
+.seg button:focus-visible { outline: var(--focus-ring); outline-offset: -2px; }
+
+/* 三個數字 */
+.stats {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));
+    gap: var(--space-4);
+    margin-bottom: var(--space-4);
+}
+.stat__label { font-size: 0.8rem; color: var(--text-muted); }
+.stat__value {
+    font-size: 1.75rem;
+    font-weight: 700;
+    color: var(--text-strong);
+    line-height: 1.2;
+}
+.stat__sub { font-size: 0.75rem; color: var(--text-muted); margin-top: var(--space-1); }
+
+/* ZH: 說明性提示。用 --surface-2 而非警示色 —— 「樣本不足所以沒有對照」
+ *     是設計上的正常結果，不是錯誤，配色不該讓人以為出事了。 */
+.hint {
+    font-size: 0.8rem;
+    line-height: 1.7;
+    color: var(--text-muted);
+    background-color: var(--surface-2);
+    border-radius: var(--radius-sm);
+    padding: var(--space-3);
+    margin: 0 0 var(--space-4);
+}
+
+.chart { margin-bottom: var(--space-5); }
+.chart__title {
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--text-muted);
+    margin: 0 0 var(--space-2);
+}
+/* ZH: 固定高度是必要的 —— Chart.js 的 maintainAspectRatio:false 需要容器有高，
+ *     否則 canvas 會塌成 0 高，圖表「沒畫出來」但也不報錯。 */
+.chart__box {
+    position: relative;
+    height: 14rem;
+    padding: var(--space-3);
+    background-color: var(--surface-2);
+    border-radius: var(--radius-sm);
+}
+
 @media (max-width: 640px) {
     .page { padding: var(--space-5) var(--space-4) var(--space-7); }
     .balance__value { font-size: 2rem; }
     .hero__title { font-size: 1.3rem; }
+    .chart__box { height: 12rem; }
 }

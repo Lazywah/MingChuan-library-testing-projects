@@ -36,6 +36,16 @@
     --mcu-grey-600:  #555555;    /* 實測自 Moodle 的內文色，對白 7.46 */
     --mcu-ink:       #1f2328;    /* 標題與 accent 上的深字，對黃底 9.44 */
 
+    /* 圖表色 —— **不能直接用 --accent**：黃色 (#f9bf3b) 對白底只有 1.67，
+       畫成細線幾乎看不見。折線/長條需要的是「可辨識」不是「品牌感」，
+       所以兩個色系各自指定一個夠深的資料色。
+       （WCAG 對非文字的圖形物件要求 3.0；以下皆為實算值，非估計。） */
+    --mcu-chart-yellow: #8a6410;   /* 黃系的資料色，對白 5.37 */
+    --mcu-chart-blue:   #3d5580;   /* 藍系的資料色，對白 7.47 */
+    --mcu-chart-peer:   #9aa3ad;   /* 全體人均，對白 2.56 —— 刻意比自己的線淡，
+                                      主從要分得出來；它是背景參考不是主要資料 */
+    --mcu-chart-grid:   #ececf0;   /* 格線，對白 1.18 —— 只需要看得出有格 */
+
     /* 語意狀態色（兩色系共用；低飽和，符合 B 調性） */
     --mcu-warn-600:  #a8730c;    /* 低額度提示，對白 4.10 */
     --mcu-warn-050:  #fdf3e0;
@@ -66,6 +76,11 @@
     --error-soft:      var(--mcu-error-050);
 
     --focus-ring:      color-mix(in srgb, var(--accent) 55%, transparent);
+
+    /* 圖表（JS 會用 getComputedStyle 讀這幾個，切換色系時重繪）*/
+    --chart-me:        var(--mcu-chart-yellow);
+    --chart-peer:      var(--mcu-chart-peer);
+    --chart-grid:      var(--mcu-chart-grid);
 }
 
 :root[data-theme="blue"] {
@@ -74,6 +89,9 @@
     --accent-soft:     var(--mcu-slate-050);
     --on-accent:       var(--mcu-white);      /* 藍底配白字 6.38，通過 AA */
     --link:            var(--mcu-slate-600);
+    --chart-me:        var(--mcu-chart-blue);
+    --chart-peer:      var(--mcu-chart-peer);
+    --chart-grid:      var(--mcu-chart-grid);
 }
 
 /* ── 尺寸／間距／字體（8pt 網格）───────────────────────────────────── */

@@ -3,8 +3,9 @@
    ==============================================================================
    規格：docs/06-ui-v2-design.md。四個狀態全做，可用 ?state= 強制展示。
 
-   本檔只實作主線首頁。其餘畫面（登入 / GPU 引導 / 使用量）尚未實作，
-   入口先接到明確的「尚未實作」提示，而不是死連結——連到空頁比沒有連結更糟。
+   本檔只負責主線首頁。登入 / GPU 引導 / 使用量各自有自己的 HTML+JS。
+   仍未實作的去處（Lab、問題回報、公告列表、開通確認）接到明確的
+   「尚未實作」提示，而不是死連結——連到空頁比沒有連結更糟。
    ============================================================================== */
 
 const API = '/api/v1';
@@ -171,8 +172,10 @@ function notImplemented(what) {
 }
 
 function wireUsageLink() {
+    // ZH: 額度區裡的行內連結與底部的「使用量明細」是同一個去處。
+    //     漏掉這個的話，同一頁上兩個同名連結一個能用一個說「尚未實作」。
     const a = $('link-usage-inline');
-    if (a) a.addEventListener('click', (ev) => { ev.preventDefault(); notImplemented('使用量明細'); });
+    if (a) a.addEventListener('click', (ev) => { ev.preventDefault(); location.href = 'usage.html'; });
 }
 
 // ── 未登入 → 回登入頁 ─────────────────────────────────────────────────
@@ -191,7 +194,11 @@ function requireLogin() {
 // ── 啟動 ─────────────────────────────────────────────────────────────
 $('go-myai').addEventListener('click', goMyai);
 $('go-gpu').addEventListener('click', () => { location.href = 'gpu.html'; });
-['link-usage', 'link-lab', 'link-report'].forEach((id) => {
+$('link-usage').addEventListener('click', (ev) => {
+    ev.preventDefault();
+    location.href = 'usage.html';
+});
+['link-lab', 'link-report'].forEach((id) => {
     $(id).addEventListener('click', (ev) => { ev.preventDefault(); notImplemented($(id).textContent); });
 });
 
