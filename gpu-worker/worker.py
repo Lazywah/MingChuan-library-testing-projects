@@ -255,6 +255,9 @@ def prepare_dataset(job_id: str) -> str:
 
         if ready.exists():
             logger.info("Dataset %s already extracted, reusing the cache", digest)
+            # ZH: **這一行是回收器的基礎。** 不 touch 的話 mtime 永遠停在解壓當下，
+            #     於是一包天天在用的資料也會被當成「14 天沒用過」而刪掉。
+            _touch(ready)
         else:
             if cache.exists():
                 # ZH: 有目錄卻沒有記號 = 上次沒解完。整個丟掉重來，不要沿用半套的。
@@ -285,6 +288,186 @@ def materialize_builtin_script(task: str) -> str:
     dest_dir = _host_dir("scripts")
     shutil.copyfile(src, dest_dir / src.name)
     return f"{TRAIN_WORKSPACE}/scripts/{src.name}"
+
+# ==============================================================================
+# ZH: v3.6 共享儲存回收 | EN: v3.6 Shared-storage reaper
+# ==============================================================================
+#
+# ZH: 這台機器上會無限長大的三個地方：
+#       datasets/<hash>/   每個不同的 zip 一份解壓後的完整副本
+#       outputs/<job_id>/  每張任務一個模型檔（ResNet-18 就 44 MB）
+#       tmp/               下載中的暫存檔（正常會清掉，被 kill 才會留下）
+#     服務層那側有 2 GB/人的配額擋著，**這一側什麼都沒有**。
+#
+# ZH: ⚠ 刪錯的後果是「刪掉正在訓練的資料」，所以判準刻意做成**沒有狀態**的：
+#       1. 開始使用時 touch `.ready` → mtime ＝ 最後一次被用到（真正的 LRU）
+#       2. TTL 以**天**計，而任務以小時計 → 正在跑的東西不可能過期
+#       3. 容量上限用 LRU 淘汰，但**最近 REAP_MIN_AGE_HOURS 內碰過的一律不刪**
+#     不做「使用中登記表」：那種簿記會在某條 early return 上漏掉，而漏掉就是刪錯。
+# EN: Three unbounded directories on this host. Deletion criteria are deliberately
+#     stateless — an in-flight job's dataset was just touched, so it is never eligible.
+
+REAP_ENABLED           = os.environ.get("REAP_ENABLED", "true").strip().lower() in ("1", "true", "yes", "on")
+REAP_INTERVAL_HOURS    = float(os.environ.get("REAP_INTERVAL_HOURS", "6"))
+# ZH: 資料集快取保留天數。重跑同一包資料在這天數內都還是快取命中。
+DATASET_TTL_DAYS       = float(os.environ.get("DATASET_TTL_DAYS", "14"))
+# ZH: 資料集快取總量上限(GB)。超過就 LRU 淘汰——磁碟塞爆比快取失效嚴重得多。
+DATASET_CACHE_MAX_GB   = float(os.environ.get("DATASET_CACHE_MAX_GB", "100"))
+# ZH: 訓練產出保留天數。**這一版還不能從畫面下載**，所以留久一點，
+#     讓管理者還來得及自己上機器拿。
+OUTPUT_TTL_DAYS        = float(os.environ.get("OUTPUT_TTL_DAYS", "30"))
+# ZH: 安全底線：不論 TTL 或容量怎麼算，這麼新的東西一律不刪。
+REAP_MIN_AGE_HOURS     = float(os.environ.get("REAP_MIN_AGE_HOURS", "24"))
+
+
+def _dir_size(path: pathlib.Path) -> int:
+    """@node gpu-worker/worker.py::_dir_size"""
+    total = 0
+    for p in path.rglob("*"):
+        try:
+            if p.is_file():
+                total += p.stat().st_size
+        except OSError:
+            pass          # ZH: 掃描途中檔案消失是正常的，不要因此整個回收中止
+    return total
+
+
+def _touch(path: pathlib.Path) -> None:
+    """ZH: 把記號檔的 mtime 更新成現在＝「剛剛被用到」。
+
+    @node gpu-worker/worker.py::_touch
+    """
+    try:
+        path.touch()
+    except OSError as e:
+        logger.debug("Could not touch %s: %s", path, e)
+
+
+def _remove(path: pathlib.Path, why: str) -> int:
+    """ZH: 刪掉一個目錄，回傳釋放的位元組數。**一定要印出來**——
+       靜默刪除使用者的東西是最難查的一種行為。
+
+    @node gpu-worker/worker.py::_remove
+    """
+    size = _dir_size(path)
+    shutil.rmtree(path, ignore_errors=True)
+    logger.info("Reaped %s (%.1f MB) - %s", path.name, size / 1024 ** 2, why)
+    return size
+
+
+def reap_host_storage() -> dict:
+    """ZH: 清掉過期的資料集快取、訓練產出與暫存檔。回傳統計（供測試斷言）。
+
+    ZH: 這支**絕對不能拋例外**——它掛掉就會拖垮輪詢迴圈，
+        而「worker 不再領工」比「磁碟滿了」更難查。所以整段包起來。
+
+    @node gpu-worker/worker.py::reap_host_storage
+    """
+    stats = {"datasets_removed": 0, "outputs_removed": 0, "tmp_removed": 0, "freed_bytes": 0}
+    if not REAP_ENABLED:
+        return stats
+
+    now = time.time()
+    min_age = REAP_MIN_AGE_HOURS * 3600
+    root = pathlib.Path(HOST_STORAGE_MOUNT)
+    if not root.is_dir():
+        logger.debug("Reaper: %s does not exist yet, nothing to do", root)
+        return stats
+
+    # ── 1) 資料集快取：先 TTL，再看總量 ────────────────────────────────
+    ds_root = root / "datasets"
+    entries = []                     # (最後使用時間, 目錄)
+    if ds_root.is_dir():
+        for d in ds_root.iterdir():
+            if not d.is_dir():
+                continue
+            marker = d / ".ready"
+            try:
+                # ZH: 沒有 .ready ＝ 上次沒解完的殘骸。用目錄本身的時間判斷，
+                #     一樣受 min_age 保護（可能是**此刻正在解壓**的那一個）。
+                last_used = marker.stat().st_mtime if marker.exists() else d.stat().st_mtime
+            except OSError:
+                continue
+            entries.append((last_used, d))
+
+        for last_used, d in list(entries):
+            age = now - last_used
+            if age < min_age:
+                continue                                  # 安全底線
+            if age > DATASET_TTL_DAYS * 86400:
+                stats["freed_bytes"] += _remove(d, f"unused for {age / 86400:.1f} days")
+                stats["datasets_removed"] += 1
+                entries.remove((last_used, d))
+
+        # ZH: 容量上限。TTL 之後還是太大就 LRU 淘汰——
+        #     磁碟塞爆會讓**所有**任務失敗，快取失效只是慢一點。
+        total = sum(_dir_size(d) for _, d in entries)
+        cap = DATASET_CACHE_MAX_GB * 1024 ** 3
+        if total > cap:
+            logger.warning(
+                "Dataset cache is %.1f GB, over the %.0f GB cap - evicting oldest first. "
+                "If this keeps happening, lower DATASET_TTL_DAYS or raise the cap.",
+                total / 1024 ** 3, DATASET_CACHE_MAX_GB)
+            for last_used, d in sorted(entries):          # 最舊的先
+                if total <= cap:
+                    break
+                if now - last_used < min_age:
+                    continue                              # 安全底線優先於容量
+                freed = _remove(d, "cache over the size cap")
+                total -= freed
+                stats["freed_bytes"] += freed
+                stats["datasets_removed"] += 1
+
+    # ── 2) 訓練產出 ────────────────────────────────────────────────────
+    out_root = root / "outputs"
+    if out_root.is_dir():
+        for d in out_root.iterdir():
+            if not d.is_dir():
+                continue
+            try:
+                age = now - d.stat().st_mtime
+            except OSError:
+                continue
+            if age < min_age:
+                continue
+            if age > OUTPUT_TTL_DAYS * 86400:
+                stats["freed_bytes"] += _remove(d, f"output kept {OUTPUT_TTL_DAYS:.0f} days")
+                stats["outputs_removed"] += 1
+
+    # ── 3) 暫存檔（正常會自己清；被 kill 才會留下）────────────────────
+    tmp_root = root / "tmp"
+    if tmp_root.is_dir():
+        for f in tmp_root.iterdir():
+            try:
+                if not f.is_file() or now - f.stat().st_mtime < min_age:
+                    continue
+                size = f.stat().st_size
+                f.unlink()
+            except OSError:
+                continue
+            logger.info("Reaped stale temp file %s (%.1f MB)", f.name, size / 1024 ** 2)
+            stats["freed_bytes"] += size
+            stats["tmp_removed"] += 1
+
+    if stats["freed_bytes"]:
+        logger.info("Reaper freed %.1f MB (datasets %d, outputs %d, temp %d)",
+                    stats["freed_bytes"] / 1024 ** 2, stats["datasets_removed"],
+                    stats["outputs_removed"], stats["tmp_removed"])
+    return stats
+
+
+def reap_safely() -> None:
+    """ZH: 包一層——回收失敗絕對不能拖垮輪詢迴圈。
+
+    ZH: 「worker 不再領工」比「磁碟滿了」更難查，所以寧可讓回收靜靜失敗，
+        但**要留下 exception 的紀錄**，不要連痕跡都沒有。
+
+    @node gpu-worker/worker.py::reap_safely
+    """
+    try:
+        reap_host_storage()
+    except Exception:
+        logger.exception("Storage reaper failed (the worker keeps running)")
 
 def get_available_gpus():
     """
@@ -739,6 +922,9 @@ def poll_loop():
                 "  -> this node will NOT be given Code Lab (notebook) jobs")
 
     last_heartbeat = 0.0  # Unix timestamp of last successful heartbeat send
+    # ZH: v3.6 開機先跑一次回收——重啟通常正是「磁碟滿了」之後的第一個動作，
+    #     等 6 小時才清等於沒清。
+    last_reap = 0.0
 
     while True:
         available_gpus = get_available_gpus()
@@ -748,6 +934,13 @@ def poll_loop():
         if now - last_heartbeat >= HEARTBEAT_INTERVAL:
             send_heartbeat(available_gpus)
             last_heartbeat = now
+
+        # ── ZH: 共享儲存回收（每 REAP_INTERVAL_HOURS 一次）──────────────────
+        #    EN: Shared-storage reaper
+        if REAP_ENABLED and now - last_reap >= REAP_INTERVAL_HOURS * 3600:
+            last_reap = now
+            # ZH: 另開執行緒——大目錄掃起來可能要幾秒，不要卡住領工。
+            threading.Thread(target=reap_safely, daemon=True).start()
 
         # ── Job polling (only when a GPU is free) ─────────────────────────────
         if available_gpus:

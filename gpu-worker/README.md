@@ -25,6 +25,10 @@ Windows 用 `start-worker.bat`（用法相同）。Linux 首次可能要先給�
 - `SERVICE_LAYER_URL`＝服務層主機的真實位址（例 `http://192.168.1.50:8002`）
 - `WORKER_API_TOKEN`＝**與服務層根 .env 完全一致**（key 名就叫 `WORKER_API_TOKEN`，不是 `API_TOKEN`）
 - `NODE_ID`＝此節點名稱；`POOL_TYPE`＝`batch` 或 `interactive`
+- `DATASET_CACHE_MAX_GB` ← **依這台機器的磁碟大小調**（預設 100 GB）。
+  這台機器上**沒有任何配額擋著**（服務層那側有每人 2 GB，這裡沒有）：
+  資料集快取與訓練產出不清會一路長到磁碟滿，而症狀是「訓練突然全部失敗」。
+  worker 每 6 小時自己清一次，判準見 `worker.py::reap_host_storage`。
 - `SHARES_SERVICE_STORAGE=false` ← **這一節（不同機）必填 false**。
   設 true 會讓服務層把「程式實驗室」的任務派過來，而那些任務要讀使用者的
   `home_<uid>` Docker volume；那個 volume 在服務層那台。docker 會在**這台**
