@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title data-i18n="ds_title">我的資料集 · MCU AI Base</title>
+    <title data-i18n="jl_title">我的訓練 · MCU AI Base</title>
 
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -27,22 +27,21 @@
 <main class="page page--narrow">
 
     <!-- ==================================================================
-         ZH: 這一頁存在的理由**不是方便，是必要**：
-             每人 2 GB 配額，而在這之前沒有任何刪除的方法——
-             使用者一旦傳滿就永遠卡住（上傳 413，而他什麼都做不了）。
-             第二個價值是重用：同一包資料訓練不同輪數不必重傳。
+         ZH: 這一頁存在的理由：**送出之後關掉分頁就再也找不回那張單。**
+             看不到進度、拿不到模型、也不知道到底跑完了沒有——
+             而訓練通常要好幾分鐘到幾十分鐘，沒有人會一直開著那一頁等。
          ================================================================== -->
-    <section class="primary-card" aria-labelledby="ds-title">
-        <h1 class="hero__title" id="ds-title" data-i18n="ds_h1">我的資料集</h1>
-        <p class="hero__sub" data-i18n="ds_sub">你上傳過的圖片包都在這裡。可以直接拿來再訓練一次，或刪掉騰出空間。</p>
-
-        <!-- ZH: 用量講在最前面。使用者會來這一頁，多半就是因為傳不上去了。 -->
-        <div class="bar" role="progressbar" aria-valuemin="0" aria-valuemax="100"
-             aria-valuenow="0" id="quota-wrap">
-            <div class="bar__fill" id="quota-bar"></div>
-        </div>
-        <p class="footnote" id="quota" data-i18n="ds_loading">讀取中…</p>
+    <section class="primary-card" aria-labelledby="jl-title">
+        <h1 class="hero__title" id="jl-title" data-i18n="jl_h1">我的訓練</h1>
+        <p class="hero__sub" data-i18n="jl_sub">你送出過的訓練都在這裡。點進去看進度與結果，跑完的可以下載模型。</p>
     </section>
+
+    <!-- ZH: 只有「還在跑」與「全部」兩個選項。狀態有六種，但使用者實際會問的
+             只有「我那張跑完了沒」——多給四個篩選鈕只是讓他多想一次。 -->
+    <div class="seg" role="group" aria-label="篩選" data-i18n-aria="jl_filter_aria">
+        <button type="button" data-filter="" aria-pressed="true" data-i18n="jl_all">全部</button>
+        <button type="button" data-filter="active" aria-pressed="false" data-i18n="jl_active">還在跑</button>
+    </div>
 
     <div id="list" aria-live="polite">
         <span class="skeleton skeleton--line"></span>
@@ -50,8 +49,8 @@
     </div>
 
     <nav class="minor">
-        <a href="train.html" data-i18n="ds_to_train">上傳新的一包，開始訓練</a>
-        <a href="gpu.html" data-i18n="tr_back">回到上一頁</a>
+        <a href="train.html" data-i18n="jl_new">開始一個新的訓練</a>
+        <a href="datasets.html" data-i18n="nav_datasets">我的資料集</a>
     </nav>
 
 </main>
@@ -60,6 +59,6 @@
 <script src="i18n.js?v=85b7fa1a"></script>
 <script src="prefs.js?v=8b7b4277"></script>
 <script src="chrome.js?v=40c86ceb"></script>
-<script src="datasets.js?v=583ad51c"></script>
+<script src="jobs.js?v=8e0451d1"></script>
 </body>
 </html>

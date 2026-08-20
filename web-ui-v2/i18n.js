@@ -104,6 +104,21 @@
             login_forgot: '忘記密碼',
             login_forgot_msg: '忘記密碼：請聯絡圖書館 AI 基地管理者重設。（自助重設尚未接上）',
 
+            // ── 我的訓練（jobs.html）──────────────────────────────
+            jl_title: '我的訓練 · MCU AI Base',
+            jl_h1: '我的訓練',
+            jl_sub: '你送出過的訓練都在這裡。點進去看進度與結果，跑完的可以下載模型。',
+            jl_all: '全部',
+            jl_active: '還在跑',
+            jl_filter_aria: '篩選訓練狀態',
+            jl_open: '看進度與結果',
+            jl_new: '開始一個新的訓練',
+            jl_empty: '還沒有送出過任何訓練。',
+            jl_none_active: '目前沒有正在跑的訓練。',
+            jl_load_fail: '暫時讀不到你的訓練紀錄。這不代表它們不見了，稍後重新整理即可。',
+            nav_jobs: '我的訓練',
+            jl_back: '回到我的訓練',
+
             // ── 我的資料集（datasets.html）────────────────────────
             ds_title: '我的資料集 · MCU AI Base',
             ds_h1: '我的資料集',
@@ -429,6 +444,21 @@
             login_failed: 'Sign-in failed',
             login_forgot: 'Forgot password',
             login_forgot_msg: 'Forgot password: please contact the Library AI Base administrator to reset it. (Self-service reset is not available yet.)',
+
+            // ── My training runs (jobs.html) ─────────────────────
+            jl_title: 'My training runs · MCU AI Base',
+            jl_h1: 'My training runs',
+            jl_sub: 'Everything you have submitted. Open one for progress and results; finished runs offer the model.',
+            jl_all: 'All',
+            jl_active: 'Still running',
+            jl_filter_aria: 'Filter by state',
+            jl_open: 'Progress and results',
+            jl_new: 'Start a new training run',
+            jl_empty: 'You have not submitted any training run yet.',
+            jl_none_active: 'Nothing is running right now.',
+            jl_load_fail: 'Cannot read your training runs right now. That does not mean they are gone — refresh in a moment.',
+            nav_jobs: 'My training',
+            jl_back: 'Back to my training runs',
 
             // ── My datasets (datasets.html) ───────────────────────
             ds_title: 'My datasets · MCU AI Base',

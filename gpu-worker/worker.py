@@ -980,10 +980,22 @@ def execute_job(job):
             text=True
         )
 
+        # ZH: v3.6 —— 內建腳本用 `[錯誤]` / `[怎麼修]` 印給人看的失敗原因。
+        #     失敗時把它當成 error_message，不要只回「exited with code 1」——
+        #     後者對學生毫無用處，而真正的原因就在 log 裡沒人撿。
+        friendly_error = []
+
         for line in process.stdout:
             line = line.strip()
             if not line:
                 continue
+
+            if line.startswith(("[錯誤]", "[怎麼修]", "[ERROR]", "[FIX]")):
+                # ZH: 只留**最後一組**：腳本可能先印警告再印真正的失敗原因。
+                if line.startswith(("[錯誤]", "[ERROR]")):
+                    friendly_error = [line]
+                else:
+                    friendly_error.append(line)
 
             # ZH: 指標行不進使用者看得到的 log —— 讓 `@@METRIC {...}` 出現在
             #     學生的訓練紀錄裡只會讓人困惑。解析失敗時它不算指標，會照常留在 log。
@@ -1016,9 +1028,13 @@ def execute_job(job):
             })
         else:
             logger.error(f"Job {job_id} failed with exit code {process.returncode}.")
+            # ZH: 有講人話的原因就用它；沒有才退回 exit code。
+            #     ⚠ 退回的那條**不要拿掉** —— 使用者自己帶的程式不會照這個格式印，
+            #       那時「exited with code 1」雖然難懂，但至少是真的。
             report_update(job_id, {
                 "status":        "failed",
-                "error_message": f"Docker container exited with code {process.returncode}"
+                "error_message": ("　".join(friendly_error) if friendly_error
+                                  else f"Docker container exited with code {process.returncode}")
             })
 
     except Exception as e:

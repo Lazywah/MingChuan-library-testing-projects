@@ -359,6 +359,9 @@ class JobListItem(BaseModel):
     created_at: Optional[UtcDatetime] = None
     error_message: Optional[str] = None
     output_path: Optional[str] = None
+    # ZH: v3.6 有沒有可下載的模型（列表直接給下載鈕用）
+    has_model: bool = False
+    model_bytes: Optional[int] = None
 
 
 class JobListResponse(BaseModel):

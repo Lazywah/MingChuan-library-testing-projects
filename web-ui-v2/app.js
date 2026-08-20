@@ -81,10 +81,14 @@ async function loadBalance() {
         // ZH: Token 即基準（Decision Log #15）——不換算成「約可再問 N 次」。
         //     但「低於門檻」要看得出來，用的是後端已回傳的 below 旗標。
         card.dataset.low = bal.below ? '1' : '0';
+        // ZH: 一般狀態**不再**掛「使用量明細」——底部次要區與帳號選單都已經有了，
+        //     同一頁三個入口通往同一個地方，是雜訊不是方便（擁有者裁定 2026-08-21）。
+        // ZH: 但低額度時保留「看用在哪」：那不是導覽項，是**掛在警示上的行動點**，
+        //     回答的是「為什麼變低」。把它一起拿掉會讓警示變成一句沒有下一步的話。
         meta.innerHTML = bal.below
             ? T('idx_low_balance', '額度偏低（低於 {n}）').replace('{n}', bal.threshold.toLocaleString('en-US'))
               + ` · <a href="#" id="link-usage-inline">${T('idx_see_where', '看用在哪')}</a>`
-            : `<a href="#" id="link-usage-inline">${T('acct_usage', '使用量明細')}</a>`;
+            : '';
         wireUsageLink();
     } catch (e) {
         // 錯誤：**主要動作照常可用**——看不到額度不是不能用 AI 的理由

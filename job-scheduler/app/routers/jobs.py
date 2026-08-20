@@ -34,7 +34,7 @@ import asyncio
 from .. import crud, schemas, models
 from ..auth import get_current_user
 from ..database import get_db
-from ..config import SCHEDULER_POLICY
+from ..config import SCHEDULER_POLICY, settings
 
 import json
 import logging
@@ -215,9 +215,16 @@ def submit_job(
     # ZH: 計算預估 Token 消耗 | EN: Calculate estimated token cost
     estimated_tokens = crud.estimate_job_tokens(job.config)
 
-    # ZH: 原子性配額檢查 + 扣減（單一 SQL UPDATE，消除 TOCTOU 競爭條件）
-    # EN: Atomic quota check + deduction (single SQL UPDATE, eliminates TOCTOU race)
-    if not crud.try_deduct_tokens(db, user_id=current_user.id, tokens=estimated_tokens):
+    # ZH: v3.6 —— 平台自身的 Token 計費由 `INTERNAL_TOKEN_ACCOUNTING` 統一控制。
+    #     🔴 這個開關**原本只有 chat.py 讀**，送單這條路照扣照擋 ——
+    #     也就是開關沒有做到它名字說的事。設為 false 的部署以為計費關了，
+    #     實際上訓練仍在扣額度，而扣到見底時使用者會收到 429 且完全不知道為什麼
+    #     （v2 畫面上沒有任何地方看得到平台 Token 餘額）。
+    # ZH: 目前的規劃是「訓練不消耗 Token」（未接外部 LLM API），所以預設關閉。
+    #     機制整套保留：把開關打開就恢復原本行為，不需要改程式碼。
+    # EN: The flag was only honoured by chat.py; job submission still deducted and
+    #     could reject with 429. Gate it here too so the switch means what it says.
+    if settings.INTERNAL_TOKEN_ACCOUNTING and             not crud.try_deduct_tokens(db, user_id=current_user.id, tokens=estimated_tokens):
         usage = crud.get_token_usage(db, user_id=current_user.id)
         remaining = (usage.tokens_limit - usage.tokens_used) if usage else 0
         raise HTTPException(
@@ -292,6 +299,10 @@ def list_jobs(
             "created_at": job.created_at,
             "error_message": job.error_message,
             "output_path": job.output_path,
+            # ZH: v3.6 —— 列表要能直接給下載鈕，所以這裡就要說有沒有模型。
+            #     ⚠ 這是**手工組的 dict**，只在 schema 加欄位不會自動帶上（踩過兩次）。
+            "has_model": bool(job.artifact_bytes),
+            "model_bytes": job.artifact_bytes,
         })
 
     return {"total": total, "jobs": job_list}

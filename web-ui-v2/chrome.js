@@ -115,6 +115,16 @@
         if (page === 'lab.html') lab.setAttribute('aria-current', 'page');
         nav.appendChild(lab);
 
+        // ZH: v3.6 「我的訓練」。**這是三頁裡最該在導覽上的一個** —— 使用者送出之後
+        //     關掉分頁，就只剩導覽找得回那張單（在這之前是完全找不回來）。
+        var jl = document.createElement('a');
+        jl.href = 'jobs.html';
+        jl.setAttribute('data-i18n', 'nav_jobs');
+        jl.textContent = T('nav_jobs', '我的訓練');
+        // ZH: 訓練頁歸在「我的訓練」這一組（送出與查看是同一件事的兩端）
+        if (page === 'jobs.html' || page === 'train.html') jl.setAttribute('aria-current', 'page');
+        nav.appendChild(jl);
+
         // ZH: v3.6 「我的資料集」。放進主導覽而不是埋在某一頁的連結裡，
         //     因為使用者會需要它的時機是「傳不上去了」——那時他不會記得
         //     從哪一頁進得去。訓練頁與這一頁是互相到得了的一組。
@@ -122,7 +132,7 @@
         ds.href = 'datasets.html';
         ds.setAttribute('data-i18n', 'nav_datasets');
         ds.textContent = T('nav_datasets', '我的資料集');
-        if (page === 'datasets.html' || page === 'train.html') ds.setAttribute('aria-current', 'page');
+        if (page === 'datasets.html') ds.setAttribute('aria-current', 'page');
         nav.appendChild(ds);
 
         // ── 帳號選單（永遠在最右邊；色系切換是開發期的，上線會整塊移除）

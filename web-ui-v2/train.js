@@ -24,7 +24,11 @@ function authHeaders() {
 // ── 狀態 ─────────────────────────────────────────────────────────────
 // ZH: v3.6 —— 從「我的資料集」按「再訓練一次」進來時，網址會帶 ?dataset=<id>。
 //     這條路**完全不上傳**（檔案早就在伺服器上了），所以是另一條分支。
-let reuseId = new URLSearchParams(location.search).get('dataset');
+const QS = new URLSearchParams(location.search);
+// ZH: v3.6 —— 從「我的訓練」點進來時帶 ?job=<id>：**只看**既有任務，不送新單。
+//     這條路完全不碰上傳與送出，畫面上那張表單整個收起來。
+const viewJobId = QS.get('job');
+let reuseId = QS.get('dataset');
 let reuseName = null;
 let picked = null;        // ZH: 使用者選的檔案（尚未上傳）
 let jobId = null;
@@ -202,7 +206,34 @@ async function initReuse() {
     }
 }
 
-initReuse();
+// ZH: 三種進入方式，互斥：
+//     ?job=<id>     只看既有任務（從「我的訓練」進來）
+//     ?dataset=<id> 用既有資料集訓練（從「我的資料集」進來）
+//     什麼都沒帶     一般的上傳流程
+if (viewJobId) initViewMode();
+else initReuse();
+
+
+// ── 只看既有任務 ─────────────────────────────────────────────────────
+function initViewMode() {
+    // ZH: 從「我的訓練」進來的，回去也該回那裡（不是 gpu.html）。
+    const back = document.querySelector('.minor a[href="gpu.html"]');
+    if (back) {
+        back.href = 'jobs.html';
+        back.removeAttribute('data-i18n');
+        back.textContent = T('jl_back', '回到我的訓練');
+    }
+    // ZH: 把送單那張卡整個收起來 —— 這條路不上傳、不設輪數、不送出。
+    //     留著一顆按不了的按鈕比拿掉更讓人困惑。
+    const card = document.querySelector('.primary-card');
+    if (card) card.hidden = true;
+
+    jobId = viewJobId;
+    $('run').hidden = false;
+    poll();
+    // ZH: 已經跑完的單 poll() 一次就會 clearInterval，所以這裡照常起輪詢沒關係。
+    polling = setInterval(poll, 3000);
+}
 
 // ZH: 目前的語言。**唯一定義** —— 散在各處自己取的話，總有一處會寫錯而且看不出來。
 function currentLang() {
@@ -294,7 +325,8 @@ async function poll() {
 function finish(j) {
     if (j.status === 'completed') {
         setBar(100);
-        setGo({ label: T('tr_again', '再訓練一次'), enabled: true });
+        // ZH: 只看模式下那張卡是收起來的，不要去動裡面的按鈕。
+        if (!viewJobId) setGo({ label: T('tr_again', '再訓練一次'), enabled: true });
         picked = null;
         $('drop').classList.remove('drop--has');
         $('drop-main').textContent = T('tr_drop', '把 zip 拖到這裡，或點一下選檔案');
@@ -308,20 +340,24 @@ function finish(j) {
             //     而 token 在 sessionStorage —— 按下去必定 401。實測踩過。
             //     所以改成按鈕：用 fetch 帶 header 取回 blob 再存檔。
             //     ⚠ 也**不把 token 放進網址**：那會留在伺服器 log 與 referrer 裡。
-            setNote(T('tr_done_note', '訓練完成，結果在下面。') +
-                    ` <button class="btn btn--minor" type="button" id="dl">` +
-                    `${esc(T('tr_download', '下載模型檔'))}` +
-                    `${j.model_bytes ? '（' + human(j.model_bytes) + '）' : ''}</button>`);
+            const acts = $('run-actions');
+            acts.hidden = false;
+            acts.innerHTML = `<button class="btn btn--minor" type="button" id="dl">` +
+                             `${esc(T('tr_download', '下載模型檔'))}` +
+                             `${j.model_bytes ? '（' + human(j.model_bytes) + '）' : ''}</button>`;
             $('dl').addEventListener('click', () => downloadModel($('dl')));
-        } else {
+            if (!viewJobId) setNote(T('tr_done_note', '訓練完成，結果在下面。'));
+        } else if (!viewJobId) {
             setNote(T('tr_done_no_model', '訓練完成，結果在下面。模型檔沒能傳回伺服器，' +
                                           '請把下面的訓練紀錄貼給管理者。'));
         }
     } else {
-        setGo({ label: T('tr_go', '開始訓練'), enabled: true });
+        if (!viewJobId) setGo({ label: T('tr_go', '開始訓練'), enabled: true });
         $('log-fold').hidden = false;
         $('log-fold').open = true;
-        setNote(T('tr_failed_note', '這次沒有跑完') +
+        // ZH: 只看模式下 `#note` 在收起來的卡片裡，改用結果面板下方那一塊，
+        //     不然失敗原因會整個看不到。
+        (viewJobId ? setRunNote : setNote)(T('tr_failed_note', '這次沒有跑完') +
                 (j.error_message ? `（${clean(j.error_message)}）` : '') +
                 ' ' + T('tr_failed_hint', '常見原因：類別少於兩個、或圖片太少。'));
     }
@@ -384,6 +420,13 @@ function renderMetrics(metrics) {
                 </tr>`).join('')}</tbody>
             </table>`;
     }
+}
+
+// ZH: 只看模式的訊息落點（送單那張卡是收起來的）。
+function setRunNote(html) {
+    const acts = $('run-actions');
+    acts.hidden = false;
+    acts.innerHTML = `<span class="inline-error">${html}</span>`;
 }
 
 // ZH: 取回模型檔並交給瀏覽器存檔。
