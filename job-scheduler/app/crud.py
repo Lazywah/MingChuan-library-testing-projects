@@ -483,9 +483,25 @@ def get_all_jobs(
 #     送單驗證與派工都讀它，不要在別處另抄一份。
 # EN: v3.6 built-in training scripts, keyed by task type. Single source of truth.
 BUILTIN_TASKS = {
-    "image_classification": "ZH: 圖片分類（每個類別一個資料夾）| EN: Image classification (one folder per class)",
+    "image_classification": {
+        "desc":  "ZH: 圖片分類（每個類別一個資料夾）| EN: Image classification (one folder per class)",
+        # ZH: **指名映像**，不要落到 worker 的 DEFAULT_IMAGE。內建腳本需要 torchvision，
+        #     而「預設映像剛好有沒有」不是可以賭的事——賭輸的症狀是任務起來就 ImportError，
+        #     而使用者根本不知道自己選過映像。這裡用平台既有的學期鎖定映像。
+        # EN: Pin the image. The built-in script hard-depends on torchvision; relying on
+        #     whatever the worker's default happens to be is a silent-failure bet.
+        "image": "aibase/pytorch:2026-spring",
+    },
 }
 DEFAULT_BUILTIN_TASK = "image_classification"
+
+
+def builtin_task_image(task: str) -> Optional[str]:
+    """ZH: 這個內建任務要用哪個映像。
+
+    @node job-scheduler/app/crud.py::builtin_task_image
+    """
+    return (BUILTIN_TASKS.get(task) or {}).get("image")
 
 
 def builtin_task_for(job) -> Optional[str]:

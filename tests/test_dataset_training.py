@@ -317,3 +317,39 @@ def test_sha256_is_content_based(tmp_path):
     c = tmp_path / "c.zip"; c.write_bytes(b"different")
     assert gw.file_sha256(a) == gw.file_sha256(b)
     assert gw.file_sha256(a) != gw.file_sha256(c)
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# ZH: 五、內建任務的映像指名（實跑之後補的）
+# ──────────────────────────────────────────────────────────────────────────
+
+def test_builtin_task_pins_its_image(client, db, user_headers):
+    """ZH: 使用者沒選映像時，內建任務要指名一個**保證有 torchvision** 的映像。
+
+    ZH: 這條是實跑逼出來的：我當時得手動指定映像才跑得起來。
+        使用者從畫面送單不會指定，於是會落到 worker 的 DEFAULT_IMAGE，
+        而那是「剛好有沒有 torchvision」的賭博——賭輸的症狀是容器一起來就
+        ImportError，而使用者根本不知道自己選過映像。
+    """
+    from app import crud
+    _heartbeat(client)
+    assert _submit(client, user_headers,
+                   dataset_path="/data/datasets/u1/a.zip").status_code == 201
+    job = _take(client)
+    assert job["docker_image"] == crud.builtin_task_image("image_classification")
+    assert job["docker_image"]          # 不可以是 None
+
+
+def test_user_chosen_image_wins(client, db, user_headers):
+    """ZH: 使用者自己選了映像就用他的 —— 指名只是預設值，不是強制。"""
+    _heartbeat(client)
+    assert _submit(client, user_headers, dataset_path="/data/datasets/u1/a.zip",
+                   docker_image="aibase/tensorflow:2026-spring").status_code == 201
+    assert _take(client)["docker_image"] == "aibase/tensorflow:2026-spring"
+
+
+def test_non_builtin_job_keeps_none_image(client, db, user_headers):
+    """ZH: 陰性對照 —— 不是內建任務的單不受影響（None ＝ 交給 worker 的預設）。"""
+    _heartbeat(client)
+    assert _submit(client, user_headers).status_code == 201
+    assert _take(client)["docker_image"] is None

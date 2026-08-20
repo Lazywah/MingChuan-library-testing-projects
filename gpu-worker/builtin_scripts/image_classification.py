@@ -144,7 +144,16 @@ def main() -> int:
 
     # ZH: 用 ImageNet 預訓練的 ResNet-18 只換最後一層（transfer learning）。
     #     校園情境下資料通常只有幾百張，從頭訓練幾乎一定過擬合。
-    model = models.resnet18(weights=models.ResNet18_Weights.DEFAULT)
+    # ZH: 把 torch 的權重快取指到共享儲存。不設的話它落在 `--rm` 的容器裡，
+    #     **每一張單都重新下載 45 MB**；而且離線的 GPU 主機會直接失敗。
+    #     指到共享儲存後只有第一次要外網。
+    os.environ.setdefault("TORCH_HOME", "/workspace/.torch")
+    try:
+        model = models.resnet18(weights=models.ResNet18_Weights.DEFAULT)
+    except Exception as e:
+        fail(f"取不到 ResNet-18 的預訓練權重：{e}",
+             "這台機器第一次跑需要連得到 download.pytorch.org。"
+             "下載過一次之後就會用共享儲存裡的快取，不必再連外網。")
     model.fc = nn.Linear(model.fc.in_features, len(classes))
     model = model.to(device)
 
@@ -205,8 +214,10 @@ def main() -> int:
     with open(os.path.join(OUTPUT_DIR, "result.json"), "w", encoding="utf-8") as f:
         json.dump(result, f, ensure_ascii=False, indent=2)
 
+    # ZH: 不到一分鐘就寫秒——「花了 0.0 分鐘」看起來像壞掉了。
+    took = f"{elapsed:.0f} 秒" if elapsed < 60 else f"{elapsed / 60:.1f} 分鐘"
     print("=" * 60, flush=True)
-    print(f"完成。最佳驗證正確率 {best_acc * 100:.1f}%，花了 {elapsed / 60:.1f} 分鐘。", flush=True)
+    print(f"完成。最佳驗證正確率 {best_acc * 100:.1f}%，花了 {took}。", flush=True)
     print(f"模型：{OUTPUT_DIR}/model.pt", flush=True)
     return 0
 
