@@ -45,6 +45,15 @@ NODE_ID = os.environ.get("NODE_ID", "gpu-node-01")
 # EN: v3.0 this node's pool. Keep default "batch" for now; a future service-layer
 #     RTX 5090 worker sets POOL_TYPE=interactive and local-GPU jobs route to it — no code change.
 POOL_TYPE = os.environ.get("POOL_TYPE", "batch")
+# ZH: v3.6 這個節點是否與**服務層同一台機器**。
+#     為什麼需要它：程式實驗室（Notebook）模式的任務靠 per-user 的 `home_<uid>`
+#     Docker volume 取得使用者的檔案，而 Docker volume 是**本機**的。
+#     這個 worker 跑在別台機器時，`docker run -v home_<uid>:…` 會在**這台**
+#     自動建立一個**空的**同名 volume：不報錯、不警告、訓練出沒有意義的結果。
+#     宣告 false（預設）時，服務層就不會把這類任務派過來。
+#     ⚠ 用**明確宣告**而不是自動推測（比對 IP 之類）：架節點的人知道自己是不是同一台，
+#       而猜錯成 true 會產生無聲的錯誤結果，猜錯成 false 只是拒絕派工——往安全的方向倒。
+SHARES_SERVICE_STORAGE = os.environ.get("SHARES_SERVICE_STORAGE", "false").strip().lower() in ("1", "true", "yes", "on")
 POLL_INTERVAL = int(os.environ.get("POLL_INTERVAL", "5"))
 STORAGE_MOUNT_PATH = os.environ.get("STORAGE_MOUNT_PATH", "C:\\storage")
 # Heartbeat is sent every HEARTBEAT_INTERVAL polls (default: every 30 s = 6 polls × 5 s)
@@ -161,6 +170,7 @@ def send_heartbeat(available_gpus: list) -> None:
             "gpu_utilization": gpu_util,
             "gpus_detail": get_gpu_details(),
             "pool_type": POOL_TYPE,
+            "shares_service_storage": SHARES_SERVICE_STORAGE,   # ZH: v3.6 見檔頭說明
         }
         resp = requests.post(
             f"{SERVICE_LAYER_URL}/api/v1/worker/heartbeat",
@@ -410,6 +420,11 @@ def poll_loop():
     """@node gpu-worker/worker.py::poll_loop"""
     logger.info("Worker node %s started. Polling %s every %ds, heartbeat every %ds.",
                 NODE_ID, SERVICE_LAYER_URL, POLL_INTERVAL, HEARTBEAT_INTERVAL)
+    # ZH: v3.6 開機時把這個宣告印出來——設錯了要看得見，不要等到訓練結果不對才發現。
+    logger.info("Co-located with the service layer (Code Lab volumes visible): %s%s",
+                SHARES_SERVICE_STORAGE,
+                "" if SHARES_SERVICE_STORAGE else
+                "  -> this node will NOT be given Code Lab (notebook) jobs")
 
     last_heartbeat = 0.0  # Unix timestamp of last successful heartbeat send
 
@@ -427,7 +442,9 @@ def poll_loop():
             try:
                 response = requests.post(
                     f"{SERVICE_LAYER_URL}/api/v1/worker/take",
-                    json={"node_id": NODE_ID, "available_gpus": available_gpus, "pool_type": POOL_TYPE},
+                    json={"node_id": NODE_ID, "available_gpus": available_gpus,
+                          "pool_type": POOL_TYPE,
+                          "shares_service_storage": SHARES_SERVICE_STORAGE},
                     headers=HEADERS,
                     timeout=5,
                 )

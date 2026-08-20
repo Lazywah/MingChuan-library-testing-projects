@@ -478,6 +478,68 @@ def get_all_jobs(
     return jobs, total
 
 
+def job_needs_lab_volume(job) -> bool:
+    """ZH: 這個任務是否需要使用者 Lab 的檔案（因而只能在與服務層同機的節點上跑）。
+
+    ZH: 判準是 `inline_code` —— 那是 Lab 的 VS Code 擴充套件（aibase-runner）把
+        cell/檔案編譯成 shell script 送過來的，腳本裡的相對路徑都指向 /home/coder。
+        該目錄來自 per-user 的 `home_<uid>` Docker volume，**只在服務層那台機器上有內容**。
+
+    @node job-scheduler/app/crud.py::job_needs_lab_volume
+    """
+    return bool(getattr(job, "inline_code", None))
+
+
+def has_colocated_worker(db: Session, timeout_seconds: int = 90) -> bool:
+    """ZH: 線上是否有「與服務層同機」的節點（看得到 home_<uid> volume）。
+
+    ZH: 用於送單時就攔下不可能執行的任務——否則它會永遠 pending，
+        而「永遠排隊」是另一種沉默失敗。
+
+    ZH: 沿用 pool_has_online_worker 的判準：**「在線但被停用／時段外」不算數**，
+        否則會誤判有人接而讓任務卡死。
+
+    @node job-scheduler/app/crud.py::has_colocated_worker
+    """
+    for n in get_online_worker_nodes(db, timeout_seconds=timeout_seconds):
+        if not getattr(n, "shares_storage", 0):
+            continue
+        if node_dispatch_state(get_gpu_node(db, n.node_id))["allowed"]:
+            return True
+    return False
+
+
+def job_needs_lab_volume(job) -> bool:
+    """ZH: 這個任務是否需要使用者 Lab 的檔案（因而只能在與服務層同機的節點上跑）。
+
+    ZH: 判準是 `inline_code` —— 那是 Lab 的 VS Code 擴充套件（aibase-runner）把
+        cell/檔案編譯成 shell script 送過來的，腳本裡的相對路徑都指向 /home/coder。
+        該目錄來自 per-user 的 `home_<uid>` Docker volume，**只在服務層那台機器上有內容**。
+
+    @node job-scheduler/app/crud.py::job_needs_lab_volume
+    """
+    return bool(getattr(job, "inline_code", None))
+
+
+def has_colocated_worker(db: Session, timeout_seconds: int = 90) -> bool:
+    """ZH: 線上是否有「與服務層同機」的節點（看得到 home_<uid> volume）。
+
+    ZH: 用於送單時就攔下不可能執行的任務——否則它會永遠 pending，
+        而「永遠排隊」是另一種沉默失敗。
+
+    ZH: 沿用 pool_has_online_worker 的判準：**「在線但被停用／時段外」不算數**，
+        否則會誤判有人接而讓任務卡死。
+
+    @node job-scheduler/app/crud.py::has_colocated_worker
+    """
+    for n in get_online_worker_nodes(db, timeout_seconds=timeout_seconds):
+        if not getattr(n, "shares_storage", 0):
+            continue
+        if node_dispatch_state(get_gpu_node(db, n.node_id))["allowed"]:
+            return True
+    return False
+
+
 def get_pending_jobs(db: Session) -> List[models.TrainingJob]:
     """
     ZH: 取得待處理任務 (按優先級排序，排程器使用)
@@ -723,7 +785,7 @@ def estimate_job_tokens(config: Optional[dict]) -> int:
 def upsert_worker_heartbeat(
     db: Session, node_id: str, available_gpus: List[str], gpu_utilization: float,
     gpus_detail: Optional[list] = None, pool_type: Optional[str] = None,
-    source_ip: Optional[str] = None,
+    source_ip: Optional[str] = None, shares_storage: bool = False,
 ) -> models.WorkerHeartbeat:
     """ZH: 更新或新增 Worker 節點心跳；v3.2 順帶自動註冊 gpu_nodes + NODE_ID 撞名偵測
        EN: Upsert worker heartbeat; v3.2 also auto-registers gpu_nodes + duplicate-ID detection
@@ -754,6 +816,10 @@ def upsert_worker_heartbeat(
         if detail_json is not None:
             node.gpus_detail = detail_json
         node.pool_type = pool
+        # ZH: v3.6 —— **每次心跳都覆寫，不保留舊值**。刻意如此：
+        #     舊版 worker 不送這個欄位（於是是 False），若改成「沒說就沿用」，
+        #     一台原本同機、後來被搬走又降版的節點會繼續自稱同機——那正是要防的情況。
+        node.shares_storage = 1 if shares_storage else 0
         node.last_seen = now
         node.is_online = True
     else:
@@ -766,6 +832,8 @@ def upsert_worker_heartbeat(
             last_seen=now,
             is_online=True,
             source_ip=source_ip,
+            # ZH: v3.6 —— 沒宣告＝0（不同機），往安全的方向倒。
+            shares_storage=1 if shares_storage else 0,
         )
         db.add(node)
     # ZH: v3.2 自動註冊節點設定列（不存在才建；預設 啟用+全天可排，行為與加表前一致）

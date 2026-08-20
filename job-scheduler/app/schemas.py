@@ -390,6 +390,9 @@ class WorkerHeartbeatPayload(BaseModel):
     gpu_utilization: Optional[float] = 0.0  # ZH: GPU 使用率 % | EN: GPU utilization %
     gpus_detail: Optional[List[Dict[str, Any]]] = None  # ZH: 每張 GPU 詳細 | EN: Per-GPU detail
     pool_type: Optional[str] = "batch"      # ZH: v3.0 此節點所屬池 batch/interactive | EN: node's pool
+    # ZH: v3.6 —— 此節點是否與服務層同機（看得到 per-user 的 home_<uid> volume）。
+    #     預設 False：舊版 worker 不送這欄位，於是被當成「不同機」——寧可不派工。
+    shares_service_storage: bool = False
 
 
 # ZH: Notebook Schema 已於 Phase E 移除 — 被 v2.0 Lab schemas 取代

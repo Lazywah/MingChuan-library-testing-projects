@@ -42,6 +42,7 @@ SERVICE_LAYER_URL=http://<服務層真實 IP>:8002    # 例 http://192.168.1.50:
 WORKER_API_TOKEN=<與服務層「根 .env」的 WORKER_API_TOKEN 完全一致>
 NODE_ID=gpu-node-01                                # 多節點請各自命名
 POOL_TYPE=batch                                    # 服務層 5090 那台設 interactive
+SHARES_SERVICE_STORAGE=false                       # 與服務層不同機 → false（單機部署才是 true）
 STORAGE_MOUNT_PATH=/mnt/storage                    # Linux 路徑；Windows 用 C:\storage
 GPU_IDLE_UTIL_THRESHOLD=90
 POLL_INTERVAL=5

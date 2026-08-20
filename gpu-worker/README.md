@@ -25,6 +25,10 @@ Windows 用 `start-worker.bat`（用法相同）。Linux 首次可能要先給�
 - `SERVICE_LAYER_URL`＝服務層主機的真實位址（例 `http://192.168.1.50:8002`）
 - `WORKER_API_TOKEN`＝**與服務層根 .env 完全一致**（key 名就叫 `WORKER_API_TOKEN`，不是 `API_TOKEN`）
 - `NODE_ID`＝此節點名稱；`POOL_TYPE`＝`batch` 或 `interactive`
+- `SHARES_SERVICE_STORAGE=false` ← **這一節（不同機）必填 false**。
+  設 true 會讓服務層把「程式實驗室」的任務派過來，而那些任務要讀使用者的
+  `home_<uid>` Docker volume；那個 volume 在服務層那台。docker 會在**這台**
+  自動建立一個**空的**同名 volume：不報錯、資料不在、訓練出沒有意義的結果。
 - `STORAGE_MOUNT_PATH`＝此宿主機的共享儲存路徑（Linux 不可留 `C:\...`）
 
 然後：

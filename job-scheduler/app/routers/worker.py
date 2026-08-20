@@ -60,6 +60,10 @@ def verify_worker_token(authorization: Optional[str] = Header(None)) -> None:
 
 class TakeJobRequest(BaseModel):
     node_id: str
+    # ZH: v3.6 —— 節點是否與服務層同機。**預設 False（安全的一邊）**：
+    #     舊版 worker 不會送這個欄位，於是自動被當成「不同機」，
+    #     Notebook 任務不會被派給它——寧可不派，也不要派出去訓練在空目錄上。
+    shares_service_storage: bool = False
     available_gpus: List[str]
     pool_type: Optional[str] = "batch"   # v3.0 領取端節點所屬池 batch/interactive
 
@@ -143,6 +147,17 @@ def take_job(
         if not _pool_allows(job):
             continue
 
+        # ZH: v3.6 —— Notebook/Lab 模式的任務需要使用者的 `home_<uid>` volume，
+        #     而那是**本機** Docker volume。派給不同機的節點時，docker 會在那台
+        #     **自動建立一個空的**同名 volume：不報錯、資料不在、訓練出沒有意義的結果。
+        #     **寧可不派**（留給同機節點），也不要派出去在空目錄上訓練。
+        if crud.job_needs_lab_volume(job) and not req.shares_service_storage:
+            logger.info(
+                "Job %s needs the user's Lab volume; node %s is not co-located with the "
+                "service layer - leaving it pending", job.id[:8], req.node_id
+            )
+            continue
+
         # ZH: 若任務指定偏好節點且與當前節點不符則跳過（讓對應節點來領）
         # EN: If job has a preferred_node and it doesn't match this node, skip it
         if job.preferred_node and job.preferred_node != req.node_id:
@@ -195,7 +210,10 @@ def take_job(
         except Exception as e:
             logger.warning(f"Failed to build secret env for job {job.id[:8]}: {e}")
 
-        if job.user_id:
+        # ZH: v3.6 —— per-user home volume 只在與服務層同機時才有意義（見上方派工閘門）。
+        #     不同機時**不掛**：掛一個空 volume 只會讓腳本以為「資料夾是空的」，
+        #     比缺少掛載更難查。
+        if job.user_id and req.shares_service_storage:
             # ZH: per-user home volume → /home/coder（與 code-server 共用）
             # EN: per-user home volume → /home/coder (shared with code-server)
             volume_mounts.append({
@@ -254,7 +272,7 @@ def worker_heartbeat(
     crud.upsert_worker_heartbeat(
         db, payload.node_id, payload.available_gpus, payload.gpu_utilization or 0.0,
         gpus_detail=payload.gpus_detail, pool_type=payload.pool_type,
-        source_ip=source_ip,
+        source_ip=source_ip, shares_storage=payload.shares_service_storage,
     )
     logger.debug(f"Heartbeat from {payload.node_id}, gpus={payload.available_gpus}, pool={payload.pool_type}")
     return {"status": "ok", "node_id": payload.node_id}

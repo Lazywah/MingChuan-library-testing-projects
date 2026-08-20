@@ -247,6 +247,9 @@ def init_db():
             except Exception: pass
             try: conn.execute(text("ALTER TABLE worker_heartbeats ADD COLUMN ip_conflict_until DATETIME"))
             except Exception: pass
+            # --- v3.6 節點是否與服務層同機（Lab volume 看得到與否）---
+            try: conn.execute(text("ALTER TABLE worker_heartbeats ADD COLUMN shares_storage INTEGER DEFAULT 0"))
+            except Exception: pass
 
     except Exception as e:
         logger.warning(f"Manual DB migration skipped or partially failed: {e}")

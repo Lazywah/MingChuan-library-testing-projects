@@ -150,6 +150,22 @@ def submit_job(
         except (TypeError, ValueError):
             pass  # ZH: 非整數值由後續訓練框架處理 | EN: Non-int handled by training framework
 
+    # ------------------------------------------------------------------
+    # ZH: 政策檢查 e — Lab（Notebook）任務需要與服務層同機的節點
+    # EN: Policy check e — Lab (notebook) jobs need a co-located node
+    # ------------------------------------------------------------------
+    # ZH: `inline_code` 的腳本跑在使用者的 `home_<uid>` volume 上，而那是**本機**
+    #     Docker volume。若線上沒有任何同機節點，這張單**不可能**正確執行——
+    #     與其讓它永遠 pending（看起來像「還在排隊」），不如立刻說清楚。
+    if job.inline_code and not crud.has_colocated_worker(db):
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="ZH: 目前沒有可以讀取你實驗室檔案的運算節點，這種任務暫時無法執行，"
+                   "請稍後再試或聯繫管理員 | "
+                   "EN: No compute node can currently read your Code Lab files, so this "
+                   "kind of job cannot run right now; please try later or contact an admin"
+        )
+
     # ZH: 計算預估 Token 消耗 | EN: Calculate estimated token cost
     estimated_tokens = crud.estimate_job_tokens(job.config)
 

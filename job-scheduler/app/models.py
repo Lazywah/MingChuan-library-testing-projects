@@ -291,6 +291,10 @@ class WorkerHeartbeat(Base):
     # ZH: v3.2 節點管理 — 心跳來源 IP 與「同 ID 多來源」撞名偵測（NODE_ID 抄預設值的實務地雷）
     # EN: v3.2 node mgmt — heartbeat source IP + duplicate-NODE_ID detection
     source_ip = Column(String)                                                # ZH: 最近心跳來源 IP | EN: Latest heartbeat source IP
+    # ZH: v3.6 —— 這個節點是否與服務層**同機**（因而看得到 per-user 的 home_<uid> volume）。
+    #     程式實驗室（Notebook）模式的任務靠那個 volume 取得使用者的檔案；跨機時它會是一個
+    #     **自動建立的空 volume**，不報錯但資料不在。預設 0（不同機）＝安全的一邊。
+    shares_storage = Column(Integer, default=0)                               # ZH: 是否與服務層同機 | EN: Co-located with the service layer
     ip_conflict_until = Column(DateTime)                                      # ZH: 撞名警示有效期 | EN: Conflict warning valid until
 
 

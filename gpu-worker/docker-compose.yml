@@ -22,6 +22,12 @@ services:
       # ZH: v3.0 此節點所屬池。本機 4060 維持 batch；日後服務層 RTX 5090 起 worker 設 interactive。
       # EN: v3.0 node pool. Keep batch for the local 4060; set interactive on the future 5090 worker.
       - POOL_TYPE=${POOL_TYPE:-batch}
+      # ZH: v3.6 是否與服務層同機（看得到 per-user 的 home_<uid> volume）。
+      #     ⚠ 這裡的預設 false 與 .env.example 的 true 不同，是刻意的：
+      #       沒有 .env 就啟動 = 來歷不明 = 當成不同機（不派程式實驗室的任務）。
+      # EN: v3.6 co-located with the service layer. Default false on purpose:
+      #     an unknown deployment must not be given Code Lab jobs.
+      - SHARES_SERVICE_STORAGE=${SHARES_SERVICE_STORAGE:-false}
       - POLL_INTERVAL=${POLL_INTERVAL:-5}                   # ZH: 領取任務輪詢間隔 (秒)
       - HEARTBEAT_INTERVAL=${HEARTBEAT_INTERVAL:-30}        # ZH: 心跳上報間隔 (秒)
       # ZH: GPU 空閒判定門檻(%)。預設 90 適合本機/桌機（GPU 與 OS/瀏覽器/Ollama 共用，
