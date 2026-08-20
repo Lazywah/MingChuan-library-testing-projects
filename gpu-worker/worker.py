@@ -691,6 +691,48 @@ def report_update(job_id, payload, *, retries: int = 3, backoff: float = 2.0) ->
 METRIC_PREFIX = "@@METRIC "
 
 
+def upload_artifact(job_id: str) -> bool:
+    """ZH: 把訓練產出（model.pt）傳回服務層。回傳有沒有成功。
+
+    ZH: 為什麼要傳回去：檔案寫在**這台**的共享儲存上。跨機部署時服務層讀不到，
+        使用者也就拿不到——而「訓練完了卻拿不到東西」是最令人洩氣的結果。
+
+    ZH: 失敗**不把任務標成 failed**：模型確實訓練出來了，只是沒送到。
+        把它標成失敗會讓使用者以為要重跑（浪費一次 GPU 時間），
+        而重跑同樣會遇到同一個網路問題。所以只記錄，狀態維持 completed。
+
+    @node gpu-worker/worker.py::upload_artifact
+    """
+    src = pathlib.Path(HOST_STORAGE_MOUNT) / "outputs" / job_id / "model.pt"
+    if not src.is_file():
+        # ZH: 沒有產出不是錯誤——自己帶程式的任務本來就不一定會寫這個檔。
+        logger.debug("Job %s produced no model.pt, nothing to upload", job_id[:8])
+        return False
+
+    size = src.stat().st_size
+    url = f"{SERVICE_LAYER_URL}/api/v1/worker/jobs/{job_id}/artifact"
+    try:
+        with open(src, "rb") as f:
+            r = requests.post(url, headers=HEADERS,
+                              files={"file": ("model.pt", f, "application/octet-stream")},
+                              timeout=(10, 600))
+        r.raise_for_status()
+    except Exception as e:
+        # ZH: 說清楚「模型還在這台機器上」——管理者才知道還救得回來。
+        logger.error("Job %s: could not upload the model (%.1f MB): %s. "
+                     "The file is still on this host at %s",
+                     job_id[:8], size / 1024 ** 2, e, src)
+        report_update(job_id, {
+            "log": "模型檔沒能傳回伺服器，訓練結果仍在運算主機上 / "
+                   "The model could not be sent back to the server; "
+                   "it is still on the compute host",
+        })
+        return False
+
+    logger.info("Uploaded model for job %s (%.1f MB)", job_id[:8], size / 1024 ** 2)
+    return True
+
+
 def parse_metric(log_line):
     """ZH: 這一行是不是結構化指標？是就回 dict，不是回 None。
 
@@ -963,6 +1005,10 @@ def execute_job(job):
 
         if process.returncode == 0:
             logger.info(f"Job {job_id} completed successfully.")
+            # ZH: v3.6 —— **先傳檔再回報完成**。反過來的話畫面會先顯示「完成、可下載」，
+            #     使用者按下去卻是 404（檔案還在路上）。
+            #     傳檔失敗不影響完成狀態：模型確實訓出來了，只是沒送到。
+            upload_artifact(job_id)
             report_update(job_id, {
                 "status":      "completed",
                 "progress":    100.0,

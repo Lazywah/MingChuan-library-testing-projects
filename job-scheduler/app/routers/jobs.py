@@ -25,7 +25,7 @@ EN: Modular design:
 """
 
 from fastapi import APIRouter, Depends, HTTPException, status, Query
-from fastapi.responses import StreamingResponse
+from fastapi.responses import StreamingResponse, FileResponse
 from fastapi.concurrency import run_in_threadpool
 from sqlalchemy.orm import Session
 from typing import Optional
@@ -38,6 +38,13 @@ from ..config import SCHEDULER_POLICY
 
 import json
 import logging
+import os
+import re
+import urllib.parse
+
+# ZH: v3.6 —— 模型檔的實際位置由 worker router 那邊定義（唯一定義），
+#     這裡引用而不是再抄一份路徑規則。
+from . import worker as worker_router
 
 logger = logging.getLogger(__name__)
 
@@ -334,6 +341,9 @@ def get_job_status(
         #     漏了這一行的症狀是「指標存進 DB 了，但前端永遠拿到 null」。踩過。
         #     DB 存的是 JSON 字串，由 schema 的 field_validator 轉成陣列。
         "metrics": job.metrics,
+        # ZH: v3.6 —— 手工組的 dict，欄位要自己加（只加 schema 不會自動帶上，踩過）
+        "has_model": bool(job.artifact_bytes),
+        "model_bytes": job.artifact_bytes,
     }
 
 
@@ -463,3 +473,67 @@ async def stream_job_logs(
             await asyncio.sleep(1)
 
     return StreamingResponse(event_generator(), media_type="text/event-stream")
+
+
+# ==============================================================================
+# ZH: GET /{job_id}/model - 下載訓練出來的模型檔
+# EN: GET /{job_id}/model - Download the trained model file
+# ==============================================================================
+
+@router.get("/{job_id}/model")
+def download_job_model(
+    job_id: str,
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    ZH: 下載這張任務訓練出來的模型檔。
+
+    ZH: 權限沿用本檔既有的規則（學生只能碰自己的，教師／管理員可看全部），
+        **不自己另發明一套**——兩套規則會漂開，而漂開的那一天沒有人會發現。
+
+    @node job-scheduler/app/routers/jobs.py::download_job_model
+    """
+    job = crud.get_job(db, job_id=job_id)
+    if not job:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,
+                            detail="ZH: 找不到任務 | EN: Job not found")
+
+    if current_user.role == "student" and job.user_id != current_user.id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,
+                            detail="ZH: 無權限查看此任務 | EN: Not authorized to view this job")
+
+    if not job.artifact_bytes:
+        # ZH: 分得開「這張單沒有模型」與「檔案不見了」——前者是正常的
+        #     （還在跑、失敗了、或是自己帶程式的任務），後者是要查的。
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="ZH: 這張任務沒有可下載的模型檔 | EN: This job has no downloadable model")
+
+    path = worker_router.artifact_path(job_id)
+    if not os.path.isfile(path):
+        logger.error("Job %s claims an artifact but %s is missing", job_id[:8], path)
+        raise HTTPException(
+            status_code=status.HTTP_410_GONE,
+            detail="ZH: 模型檔已不在伺服器上（可能已逾保留期）| "
+                   "EN: The model file is no longer on the server (retention may have expired)")
+
+    # ZH: 檔名帶上任務名稱比較好認，但那是**使用者輸入的字串**。
+    #     兩段一起送（RFC 5987）：
+    #       filename=   純 ASCII 的保守版本，老瀏覽器看這個
+    #       filename*=  UTF-8 百分比編碼，保住原本的中文名
+    #     ⚠ 只給 filename= 的話，**中文名字會被清成空字串**，於是每個人下載到的
+    #       都叫 model.pt —— 而這裡的任務名幾乎都是中文（來自 zip 的檔名）。
+    #       實測踩過：任務叫「下載測試」，下載下來是 model.pt。
+    #     ⚠ UTF-8 那一段**也要清**：保留中文，但路徑分隔符、`..`、控制字元一律拿掉。
+    #       百分比編碼不算清理（`../..` 只是變成 `..%2F..`），而「反正瀏覽器會處理」
+    #       是把安全外包給別人的程式。
+    raw = (job.job_name or "model").strip()
+    raw = re.sub(r'[\x00-\x1f\x7f/\\:*?"<>|]', "_", raw)   # 路徑與控制字元
+    raw = re.sub(r"\.{2,}", "_", raw).strip("._ ") or "model"
+    ascii_safe = re.sub(r"[^A-Za-z0-9._-]", "_", raw).strip("._-") or "model"
+    encoded = urllib.parse.quote(f"{raw}.pt", safe="")
+    return FileResponse(
+        path, media_type="application/octet-stream",
+        headers={"Content-Disposition":
+                 f"attachment; filename=\"{ascii_safe}.pt\"; filename*=UTF-8''{encoded}"})

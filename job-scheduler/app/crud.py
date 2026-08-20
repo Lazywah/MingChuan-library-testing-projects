@@ -653,6 +653,80 @@ def append_job_log(db: Session, job_id: str, new_log: str) -> Optional[models.Tr
     return job
 
 
+def purge_artifact(db: Session, job, remove_file) -> int:
+    """ZH: 清掉一張單的模型檔（實體 + DB 標記），回傳釋放的位元組數。
+
+    ZH: `remove_file` 由呼叫端傳進來，是為了讓測試可以在不碰真實檔案系統的情況下
+        驗「DB 與實體檔案是一起處理的」——這兩件事分開做的話，會出現
+        「DB 說有、檔案不在」（下載 410）或「檔案還在、DB 說沒有」（永遠不會被清）。
+
+    @node job-scheduler/app/crud.py::purge_artifact
+    """
+    size = job.artifact_bytes or 0
+    remove_file(job.id)
+    job.artifact_bytes = None
+    db.commit()
+    return size
+
+
+def enforce_artifact_limits(db: Session, user_id: str, keep: int, remove_file) -> int:
+    """ZH: 每位使用者最多保留 `keep` 個模型檔，超過的從最舊的開始清。回傳清掉幾個。
+
+    ZH: 為什麼上限用「個數」而不是「總容量」：使用者看得懂「你最近的 10 個模型」，
+        看不懂「你用了 437 MB」。而且模型大小差異不大，個數已經夠當界限。
+
+    @node job-scheduler/app/crud.py::enforce_artifact_limits
+    """
+    rows = (db.query(models.TrainingJob)
+            .filter(models.TrainingJob.user_id == user_id,
+                    models.TrainingJob.artifact_bytes.isnot(None))
+            .order_by(desc(models.TrainingJob.created_at))
+            .all())
+    removed = 0
+    for job in rows[keep:]:
+        purge_artifact(db, job, remove_file)
+        removed += 1
+    return removed
+
+
+def purge_expired_artifacts(db: Session, ttl_days: int, remove_file) -> dict:
+    """ZH: 清掉超過保留天數的模型檔。收拾「不再使用的帳號」留下的長尾。
+
+    ZH: 依 `completed_at` 而不是 `created_at`——一張排隊很久才跑的單，
+        保留期該從它產出東西那一刻算起。
+
+    @node job-scheduler/app/crud.py::purge_expired_artifacts
+    """
+    cutoff = datetime.now(timezone.utc) - timedelta(days=ttl_days)
+    rows = (db.query(models.TrainingJob)
+            .filter(models.TrainingJob.artifact_bytes.isnot(None))
+            .all())
+    stats = {"removed": 0, "freed_bytes": 0}
+    for job in rows:
+        when = job.completed_at or job.created_at
+        if when is None:
+            continue
+        if when.tzinfo is None:
+            when = when.replace(tzinfo=timezone.utc)
+        if when < cutoff:
+            stats["freed_bytes"] += purge_artifact(db, job, remove_file)
+            stats["removed"] += 1
+    return stats
+
+
+def set_job_artifact(db: Session, job_id: str, size_bytes: int) -> Optional[models.TrainingJob]:
+    """ZH: 記下這張單的模型檔大小（＝服務層這邊真的有那個檔）。
+
+    @node job-scheduler/app/crud.py::set_job_artifact
+    """
+    job = get_job(db, job_id)
+    if job:
+        job.artifact_bytes = size_bytes
+        db.commit()
+        db.refresh(job)
+    return job
+
+
 def append_job_metric(db: Session, job_id: str, metric: dict) -> Optional[models.TrainingJob]:
     """ZH: 附加指標資料 (存為 JSON array) | EN: Append metric data (stored as JSON array)
 

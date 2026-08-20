@@ -10,13 +10,14 @@ ZH: 端點清單：
     POST /take                 → Worker 領取最高優先級 pending 任務（原子搶佔）
     POST /jobs/{id}/update     → Worker 回報任務進度、日誌、狀態
     POST /heartbeat            → Worker 定期上報節點存活與 GPU 使用率
+    POST /jobs/{id}/artifact   → Worker 回傳訓練產出（模型檔）
     GET  /datasets/{job_id}    → Worker 下載該任務的資料集（跨機部署用）
 ZH: 認證：所有端點使用靜態 API Token（Bearer），由 verify_worker_token Depends 驗證
 EN: Auth: All endpoints use static API Token (Bearer), enforced via verify_worker_token
 ==============================================================================
 """
 
-from fastapi import APIRouter, Depends, HTTPException, status, Header, Request
+from fastapi import APIRouter, Depends, HTTPException, status, Header, Request, UploadFile, File
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 from sqlalchemy import update
@@ -27,6 +28,7 @@ import hmac
 import logging
 import os
 import pathlib
+import shutil
 from datetime import datetime, timezone
 
 from ..database import get_db
@@ -396,3 +398,110 @@ def download_job_dataset(
                 pathlib.Path(target).name)
     return FileResponse(target, media_type="application/octet-stream",
                         filename=pathlib.Path(target).name)
+
+
+# ==============================================================================
+# ZH: v3.6 訓練產出（模型檔）| EN: v3.6 Training artifacts
+# ==============================================================================
+# ZH: 訓練完的 model.pt 原本只留在**運算主機**上，跨機時服務層讀不到，
+#     使用者也就拿不到。worker 訓練成功後把它傳回來，存在這裡。
+#
+# ZH: 路徑由 job_id 推導，**不另存路徑欄位** —— 少一個會跟實體檔案漂開的字串。
+#     DB 只記 `artifact_bytes`（有值＝這邊真的有那個檔）。
+ARTIFACT_ROOT = os.environ.get("ARTIFACT_DIR", "/data/artifacts")
+ARTIFACT_NAME = "model.pt"
+
+# ZH: 單一檔案上限。ResNet-18 約 44 MB；留寬一點給日後較大的模型，
+#     但仍然要有上限——worker 被入侵時這是唯一擋著磁碟被塞爆的東西。
+MAX_ARTIFACT_BYTES = int(os.environ.get("MAX_ARTIFACT_BYTES", str(2 * 1024 ** 3)))
+# ZH: 每位使用者保留幾個模型檔。**這是硬上限** —— 沒有它，一個晚上跑一百張單
+#     就會佔掉幾 GB，而且沒有任何東西會擋。
+ARTIFACT_KEEP_PER_USER = int(os.environ.get("ARTIFACT_KEEP_PER_USER", "10"))
+# ZH: 保留天數，收拾不再使用的帳號留下的長尾（每日 03:00 掃描）。
+ARTIFACT_TTL_DAYS = int(os.environ.get("ARTIFACT_TTL_DAYS", "30"))
+
+
+def remove_artifact_file(job_id: str) -> None:
+    """ZH: 刪掉一張單的模型檔（連同它的目錄）。找不到不算錯。
+
+    @node job-scheduler/app/routers/worker.py::remove_artifact_file
+    """
+    d = os.path.join(ARTIFACT_ROOT, job_id)
+    shutil.rmtree(d, ignore_errors=True)
+
+
+def artifact_path(job_id: str) -> str:
+    """ZH: 這張單的模型檔在服務層的位置。
+
+    @node job-scheduler/app/routers/worker.py::artifact_path
+    """
+    return os.path.join(ARTIFACT_ROOT, job_id, ARTIFACT_NAME)
+
+
+@router.post("/jobs/{job_id}/artifact")
+async def upload_job_artifact(
+    job_id: str,
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    _: None = Depends(verify_worker_token),
+):
+    """
+    ZH: Worker 把訓練產出（模型檔）傳回服務層。
+
+    ZH: 為什麼需要：檔案原本只在運算主機上。跨機部署時服務層讀不到，
+        畫面就給不出下載——而「訓練完了但拿不到東西」是最令人洩氣的結果。
+
+    ZH: 上限是**邊寫邊數**的，不信任 Content-Length（那是請求方說了算）。
+        超過就刪掉半套的檔案並回 413，不留殘骸。
+
+    @node job-scheduler/app/routers/worker.py::upload_job_artifact
+    """
+    job = crud.get_job(db, job_id=job_id)
+    if not job:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Job not found")
+
+    dest = artifact_path(job_id)
+    os.makedirs(os.path.dirname(dest), exist_ok=True)
+
+    total = 0
+    try:
+        with open(dest, "wb") as out:
+            while True:
+                chunk = await file.read(1024 * 1024)
+                if not chunk:
+                    break
+                total += len(chunk)
+                if total > MAX_ARTIFACT_BYTES:
+                    raise ValueError("artifact exceeds the size limit")
+                out.write(chunk)
+    except ValueError:
+        # ZH: 半套的檔案比沒有檔案更糟——它看起來像有，下載下來卻是壞的。
+        try:
+            os.remove(dest)
+        except OSError:
+            pass
+        raise HTTPException(
+            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            detail=f"Artifact exceeds the {MAX_ARTIFACT_BYTES // 1024 ** 2} MB limit")
+    except Exception as e:
+        try:
+            os.remove(dest)
+        except OSError:
+            pass
+        logger.error("Job %s: could not store the artifact: %s", job_id[:8], e)
+        raise HTTPException(status_code=500, detail="Could not store the artifact")
+
+    crud.set_job_artifact(db, job_id, total)
+    logger.info("Stored artifact for job %s (%.1f MB)", job_id[:8], total / 1024 ** 2)
+
+    # ZH: 每人只留最近 N 個 —— **硬上限**，跑再多次也不會無限長。
+    #     在上傳當下就淘汰，而不是等每日掃描：等一天的話，一個晚上跑一百張單
+    #     就已經佔掉幾 GB 了。
+    if job.user_id:
+        n = crud.enforce_artifact_limits(db, job.user_id, ARTIFACT_KEEP_PER_USER,
+                                         remove_artifact_file)
+        if n:
+            logger.info("Removed %d older artifact(s) for this user (keeping %d)",
+                        n, ARTIFACT_KEEP_PER_USER)
+
+    return {"status": "ok", "bytes": total}

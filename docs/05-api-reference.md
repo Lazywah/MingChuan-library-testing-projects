@@ -258,6 +258,22 @@ GET /api/v1/admin/analytics?department=...   # 學系 / 工具用量分布
 | POST | `/api/v1/worker/take` | 領取 pending job |
 | POST | `/api/v1/worker/jobs/{job_id}/update` | 回報進度 / log |
 | GET | `/api/v1/worker/datasets/{job_id}` | 下載該任務的資料集壓縮檔（v3.6）|
+| POST | `/api/v1/worker/jobs/{job_id}/artifact` | 回傳訓練產出（模型檔）（v3.6）|
+
+**v3.6 模型檔下載（使用者端）**
+
+| 方法 | 路徑 | 用途 |
+|---|---|---|
+| GET | `/api/v1/jobs/{job_id}/model` | 下載訓練出來的模型檔 |
+
+權限沿用 `GET /jobs/{job_id}`（學生只能碰自己的，教師／管理員可看全部）。
+`GET /jobs/{job_id}` 另回 `has_model` / `model_bytes`，前端靠它決定要不要顯示下載鈕。
+
+⚠️ 這個端點要 `Authorization` header，**純 `<a href download>` 連結按下去會 401**
+（瀏覽器導覽只帶 cookie）。前端要用 fetch 取回 blob 再存檔。
+
+⚠️ 保留規則：每位使用者最多 `ARTIFACT_KEEP_PER_USER`（預設 10）個，上傳時就淘汰最舊的；
+另有 `ARTIFACT_TTL_DAYS`（預設 30）由每日 03:00 掃描清除。逾期後下載會得到 **410**（不是 404）。
 
 **v3.6 `/worker/take` 回傳的資料集欄位**
 

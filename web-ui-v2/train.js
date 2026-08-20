@@ -98,11 +98,20 @@ $('go').addEventListener('click', async () => {
         const r = await fetch(`${API}/datasets/upload`, {
             method: 'POST', headers: authHeaders(), body: fd,
         });
+        if (r.status === 401 || r.status === 403) throw new Error('__AUTH__');
         const body = await r.json().catch(() => ({}));
         if (!r.ok) throw new Error(detailText(body.detail) || `HTTP ${r.status}`);
         datasetPath = body.dataset_path;
     } catch (e) {
         // ZH: 上傳失敗與送單失敗要分得開——前者重選檔案，後者是等一下再試。
+        // ZH: 而「登入過期」與兩者都不同：**再試幾次都不會好**，要重新登入。
+        //     原本會顯示「上傳失敗（無法驗證憑證）」——那句話不會讓任何人去重新登入。
+        if (e.message === '__AUTH__') {
+            setNote(T('tr_signed_out', '你的登入已經過期，請重新登入後再試一次。') +
+                    ` <a class="btn btn--minor" href="login.html">${esc(T('btn_login', '登入'))}</a>`);
+            setGo({ label: T('tr_go', '開始訓練'), enabled: true });
+            return;
+        }
         setNote(T('tr_upload_fail', '上傳失敗') + `（${clean(e.message)}）`);
         setGo({ label: T('tr_go', '開始訓練'), enabled: true });
         return;
@@ -139,6 +148,15 @@ $('go').addEventListener('click', async () => {
     polling = setInterval(poll, 3000);
 });
 
+// ZH: 目前的語言。**唯一定義** —— 散在各處自己取的話，總有一處會寫錯而且看不出來。
+function currentLang() {
+    try {
+        return (window.Prefs && Prefs.get && Prefs.get().ui_lang) || 'zh';
+    } catch {
+        return 'zh';
+    }
+}
+
 // ZH: 後端的錯誤有兩種形狀：
 //       422（欄位驗證）→ detail 是**一個陣列**，每筆是物件
 //       其他            → detail 是一個雙語字串「ZH: … | EN: …」
@@ -160,7 +178,10 @@ function detailText(detail) {
 //     不然使用者會看到一句自己看得懂、一句看不懂的黏在一起。
 function clean(msg) {
     const s = String(msg || '');
-    const wantEn = (window.Prefs && Prefs.lang && Prefs.lang() === 'en');
+    // ZH: ⚠ 取語言是 `Prefs.get().ui_lang`。我原本寫成 `Prefs.lang()` ——
+    //     那個函式**不存在**，於是這裡永遠走中文分支。
+    //     中文模式下完全看不出來；英文模式才會出現「英文頁面配中文錯誤訊息」。
+    const wantEn = currentLang() === 'en';
     const m = s.match(/ZH:\s*(.*?)\s*\|\s*EN:\s*(.*)$/s);
     if (!m) return s;
     return wantEn ? m[2] : m[1];
@@ -222,7 +243,24 @@ function finish(j) {
         $('drop').classList.remove('drop--has');
         $('drop-main').textContent = T('tr_drop', '把 zip 拖到這裡，或點一下選檔案');
         $('drop-hint').textContent = T('tr_drop_sub', '只收 .zip，每人上限 2 GB');
-        setNote(T('tr_done_note', '訓練完成，結果在下面。模型檔留在運算主機上，這一版還不能下載。'));
+        // ZH: v3.6 —— 模型檔已經由 worker 傳回服務層，可以下載了。
+        //     `has_model` 由後端說了算，前端**不要自己猜**（訓練成功 ≠ 檔案送到了：
+        //     傳輸可能失敗，那時模型還在運算主機上）。
+        if (j.has_model) {
+            // ZH: 🔴 **不能用純 `<a href download>`。**
+            //     瀏覽器導覽只會帶 cookie，不會帶 Authorization header，
+            //     而 token 在 sessionStorage —— 按下去必定 401。實測踩過。
+            //     所以改成按鈕：用 fetch 帶 header 取回 blob 再存檔。
+            //     ⚠ 也**不把 token 放進網址**：那會留在伺服器 log 與 referrer 裡。
+            setNote(T('tr_done_note', '訓練完成，結果在下面。') +
+                    ` <button class="btn btn--minor" type="button" id="dl">` +
+                    `${esc(T('tr_download', '下載模型檔'))}` +
+                    `${j.model_bytes ? '（' + human(j.model_bytes) + '）' : ''}</button>`);
+            $('dl').addEventListener('click', () => downloadModel($('dl')));
+        } else {
+            setNote(T('tr_done_no_model', '訓練完成，結果在下面。模型檔沒能傳回伺服器，' +
+                                          '請把下面的訓練紀錄貼給管理者。'));
+        }
     } else {
         setGo({ label: T('tr_go', '開始訓練'), enabled: true });
         $('log-fold').hidden = false;
@@ -246,7 +284,7 @@ function renderMetrics(metrics) {
     if (ds) {
         // ZH: 頓號是中文的列舉符號；英文模式要用逗號。這種字元層級的東西
         //     字典掃描抓不到——它不是一個 key，是一個 join 的參數。
-        const sep = (window.Prefs && Prefs.lang && Prefs.lang() === 'en') ? ', ' : '、';
+        const sep = currentLang() === 'en' ? ', ' : '、';
         cards.push([T('tr_m_classes', '類別'), (ds.classes || []).join(sep) || '—',
                     T('tr_m_images', '{n} 張圖片').replace('{n}', ds.images)]);
     }
@@ -289,6 +327,42 @@ function renderMetrics(metrics) {
                   <td>${e.train_loss}</td>
                 </tr>`).join('')}</tbody>
             </table>`;
+    }
+}
+
+// ZH: 取回模型檔並交給瀏覽器存檔。
+// ZH: 為什麼要自己做而不是給一條連結：下載端點要 Authorization header，
+//     而純連結導覽不會帶它（token 在 sessionStorage，不是 cookie）。
+async function downloadModel(btn) {
+    const original = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = T('tr_downloading', '下載中…');
+    try {
+        const r = await fetch(`${API}/jobs/${jobId}/model`, { headers: authHeaders() });
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+
+        // ZH: 檔名從 Content-Disposition 取，優先用 filename*（那份保得住中文）。
+        const cd = r.headers.get('content-disposition') || '';
+        let name = 'model.pt';
+        const star = cd.match(/filename\*=UTF-8''([^;]+)/i);
+        const plain = cd.match(/filename="([^"]+)"/i);
+        if (star) { try { name = decodeURIComponent(star[1]); } catch { /* 壞掉就用下面那個 */ } }
+        else if (plain) { name = plain[1]; }
+
+        const url = URL.createObjectURL(await r.blob());
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = name;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        // ZH: 立刻 revoke 會讓某些瀏覽器來不及開始下載，隔一拍再放。
+        setTimeout(() => URL.revokeObjectURL(url), 60000);
+        btn.textContent = original;
+    } catch (e) {
+        btn.textContent = T('tr_download_fail', '下載失敗，請再試一次');
+    } finally {
+        btn.disabled = false;
     }
 }
 

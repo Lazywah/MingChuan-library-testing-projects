@@ -154,7 +154,13 @@ class TrainingJob(Base):
     error_message = Column(Text)                                              # ZH: 錯誤訊息 | EN: Error message
 
     # ZH: 輸出結果 | EN: Output result
-    output_path = Column(String)                                              # ZH: 模型產出路徑 | EN: Output path
+    # ZH: ⚠ 這是**運算主機上**的路徑（/workspace/outputs/…），服務層讀不到它。
+    #     留著只是給管理者上機器找檔案用。使用者要下載的檔案看 artifact_bytes。
+    output_path = Column(String)                                              # ZH: 模型產出路徑（運算主機）| EN: Output path (on the compute host)
+    # ZH: v3.6 —— worker 回傳的模型檔大小。**有值＝服務層這邊真的有那個檔**。
+    #     刻意不存路徑：路徑由 job_id 推導（/data/artifacts/<job_id>/model.pt），
+    #     少一個會跟實體檔案漂開的字串。
+    artifact_bytes = Column(Integer)                                          # ZH: 模型檔大小，None=沒有 | EN: Artifact size, None = not present
 
     # ZH: 時間戳記 | EN: Timestamps
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))

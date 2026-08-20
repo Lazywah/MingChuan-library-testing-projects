@@ -250,6 +250,9 @@ def init_db():
             # --- v3.6 節點是否與服務層同機（Lab volume 看得到與否）---
             try: conn.execute(text("ALTER TABLE worker_heartbeats ADD COLUMN shares_storage INTEGER DEFAULT 0"))
             except Exception: pass
+            # --- v3.6 訓練產出（模型檔）回傳到服務層 ---
+            try: conn.execute(text("ALTER TABLE training_jobs ADD COLUMN artifact_bytes INTEGER"))
+            except Exception: pass
 
     except Exception as e:
         logger.warning(f"Manual DB migration skipped or partially failed: {e}")

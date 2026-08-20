@@ -211,6 +211,18 @@ async def _storage_lifecycle_loop():
                     _ms.purge_expired_initial_passwords(db, days)
                 except Exception as e:  # noqa: BLE001
                     logger.error(f"ZH: MYAI 初始密碼清理錯誤: {e}")
+                # ZH: v3.6 逾期的訓練產出（模型檔）
+                #     另有「每人最多 N 個」的硬上限在上傳時就套用；這裡收拾的是
+                #     不再使用的帳號留下的長尾。
+                try:
+                    from .routers import worker as _wr
+                    st = _wr.crud.purge_expired_artifacts(
+                        db, _wr.ARTIFACT_TTL_DAYS, _wr.remove_artifact_file)
+                    if st["removed"]:
+                        logger.info(f"ZH: 已清除 {st['removed']} 個逾期模型檔 "
+                                    f"({st['freed_bytes'] / 1024 ** 2:.1f} MB)")
+                except Exception as e:  # noqa: BLE001
+                    logger.error(f"ZH: 模型檔保留期清理錯誤: {e}")
             finally:
                 db.close()
         except Exception as e:  # noqa: BLE001 - 連 session 都開不起來才會到這裡
