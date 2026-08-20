@@ -48,6 +48,29 @@ IMAGE_REGISTRY_PREFIX=registry.mcu.edu.tw          # aibase/* 映像在服務層
 REGISTRY_USERNAME=aibase                           # 與服務層一致
 REGISTRY_PASSWORD=<與服務層一致>
 
+### 🔴 改過 gpu-worker 的程式碼 → 一定要 `build`
+
+```bash
+cd gpu-worker
+./start-worker.sh build && ./start-worker.sh up -d
+
+# 確認跑的真的是新版（對任何改動都成立，兩個值要一樣）
+docker exec mcu-gpu-worker md5sum /app/worker.py
+md5sum worker.py
+```
+
+`worker.py` 與 `builtin_scripts/` 是 COPY 進映像的（不是 bind mount，
+因為 worker 要能在遠端主機獨立跑）。只跑 `up -d` 會用舊映像起來，
+而 compose 只印 `Container mcu-gpu-worker Started`，看起來完全正常。
+
+⚠️ 症狀**不會**長得像「忘了重建」：實際踩過的兩次分別是
+「訓練指標永遠是空的」與「registry 設定好像沒生效」，兩次都先去查了別的地方。
+確認方式見上面的雜湊比對——**不要**靠「log 有沒有印出某一行」，
+那種檢查只對加那一行的當下有效。
+
+> 服務層（job-scheduler）相反 —— `app/` 是 bind mount，
+> `docker restart ai-platform-scheduler` 就生效，不必 build。**兩邊規則不同。**
+
 ### 私有 registry（多機部署才需要）
 
 `aibase/*` 映像是在**服務層那台**用 `build-all.sh` 建出來的，不在任何公開 registry。

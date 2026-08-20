@@ -13,6 +13,40 @@ GPU 訓練節點。設定**單一來源＝根目錄 `../.env`**（由 `scripts/s
 ./start-worker.sh down       # 停止
 ```
 
+### 🔴 改過 worker 的程式碼？**一定要先 build**
+
+```bash
+./start-worker.sh build      # 先重建映像
+./start-worker.sh up -d      # 再起來
+```
+
+`worker.py` 與 `builtin_scripts/` 是 **COPY 進映像**的（不是 bind mount，
+因為 worker 要能在遠端主機獨立跑）。所以只跑 `up -d` 會用**舊映像**起來——
+而 compose 只會印一行 `Container mcu-gpu-worker Started`，看起來完全正常。
+
+⚠️ **症狀不會長得像「忘了重建」。** 實際踩過兩次：
+
+| 實際看到的症狀 | 容易誤判成 | 真正的原因 |
+|---|---|---|
+| 訓練指標永遠是空的 | 回報那段程式碼寫錯了 | 容器裡是舊的 `worker.py`，沒有 `parse_metric` |
+| registry 設定好像沒生效 | env 沒傳進容器 | 同上，舊映像裡沒有那段程式碼 |
+
+兩次都是先往別的方向查了一陣子才發現。
+
+**永遠有效的確認方法**——比對容器裡的檔案與磁碟上的檔案：
+
+```bash
+docker exec mcu-gpu-worker md5sum /app/worker.py
+md5sum worker.py                     # 兩個值要一樣
+```
+
+（不要靠「log 有沒有印出某一行」來判斷。那種檢查只對加那一行的當下有效，
+下一次改動就分辨不出來了。雜湊比對對任何改動都成立。）
+
+> ZH: 服務層（job-scheduler）**不一樣** —— 它的 `app/` 是 bind mount，
+> 改完 `docker restart ai-platform-scheduler` 就會生效，不必 build。
+> 兩邊規則不同，是這個坑好踩的原因之一。
+
 Windows 用 `start-worker.bat`（用法相同）。Linux 首次可能要先給執行權限：`chmod +x start-worker.sh`（或改用 `bash start-worker.sh`）。
 
 > ⚠️ 不要在本目錄直接 `docker compose up`。少了 `--env-file ../.env`，
