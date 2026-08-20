@@ -12,6 +12,7 @@ ZH: 在 `docker compose up` 之前跑一次，把常見的無聲地雷一次檢�
     5. 前端 ?v= 是否為最新內容 hash（呼叫 bump_assets.py --check）
     6. 全站時間是否一律 Asia/Taipei（呼叫 check_timezone.py）
     7. Python 模組層有沒有重複定義（呼叫 check_duplicate_defs.py）
+    8. 回應的時間欄位有沒有明示時區（呼叫 check_naive_datetime.py）
     7. 主機埠（80/8888/8002/3000/8787/11434）占用狀況
 
     退出碼：有 FAIL → 1（別部署）；只有 WARN 或全過 → 0。
@@ -263,6 +264,26 @@ def check_i18n():
     return PASS, "翻譯 key 兩種語言齊全、佔位符一致"
 
 
+def check_naive_datetime():
+    """ZH: 回應的時間欄位有沒有明示時區。
+
+    ZH: 為什麼列進部署前健檢：漏掉**不會報錯、不會壞版面**，
+        只是 +08:00 的使用者看到的每個時間都早 8 小時。
+        第一次發現時只修了問題回報一個，其餘**九個** schema 是機械掃出來的。
+
+    @node scripts/deploy_check.py::check_naive_datetime
+    """
+    script = SCRIPTS_DIR / "check_naive_datetime.py"
+    if not script.exists():
+        return WARN, "找不到 check_naive_datetime.py，略過時區標記檢查"
+    r = subprocess.run([sys.executable, str(script)], capture_output=True,
+                       text=True, encoding="utf-8", errors="replace")
+    if r.returncode != 0:
+        first = next((l.strip() for l in (r.stdout or "").splitlines() if "[FAIL]" in l), "")
+        return FAIL, f"有時間欄位沒帶時區 → python scripts/check_naive_datetime.py　{first}"
+    return PASS, "回應的時間欄位都有明示時區（UTC）"
+
+
 def check_duplicate_defs():
     """ZH: Python 模組層重複定義——同名的 def/class 出現兩次，後者無聲蓋掉前者。
 
@@ -318,6 +339,7 @@ def main():
         ("時間時區",       check_timezone()),
         ("翻譯完整性",     check_i18n()),
         ("重複定義",       check_duplicate_defs()),
+        ("時間帶時區",     check_naive_datetime()),
         ("主機埠",         check_ports()),
     ]
 

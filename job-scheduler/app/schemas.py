@@ -23,10 +23,42 @@ EN: Modular design:
 ==============================================================================
 """
 
-from pydantic import BaseModel, EmailStr, Field, ConfigDict, field_validator, field_serializer
+from pydantic import (BaseModel, EmailStr, Field, ConfigDict, field_validator,
+                      field_serializer, PlainSerializer)
+from typing_extensions import Annotated
 from datetime import datetime, timezone
 import json
 from typing import Optional, Dict, Any, List
+
+
+# ==============================================================================
+# ZH: 時間欄位的型別 | EN: The datetime field type
+# ==============================================================================
+# ZH: ⚠ 時間欄位存的是 **UTC**（models 用 datetime.now(timezone.utc)），
+#     但 SQLite 取回來是 naive datetime，序列化出去長這樣：
+#         "2026-08-20T01:42:38.152605"          ← 沒有 Z、沒有 +08:00
+#     瀏覽器的 `new Date(...)` 會把沒有時區的字串當成**本地時間**，
+#     於是 +08:00 的使用者看到的時間**早了 8 小時**。
+#     不會報錯、不會壞版面，只是每個時間都是錯的 —— 實測抓到（送出 09:42 顯示 01:42）。
+#
+# ZH: 為什麼做成**型別**而不是每個 schema 各加一個 field_serializer：
+#     那樣就是第十份、第十一份同樣的程式碼，而總有一份會漏——
+#     機械稽核當初正是抓出九個漏掉的。型別自己帶行為，新增欄位不會忘。
+#     `scripts/check_naive_datetime.py` 另外守著「有人又用了裸的 datetime」。
+#
+# ZH: 不在這裡轉成台北時間：**顯示時區是前端的事**（tz.js 釘死 Asia/Taipei）。
+#     後端只負責把「這是 UTC」講清楚，兩邊各做各的，不要互相猜。
+# EN: Naive UTC datetimes serialize without an offset; browsers then read them as
+#     local time (8h early for +08:00). The type carries the fix so new fields
+#     cannot forget it. Converting to Taipei is the frontend's job (tz.js).
+def _utc_iso(v: Optional[datetime]) -> Optional[str]:
+    """@node job-scheduler/app/schemas.py::_utc_iso"""
+    if v is None:
+        return None
+    return (v.replace(tzinfo=timezone.utc) if v.tzinfo is None else v).isoformat()
+
+
+UtcDatetime = Annotated[datetime, PlainSerializer(_utc_iso, return_type=Optional[str])]
 
 
 # ==============================================================================
@@ -150,7 +182,7 @@ class UserResponse(BaseModel):
     login_count: int = 0
     lifetime_tokens_used: int = 0
     last_login_ip: Optional[str] = None
-    last_login_time: Optional[datetime] = None
+    last_login_time: Optional[UtcDatetime] = None
     # v2.1 SSO 整合 — 給前端判斷密碼變更 UI 該顯示本機表單還是 IdP 連結
     # v2.1 SSO integration — for frontend to decide password-change UI mode
     auth_source: str = "local"        # local / sso_mock / sso_cas / sso_oidc
@@ -159,7 +191,7 @@ class UserResponse(BaseModel):
     ui_font_scale: int = 100
     ui_lang: str = "zh"
     ui_theme: str = "yellow"
-    created_at: datetime
+    created_at: UtcDatetime
 
 
 class Token(BaseModel):
@@ -184,7 +216,7 @@ class TokenUsageResponse(BaseModel):
     tokens_used: int                                 # ZH: 已使用量 | EN: Tokens consumed
     tokens_limit: int                                # ZH: 月度上限 | EN: Monthly limit
     usage_percentage: float                          # ZH: 使用百分比 | EN: Usage percentage
-    reset_date: datetime                             # ZH: 下次重置日 | EN: Next reset date
+    reset_date: UtcDatetime                             # ZH: 下次重置日 | EN: Next reset date
 
 
 class TokenIncrementRequest(BaseModel):
@@ -277,8 +309,8 @@ class JobStatusResponse(BaseModel):
     progress: float
     gpu_server: Optional[str] = None
     gpu_id: Optional[int] = None
-    started_at: Optional[datetime] = None
-    completed_at: Optional[datetime] = None
+    started_at: Optional[UtcDatetime] = None
+    completed_at: Optional[UtcDatetime] = None
     error_message: Optional[str] = None
     output_path: Optional[str] = None
     logs: Optional[str] = None
@@ -322,9 +354,9 @@ class JobListItem(BaseModel):
     user_id: Optional[str] = None
     gpu_server: Optional[str] = None
     gpu_id: Optional[int] = None
-    started_at: Optional[datetime] = None
-    completed_at: Optional[datetime] = None
-    created_at: Optional[datetime] = None
+    started_at: Optional[UtcDatetime] = None
+    completed_at: Optional[UtcDatetime] = None
+    created_at: Optional[UtcDatetime] = None
     error_message: Optional[str] = None
     output_path: Optional[str] = None
 
@@ -382,10 +414,10 @@ class AdminUserListItem(BaseModel):
     role: str
     is_active: int
     online_status: Optional[int] = 0
-    last_login_time: Optional[datetime] = None
+    last_login_time: Optional[UtcDatetime] = None
     last_login_ip: Optional[str] = None
     department: Optional[str] = None
-    created_at: Optional[datetime] = None
+    created_at: Optional[UtcDatetime] = None
     tokens_used: int = 0
     tokens_limit: int = 0
     # v2.1: 給 admin UI 的 3-tab 分頁 (local / sso_oidc / sso_mock) 用
@@ -404,9 +436,9 @@ class AdminJobListItem(BaseModel):
     priority: Optional[int] = 0
     progress: float = 0.0
     gpu_server: Optional[str] = None
-    created_at: Optional[datetime] = None
-    started_at: Optional[datetime] = None
-    completed_at: Optional[datetime] = None
+    created_at: Optional[UtcDatetime] = None
+    started_at: Optional[UtcDatetime] = None
+    completed_at: Optional[UtcDatetime] = None
     error_message: Optional[str] = None
 
 
@@ -441,7 +473,7 @@ class WorkerNodeInfo(BaseModel):
     node_id:        str
     available_gpus: List[str]
     gpu_utilization: float = 0.0
-    last_seen:      Optional[datetime] = None
+    last_seen:      Optional[UtcDatetime] = None
     is_online:      int = 1
 
 
@@ -470,8 +502,8 @@ class AnnouncementResponse(BaseModel):
     title: str
     body: str
     posted_by: Optional[str] = None
-    posted_at: datetime
-    updated_at: Optional[datetime] = None
+    posted_at: UtcDatetime
+    updated_at: Optional[UtcDatetime] = None
     is_pinned: int = 0
     is_visible: int = 1
 
@@ -505,7 +537,7 @@ class ExternalAiAccountResponse(BaseModel):
     vendor_username: str
     status: str = "active"
     note: Optional[str] = None
-    updated_at: Optional[datetime] = None
+    updated_at: Optional[UtcDatetime] = None
 
 
 class ExternalAiMe(BaseModel):
