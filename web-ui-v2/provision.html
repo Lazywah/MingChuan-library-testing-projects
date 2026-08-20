@@ -10,7 +10,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Open+Sans:wght@400;600;700&display=swap" rel="stylesheet">
 
     <link rel="stylesheet" href="tokens.css?v=dd946cc2">
-    <link rel="stylesheet" href="styles.css?v=dc160198">
+    <link rel="stylesheet" href="styles.css?v=47720adb">
 </head>
 <body>
 
@@ -57,9 +57,12 @@
         <div class="handoff" id="note" hidden></div>
     </section>
 
+    <!-- ZH: 「前往 MYAI」原本埋在句子中間，實測高 18px——全站最小的可點目標。
+             把它抽出來成為獨立的層級 3 按鈕，句子改成完整敘述。
+             WCAG 2.5.8 對「句子內的連結」有豁免，但這一個是**動作**不是引述連結。 -->
     <p class="hint" id="how" hidden>
-        改密碼的地方在 MYAI 平台本身，不在這裡——
-        <a href="#" id="go-myai">前往 MYAI</a>，用上面的帳號密碼登入後即可修改。
+        改密碼的地方在 MYAI 平台本身，不在這裡。用上面的帳號密碼登入後即可修改。
+        <a class="btn--minor" href="#" id="go-myai">前往 MYAI</a>
     </p>
 
 </main>

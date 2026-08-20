@@ -138,6 +138,49 @@ body {
 }
 .btn--ghost:hover { background-color: var(--surface-2); }
 
+/* ── 層級 3 的動作按鈕 ────────────────────────────────────────────
+ * ZH: 這一組的成員全都是「動作」，原本卻是純文字連結：實測高 18–23px，
+ *     連這個設計系統自己定的 --tap-min: 44px 都不到。
+ *
+ *     為什麼另開一種而不是直接用 --ghost：ghost 是層級 2。
+ *     三層（實心 / 外框 / 小外框）要分得出來，全變同一種就等於沒有階層。
+ *
+ *     `.minor a` / `.handoff a` 用後代選擇器一起納入，而不是要求每個連結
+ *     自己加 class —— 以後在那兩區加連結的人不必「記得」，
+ *     漏掉就會是一個 23px 的可點目標，而那種東西沒有人會回報。
+ * ──────────────────────────────────────────────────────────────── */
+.btn--minor,
+.minor a,
+.minor button,
+.handoff a {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: var(--tap-min);
+    padding: 0 var(--space-4);
+    border: 1px solid var(--hairline);
+    border-radius: var(--radius-md);
+    background: transparent;
+    color: var(--link);
+    font: inherit;
+    font-size: 0.875rem;
+    font-weight: 600;
+    text-decoration: none;
+    cursor: pointer;
+}
+/* ZH: hover 底色用 --surface（白）**不是** --surface-2 ——
+ *     實測這一組全部坐在 --surface-2 上（頁面底色就是它），
+ *     設成 --surface-2 等於 hover 完全看不出來。
+ *     邊框轉成 --link（對底色 6.30）才是主要訊號，底色只是輔助的「浮起」。 */
+.btn--minor:hover,
+.minor a:hover,
+.minor button:hover,
+.handoff a:hover { background-color: var(--surface); border-color: var(--link); }
+.btn--minor:focus-visible,
+.minor a:focus-visible,
+.minor button:focus-visible,
+.handoff a:focus-visible { outline: var(--focus-ring); outline-offset: 2px; }
+
 /* ZH: 主要動作按下後的過渡——V1 修正。
        實際流程會先開廠商登出頁再轉登入頁，中間有約 1 秒空窗；
        這一條讓本站在那段時間有話說，而不是「按了沒反應」。 */
@@ -146,7 +189,10 @@ body {
     font-size: 0.9375rem;
     color: var(--text-muted);
 }
-.handoff a { color: var(--link); font-weight: 600; }
+/* ZH: ⚠ .handoff 裡的連結是**彈窗被瀏覽器擋下時唯一的出路**，原本高 18px，
+ *     是全站最小的可點目標——最需要被點到的東西反而最難點。
+ *     形狀見上方「層級 3 的動作按鈕」；這裡只補讓它脫離句子行高的間距。 */
+.handoff a { margin-top: var(--space-2); }
 
 /* ── 層級 2 · 入口卡 ─────────────────────────────────────────────── */
 .entries { margin-top: var(--space-6); display: grid; gap: var(--space-4); }
@@ -181,7 +227,7 @@ body {
     color: var(--text-muted);
     display: flex; gap: var(--space-4); flex-wrap: wrap;
 }
-.minor a { color: var(--link); }
+/* ZH: .minor 內的連結／按鈕外觀見上方「層級 3 的動作按鈕」那一組。 */
 
 /* ── 錯誤區塊（部分失敗不整頁死）──────────────────────────────── */
 .inline-error {
@@ -265,7 +311,12 @@ body {
     gap: var(--space-3);
     padding: var(--space-4) 0 var(--space-2);
 }
+/* ZH: 原本 38px，差一點就到 --tap-min。它是連結不是動作，所以不做成按鈕，
+ *     但可點區域仍要夠大 —— 用 inline-flex + min-height 撐開，外觀不變。 */
 .fold__link {
+    display: inline-flex;
+    align-items: center;
+    min-height: var(--tap-min);
     color: var(--link);
     font-size: 0.85rem;
     align-self: flex-start;
@@ -378,6 +429,10 @@ body {
 
 /* ZH: 說明性提示。用 --surface-2 而非警示色 —— 「樣本不足所以沒有對照」
  *     是設計上的正常結果，不是錯誤，配色不該讓人以為出事了。 */
+/* ZH: .hint 的字級 0.8rem 會被 .btn--minor 的 font:inherit 繼承下去，
+ *     按鈕字會比別頁小一號。給它自己的字級，不跟著容器縮。 */
+.hint .btn--minor { font-size: 0.875rem; margin-top: var(--space-2); }
+
 .hint {
     font-size: 0.8rem;
     line-height: 1.7;
