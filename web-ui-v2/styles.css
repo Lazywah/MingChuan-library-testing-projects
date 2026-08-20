@@ -41,10 +41,16 @@ body {
     background-color: var(--surface);
     border-bottom: 1px solid var(--hairline);
 }
+/* ZH: LOGO 是回首頁的連結（chrome.js 會把 span 換成 a）。
+ *     版面規則：**只有 LOGO 在左，其餘全部靠右**，靠 .topbar__spacer 撐開。 */
 .topbar__brand {
     font-weight: 700;
     color: var(--text-strong);
     letter-spacing: 0.01em;
+    text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+    min-height: var(--tap-min);
 }
 .topbar__spacer { flex: 1; }
 
@@ -53,6 +59,23 @@ body {
     margin: 0 auto;
     padding: var(--space-6) var(--space-5) var(--space-8);
 }
+
+/* ⚠⚠ ZH: `[hidden]` 必須勝過任何 display 規則。
+ *
+ *   瀏覽器內建的是 `[hidden] { display: none }`，但**作者寫的 display 一律贏過它**
+ *   （UA 樣式表的優先序最低）。這個檔裡到處都是 `display: flex/grid/block`，
+ *   於是 `el.hidden = true` 設得下去、屬性也對，**元素卻照樣看得見**。
+ *
+ *   實測一次抓到五處都在這個坑裡：
+ *     .account__menu   帳號選單收不回去（使用者回報的症狀）
+ *     .notice          沒有公告時橫幅仍占一條
+ *     .entry           文件庫入口在沒有內容時仍出現（Decision Log #30 的規則等於沒生效）
+ *     .minor a         **「停止 Lab」在 Lab 沒執行時也看得到**
+ *
+ *   ⚠ 這件事**不會報錯**，而且 `el.hidden` 讀回來是 true ——
+ *     用屬性驗證會全部通過。要驗**可見性**（getBoundingClientRect().height）。
+ */
+[hidden] { display: none !important; }
 
 /* ── 層級 0 · 公告橫幅（條件式，沒有公告時整條不存在）──────────────── */
 .notice {
@@ -461,8 +484,16 @@ body {
 }
 
 /* 常駐導覽（§Chrome：Lab 與使用量常駐頂部，常用者不必每次經過引導頁）*/
-.topnav { display: flex; gap: var(--space-2); }
-.topnav a {
+.topnav { display: flex; gap: var(--space-2); align-items: center; }
+.topnav a,
+.topnav button {
+    background: transparent;
+    border: 0;
+    font: inherit;
+    cursor: pointer;
+}
+.topnav a,
+.topnav button {
     color: var(--text-muted);
     text-decoration: none;
     font-size: 0.875rem;
@@ -472,9 +503,86 @@ body {
     align-items: center;
     border-radius: var(--radius-sm);
 }
-.topnav a:hover { color: var(--text); background-color: var(--surface-2); }
-/* ZH: 目前所在頁要看得出來 —— 只靠 aria-current 的話視覺上分不出 */
-.topnav a[aria-current="page"] { color: var(--text-strong); font-weight: 600; }
+.topnav a:hover,
+.topnav button:hover { color: var(--text); background-color: var(--surface-2); }
+.topnav a:focus-visible,
+.topnav button:focus-visible { outline: var(--focus-ring); outline-offset: 2px; }
+
+/* ZH: 目前所在頁要看得出來。擁有者裁定：**只有目前頁有底色**，
+ *     其餘維持透明文字。MYAI 是動作不是頁面，永遠不會是 current。 */
+.topnav a[aria-current="page"] {
+    color: var(--text-strong);
+    font-weight: 600;
+    background-color: var(--accent-soft);
+}
+
+/* ── 帳號選單（頂部列最右）──────────────────────────────────────── */
+.account { position: relative; }
+.account__toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
+    min-height: var(--tap-min);
+    padding: 0 var(--space-3);
+    background: transparent;
+    border: 1px solid var(--hairline);
+    border-radius: var(--radius-md);
+    font: inherit;
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: var(--text);
+    cursor: pointer;
+}
+.account__toggle:hover { background-color: var(--surface-2); border-color: var(--link); }
+.account__toggle:focus-visible { outline: var(--focus-ring); outline-offset: 2px; }
+.account__caret { color: var(--text-muted); font-size: 0.75rem; }
+
+.account__menu {
+    position: absolute;
+    top: calc(100% + var(--space-2));
+    right: 0;
+    z-index: 20;
+    min-width: 13rem;
+    padding: var(--space-2);
+    background-color: var(--surface);
+    border: 1px solid var(--hairline);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-2);
+    display: flex;
+    flex-direction: column;
+}
+/* ZH: 選單項也要 44px —— 下拉選單裡的項目最常被做成 28px 高。 */
+.account__menu a,
+.account__menu button {
+    display: flex;
+    align-items: center;
+    min-height: var(--tap-min);
+    padding: 0 var(--space-3);
+    border: 0;
+    border-radius: var(--radius-sm);
+    background: transparent;
+    font: inherit;
+    font-size: 0.9375rem;
+    color: var(--text);
+    text-align: left;
+    text-decoration: none;
+    cursor: pointer;
+}
+.account__menu a:hover,
+.account__menu button:hover { background-color: var(--surface-2); }
+.account__menu a:focus-visible,
+.account__menu button:focus-visible { outline: var(--focus-ring); outline-offset: -2px; }
+/* ZH: 登出是唯一不可逆的項目，用 --error 與其他項分開（文字本身也已說明，不只靠顏色）。 */
+.account__logout { color: var(--error) !important; }
+
+.account__id {
+    padding: var(--space-2) var(--space-3) var(--space-3);
+    border-bottom: 1px solid var(--hairline);
+    margin-bottom: var(--space-2);
+}
+.account__id-name { font-weight: 700; color: var(--text-strong); font-size: 0.9375rem; }
+.account__id-sub { font-size: 0.8125rem; color: var(--text-muted); margin-top: 2px; }
+
 
 /* 文件庫卡片 */
 .cards {

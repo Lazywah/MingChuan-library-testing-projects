@@ -10,7 +10,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Open+Sans:wght@400;600;700&display=swap" rel="stylesheet">
 
     <link rel="stylesheet" href="tokens.css?v=dd946cc2">
-    <link rel="stylesheet" href="styles.css?v=47720adb">
+    <link rel="stylesheet" href="styles.css?v=feb5fbba">
 
     <!-- ZH: 與 v1.5 同一個來源，避免兩份 UI 各自帶不同版本的圖表庫。 -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
@@ -18,13 +18,10 @@
 <body>
 
 <header class="topbar">
-    <a class="topbar__back" href="index.html" aria-label="回首頁">‹ 首頁</a>
     <span class="topbar__brand">MCU AI Base</span>
     <span class="topbar__spacer"></span>
-    <nav class="topnav" aria-label="主要">
-        <a href="lab.html">Lab</a>
-        <a href="usage.html" aria-current="page">使用量</a>
-    </nav>
+    <!-- ZH: 導覽與帳號選單由 chrome.js 產生（唯一真相來源）。
+             版面：只有 LOGO 在左，其餘全部靠右。 -->
     <div class="theme-switch" role="group" aria-label="色系">
         <button type="button" data-set-theme="yellow" aria-pressed="true">黃</button>
         <button type="button" data-set-theme="blue" aria-pressed="false">藍</button>
@@ -78,6 +75,7 @@
 
 </main>
 
+<script src="chrome.js?v=1cf68790"></script>
 <script src="usage.js?v=d7f90ea5"></script>
 </body>
 </html>

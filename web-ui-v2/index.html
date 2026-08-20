@@ -12,17 +12,15 @@
     <link href="https://fonts.googleapis.com/css2?family=Open+Sans:wght@400;600;700&display=swap" rel="stylesheet">
 
     <link rel="stylesheet" href="tokens.css?v=dd946cc2">
-    <link rel="stylesheet" href="styles.css?v=47720adb">
+    <link rel="stylesheet" href="styles.css?v=feb5fbba">
 </head>
 <body>
 
 <header class="topbar">
     <span class="topbar__brand">MCU AI Base</span>
     <span class="topbar__spacer"></span>
-    <nav class="topnav" aria-label="主要">
-        <a href="lab.html">Lab</a>
-        <a href="usage.html">使用量</a>
-    </nav>
+    <!-- ZH: 導覽與帳號選單由 chrome.js 產生（唯一真相來源）。
+             版面：只有 LOGO 在左，其餘全部靠右。 -->
 
     <!-- ZH: 開發期的色系切換。上線擇一後整塊移除（Decision Log #16）。 -->
     <div class="theme-switch" role="group" aria-label="色系">
@@ -84,6 +82,7 @@
 </main>
 
 <script src="docs-entry.js?v=4fa954e4"></script>
-<script src="app.js?v=fd36531f"></script>
+<script src="chrome.js?v=1cf68790"></script>
+<script src="app.js?v=a24d9b41"></script>
 </body>
 </html>

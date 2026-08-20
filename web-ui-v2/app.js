@@ -155,6 +155,9 @@ async function loadNotice() {
 }
 
 // ── 主要動作：前往 MYAI（V1 修正）────────────────────────────────────
+// ZH: 只有這一頁有這個動作。頂部列的「MYAI」是**連到本頁**，不自己跳轉——
+//     那樣「彈窗被擋時要說話」的處理就只需要存在於這裡（唯一有 #handoff 的地方），
+//     不必散到八個頁面。
 async function goMyai() {
     const box = $('handoff');
     box.hidden = false;
@@ -172,16 +175,22 @@ async function goMyai() {
     //     不加 noopener：要保留 win 控制權才能做第二段跳轉。
     const win = window.open(logoutUrl, '_blank');
 
+    const fallback = (lead) => {
+        box.textContent = lead;
+        const a = document.createElement('a');
+        a.href = loginUrl; a.target = '_blank'; a.rel = 'noopener';
+        a.textContent = '點這裡前往 MYAI';
+        box.appendChild(a);
+    };
+
     if (!win) {
         // ⚠ V1 的核心修正：被瀏覽器阻擋時**不可以毫無反應**
-        box.innerHTML = '瀏覽器擋下了新分頁。'
-            + '<a href="' + loginUrl + '" target="_blank" rel="noopener">點這裡前往 MYAI</a>';
+        fallback('瀏覽器擋下了新分頁。');
         return;
     }
     setTimeout(() => {
         try { if (win && !win.closed) win.location.replace(loginUrl); } catch (e) { /* 跨網域寫入被拒 */ }
-        box.innerHTML = '已在新分頁開啟 MYAI。'
-            + '<a href="' + loginUrl + '" target="_blank" rel="noopener">沒看到的話點這裡</a>';
+        fallback('已在新分頁開啟 MYAI。');
     }, 1000);
 }
 
