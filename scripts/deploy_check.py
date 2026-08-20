@@ -11,6 +11,7 @@ ZH: 在 `docker compose up` 之前跑一次，把常見的無聲地雷一次檢�
     4. gpu-worker 是否已收斂（沒有殘留的 gpu-worker/.env）
     5. 前端 ?v= 是否為最新內容 hash（呼叫 bump_assets.py --check）
     6. 全站時間是否一律 Asia/Taipei（呼叫 check_timezone.py）
+    7. Python 模組層有沒有重複定義（呼叫 check_duplicate_defs.py）
     7. 主機埠（80/8888/8002/3000/8787/11434）占用狀況
 
     退出碼：有 FAIL → 1（別部署）；只有 WARN 或全過 → 0。
@@ -262,6 +263,26 @@ def check_i18n():
     return PASS, "翻譯 key 兩種語言齊全、佔位符一致"
 
 
+def check_duplicate_defs():
+    """ZH: Python 模組層重複定義——同名的 def/class 出現兩次，後者無聲蓋掉前者。
+
+    ZH: 為什麼列進部署前健檢：這種錯誤**不會報錯也不會讓測試變紅**，
+        程式行為甚至是正確的（用最後一份）。它會在「只改了其中一份」時才爆——
+        症狀是「我明明改了卻沒有作用」。
+
+    @node scripts/deploy_check.py::check_duplicate_defs
+    """
+    script = SCRIPTS_DIR / "check_duplicate_defs.py"
+    if not script.exists():
+        return WARN, "找不到 check_duplicate_defs.py，略過重複定義檢查"
+    r = subprocess.run([sys.executable, str(script)], capture_output=True,
+                       text=True, encoding="utf-8", errors="replace")
+    if r.returncode != 0:
+        first = next((l.strip() for l in (r.stdout or "").splitlines() if "[X]" in l), "")
+        return FAIL, f"有重複定義 → python scripts/check_duplicate_defs.py　{first}"
+    return PASS, "Python 模組層無重複定義"
+
+
 def check_ports():
     """回傳單一彙總（有占用列為 WARN，因可能是本平台已在跑）。
 
@@ -296,6 +317,7 @@ def main():
         ("前端 ?v=",       check_asset_versions()),
         ("時間時區",       check_timezone()),
         ("翻譯完整性",     check_i18n()),
+        ("重複定義",       check_duplicate_defs()),
         ("主機埠",         check_ports()),
     ]
 

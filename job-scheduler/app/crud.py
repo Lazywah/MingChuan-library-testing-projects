@@ -478,35 +478,39 @@ def get_all_jobs(
     return jobs, total
 
 
-def job_needs_lab_volume(job) -> bool:
-    """ZH: 這個任務是否需要使用者 Lab 的檔案（因而只能在與服務層同機的節點上跑）。
+# ZH: v3.6 內建訓練腳本 —— 使用者只上傳資料就能訓練，不必自己寫程式。
+#     key 是「任務種類」，worker 端有一支同名腳本。**這裡是唯一的清單**，
+#     送單驗證與派工都讀它，不要在別處另抄一份。
+# EN: v3.6 built-in training scripts, keyed by task type. Single source of truth.
+BUILTIN_TASKS = {
+    "image_classification": "ZH: 圖片分類（每個類別一個資料夾）| EN: Image classification (one folder per class)",
+}
+DEFAULT_BUILTIN_TASK = "image_classification"
 
-    ZH: 判準是 `inline_code` —— 那是 Lab 的 VS Code 擴充套件（aibase-runner）把
-        cell/檔案編譯成 shell script 送過來的，腳本裡的相對路徑都指向 /home/coder。
-        該目錄來自 per-user 的 `home_<uid>` Docker volume，**只在服務層那台機器上有內容**。
 
-    @node job-scheduler/app/crud.py::job_needs_lab_volume
+def builtin_task_for(job) -> Optional[str]:
+    """ZH: 這張單要用哪一支內建腳本？沒有就回 None（＝自己帶程式的任務）。
+
+    ZH: 判準：**有資料集**，而且**沒有自己指定執行方式**（inline_code / entry_args）。
+        自己帶程式的人一定是想跑自己的東西，不該被換成內建腳本。
+
+    ZH: `config["task"]` 可以指名；沒指名就用預設。**指名了但不認得則回 None**——
+        由送單端把它變成明確的錯誤，不要在這裡默默退回預設而跑出使用者沒要的東西。
+
+    @node job-scheduler/app/crud.py::builtin_task_for
     """
-    return bool(getattr(job, "inline_code", None))
-
-
-def has_colocated_worker(db: Session, timeout_seconds: int = 90) -> bool:
-    """ZH: 線上是否有「與服務層同機」的節點（看得到 home_<uid> volume）。
-
-    ZH: 用於送單時就攔下不可能執行的任務——否則它會永遠 pending，
-        而「永遠排隊」是另一種沉默失敗。
-
-    ZH: 沿用 pool_has_online_worker 的判準：**「在線但被停用／時段外」不算數**，
-        否則會誤判有人接而讓任務卡死。
-
-    @node job-scheduler/app/crud.py::has_colocated_worker
-    """
-    for n in get_online_worker_nodes(db, timeout_seconds=timeout_seconds):
-        if not getattr(n, "shares_storage", 0):
-            continue
-        if node_dispatch_state(get_gpu_node(db, n.node_id))["allowed"]:
-            return True
-    return False
+    if not getattr(job, "dataset_path", None):
+        return None
+    if getattr(job, "inline_code", None) or getattr(job, "entry_args", None):
+        return None
+    cfg = getattr(job, "config", None)
+    if isinstance(cfg, str):
+        try:
+            cfg = json.loads(cfg)
+        except (ValueError, TypeError):
+            cfg = None
+    task = (cfg or {}).get("task") or DEFAULT_BUILTIN_TASK
+    return task if task in BUILTIN_TASKS else None
 
 
 def job_needs_lab_volume(job) -> bool:

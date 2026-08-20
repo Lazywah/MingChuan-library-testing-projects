@@ -257,6 +257,19 @@ GET /api/v1/admin/analytics?department=...   # 學系 / 工具用量分布
 | POST | `/api/v1/worker/heartbeat` | 心跳 + GPU 使用率 |
 | POST | `/api/v1/worker/take` | 領取 pending job |
 | POST | `/api/v1/worker/jobs/{job_id}/update` | 回報進度 / log |
+| GET | `/api/v1/worker/datasets/{job_id}` | 下載該任務的資料集壓縮檔（v3.6）|
+
+**v3.6 `/worker/take` 回傳的資料集欄位**
+
+`dataset_path` 已移除——那是**服務層容器裡**的絕對路徑，worker 在別的容器、
+甚至別台機器上，拿到那個字串沒有用。改成：
+
+| 欄位 | 意義 |
+|---|---|
+| `has_dataset` | 這張單有沒有資料集；要檔案就 GET 上面那個端點 |
+| `dataset_filename` | 原始檔名（只供顯示與判斷副檔名）|
+| `builtin_task` | 用哪一支內建訓練腳本；`null` ＝ 使用者自己帶程式 |
+| `shares_service_storage`（請求端）| worker 宣告自己與服務層同機，見部署文件 |
 
 ```bash
 curl -X POST http://localhost:8002/api/v1/worker/heartbeat \

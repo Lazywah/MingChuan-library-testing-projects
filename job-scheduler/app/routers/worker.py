@@ -10,12 +10,14 @@ ZH: 端點清單：
     POST /take                 → Worker 領取最高優先級 pending 任務（原子搶佔）
     POST /jobs/{id}/update     → Worker 回報任務進度、日誌、狀態
     POST /heartbeat            → Worker 定期上報節點存活與 GPU 使用率
+    GET  /datasets/{job_id}    → Worker 下載該任務的資料集（跨機部署用）
 ZH: 認證：所有端點使用靜態 API Token（Bearer），由 verify_worker_token Depends 驗證
 EN: Auth: All endpoints use static API Token (Bearer), enforced via verify_worker_token
 ==============================================================================
 """
 
 from fastapi import APIRouter, Depends, HTTPException, status, Header, Request
+from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 from sqlalchemy import update
 from pydantic import BaseModel
@@ -23,6 +25,8 @@ from typing import List, Optional
 import json
 import hmac
 import logging
+import os
+import pathlib
 from datetime import datetime, timezone
 
 from ..database import get_db
@@ -238,7 +242,17 @@ def take_job(
             "job": {
                 "job_id":       job.id,
                 "script_path":  job.script_path or "/workspace/train.py",
-                "dataset_path": job.dataset_path,
+                # ZH: v3.6 —— 這裡**不再**送 job.dataset_path。那是服務層容器裡的絕對路徑
+                #     （/data/datasets/…），worker 在別的容器、甚至別台機器上，
+                #     拿到那個字串沒有任何用處。改成「有沒有」＋原始檔名，
+                #     真的要檔案就走 GET /worker/datasets/{job_id} 下載。
+                # EN: v3.6 — the service-layer container path is meaningless to the worker.
+                #     Send a flag + the original filename; fetch the bytes via the endpoint.
+                "has_dataset":      bool(job.dataset_path),
+                "dataset_filename": (pathlib.Path(job.dataset_path).name
+                                     if job.dataset_path else None),
+                # ZH: v3.6 內建訓練腳本（使用者只上傳資料、不寫程式時）。None ＝ 自己帶程式。
+                "builtin_task":     crud.builtin_task_for(job),
                 "config":       config,
                 "gpu_id":       gpu_id_str,       # ZH: 字串格式，供 Worker 執行 docker --gpus | EN: String for worker's docker --gpus
                 # ZH: Notebook 欄位 | EN: Notebook fields
@@ -312,3 +326,60 @@ def update_job(
             crud.update_job_progress(db, job_id, progress=100.0)
 
     return {"status": "ok"}
+
+
+# ==============================================================================
+# ZH: v3.6 資料集下載 | EN: v3.6 Dataset download
+# ==============================================================================
+
+# ZH: **直接引用上傳端的常數，不另抄一份。** 上傳寫到哪、下載就從哪讀；
+#     抄成兩份的話，有人改了其中一個就會變成「上傳成功但下載 404」。
+# EN: Import the uploader's constant instead of copying the value.
+from .datasets import DATASET_DIR as DATASET_ROOT
+
+
+@router.get("/datasets/{job_id}")
+def download_job_dataset(
+    job_id: str,
+    db: Session = Depends(get_db),
+    _: None = Depends(verify_worker_token),
+):
+    """
+    ZH: Worker 下載某張任務的資料集壓縮檔。
+
+    ZH: 為什麼需要這個端點：資料集存在**服務層**的磁碟上，而 GPU 節點可能是另一台機器。
+        原本的 `dataset_path` 只是服務層容器裡的一個字串，跨機時毫無意義。
+
+    ZH: 存取範圍：以 **job_id** 定位，不是以路徑參數定位——worker 只能拿到
+        「它正在跑的那張單」對應的檔案，沒辦法用這個端點翻別人的資料夾。
+        另外仍然做一次路徑歸一化檢查：DB 裡的 dataset_path 萬一被寫壞或被塞了
+        `../`，也不會讀到 DATASET_ROOT 以外的東西。
+
+    @node job-scheduler/app/routers/worker.py::download_job_dataset
+    """
+    job = crud.get_job(db, job_id=job_id)
+    if not job:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Job not found")
+    if not job.dataset_path:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,
+                            detail="This job has no dataset")
+
+    # ZH: 路徑歸一化 + 必須落在資料集根目錄內（縱深防禦：不信任 DB 裡的字串）
+    # EN: Defence in depth — never trust the stored path; it must resolve inside the root.
+    root = os.path.realpath(DATASET_ROOT)
+    target = os.path.realpath(job.dataset_path)
+    if not (target == root or target.startswith(root + os.sep)):
+        logger.error("Job %s dataset_path escapes the dataset root: %r",
+                     job_id[:8], job.dataset_path)
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Dataset not found")
+
+    if not os.path.isfile(target):
+        # ZH: 檔案不在了（被清掉／換機沒搬過來）。這是明確的失敗，不要讓它變成
+        #     「訓練跑起來但資料夾是空的」。
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,
+                            detail="Dataset file is missing on the service layer")
+
+    logger.info("Worker downloading dataset for job %s (%s)", job_id[:8],
+                pathlib.Path(target).name)
+    return FileResponse(target, media_type="application/octet-stream",
+                        filename=pathlib.Path(target).name)

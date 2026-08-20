@@ -37,11 +37,25 @@ services:
       #     GPU server can override back to a low value (e.g. 10) via env.
       - GPU_IDLE_UTIL_THRESHOLD=${GPU_IDLE_UTIL_THRESHOLD:-90}
       - STORAGE_MOUNT_PATH=${STORAGE_MOUNT_PATH:-C:\storage} # ZH: 宿主機共享儲存路徑
+      # ZH: v3.6 上面那個路徑在**本容器內**的掛載點（見下方 volumes）。
+      #     兩者指向同一個主機目錄，只是路徑寫法不同：worker 用這個開檔，
+      #     訓練容器則掛成 /workspace。
+      # EN: v3.6 where the host storage is mounted inside THIS container (see volumes).
+      - HOST_STORAGE_MOUNT=/hoststorage
 
     volumes:
       # ZH: 掛載 Docker Socket 以動態啟動訓練兄弟容器 (Sibling Container Pattern)
       # EN: Mount Docker socket to spawn sibling training containers
       - /var/run/docker.sock:/var/run/docker.sock
+      # ZH: v3.6 共享儲存。**沒有這一條，上傳資料集訓練就不會動。**
+      #     原因：`docker run -v A:B` 的 A 是由**主機** daemon 解析的，
+      #     worker 在自己容器裡解壓出來的東西，主機 docker 根本看不到
+      #     （worker.py 的 inline_code 註解記錄過同一個坑）。
+      #     掛了這一條之後，worker 寫 /hoststorage/… 就等於寫在主機的
+      #     STORAGE_MOUNT_PATH/… ，而訓練容器把同一個目錄掛成 /workspace。
+      # EN: v3.6 shared storage. Without this, dataset training silently cannot work:
+      #     `-v` is resolved by the HOST daemon, which cannot see the worker's own FS.
+      - ${STORAGE_MOUNT_PATH:-C:\storage}:/hoststorage
 
     # ZH: 加入 scheduler 所在網路，才能用容器名 ai-platform-scheduler 連線（免猜 IP）。
     # EN: Join the scheduler's network to reach it by container name.

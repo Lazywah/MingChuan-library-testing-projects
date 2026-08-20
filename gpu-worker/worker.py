@@ -7,6 +7,10 @@ import requests
 import re
 import threading
 import shutil
+import hashlib
+import pathlib
+import tempfile
+import zipfile
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger(__name__)
@@ -70,6 +74,217 @@ HEADERS = {"Authorization": f"Bearer {API_TOKEN}"}
 # ZH: RTX 5090 (Blackwell sm_120) 需要 CUDA ≥ 12.8；PyTorch 2.7+ 才有官方 cu128 映像檔
 # EN: RTX 5090 (Blackwell sm_120) requires CUDA ≥ 12.8; PyTorch 2.7+ has official cu128 images
 DEFAULT_IMAGE = "pytorch/pytorch:2.7.0-cuda12.8-cudnn9-runtime"
+
+# ==============================================================================
+# ZH: v3.6 資料集下載與解壓 | EN: v3.6 Dataset download & extraction
+# ==============================================================================
+#
+# ZH: ⚠ 這裡最容易踩的一個坑：**worker 容器裡的路徑，主機的 docker 看不到。**
+#     `docker run -v A:B` 的 A 是由**主機** daemon 解析的（兄弟容器模式）。
+#     所以解壓的目的地不能是 worker 容器內部隨便一個資料夾，必須是一個
+#     「主機上真實存在、而且訓練容器也掛得到」的地方。
+#
+#     做法：worker 容器把主機的 STORAGE_MOUNT_PATH 掛在 HOST_STORAGE_MOUNT（預設
+#     /hoststorage）。同一個主機目錄，訓練容器那邊掛成 /workspace。於是：
+#
+#         worker 寫  /hoststorage/datasets/<hash>/…
+#         主機上是   <STORAGE_MOUNT_PATH>/datasets/<hash>/…
+#         訓練容器讀 /workspace/datasets/<hash>/…
+#
+#     （本檔 inline_code 那段註解記錄過同一個坑：當初 run.sh 就是這樣消失的。）
+# EN: The worker's in-container paths are invisible to the host docker daemon, which
+#     resolves `-v`. Extract into shared host storage, mounted here and in the
+#     training container at different paths.
+HOST_STORAGE_MOUNT = os.environ.get("HOST_STORAGE_MOUNT", "/hoststorage")
+# ZH: 訓練容器看到的同一個目錄（worker 不會用這個路徑開檔，只用來組 env）
+TRAIN_WORKSPACE = "/workspace"
+
+# ZH: 解壓上限。壓縮炸彈防線：一個 20 KB 的 zip 可以解出好幾 TB。
+MAX_EXTRACT_BYTES   = int(os.environ.get("MAX_EXTRACT_BYTES", str(8 * 1024 ** 3)))
+MAX_EXTRACT_MEMBERS = int(os.environ.get("MAX_EXTRACT_MEMBERS", "200000"))
+# ZH: 下載上限，與服務層的每人 2 GB 配額同數量級
+MAX_DOWNLOAD_BYTES  = int(os.environ.get("MAX_DOWNLOAD_BYTES", str(4 * 1024 ** 3)))
+
+# ZH: 內建訓練腳本（隨映像一起帶進來），key 必須與服務層 crud.BUILTIN_TASKS 一致
+BUILTIN_SCRIPT_DIR = pathlib.Path(__file__).resolve().parent / "builtin_scripts"
+
+
+def _host_dir(*parts) -> pathlib.Path:
+    """ZH: 組出 worker 這一側的共享儲存路徑，並確保目錄存在。
+
+    @node gpu-worker/worker.py::_host_dir
+    """
+    d = pathlib.Path(HOST_STORAGE_MOUNT).joinpath(*parts)
+    d.mkdir(parents=True, exist_ok=True)
+    return d
+
+
+def download_dataset(job_id: str) -> pathlib.Path:
+    """ZH: 從服務層下載這張單的資料集壓縮檔，回傳暫存檔路徑。
+
+    ZH: 串流寫檔——資料集可能好幾 GB，不整包讀進記憶體。
+
+    @node gpu-worker/worker.py::download_dataset
+    """
+    url = f"{SERVICE_LAYER_URL}/api/v1/worker/datasets/{job_id}"
+    tmp_dir = _host_dir("tmp")
+    fd, tmp_path = tempfile.mkstemp(prefix=f"ds_{job_id[:8]}_", suffix=".zip", dir=str(tmp_dir))
+    os.close(fd)
+    tmp = pathlib.Path(tmp_path)
+
+    total = 0
+    try:
+        with requests.get(url, headers=HEADERS, stream=True, timeout=(10, 600)) as r:
+            r.raise_for_status()
+            with open(tmp, "wb") as f:
+                for chunk in r.iter_content(chunk_size=1024 * 1024):
+                    if not chunk:
+                        continue
+                    total += len(chunk)
+                    if total > MAX_DOWNLOAD_BYTES:
+                        raise ValueError(
+                            f"Dataset exceeds the "
+                            f"{MAX_DOWNLOAD_BYTES // 1024 ** 3} GB download limit")
+                    f.write(chunk)
+    except Exception:
+        tmp.unlink(missing_ok=True)
+        raise
+    logger.info("Downloaded dataset for job %s (%.1f MB)", job_id[:8], total / 1024 ** 2)
+    return tmp
+
+
+def file_sha256(path: pathlib.Path) -> str:
+    """ZH: 檔案內容雜湊——拿來當快取鍵。
+
+    ZH: 用**內容**而不是 job_id 或檔名：同一包資料重跑十次只解壓一次，
+        而不同的資料就算檔名一樣也不會互相污染。
+
+    @node gpu-worker/worker.py::file_sha256
+    """
+    h = hashlib.sha256()
+    with open(path, "rb") as f:
+        for chunk in iter(lambda: f.read(1024 * 1024), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+
+def _declared_size(infos) -> int:
+    """ZH: zip 標頭宣告的解壓後總大小。
+
+    ZH: 獨立成一支不只是為了好讀——測試要能把它「關掉」，才驗得到下面那道
+        **實際寫入時**的關。兩道關共用同一個上限常數，不拆開的話第二道關
+        在測試裡永遠碰不到（而現實中一個說謊的標頭就會碰到）。
+
+    @node gpu-worker/worker.py::_declared_size
+    """
+    return sum(i.file_size for i in infos)
+
+
+def safe_extract_zip(zip_path: pathlib.Path, dest: pathlib.Path) -> int:
+    """ZH: 解壓 zip，拒絕會跑出 dest 之外的成員；回傳解出的檔案數。
+
+    ZH: 要擋的三件事：
+        1. **路徑穿越（zip slip）** —— 成員名字是 `../../etc/passwd` 或絕對路徑。
+           不靠檢查字串裡有沒有 `..`（那擋不住各種編碼），而是把最終路徑
+           歸一化後確認它**確實在 dest 底下**。
+        2. **壓縮炸彈** —— 依 zip 標頭宣告的 file_size 累加，超過上限就中止。
+           標頭是可以說謊的，所以實際寫入時**再數一次**。
+        3. **成員數量爆炸** —— 幾百萬個小檔案本身就會癱瘓檔案系統。
+
+    @node gpu-worker/worker.py::safe_extract_zip
+    """
+    dest.mkdir(parents=True, exist_ok=True)
+    root = os.path.realpath(dest)
+    written = 0
+    count = 0
+
+    with zipfile.ZipFile(zip_path) as zf:
+        infos = zf.infolist()
+        if len(infos) > MAX_EXTRACT_MEMBERS:
+            raise ValueError(f"Archive has {len(infos)} members, over the "
+                             f"{MAX_EXTRACT_MEMBERS} limit")
+        declared = _declared_size(infos)
+        if declared > MAX_EXTRACT_BYTES:
+            raise ValueError(f"Archive expands to {declared / 1024 ** 3:.1f} GB, over the "
+                             f"{MAX_EXTRACT_BYTES / 1024 ** 3:.0f} GB limit")
+
+        for info in infos:
+            name = info.filename
+            # ZH: 絕對路徑與磁碟機代號直接拒絕（Windows 的 C:\ 也算）
+            if name.startswith(("/", "\\")) or (len(name) > 1 and name[1] == ":"):
+                raise ValueError(f"Refusing absolute path in archive: {name!r}")
+
+            target = os.path.realpath(os.path.join(dest, name))
+            if not (target == root or target.startswith(root + os.sep)):
+                raise ValueError(f"Refusing path traversal in archive: {name!r}")
+
+            if info.is_dir():
+                os.makedirs(target, exist_ok=True)
+                continue
+
+            os.makedirs(os.path.dirname(target), exist_ok=True)
+            with zf.open(info) as src, open(target, "wb") as dst:
+                while True:
+                    chunk = src.read(1024 * 1024)
+                    if not chunk:
+                        break
+                    written += len(chunk)
+                    # ZH: 標頭會說謊，所以實際寫了多少也要數。
+                    if written > MAX_EXTRACT_BYTES:
+                        raise ValueError("Archive expanded past the size limit while "
+                                         "extracting (the header understated it)")
+                    dst.write(chunk)
+            count += 1
+
+    return count
+
+
+def prepare_dataset(job_id: str) -> str:
+    """ZH: 下載 → 快取判斷 → 解壓，回傳**訓練容器看到的**資料夾路徑。
+
+    ZH: 快取鍵是壓縮檔的內容雜湊。完成的目錄會放一個 `.ready` 記號檔——
+        **沒有記號就不算完成**：解壓到一半斷掉留下的半套資料夾，下次不會被誤用。
+
+    @node gpu-worker/worker.py::prepare_dataset
+    """
+    tmp = download_dataset(job_id)
+    try:
+        digest = file_sha256(tmp)[:16]
+        cache = pathlib.Path(HOST_STORAGE_MOUNT) / "datasets" / digest
+        ready = cache / ".ready"
+
+        if ready.exists():
+            logger.info("Dataset %s already extracted, reusing the cache", digest)
+        else:
+            if cache.exists():
+                # ZH: 有目錄卻沒有記號 = 上次沒解完。整個丟掉重來，不要沿用半套的。
+                logger.warning("Cache dir %s has no .ready marker - re-extracting", digest)
+                shutil.rmtree(cache, ignore_errors=True)
+            n = safe_extract_zip(tmp, cache)
+            ready.write_text("ok", encoding="utf-8")
+            logger.info("Extracted %d files to %s", n, cache)
+
+        return f"{TRAIN_WORKSPACE}/datasets/{digest}"
+    finally:
+        tmp.unlink(missing_ok=True)
+
+
+def materialize_builtin_script(task: str) -> str:
+    """ZH: 把內建訓練腳本複製到共享儲存，回傳**訓練容器看到的**路徑。
+
+    ZH: 為什麼每次都複製而不是只在第一次：腳本只有幾 KB，而「映像更新了但
+        主機上還留著舊腳本」是那種完全看不出來的錯誤。每次覆蓋最省事也最不會錯。
+
+    @node gpu-worker/worker.py::materialize_builtin_script
+    """
+    src = BUILTIN_SCRIPT_DIR / f"{task}.py"
+    if not src.is_file():
+        raise FileNotFoundError(
+            f"Built-in script for task {task!r} is missing from this worker image "
+            f"({src}). The service layer offers a task this worker cannot run.")
+    dest_dir = _host_dir("scripts")
+    shutil.copyfile(src, dest_dir / src.name)
+    return f"{TRAIN_WORKSPACE}/scripts/{src.name}"
 
 def get_available_gpus():
     """
@@ -257,6 +472,15 @@ def parse_progress(log_line):
 
     return None
 
+# ZH: v3.6 —— 這些注入的環境變數**不是機密**，log 裡不要遮。
+#     遮掉的代價是實際的：學生的任務失敗時，log 就是唯一的線索，
+#     而 `DATASET_DIR=/w****/x` 等於沒說。
+# EN: These injected env vars are not secrets; masking them would blind the only
+#     diagnostic a student has when a job fails.
+NON_SECRET_ENV = {"DATASET_DIR", "OUTPUT_DIR", "EPOCHS", "BATCH_SIZE",
+                  "LEARNING_RATE", "VAL_SPLIT", "SEED"}
+
+
 def _mask_secret(value: str) -> str:
     """ZH: 將 secret 在 log 中 mask 成 ab****yz | EN: Mask secret as ab****yz for logs
 
@@ -278,6 +502,10 @@ def execute_job(job):
     # EN: v2.0 Lab — env vars and extra mounts injected by service layer
     extra_env: dict     = job.get("extra_env") or {}
     volume_mounts: list = job.get("volume_mounts") or []
+    # ZH: v3.6 上傳資料集訓練 | EN: v3.6 upload-a-dataset training
+    has_dataset  = bool(job.get("has_dataset"))
+    builtin_task = job.get("builtin_task")
+    config: dict = job.get("config") or {}
 
     logger.info(f"Starting job {job_id} on GPU {gpu_id} | image={image}")
     if extra_env:
@@ -298,6 +526,29 @@ def execute_job(job):
     extra_mounts: list[str] = []
     code_dir: str | None = None
 
+    # ZH: v3.6 —— 先把資料集準備好（下載＋解壓到共享儲存）。
+    #     這一段**在起容器之前**做完：解壓失敗就直接把任務標成 failed 並附上原因，
+    #     不要讓訓練容器起來之後才發現資料夾是空的（那時使用者只會看到
+    #     「訓練完成、正確率 0%」這種毫無線索的結果）。
+    # EN: Prepare the dataset before launching the container so a failure surfaces
+    #     as a failed job with a reason, not as a successful run on an empty folder.
+    dataset_dir: str | None = None
+    if has_dataset:
+        try:
+            report_update(job_id, {"log": "正在取得資料集… / Fetching the dataset…"})
+            dataset_dir = prepare_dataset(job_id)
+            report_update(job_id, {"log": f"資料集就緒 / Dataset ready at {dataset_dir}"})
+        except Exception as e:
+            logger.error("Job %s: could not prepare the dataset: %s", job_id, e)
+            report_update(job_id, {
+                "status": "failed",
+                "error_message": f"ZH: 資料集準備失敗 | EN: Could not prepare the dataset: {e}",
+            })
+            # ZH: 這兩個提早 return 在下面那個 try/finally **之前**，
+            #     所以要自己放掉 GPU 標記——不放的話這張卡會永遠被當成忙碌中。
+            _mark_gpu_free(gpu_id)
+            return
+
     if inline_code:
         # ZH: Notebook 模式 — 直接以 bash -c 執行已編譯的 shell script。
         #     不寫檔/掛載：兄弟容器模式下 worker 容器內的 /tmp 路徑主機 docker 看不到
@@ -308,6 +559,23 @@ def execute_job(job):
         #     is cross-platform and avoids the shared-path problem entirely.
         entry = ["bash", "-euc", inline_code]
         logger.info("Notebook mode: running compiled script via bash -c")
+    elif builtin_task:
+        # ZH: v3.6 內建腳本模式 —— 使用者只上傳資料，程式由平台提供。
+        # EN: v3.6 built-in script mode — the user uploads data; the platform supplies the code.
+        try:
+            script_in_container = materialize_builtin_script(builtin_task)
+        except Exception as e:
+            logger.error("Job %s: %s", job_id, e)
+            report_update(job_id, {
+                "status": "failed",
+                "error_message": f"ZH: 這個節點沒有這支內建腳本 | EN: {e}",
+            })
+            # ZH: 這兩個提早 return 在下面那個 try/finally **之前**，
+            #     所以要自己放掉 GPU 標記——不放的話這張卡會永遠被當成忙碌中。
+            _mark_gpu_free(gpu_id)
+            return
+        entry = ["python", "-u", script_in_container]
+        logger.info("Built-in mode: %s -> %s", builtin_task, script_in_container)
     elif entry_args:
         # ZH: 自訂入口（llama.cpp、vLLM 等非 Python 工具）
         # EN: Custom entry (llama.cpp, vLLM, and other non-Python tools)
@@ -317,6 +585,20 @@ def execute_job(job):
         # EN: Legacy mode — run Python script at script_path
         script = job.get("script_path", "/workspace/train.py")
         entry = ["python", "-u", script]
+
+    # ZH: v3.6 —— 資料集位置與訓練參數以環境變數交給腳本。
+    #     用 env 而不是命令列參數：內建腳本與使用者自己的腳本用同一組約定，
+    #     而且不必處理引號跳脫（路徑裡有空白時最容易在這裡出事）。
+    # EN: v3.6 — pass dataset location and hyper-parameters via env, not argv.
+    if dataset_dir:
+        extra_env.setdefault("DATASET_DIR", dataset_dir)
+    if builtin_task:
+        extra_env.setdefault("OUTPUT_DIR", f"{TRAIN_WORKSPACE}/outputs/{job_id}")
+        for key, env_name in (("epochs", "EPOCHS"),
+                              ("batch_size", "BATCH_SIZE"),
+                              ("learning_rate", "LEARNING_RATE")):
+            if config.get(key) is not None:
+                extra_env.setdefault(env_name, str(config[key]))
 
     # ZH: v2.0 — 額外環境變數 ( -e KEY=VAL )，secrets 不會被印到 log（已 mask 在上方）
     # EN: v2.0 — extra env flags ( -e KEY=VAL ); secrets are masked above before logging
@@ -355,7 +637,8 @@ def execute_job(job):
         if skip_next:
             if "=" in tok:
                 k, _, v = tok.partition("=")
-                safe_cmd.append(f"{k}={_mask_secret(v)}")
+                safe_cmd.append(f"{k}={v}" if k in NON_SECRET_ENV
+                                else f"{k}={_mask_secret(v)}")
             else:
                 safe_cmd.append(tok)
             skip_next = False

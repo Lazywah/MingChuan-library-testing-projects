@@ -166,6 +166,22 @@ def submit_job(
                    "kind of job cannot run right now; please try later or contact an admin"
         )
 
+    # ------------------------------------------------------------------
+    # ZH: 政策檢查 f — 指名的內建訓練種類必須認得
+    # EN: Policy check f — a named built-in task must be one we actually have
+    # ------------------------------------------------------------------
+    # ZH: 不認得就**當場拒絕**，不要默默退回預設種類——使用者指名 X 卻跑了 Y，
+    #     結果會是「訓練成功但完全不是他要的東西」，那是最難查的一種。
+    task = (job.config or {}).get("task")
+    if task is not None and task not in crud.BUILTIN_TASKS:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"ZH: 不支援的訓練種類 '{task}'，目前支援："
+                   f"{', '.join(sorted(crud.BUILTIN_TASKS))} | "
+                   f"EN: Unsupported task '{task}'. Supported: "
+                   f"{', '.join(sorted(crud.BUILTIN_TASKS))}"
+        )
+
     # ZH: 計算預估 Token 消耗 | EN: Calculate estimated token cost
     estimated_tokens = crud.estimate_job_tokens(job.config)
 
