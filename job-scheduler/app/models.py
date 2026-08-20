@@ -77,6 +77,12 @@ class User(Base):
     is_test_account = Column(Integer, default=0)                              # ZH: 測試帳號標記 (0:否, 1:是) | EN: Test account flag
     tutorial_dismissed = Column(Integer, default=0)                           # ZH: 是否不再顯示教學 (0:否, 1:是) | EN: Tutorial dismissed (0:no, 1:yes)
     department = Column(String, nullable=True)                                # ZH: 學系資訊 | EN: Department
+    # ZH: v3.5 介面偏好——**跟帳號走，不是跟裝置走**（擁有者裁定）：換一台機器登入設定要在。
+    #     只有兩個設定，沿用本表既有的個人偏好欄位慣例（tutorial_dismissed / department），
+    #     不另開 user_preferences 表。前端另存一份 localStorage 當**快取**（避免載入時閃一下），
+    #     但**真相是這裡**。
+    ui_font_scale = Column(Integer, default=100)                              # ZH: 介面字級 %（80–150）| EN: UI font scale %
+    ui_lang       = Column(String, default="zh")                              # ZH: 介面語言 zh / en | EN: UI language
     login_count = Column(Integer, default=0)                                  # ZH: 登入次數 | EN: Login count
     lifetime_tokens_used = Column(Integer, default=0)                         # ZH: 歷史累計 Token 數 | EN: Lifetime tokens used
     disk_quota_gb = Column(Integer, default=10)                               # ZH: 個人磁碟配額 GB (v2.0 Lab) | EN: Personal disk quota GB

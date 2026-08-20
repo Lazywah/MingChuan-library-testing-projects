@@ -308,6 +308,33 @@ def read_users_me(current_user: models.User = Depends(get_current_user)):
     return current_user
 
 # ==============================================================================
+# ZH: PATCH /me/preferences - 介面偏好（字級 / 語言），跟帳號走
+# EN: PATCH /me/preferences - per-account UI preferences
+# ==============================================================================
+@router.patch("/me/preferences", response_model=schemas.UserResponse)
+def update_my_preferences(
+    payload: schemas.UserPreferencesUpdate,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    """ZH: 更新自己的介面偏好。
+
+    ZH: **跟帳號走**（擁有者裁定）——換一台機器登入，字級與語言要跟著在。
+        前端另存一份 localStorage 只是**快取**（避免載入時先畫 100% 中文再跳一下），
+        真相在這裡。範圍由 schemas 驗，超出直接 422。
+
+    @node job-scheduler/app/routers/auth.py::update_my_preferences
+    """
+    if payload.ui_font_scale is not None:
+        current_user.ui_font_scale = payload.ui_font_scale
+    if payload.ui_lang is not None:
+        current_user.ui_lang = payload.ui_lang
+    db.commit()
+    db.refresh(current_user)
+    return current_user
+
+
+# ==============================================================================
 # ZH: PUT /me - 更新當前使用者資訊
 # EN: PUT /me - Update current user info
 # ==============================================================================

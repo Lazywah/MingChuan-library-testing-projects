@@ -100,13 +100,15 @@
         //     回首頁則是把那件事收在唯一有 #handoff 的地方。
         var myai = document.createElement('a');
         myai.href = 'index.html';
-        myai.textContent = 'MYAI';
+        myai.setAttribute('data-i18n', 'nav_myai');
+        myai.textContent = T('nav_myai', 'MYAI');
         if (page === 'index.html' || page === '') myai.setAttribute('aria-current', 'page');
         nav.appendChild(myai);
 
         var lab = document.createElement('a');
         lab.href = 'lab.html';
-        lab.textContent = 'Lab';
+        lab.setAttribute('data-i18n', 'nav_lab');
+        lab.textContent = T('nav_lab', 'Lab');
         // ZH: 底色只給「目前所在頁」（擁有者裁定）。
         if (page === 'lab.html') lab.setAttribute('aria-current', 'page');
         nav.appendChild(lab);
@@ -121,7 +123,8 @@
         toggle.id = 'account-toggle';
         toggle.setAttribute('aria-haspopup', 'menu');
         toggle.setAttribute('aria-expanded', 'false');
-        toggle.textContent = '載入中…';
+        toggle.setAttribute('data-i18n', 'acct_loading');
+        toggle.textContent = T('acct_loading', '載入中…');
         var menu = document.createElement('div');
         menu.className = 'account__menu';
         menu.setAttribute('role', 'menu');
@@ -154,15 +157,152 @@
         });
     }
 
-    var ROLE = { student: '學生', teacher: '教師', admin: '管理員' };
+    // ZH: 取文案。字典裡沒有就用 fallback（＝原本的中文），**不清空**。
+    function T(key, fallback) {
+        return (window.Prefs && window.Prefs.t(key, fallback)) || fallback;
+    }
+    function roleLabel(role) {
+        return T('role_' + role, { student: '學生', teacher: '教師', admin: '管理員' }[role] || role || '');
+    }
 
-    function item(el, text) {
+    function item(el, key, fallback) {
         el.setAttribute('role', 'menuitem');
-        el.textContent = text;
+        el.setAttribute('data-i18n', key);
+        el.textContent = T(key, fallback);
         return el;
     }
 
+    // ── 顯示設定（字級 / 語言）─────────────────────────────────────────
+    // ZH: 放在帳號選單裡而不是另開設定頁：只有兩個設定，開一頁的成本遠大於收益，
+    //     而且這裡正是「跟你這個帳號有關的東西」該在的位置。
+    function prefsSection() {
+        var box = document.createElement('div');
+        box.className = 'account__prefs';
+
+        var title = document.createElement('div');
+        title.className = 'account__prefs-title';
+        title.setAttribute('data-i18n', 'prefs_title');
+        title.textContent = T('prefs_title', '顯示設定');
+        box.appendChild(title);
+
+        // 字級
+        var fontRow = document.createElement('div');
+        fontRow.className = 'account__prefs-row';
+        var fontLabel = document.createElement('span');
+        fontLabel.setAttribute('data-i18n', 'prefs_font');
+        fontLabel.textContent = T('prefs_font', '字級');
+        fontRow.appendChild(fontLabel);
+
+        var group = document.createElement('div');
+        group.className = 'account__seg';
+        var out = document.createElement('span');
+        out.className = 'account__seg-value';
+
+        function stepBtn(delta, key, fb, label) {
+            var b = document.createElement('button');
+            b.type = 'button';
+            b.textContent = label;
+            b.setAttribute('data-i18n-aria', key);
+            b.setAttribute('aria-label', T(key, fb));
+            b.addEventListener('click', function (ev) {
+                ev.stopPropagation();               // ZH: 別讓它把選單關掉
+                var cur = window.Prefs.get().ui_font_scale;
+                savePrefs({ ui_font_scale: cur + delta });
+            });
+            return b;
+        }
+        group.appendChild(stepBtn(-10, 'prefs_font_smaller', '縮小字級', 'A−'));
+        // ZH: 中間顯示目前值，並兼任「還原 100%」——數字本身可點，省一顆按鈕。
+        var reset = document.createElement('button');
+        reset.type = 'button';
+        reset.className = 'account__seg-reset';
+        reset.setAttribute('data-i18n-aria', 'prefs_font_reset');
+        reset.setAttribute('aria-label', T('prefs_font_reset', '還原為 100%'));
+        reset.appendChild(out);
+        reset.addEventListener('click', function (ev) {
+            ev.stopPropagation();
+            savePrefs({ ui_font_scale: 100 });
+        });
+        group.appendChild(reset);
+        group.appendChild(stepBtn(10, 'prefs_font_bigger', '放大字級', 'A+'));
+        fontRow.appendChild(group);
+        box.appendChild(fontRow);
+
+        // 語言
+        var langRow = document.createElement('div');
+        langRow.className = 'account__prefs-row';
+        var langLabel = document.createElement('span');
+        langLabel.setAttribute('data-i18n', 'prefs_lang');
+        langLabel.textContent = T('prefs_lang', '語言');
+        langRow.appendChild(langLabel);
+        var langGroup = document.createElement('div');
+        langGroup.className = 'account__seg';
+        [['zh', '中文'], ['en', 'English']].forEach(function (pair) {
+            var b = document.createElement('button');
+            b.type = 'button';
+            b.textContent = pair[1];
+            b.dataset.lang = pair[0];
+            b.addEventListener('click', function (ev) {
+                ev.stopPropagation();
+                savePrefs({ ui_lang: pair[0] });
+            });
+            langGroup.appendChild(b);
+        });
+        langRow.appendChild(langGroup);
+        box.appendChild(langRow);
+
+        var warn = document.createElement('div');
+        warn.className = 'account__prefs-warn';
+        // ZH: 警告是**模組狀態**不是元素狀態。改設定會觸發 prefs:applied → 整個選單重畫，
+        //     若把訊息寫進當時捕捉到的節點，那個節點已經脫離 DOM，訊息就永遠看不到。
+        //     （實測踩到：畫面正確地沒回滾，但提示不見了。）
+        warn.textContent = _prefsWarn;
+        warn.hidden = !_prefsWarn;
+        box.appendChild(warn);
+
+        syncPrefsUI(box);
+        return box;
+    }
+
+    // ZH: 「上次存回帳號失敗」的訊息。空字串＝沒有問題。
+    var _prefsWarn = '';
+
+    function syncPrefsUI(box) {
+        var st = window.Prefs.get();
+        var v = box.querySelector('.account__seg-value');
+        if (v) v.textContent = st.ui_font_scale + '%';
+        box.querySelectorAll('[data-lang]').forEach(function (b) {
+            b.setAttribute('aria-pressed', String(b.dataset.lang === st.ui_lang));
+        });
+    }
+
+    async function savePrefs(patch) {
+        var ok = await window.Prefs.set(patch);   // ← 這裡就會觸發重畫
+        // ZH: 存不回帳號時**不回滾畫面**——他看到的就是他選的。
+        //     但要講清楚「這台機器有效、沒存回帳號」，否則換機器發現設定不見會很困惑。
+        _prefsWarn = ok ? '' : T('prefs_saved_local_only',
+            '已在這台機器上套用，但沒有存回帳號（稍後再試）。');
+        // ZH: 重畫已經發生過了，所以往**現在活著的**節點寫，不要用捕捉到的舊參照。
+        var live = _menu && _menu.querySelector('.account__prefs-warn');
+        if (live) {
+            live.textContent = _prefsWarn;
+            live.hidden = !_prefsWarn;
+        }
+    }
+
+    // ZH: 快取 /auth/me 的結果。切換語言時要重畫選單——
+    //     像「學生 · a@b.c」這種**組合字串**不是 data-i18n 元素，
+    //     prefs.js 的字典掃描換不掉它，只會留下半中半英的選單。
+    //     重畫而不是重打 API：語言切換不該產生網路請求。
+    var _me = null;
+    var _toggle = null, _menu = null;
+
+    document.addEventListener('prefs:applied', function () {
+        if (_toggle && _menu) render(_toggle, _menu, _me);
+    });
+
     async function fillAccount(toggle, menu) {
+        _toggle = toggle; _menu = menu;
         var me = null;
         try {
             var r = await fetch(API + '/auth/me',
@@ -170,27 +310,38 @@
             if (r.ok) me = await r.json();
         } catch (e) { /* 下面會處理 */ }
 
+        // ZH: 偏好跟帳號走。這裡順便對帳——**不要再打一次 /auth/me**。
+        //     ⚠ syncFrom 會觸發 prefs:applied → render()，所以要先存 _me。
+        _me = me;
+        if (me && window.Prefs) window.Prefs.syncFrom(me);
+        render(toggle, menu, me);
+    }
+
+    function render(toggle, menu, me) {
         if (!me) {
             // ZH: 取不到身分就不要假裝有人登入。給的是「去登入」而不是空選單。
-            toggle.textContent = '未登入';
+            toggle.setAttribute('data-i18n', 'acct_anon');
+            toggle.textContent = T('acct_anon', '未登入');
             menu.textContent = '';
             var go = document.createElement('a');
             go.href = 'login.html';
-            menu.appendChild(item(go, '前往登入'));
+            menu.appendChild(item(go, 'acct_go_login', '前往登入'));
+            menu.appendChild(prefsSection());       // ZH: 沒登入也要能調字級／語言
             return;
         }
 
         toggle.textContent = '';
         var name = document.createElement('span');
         name.className = 'account__name';
-        name.textContent = me.username || '（不明）';
+        name.textContent = me.username || T('acct_unknown', '（不明）');
         toggle.appendChild(name);
         var caret = document.createElement('span');
         caret.className = 'account__caret';
         caret.setAttribute('aria-hidden', 'true');
         caret.textContent = '▾';
         toggle.appendChild(caret);
-        toggle.setAttribute('aria-label', '帳號選單：' + (me.username || ''));
+        toggle.removeAttribute('data-i18n');    // ZH: 這裡放的是帳號名，不是可翻譯文案
+        toggle.setAttribute('aria-label', T('acct_menu', '帳號選單') + '：' + (me.username || ''));
 
         menu.textContent = '';
 
@@ -199,7 +350,7 @@
         head.className = 'account__id';
         var who = document.createElement('div');
         who.className = 'account__id-name';
-        who.textContent = me.username || '（不明）';
+        who.textContent = me.username || T('acct_unknown', '（不明）');
         head.appendChild(who);
         var sub = document.createElement('div');
         sub.className = 'account__id-sub';
@@ -207,18 +358,18 @@
         //     顯示出來像壞掉的資料。那種就只顯示身分。
         var mail = (me.email || '');
         sub.textContent = /@unknown$/.test(mail) || !mail
-            ? (ROLE[me.role] || me.role || '')
-            : (ROLE[me.role] || me.role || '') + ' · ' + mail;
+            ? roleLabel(me.role)
+            : roleLabel(me.role) + ' · ' + mail;
         head.appendChild(sub);
         menu.appendChild(head);
 
         var usage = document.createElement('a');
         usage.href = 'usage.html';
-        menu.appendChild(item(usage, '使用量明細'));
+        menu.appendChild(item(usage, 'acct_usage', '使用量明細'));
 
         var report = document.createElement('a');
         report.href = 'report.html';
-        menu.appendChild(item(report, '問題回報'));
+        menu.appendChild(item(report, 'acct_report', '問題回報'));
 
         if (me.role === 'admin') {
             // ZH: 管理端在同主機 port 8888，且要先把 token 交棒過去（沿用 v1.5 的做法）。
@@ -230,14 +381,16 @@
                 if (t) localStorage.setItem('admin_hud_token', t);
                 location.href = location.protocol + '//' + location.hostname + ':8888/';
             });
-            menu.appendChild(item(admin, '管理介面'));
+            menu.appendChild(item(admin, 'acct_admin', '管理介面'));
         }
+
+        menu.appendChild(prefsSection());
 
         var out = document.createElement('button');
         out.type = 'button';
         out.className = 'account__logout';
         out.addEventListener('click', logout);
-        menu.appendChild(item(out, '登出'));
+        menu.appendChild(item(out, 'acct_logout', '登出'));
     }
 
     // ZH: 對外只暴露 logout —— 其他頁面若要做「登出」都該走同一份實作。

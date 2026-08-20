@@ -130,9 +130,11 @@ async function load() {
         ALL = await fetchItems();
         if (!ALL.length) {
             // ZH: 空狀態兼任引導（Nielsen #10）——不要只說「沒有內容」就停在那裡。
+            // ZH: 引導的去處用 .btn--minor 而非句中連結：實測句中那顆只有 19px，
+            //     不到 --tap-min 44px。這裡是**動作**（去訓練第一個模型），不是引述連結。
             return showMsg('文件庫還沒有內容。<br>'
-                + '這裡之後會放同學的作品與教學影片；'
-                + '想成為第一個的話，<a href="gpu.html">從訓練你的第一個模型開始</a>。');
+                + '這裡之後會放同學的作品與教學影片。想成為第一個嗎？<br>'
+                + '<a class="btn--minor" href="gpu.html">從訓練你的第一個模型開始</a>');
         }
         ALL.sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')));
         $('msg').hidden = true;

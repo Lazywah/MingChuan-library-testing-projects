@@ -210,6 +210,12 @@ def init_db():
             # --- v2.1 在線狀態修正 | v2.1 online status fix ---
             # ZH: 取代既有 online_status 持久化邏輯，改用 last_activity 動態判斷
             # EN: Replace persistent online_status with dynamic last_activity
+            # --- v3.5 介面偏好（跟帳號走）| v3.5 per-account UI preferences ---
+            try: conn.execute(text("ALTER TABLE users ADD COLUMN ui_font_scale INTEGER DEFAULT 100"))
+            except Exception: pass
+            try: conn.execute(text("ALTER TABLE users ADD COLUMN ui_lang VARCHAR DEFAULT 'zh'"))
+            except Exception: pass
+
             try: conn.execute(text("ALTER TABLE users ADD COLUMN last_activity DATETIME"))
             except Exception: pass
 

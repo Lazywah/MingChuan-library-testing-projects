@@ -154,6 +154,9 @@ class UserResponse(BaseModel):
     # v2.1 SSO integration — for frontend to decide password-change UI mode
     auth_source: str = "local"        # local / sso_mock / sso_cas / sso_oidc
     external_id: Optional[str] = None # OIDC oid; None for local users
+    # ZH: v3.5 介面偏好。放在 /auth/me 一起回，前端本來就會呼叫它——**不必多一次往返**。
+    ui_font_scale: int = 100
+    ui_lang: str = "zh"
     created_at: datetime
 
 
@@ -569,4 +572,24 @@ class AdminIssueReportUpdate(BaseModel):
     def _known_status(cls, v: Optional[str]) -> Optional[str]:
         if v is not None and v not in ISSUE_STATUSES:
             raise ValueError(f"status 必須是 {ISSUE_STATUSES} 其中之一")
+        return v
+
+
+# ==============================================================================
+# ZH: v3.5 介面偏好（字級 / 語言），跟帳號走
+# ==============================================================================
+UI_LANGS = ("zh", "en")
+FONT_SCALE_MIN, FONT_SCALE_MAX = 80, 150      # ZH: 沿用 v1.5 的範圍
+
+
+class UserPreferencesUpdate(BaseModel):
+    """ZH: 兩個欄位都可選——只改字級、只改語言、兩個一起改，都是合法的。"""
+    ui_font_scale: Optional[int] = Field(None, ge=FONT_SCALE_MIN, le=FONT_SCALE_MAX)
+    ui_lang: Optional[str] = None
+
+    @field_validator("ui_lang")
+    @classmethod
+    def _known_lang(cls, v: Optional[str]) -> Optional[str]:
+        if v is not None and v not in UI_LANGS:
+            raise ValueError(f"ui_lang 必須是 {UI_LANGS} 其中之一")
         return v

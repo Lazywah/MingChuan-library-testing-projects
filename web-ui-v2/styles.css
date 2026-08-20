@@ -11,7 +11,13 @@
 
 *, *::before, *::after { box-sizing: border-box; }
 
-html { font-size: 16px; }
+/* ZH: **不要釘 px。** `100%` ＝ 使用者瀏覽器的預設字級。
+ *     把瀏覽器預設調大的人多半是真的需要（擁有者裁定 2026-08-20），
+ *     釘 16px 等於默默取消他的無障礙設定——而且他關掉 JS 時連 prefs.js 都救不了。
+ *     v2 的字級全走 rem，所以這一行決定了整體大小。
+ *     ⚠ 間距（--space-*）仍是 px，不會跟著放大：那個取捨已由
+ *     .topbar 的 min-height + flex-wrap 承接（見該處註解）。 */
+html { font-size: 100%; }
 
 body {
     margin: 0;
@@ -32,14 +38,28 @@ body {
 /* ── 版面骨架 ───────────────────────────────────────────────────────── */
 /* ZH: 內容先於外框（design-before-code 的 content-out）——
        三個畫面定案後只需要頂部一條，不需要側邊欄。 */
+/* ZH: `min-height` + `flex-wrap` 而不是固定 `height: 56px`。
+ *
+ *   實測 375px 寬 × 字級 150%：內容 448px > 視窗 375px，**帳號鈕整個跑到畫面外**——
+ *   而最需要放大字的人正是構不到自己設定的那個人（要橫向捲動才找得到）。
+ *   固定高度時 flex 不換行，只會往外長。
+ *
+ *   放得下時（桌面 100%）行為與原本完全相同：min-height 56、不換行。
+ */
 .topbar {
     display: flex;
     align-items: center;
+    flex-wrap: wrap;
+    row-gap: var(--space-2);
     gap: var(--space-4);
-    padding: 0 var(--space-5);
-    height: 56px;
+    padding: var(--space-1) var(--space-5);
+    min-height: 56px;
     background-color: var(--surface);
     border-bottom: 1px solid var(--hairline);
+}
+/* ZH: 換行時 spacer 不該再把右側推走，否則第二行只有一個孤零零的元素。 */
+@media (max-width: 640px) {
+    .topbar { gap: var(--space-2); padding-inline: var(--space-4); }
 }
 /* ZH: LOGO 是回首頁的連結（chrome.js 會把 span 換成 a）。
  *     版面規則：**只有 LOGO 在左，其餘全部靠右**，靠 .topbar__spacer 撐開。 */
@@ -455,6 +475,8 @@ body {
 /* ZH: .hint 的字級 0.8rem 會被 .btn--minor 的 font:inherit 繼承下去，
  *     按鈕字會比別頁小一號。給它自己的字級，不跟著容器縮。 */
 .hint .btn--minor { font-size: 0.875rem; margin-top: var(--space-2); }
+/* ZH: 空狀態的引導按鈕（文件庫的 #msg 用 .inline-error）——補間距。 */
+.inline-error .btn--minor { margin-top: var(--space-3); }
 
 .hint {
     font-size: 0.8rem;
@@ -574,6 +596,66 @@ body {
 .account__menu button:focus-visible { outline: var(--focus-ring); outline-offset: -2px; }
 /* ZH: 登出是唯一不可逆的項目，用 --error 與其他項分開（文字本身也已說明，不只靠顏色）。 */
 .account__logout { color: var(--error) !important; }
+
+/* ── 帳號選單裡的顯示設定 ─────────────────────────────────────────── */
+/* ZH: 放在這裡而不是另開設定頁：只有兩個設定，開一頁的成本遠大於收益。 */
+.account__prefs {
+    border-top: 1px solid var(--hairline);
+    margin-top: var(--space-2);
+    padding-top: var(--space-2);
+}
+.account__prefs-title {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    padding: 0 var(--space-3) var(--space-1);
+}
+.account__prefs-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-3);
+    padding: var(--space-1) var(--space-3);
+    font-size: 0.875rem;
+    color: var(--text);
+}
+.account__seg { display: flex; gap: var(--space-1); }
+/* ZH: 這幾顆比 44px 小是**知情的例外**：三顆並排在 13rem 寬的選單裡放不下 44px，
+ *     而 WCAG 2.5.8 的 AA 門檻是 24×24（AAA 才是 44）。這裡取 32×32，
+ *     並讓「目前值」那一格兼任還原鍵（省一顆按鈕、也讓中間那格更大）。 */
+.account__seg button {
+    min-width: 32px;
+    min-height: 32px;
+    padding: 0 var(--space-2);
+    border: 1px solid var(--hairline);
+    border-radius: var(--radius-sm);
+    background: transparent;
+    font: inherit;
+    font-size: 0.8125rem;
+    font-weight: 600;
+    color: var(--text);
+    cursor: pointer;
+}
+.account__seg button:hover { background-color: var(--surface-2); border-color: var(--link); }
+.account__seg button:focus-visible { outline: var(--focus-ring); outline-offset: 1px; }
+.account__seg button[aria-pressed="true"] {
+    background-color: var(--accent-soft);
+    border-color: var(--accent);
+    color: var(--text-strong);
+}
+.account__seg-reset { min-width: 46px; }
+.account__seg-value { font-variant-numeric: tabular-nums; }
+
+/* ZH: 存不回帳號時的提示。畫面**不回滾**（他看到的就是他選的），
+ *     但要講清楚「這台機器有效、沒存回帳號」。 */
+.account__prefs-warn {
+    margin: var(--space-2) var(--space-3) 0;
+    padding: var(--space-2);
+    background-color: var(--warn-soft);
+    border-radius: var(--radius-sm);
+    font-size: 0.75rem;
+    line-height: 1.6;
+    color: var(--text-strong);
+}
 
 .account__id {
     padding: var(--space-2) var(--space-3) var(--space-3);
