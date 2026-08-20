@@ -25,6 +25,14 @@ Windows 用 `start-worker.bat`（用法相同）。Linux 首次可能要先給�
 - `SERVICE_LAYER_URL`＝服務層主機的真實位址（例 `http://192.168.1.50:8002`）
 - `WORKER_API_TOKEN`＝**與服務層根 .env 完全一致**（key 名就叫 `WORKER_API_TOKEN`，不是 `API_TOKEN`）
 - `NODE_ID`＝此節點名稱；`POOL_TYPE`＝`batch` 或 `interactive`
+- `IMAGE_REGISTRY_PREFIX` ← **這一節（不同機）幾乎一定要填**（例 `registry.mcu.edu.tw`）。
+  `aibase/*` 映像是在**服務層那台**建出來的，不在任何公開 registry，這台拉不到。
+  症狀是每張任務都失敗在 `docker run`，訊息是 `manifest unknown` 或 `pull access denied`。
+  留空＝用本機映像（那是單機部署的情形）。
+- `REGISTRY_USERNAME` / `REGISTRY_PASSWORD` ← 與服務層一致。worker 開機會自己 `docker login`。
+- ⚠ **明文 HTTP 的 registry**：這台的 docker daemon 要在 `/etc/docker/daemon.json` 加
+  `{"insecure-registries": ["registry.mcu.edu.tw:5000"]}` 再 `systemctl restart docker`。
+  正式環境**建議改走 nginx 的 TLS**，不要用明文——帳密會送在網路上。
 - `DATASET_CACHE_MAX_GB` ← **依這台機器的磁碟大小調**（預設 100 GB）。
   這台機器上**沒有任何配額擋著**（服務層那側有每人 2 GB，這裡沒有）：
   資料集快取與訓練產出不清會一路長到磁碟滿，而症狀是「訓練突然全部失敗」。

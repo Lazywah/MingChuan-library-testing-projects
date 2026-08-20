@@ -20,6 +20,9 @@
 # EN: User-uploaded datasets must never be committed.
 **/data/datasets/
 
+# ZH: 私有 registry 的帳密檔（bcrypt 雜湊，仍然不該進版控）
+infrastructure/registry/auth/
+
 # ZH: Python 快取 | EN: Python cache
 __pycache__/
 *.py[cod]

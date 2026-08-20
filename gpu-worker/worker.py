@@ -469,6 +469,80 @@ def reap_safely() -> None:
     except Exception:
         logger.exception("Storage reaper failed (the worker keeps running)")
 
+# ==============================================================================
+# ZH: v3.6 私有 registry | EN: v3.6 Private registry
+# ==============================================================================
+#
+# ZH: `aibase/*` 是**在服務層那台機器上建出來的**（infrastructure/base-images/），
+#     不在任何公開 registry。GPU 搬到獨立主機之後那台拉不到，
+#     而 Lab 模式與上傳訓練**兩邊都指向這些映像** —— 會一起停擺。
+#
+# ZH: 解法是把它們推到一個私有 registry，遠端節點加上前綴去拉：
+#         aibase/pytorch:2026-spring
+#       → registry.example:5000/aibase/pytorch:2026-spring
+#
+# ZH: ⚠ **只加在我們自己的映像上。** 使用者可能指定 `pytorch/pytorch:...` 這種
+#     公開映像，硬加前綴會讓它去私有 registry 找一個不存在的東西。
+# EN: Prefix only our own images; a public image name must stay untouched.
+OUR_IMAGE_PREFIX = "aibase/"
+
+# ZH: 空字串（預設）＝ 用本機映像，行為與加這個功能之前完全一樣。
+#     只有「與服務層不同機」的節點才需要設。
+IMAGE_REGISTRY_PREFIX = os.environ.get("IMAGE_REGISTRY_PREFIX", "").strip().rstrip("/")
+REGISTRY_USERNAME = os.environ.get("REGISTRY_USERNAME", "").strip()
+REGISTRY_PASSWORD = os.environ.get("REGISTRY_PASSWORD", "")
+
+
+def resolve_image(image: str) -> str:
+    """ZH: 把平台自己的映像名補上私有 registry 前綴。其他一律原樣回傳。
+
+    ZH: 判準是名字開頭 —— 已經帶了前綴的（重複套用）、公開映像、
+        使用者自訂的完整位址，全都不動。
+
+    @node gpu-worker/worker.py::resolve_image
+    """
+    if not image or not IMAGE_REGISTRY_PREFIX:
+        return image
+    if not image.startswith(OUR_IMAGE_PREFIX):
+        return image
+    return f"{IMAGE_REGISTRY_PREFIX}/{image}"
+
+
+def registry_login() -> bool:
+    """ZH: 開機時登入私有 registry（有設帳密才做）。回傳有沒有登入成功。
+
+    ZH: ⚠ 密碼走 stdin，**不放進命令列參數** —— 那會出現在 `ps` 與 docker 的警告裡。
+    ZH: 登入失敗**不中止 worker**：它仍然可以跑不需要私有映像的任務，
+        而且失敗訊息要留下來（不是靜默降級）。
+
+    @node gpu-worker/worker.py::registry_login
+    """
+    if not IMAGE_REGISTRY_PREFIX:
+        return False
+    if not (REGISTRY_USERNAME and REGISTRY_PASSWORD):
+        # ZH: 有 registry 卻沒帳密 —— 可能是刻意開放匿名拉取，但更常是忘了設。
+        #     說出來，不要讓它變成之後某次 pull 失敗時才發現。
+        logger.warning(
+            "IMAGE_REGISTRY_PREFIX is set (%s) but REGISTRY_USERNAME/PASSWORD are not. "
+            "Pulls will be attempted anonymously and will fail if the registry needs auth.",
+            IMAGE_REGISTRY_PREFIX)
+        return False
+
+    host = IMAGE_REGISTRY_PREFIX.split("/")[0]
+    try:
+        p = subprocess.run(
+            ["docker", "login", host, "-u", REGISTRY_USERNAME, "--password-stdin"],
+            input=REGISTRY_PASSWORD, text=True, capture_output=True, timeout=30)
+    except Exception as e:
+        logger.error("docker login %s failed to run: %s", host, e)
+        return False
+    if p.returncode == 0:
+        logger.info("Logged in to the private registry at %s", host)
+        return True
+    # ZH: docker 的錯誤訊息不含密碼，可以直接印。
+    logger.error("docker login %s failed: %s", host, (p.stderr or "").strip()[:300])
+    return False
+
 def get_available_gpus():
     """
     ZH: 透過 nvidia-smi 查詢空閒 GPU，並排除本機已派發但容器尚未起跑的 GPU
@@ -700,7 +774,10 @@ def execute_job(job):
     """@node gpu-worker/worker.py::execute_job"""
     job_id    = job.get("job_id")
     gpu_id    = job.get("gpu_id", "0")
-    image     = job.get("docker_image") or DEFAULT_IMAGE
+    # ZH: v3.6 —— 平台自己的映像要補上私有 registry 前綴（遠端節點才有設）。
+    #     服務層送的是**邏輯名**（aibase/pytorch:2026-spring），因為同機與遠端
+    #     的正確答案不同，只有節點自己知道該去哪裡拉。
+    image     = resolve_image(job.get("docker_image") or DEFAULT_IMAGE)
     inline_code = job.get("inline_code")
     entry_args  = job.get("entry_args")   # list[str] or None
     # ZH: v2.0 Lab — 由服務層注入的環境變數與額外掛載
@@ -915,6 +992,16 @@ def poll_loop():
     """@node gpu-worker/worker.py::poll_loop"""
     logger.info("Worker node %s started. Polling %s every %ds, heartbeat every %ds.",
                 NODE_ID, SERVICE_LAYER_URL, POLL_INTERVAL, HEARTBEAT_INTERVAL)
+    # ZH: v3.6 私有 registry —— 有設就先登入。設錯的症狀是「每張任務都拉不到映像」，
+    #     在開機這裡講一次比在每張失敗的任務裡找容易得多。
+    if IMAGE_REGISTRY_PREFIX:
+        logger.info("Private registry: %s (platform images will be pulled from there)",
+                    IMAGE_REGISTRY_PREFIX)
+        registry_login()
+    else:
+        logger.info("Private registry: not configured - platform images must exist "
+                    "locally on this host")
+
     # ZH: v3.6 開機時把這個宣告印出來——設錯了要看得見，不要等到訓練結果不對才發現。
     logger.info("Co-located with the service layer (Code Lab volumes visible): %s%s",
                 SHARES_SERVICE_STORAGE,

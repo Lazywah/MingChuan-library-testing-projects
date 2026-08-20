@@ -435,3 +435,95 @@ def test_broken_metrics_json_does_not_break_the_whole_query(client, db, user_hea
     assert r.status_code == 200, r.text
     assert r.json()["metrics"] is None
     assert r.json()["status"] == "pending"
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# ZH: 七、私有 registry 的映像前綴（worker 端）
+# ──────────────────────────────────────────────────────────────────────────
+# ZH: 為什麼前綴在 worker 而不是服務層：同機的節點該用本機映像、遠端的該從
+#     registry 拉，**兩台的正確答案不同**。服務層送同一個字串必定有一邊是錯的。
+
+def test_no_prefix_leaves_images_alone(monkeypatch):
+    """ZH: 沒設 registry（單機部署）＝ 行為與加這個功能之前完全一樣。"""
+    monkeypatch.setattr(gw, "IMAGE_REGISTRY_PREFIX", "")
+    assert gw.resolve_image("aibase/pytorch:2026-spring") == "aibase/pytorch:2026-spring"
+
+
+def test_prefix_is_added_to_platform_images(monkeypatch):
+    monkeypatch.setattr(gw, "IMAGE_REGISTRY_PREFIX", "reg.example:5000")
+    assert gw.resolve_image("aibase/pytorch:2026-spring") == \
+        "reg.example:5000/aibase/pytorch:2026-spring"
+
+
+def test_public_images_are_never_prefixed(monkeypatch):
+    """ZH: 🔴 使用者可以指定公開映像。硬加前綴會讓它去私有 registry 找
+       一個不存在的東西——而錯誤訊息會是「manifest unknown」，
+       完全看不出是平台自己改了名字。
+    """
+    monkeypatch.setattr(gw, "IMAGE_REGISTRY_PREFIX", "reg.example:5000")
+    for public in ("pytorch/pytorch:2.7.0-cuda12.8-cudnn9-runtime",
+                   "ubuntu:22.04",
+                   "ghcr.io/someone/thing:v1"):
+        assert gw.resolve_image(public) == public, public
+
+
+def test_already_prefixed_image_is_not_prefixed_twice(monkeypatch):
+    """ZH: 有人把完整位址填進 docker_image 時不能再包一層。"""
+    monkeypatch.setattr(gw, "IMAGE_REGISTRY_PREFIX", "reg.example:5000")
+    full = "reg.example:5000/aibase/pytorch:2026-spring"
+    assert gw.resolve_image(full) == full
+
+
+def test_trailing_slash_in_prefix_does_not_double(monkeypatch):
+    """ZH: 設定值寫成 `reg.example:5000/` 是很自然的手誤，不該變成 `//`。"""
+    monkeypatch.setattr(gw, "IMAGE_REGISTRY_PREFIX", "reg.example:5000")
+    assert "//" not in gw.resolve_image("aibase/pytorch:2026-spring")
+
+
+def test_empty_image_is_safe(monkeypatch):
+    monkeypatch.setattr(gw, "IMAGE_REGISTRY_PREFIX", "reg.example:5000")
+    assert gw.resolve_image("") == ""
+
+
+def test_login_is_skipped_without_a_registry(monkeypatch):
+    """ZH: 沒設 registry 就不該去 docker login（單機部署根本沒有那個東西）。"""
+    monkeypatch.setattr(gw, "IMAGE_REGISTRY_PREFIX", "")
+    called = []
+    monkeypatch.setattr(gw.subprocess, "run", lambda *a, **k: called.append(a))
+    assert gw.registry_login() is False
+    assert called == []
+
+
+def test_login_warns_but_does_not_crash_without_credentials(monkeypatch):
+    """ZH: 有 registry 卻沒帳密——可能是刻意匿名，更常是忘了設。
+       要說出來，但**不能中止 worker**：它仍然可以跑不需要私有映像的任務。
+    """
+    monkeypatch.setattr(gw, "IMAGE_REGISTRY_PREFIX", "reg.example:5000")
+    monkeypatch.setattr(gw, "REGISTRY_USERNAME", "")
+    monkeypatch.setattr(gw, "REGISTRY_PASSWORD", "")
+    assert gw.registry_login() is False
+
+
+def test_login_never_puts_the_password_on_the_command_line(monkeypatch):
+    """ZH: 🔴 密碼走 stdin。放在命令列會出現在 `ps` 與 docker 的警告裡。"""
+    monkeypatch.setattr(gw, "IMAGE_REGISTRY_PREFIX", "reg.example:5000/aibase")
+    monkeypatch.setattr(gw, "REGISTRY_USERNAME", "u")
+    monkeypatch.setattr(gw, "REGISTRY_PASSWORD", "s3cr3t-password")
+    seen = {}
+
+    class R:
+        returncode = 0
+        stderr = ""
+
+    def fake_run(cmd, **kw):
+        seen["cmd"] = cmd
+        seen["input"] = kw.get("input")
+        return R()
+
+    monkeypatch.setattr(gw.subprocess, "run", fake_run)
+    assert gw.registry_login() is True
+    assert "s3cr3t-password" not in " ".join(seen["cmd"]), seen["cmd"]
+    assert seen["input"] == "s3cr3t-password"
+    # ZH: 只把主機名餵給 docker login，不是整個前綴（前綴可能含路徑段）
+    assert "reg.example:5000" in seen["cmd"]
+    assert "reg.example:5000/aibase" not in seen["cmd"]

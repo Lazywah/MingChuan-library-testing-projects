@@ -125,6 +125,48 @@ services:
 # ZH: 統一橋接網路 (供 AI Models 外掛連入)
 # EN: Unified Bridged Network (for AI Models to attach)
 # ==============================================================================
+  # ==========================================================================
+  # ZH: 私有 Docker Registry（v3.6）—— **只有多機部署才需要**
+  # EN: Private Docker registry — only needed for multi-host deployments
+  # ==========================================================================
+  # ZH: 為什麼要它：`aibase/*` 是在這台機器上建出來的，不在任何公開 registry。
+  #     GPU 搬到獨立主機之後那台拉不到，而 Lab 模式與上傳訓練兩邊都指向這些映像。
+  #
+  # ZH: 用 profile 關起來——單機部署完全不會啟動它：
+  #         docker compose --profile registry up -d registry
+  #
+  # ZH: ⚠ **一定要有帳密。** 開放的 registry 等於讓網路上任何人把映像推進來，
+  #     而那些映像會在你的機器上以 `--gpus` 執行。
+  #     保護來自 `REGISTRY_AUTH=htpasswd` ＋ 下面掛進來的 auth/htpasswd 檔：
+  #     **沒有那個檔，registry 容器自己就起不來**（不是安靜地開放）。
+  #     先跑 `bash infrastructure/registry/make-htpasswd.sh` 產生它。
+  # ZH: 這裡刻意**不用**「冒號問號」那種 compose fail-fast 語法 —— 它的插值是
+  #     整份檔案一起算的，即使沒開這個 profile 也會擋下**整個平台**的啟動。
+  #     （而且寫在註解裡也會被 setup_env 的漂移稽核當成真的 key 撈走。）
+  # EN: Protection comes from the htpasswd file (the container refuses to start
+  #     without it), not from a `:?` guard — that would block the whole stack.
+  registry:
+    image: registry:2
+    container_name: ai-platform-registry
+    profiles: ["registry"]
+    environment:
+      - REGISTRY_AUTH=htpasswd
+      - REGISTRY_AUTH_HTPASSWD_REALM=MCU AI Base Registry
+      - REGISTRY_AUTH_HTPASSWD_PATH=/auth/htpasswd
+      # ZH: 允許重複推同一個 tag（學期內修 image 時會用到）
+      - REGISTRY_STORAGE_DELETE_ENABLED=true
+    volumes:
+      - registry_data:/var/lib/registry
+      - ./infrastructure/registry/auth:/auth:ro
+    ports:
+      # ZH: 預設只綁 127.0.0.1 —— 要讓遠端 GPU 主機連進來時，
+      #     **建議走 nginx 的 TLS**（見 docs/03-deployment.md），
+      #     而不是把這個埠直接開到網路上（明文 HTTP 會把帳密送在外面）。
+      - "${REGISTRY_BIND:-127.0.0.1}:5000:5000"
+    networks:
+      - ai-platform-net
+    restart: unless-stopped
+
 networks:
   ai-platform-net:
     driver: bridge
@@ -134,11 +176,17 @@ networks:
 # ZH: v2.0 Lab 命名 volume — 共享模型快取與 per-user home (動態建立)
 # EN: v2.0 Lab named volumes — shared model cache and per-user home (created dynamically)
 # ==============================================================================
+
+
 volumes:
   shared_models:
     name: shared_models
     # ZH: 由管理員用 preload-models.sh 預下載熱門模型至此 volume
     # EN: Pre-populated by admin via preload-models.sh
+
+  # ZH: v3.6 私有 registry 的映像儲存（只有 --profile registry 時才用到）
+  registry_data:
+    name: ai_platform_registry_data
 
   # ZH: 注意：per-user home volume (home_{user_id}) 由 lab_manager 在使用者首次
   #     啟動 lab session 時動態建立，不在此宣告

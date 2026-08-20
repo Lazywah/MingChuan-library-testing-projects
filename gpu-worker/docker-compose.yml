@@ -28,6 +28,14 @@ services:
       # EN: v3.6 co-located with the service layer. Default false on purpose:
       #     an unknown deployment must not be given Code Lab jobs.
       - SHARES_SERVICE_STORAGE=${SHARES_SERVICE_STORAGE:-false}
+      # ZH: v3.6 私有 registry。**空的（預設）＝ 用本機映像**，行為與加這個功能前一樣。
+      #     只有「與服務層不同機」的節點需要設——那台機器上沒有 aibase/* 映像。
+      #     前綴放在節點這一側是因為：同機用本機映像、遠端從 registry 拉，
+      #     兩台的正確答案不同，服務層送同一個字串必定有一邊是錯的。
+      # EN: v3.6 private registry prefix. Empty = use local images (pre-v3.6 behaviour).
+      - IMAGE_REGISTRY_PREFIX=${IMAGE_REGISTRY_PREFIX:-}
+      - REGISTRY_USERNAME=${REGISTRY_USERNAME:-}
+      - REGISTRY_PASSWORD=${REGISTRY_PASSWORD:-}
       - POLL_INTERVAL=${POLL_INTERVAL:-5}                   # ZH: 領取任務輪詢間隔 (秒)
       - HEARTBEAT_INTERVAL=${HEARTBEAT_INTERVAL:-30}        # ZH: 心跳上報間隔 (秒)
       # ZH: GPU 空閒判定門檻(%)。預設 90 適合本機/桌機（GPU 與 OS/瀏覽器/Ollama 共用，

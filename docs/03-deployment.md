@@ -44,6 +44,35 @@ NODE_ID=gpu-node-01                                # 多節點請各自命名
 POOL_TYPE=batch                                    # 服務層 5090 那台設 interactive
 SHARES_SERVICE_STORAGE=false                       # 與服務層不同機 → false（單機部署才是 true）
 DATASET_CACHE_MAX_GB=100                           # 依這台機器的磁碟調；GPU 主機這側沒有其他配額
+IMAGE_REGISTRY_PREFIX=registry.mcu.edu.tw          # aibase/* 映像在服務層才有，這台要從 registry 拉
+REGISTRY_USERNAME=aibase                           # 與服務層一致
+REGISTRY_PASSWORD=<與服務層一致>
+
+### 私有 registry（多機部署才需要）
+
+`aibase/*` 映像是在**服務層那台**用 `build-all.sh` 建出來的，不在任何公開 registry。
+GPU 一搬到獨立主機，**「程式實驗室」與「上傳訓練」會一起停擺**——兩邊都指向這些映像。
+
+服務層這側：
+
+```bash
+# 1. 填好根 .env 的 REGISTRY_USERNAME / REGISTRY_PASSWORD
+bash infrastructure/registry/make-htpasswd.sh
+docker compose --profile registry up -d registry     # 單機部署不需要這步
+bash infrastructure/base-images/push-all.sh
+```
+
+GPU 主機那側：填 `IMAGE_REGISTRY_PREFIX` 與同一組帳密即可，worker 開機會自己登入。
+
+⚠️ **registry 預設只綁 `127.0.0.1`。** 要讓遠端 GPU 主機連進來時：
+- **建議**：走 nginx 的 TLS（與 SSO go-live 的憑證同一套），不要開明文埠
+- 過渡做法：`REGISTRY_BIND=0.0.0.0`，並在每台 GPU 主機的 `/etc/docker/daemon.json`
+  加 `{"insecure-registries": [...]}`。⚠️ 明文會把帳密送在網路上
+- 沒有 registry 的替代方案：`docker save` / `docker load` 用檔案搬（土法，但一學期一次可接受）
+
+⚠️ **沒有帳密的 registry 是一條遠端執行路徑** —— 任何人都能推一個映像進來，
+而它之後會在你的 GPU 主機上以 `--gpus` 執行。缺 htpasswd 檔時 registry 容器會直接起不來。
+
 STORAGE_MOUNT_PATH=/mnt/storage                    # Linux 路徑；Windows 用 C:\storage
 GPU_IDLE_UTIL_THRESHOLD=90
 POLL_INTERVAL=5
