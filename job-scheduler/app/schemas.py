@@ -234,6 +234,11 @@ class JobCreate(BaseModel):
         pattern=r"^[a-zA-Z0-9_\-\.\/\\]+$",
         description="Only alphanumeric, dash, underscore, dot and slashes allowed"
     )
+    # ZH: v3.6 —— **這才是之後該用的欄位**。伺服器自己查所有權，
+    #     路徑完全不經過客戶端。
+    dataset_id: Optional[str] = None
+    # ZH: 相容用法（v1 / v1.5 送的是這個）。⚠ 這是客戶端給的字串，
+    #     伺服器必須自己驗它屬於送單的人——實測證實原本沒驗。
     dataset_path: Optional[str] = Field(
         default=None, 
         pattern=r"^[a-zA-Z0-9_\-\.\/\\]+$",

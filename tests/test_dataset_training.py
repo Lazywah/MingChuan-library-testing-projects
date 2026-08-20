@@ -57,18 +57,51 @@ def user_headers(client, db):
     return auth_headers(client)
 
 
-@pytest.fixture
-def dataset_file(tmp_path, monkeypatch):
-    """ZH: 造一個真的 zip 放進「資料集根目錄」，並把根目錄指到 tmp。"""
+@pytest.fixture(autouse=True)
+def dataset_root(monkeypatch):
+    """ZH: 資料集根目錄指到一個 **POSIX 形狀**的暫存路徑。
+
+    ZH: 不用 pytest 的 tmp_path —— Windows 的暫存路徑帶冒號，
+        而 `JobCreate.dataset_path` 的字元白名單會直接 422，
+        那樣測出來的紅是「路徑格式不合」而不是要測的東西。
+
+    ZH: **兩個模組都要指過去**：上傳寫到 datasets.DATASET_DIR，
+        worker 從 worker.DATASET_ROOT 讀，所有權檢查也看前者。
+        只改一個的話會出現「上傳成功但送單說不是你的」。
+    """
+    import shutil
+    import uuid as _uuid
+    from app.routers import datasets as ds
     from app.routers import worker as wr
-    root = tmp_path / "datasets" / "u1"
-    root.mkdir(parents=True)
-    z = root / "abc123_cats.zip"
+    root = f"/tmp/dst_{_uuid.uuid4().hex[:8]}"
+    monkeypatch.setattr(ds, "DATASET_DIR", root)
+    monkeypatch.setattr(wr, "DATASET_ROOT", root)
+    yield pathlib.Path(root)
+    shutil.rmtree(root, ignore_errors=True)
+
+
+def _make_dataset(client, headers, name="cats.zip"):
+    """ZH: 走**真的上傳端點**建一份資料集，回傳 (dataset_id, 磁碟路徑)。
+
+    ZH: 以前這些測試是憑空編一個 dataset_path 送出去——而那正是這次補起來的洞
+        （伺服器根本沒檢查那是不是你的）。現在測試也得走真的那條路。
+    """
+    import io as _io
+    z = _io.BytesIO()
     with zipfile.ZipFile(z, "w") as zf:
         zf.writestr("cats/a.txt", "meow")
         zf.writestr("dogs/b.txt", "woof")
-    monkeypatch.setattr(wr, "DATASET_ROOT", str(tmp_path / "datasets"))
-    return z
+    r = client.post("/api/v1/datasets/upload", headers=headers,
+                    files={"file": (name, z.getvalue(), "application/zip")})
+    assert r.status_code == 200, r.text
+    return r.json()["dataset_id"], r.json()["dataset_path"]
+
+
+@pytest.fixture
+def dataset_file(client, user_headers, dataset_root):
+    """ZH: 一份真的、屬於測試使用者的資料集（回磁碟路徑）。"""
+    _, path = _make_dataset(client, user_headers)
+    return pathlib.Path(path)
 
 
 def _submit(client, headers, **over):
@@ -89,11 +122,12 @@ def test_take_payload_has_dataset_flag_not_container_path(client, db, user_heade
     """
     _heartbeat(client)
     assert _submit(client, user_headers,
-                   dataset_path="/data/datasets/u1/abc_cats.zip").status_code == 201
+                   dataset_path=_make_dataset(client, user_headers, "abc_cats.zip")[1]).status_code == 201
 
     job = _take(client)
     assert job["has_dataset"] is True
-    assert job["dataset_filename"] == "abc_cats.zip"
+    # ZH: 存檔名帶 uuid 前綴（上傳端加的，防同名互蓋），所以比對結尾。
+    assert job["dataset_filename"].endswith("abc_cats.zip"), job["dataset_filename"]
     assert "dataset_path" not in job
 
 
@@ -116,14 +150,14 @@ def test_dataset_job_gets_the_builtin_task(client, db, user_headers):
     """ZH: 上傳資料又沒自己帶程式 → 平台提供腳本。"""
     _heartbeat(client)
     assert _submit(client, user_headers,
-                   dataset_path="/data/datasets/u1/a.zip").status_code == 201
+                   dataset_path=_make_dataset(client, user_headers)[1]).status_code == 201
     assert _take(client)["builtin_task"] == "image_classification"
 
 
 def test_inline_code_job_keeps_its_own_code(client, db, user_headers):
     """ZH: 自己帶程式的人不該被換成內建腳本 —— 他一定是想跑自己的東西。"""
     _heartbeat(client)
-    assert _submit(client, user_headers, dataset_path="/data/datasets/u1/a.zip",
+    assert _submit(client, user_headers, dataset_path=_make_dataset(client, user_headers)[1],
                    inline_code="echo hi").status_code == 201
     assert _take(client)["builtin_task"] is None
 
@@ -131,7 +165,7 @@ def test_inline_code_job_keeps_its_own_code(client, db, user_headers):
 def test_entry_args_job_keeps_its_own_entry(client, db, user_headers):
     """ZH: 自訂入口（llama.cpp 那類）同理。"""
     _heartbeat(client)
-    assert _submit(client, user_headers, dataset_path="/data/datasets/u1/a.zip",
+    assert _submit(client, user_headers, dataset_path=_make_dataset(client, user_headers)[1],
                    entry_args=["./main", "-m", "x.gguf"]).status_code == 201
     assert _take(client)["builtin_task"] is None
 
@@ -143,7 +177,7 @@ def test_unknown_task_is_rejected_at_submit(client, db, user_headers):
         「訓練成功但完全不是他要的東西」——那是最難查的一種失敗。
     """
     _heartbeat(client)
-    r = _submit(client, user_headers, dataset_path="/data/datasets/u1/a.zip",
+    r = _submit(client, user_headers, dataset_path=_make_dataset(client, user_headers)[1],
                 config={"epochs": 2, "task": "speech_recognition"})
     assert r.status_code == 400, r.text
     assert "speech_recognition" in r.text
@@ -152,7 +186,7 @@ def test_unknown_task_is_rejected_at_submit(client, db, user_headers):
 def test_known_task_is_accepted(client, db, user_headers):
     """ZH: 陰性對照 —— 認得的種類照收。"""
     _heartbeat(client)
-    r = _submit(client, user_headers, dataset_path="/data/datasets/u1/a.zip",
+    r = _submit(client, user_headers, dataset_path=_make_dataset(client, user_headers)[1],
                 config={"epochs": 2, "task": "image_classification"})
     assert r.status_code == 201, r.text
 
@@ -177,7 +211,7 @@ def _job_with_dataset(client, headers, db, real_path):
     job_id = client.post("/api/v1/jobs",
                          json={"job_name": "t", "model_name": "resnet18",
                                "config": {"epochs": 2},
-                               "dataset_path": "/data/datasets/u1/a.zip"},
+                               "dataset_path": _make_dataset(client, headers)[1]},
                          headers=headers).json()["job_id"]
     row = db.query(models.TrainingJob).filter_by(id=job_id).first()
     row.dataset_path = str(real_path)
@@ -334,7 +368,7 @@ def test_builtin_task_pins_its_image(client, db, user_headers):
     from app import crud
     _heartbeat(client)
     assert _submit(client, user_headers,
-                   dataset_path="/data/datasets/u1/a.zip").status_code == 201
+                   dataset_path=_make_dataset(client, user_headers)[1]).status_code == 201
     job = _take(client)
     assert job["docker_image"] == crud.builtin_task_image("image_classification")
     assert job["docker_image"]          # 不可以是 None
@@ -343,7 +377,7 @@ def test_builtin_task_pins_its_image(client, db, user_headers):
 def test_user_chosen_image_wins(client, db, user_headers):
     """ZH: 使用者自己選了映像就用他的 —— 指名只是預設值，不是強制。"""
     _heartbeat(client)
-    assert _submit(client, user_headers, dataset_path="/data/datasets/u1/a.zip",
+    assert _submit(client, user_headers, dataset_path=_make_dataset(client, user_headers)[1],
                    docker_image="aibase/tensorflow:2026-spring").status_code == 201
     assert _take(client)["docker_image"] == "aibase/tensorflow:2026-spring"
 

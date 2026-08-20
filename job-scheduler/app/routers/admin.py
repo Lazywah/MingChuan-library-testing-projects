@@ -651,6 +651,28 @@ def admin_delete_user(
     except Exception as e:  # noqa: BLE001 - Lab 封存失敗不應阻擋帳號刪除
         logger.error(f"Lab 封存失敗（仍繼續刪除帳號）: {e}")
 
+    # ZH: v3.6 —— 資料集與訓練產出的**實體檔案**。
+    #     DB 那邊 datasets 是 ON DELETE CASCADE、training_jobs 在下面直接刪，
+    #     但**磁碟上的檔案不會跟著消失** —— 刪了帳號，那些 zip 與模型檔會永遠留著。
+    #     這與 Lab volume 封存是同一類：DB 與實體儲存要一起處理。
+    #     ⚠ 與 Lab 不同的是**不做封存**：資料集是使用者自己上傳的原始檔，
+    #       他要保留應該自己留一份；平台沒有理由替他保管一份副本。
+    try:
+        import shutil as _sh
+        from .datasets import DATASET_DIR as _dsd
+        import os as _os
+        _sh.rmtree(_os.path.join(_dsd, user_id), ignore_errors=True)
+    except Exception as e:  # noqa: BLE001 - 清檔案失敗不該擋住帳號刪除
+        logger.error(f"ZH: 清除使用者資料集檔案失敗（仍繼續刪除帳號）: {e}")
+    try:
+        from . import worker as _wr
+        for _j in db.query(models.TrainingJob).filter(
+                models.TrainingJob.user_id == user_id,
+                models.TrainingJob.artifact_bytes.isnot(None)).all():
+            _wr.remove_artifact_file(_j.id)
+    except Exception as e:  # noqa: BLE001
+        logger.error(f"ZH: 清除使用者模型檔失敗（仍繼續刪除帳號）: {e}")
+
     try:
         db.query(models.AdminAction).filter(
             models.AdminAction.target_user == user_id

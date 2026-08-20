@@ -22,6 +22,10 @@ function authHeaders() {
 }
 
 // ── 狀態 ─────────────────────────────────────────────────────────────
+// ZH: v3.6 —— 從「我的資料集」按「再訓練一次」進來時，網址會帶 ?dataset=<id>。
+//     這條路**完全不上傳**（檔案早就在伺服器上了），所以是另一條分支。
+let reuseId = new URLSearchParams(location.search).get('dataset');
+let reuseName = null;
 let picked = null;        // ZH: 使用者選的檔案（尚未上傳）
 let jobId = null;
 let polling = null;
@@ -87,10 +91,13 @@ $('drop').addEventListener('drop', (e) => choose(e.dataTransfer.files[0]));
 
 // ── 送出 ─────────────────────────────────────────────────────────────
 $('go').addEventListener('click', async () => {
-    if (!picked) return;
-    setGo({ label: T('tr_uploading', '上傳中…'), enabled: false });
+    if (!picked && !reuseId) return;
     setNote('');
 
+    // ZH: 重用既有資料集 —— 檔案已經在伺服器上，這裡什麼都不用傳。
+    if (reuseId) return submitJob({ dataset_id: reuseId }, reuseName || 'training');
+
+    setGo({ label: T('tr_uploading', '上傳中…'), enabled: false });
     let datasetPath;
     try {
         const fd = new FormData();
@@ -117,21 +124,36 @@ $('go').addEventListener('click', async () => {
         return;
     }
 
+    return submitJob({ dataset_path: datasetPath }, picked.name.replace(/\.zip$/i, ''));
+});
+
+// ZH: 送單。**上傳與重用兩條路共用這一支** —— 各寫一份的話，
+//     日後改送單參數時一定會有一條被漏掉，而那條會安靜地繼續送舊格式。
+async function submitJob(datasetRef, jobName) {
     setGo({ label: T('tr_submitting', '送出中…'), enabled: false });
     const epochs = Math.min(50, Math.max(1, parseInt($('epochs').value, 10) || 10));
     try {
         const r = await fetch(`${API}/jobs`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', ...authHeaders() },
-            body: JSON.stringify({
-                job_name: picked.name.replace(/\.zip$/i, ''),
+            body: JSON.stringify(Object.assign({
+                job_name: jobName,
                 model_name: 'resnet18',
-                dataset_path: datasetPath,
                 // ZH: 種類寫明。不寫也會落到預設，但寫出來的話**日後多一種任務時
                 //     這張舊單仍然指向同一支腳本**，不會跟著預設值漂走。
                 config: { epochs: epochs, task: 'image_classification' },
-            }),
+            }, datasetRef)),
         });
+        if (r.status === 401 || r.status === 403) {
+            const body = await r.json().catch(() => ({}));
+            // ZH: 403 在這裡有兩種意思：登入過期，或**這份資料集不是你的**。
+            //     後者在正常使用下不會發生（是別人的 id 才會），但訊息要分得開。
+            setNote(r.status === 401
+                ? T('tr_signed_out', '你的登入已經過期，請重新登入後再試一次。')
+                : clean(detailText(body.detail)) || T('tr_submit_fail', '送不出去'));
+            setGo({ label: T('tr_go', '開始訓練'), enabled: true });
+            return;
+        }
         const body = await r.json().catch(() => ({}));
         if (!r.ok) throw new Error(detailText(body.detail) || `HTTP ${r.status}`);
         jobId = body.job_id;
@@ -146,7 +168,41 @@ $('go').addEventListener('click', async () => {
     $('run').scrollIntoView({ behavior: 'smooth', block: 'start' });
     poll();
     polling = setInterval(poll, 3000);
-});
+}
+
+// ZH: 帶著 ?dataset= 進來時，把拖放區換成「用這一包」的說明，
+//     並讓開始鈕直接可按 —— 這條路不需要選檔案。
+async function initReuse() {
+    if (!reuseId) return;
+    $('go').disabled = false;
+    $('drop').classList.add('drop--has');
+    $('drop-main').textContent = T('tr_reusing', '用你上傳過的資料');
+    $('drop-hint').textContent = '';
+    try {
+        const r = await fetch(`${API}/datasets`, { headers: authHeaders() });
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        const found = ((await r.json()).datasets || []).find((d) => d.id === reuseId);
+        if (!found) {
+            // ZH: id 對不上（被刪了、或不是自己的）——**不要默默讓他按下去**，
+            //     那會在送單時才拿到 403，而他不知道為什麼。
+            reuseId = null;
+            $('drop').classList.remove('drop--has');
+            $('drop-main').textContent = T('tr_drop', '把 zip 拖到這裡，或點一下選檔案');
+            $('drop-hint').textContent = T('tr_drop_sub', '只收 .zip，每人上限 2 GB');
+            $('go').disabled = true;
+            setNote(T('tr_reuse_gone', '找不到那份資料集，可能已經被刪掉了。請重新選一個檔案。'));
+            return;
+        }
+        reuseName = found.name.replace(/\.zip$/i, '');
+        $('drop-main').textContent = found.name;
+        $('drop-hint').textContent = human(found.size_bytes);
+    } catch {
+        // ZH: 讀不到清單不影響送單（伺服器那邊仍會驗所有權），只是顯示不了名字。
+        $('drop-main').textContent = T('tr_reusing', '用你上傳過的資料');
+    }
+}
+
+initReuse();
 
 // ZH: 目前的語言。**唯一定義** —— 散在各處自己取的話，總有一處會寫錯而且看不出來。
 function currentLang() {

@@ -899,6 +899,19 @@ textarea.field__input { resize: vertical; min-height: 6rem; }
 }
 @media (prefers-reduced-motion: reduce) { .bar__fill { transition: none } }
 
+/* ZH: 資料集列表的動作列。窄畫面時自己換行，不要把卡片撐破。 */
+.ds__actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-2);
+    margin-top: var(--space-3);
+}
+.ds__actions .footnote { margin: 0; }
+
+/* ZH: 配額快滿時的警示色。這一頁的來訪者多半就是為了這件事。 */
+.bar--warn .bar__fill { background-color: var(--warn); }
+
 /* ZH: 每輪結果的表格。窄畫面時讓它自己橫向捲，不要把整頁撐寬。 */
 .tbl {
     width: 100%;

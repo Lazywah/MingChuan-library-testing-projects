@@ -260,6 +260,20 @@ GET /api/v1/admin/analytics?department=...   # 學系 / 工具用量分布
 | GET | `/api/v1/worker/datasets/{job_id}` | 下載該任務的資料集壓縮檔（v3.6）|
 | POST | `/api/v1/worker/jobs/{job_id}/artifact` | 回傳訓練產出（模型檔）（v3.6）|
 
+**v3.6 資料集管理（使用者端）**
+
+| 方法 | 路徑 | 用途 |
+|---|---|---|
+| POST | `/api/v1/datasets/upload` | 上傳；**回傳 `dataset_id`**（另回 `dataset_path` 供舊版相容）|
+| GET | `/api/v1/datasets` | 列出自己的資料集，含用量與配額 |
+| DELETE | `/api/v1/datasets/{id}` | 刪除（還有任務在用時回 **409**）|
+
+⚠️ **送單請用 `dataset_id`，不要用 `dataset_path`。** 路徑由客戶端傳的話，
+伺服器手上只有一個字串，無從判斷是誰的——原本正是這樣，**別人的路徑照收**。
+現在兩種輸入都經 `crud.resolve_dataset_for_user` 驗證所有權，不是自己的一律 403。
+
+⚠️ 刪除與「不是自己的」都回 404（不是 403）—— 分開回等於告訴對方哪些 id 存在。
+
 **v3.6 模型檔下載（使用者端）**
 
 | 方法 | 路徑 | 用途 |

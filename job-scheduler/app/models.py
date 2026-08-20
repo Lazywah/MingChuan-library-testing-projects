@@ -157,6 +157,10 @@ class TrainingJob(Base):
     # ZH: ⚠ 這是**運算主機上**的路徑（/workspace/outputs/…），服務層讀不到它。
     #     留著只是給管理者上機器找檔案用。使用者要下載的檔案看 artifact_bytes。
     output_path = Column(String)                                              # ZH: 模型產出路徑（運算主機）| EN: Output path (on the compute host)
+    # ZH: v3.6 —— 這張單用的是哪一份資料集。**這才是正解**：
+    #     dataset_path 是客戶端傳來的字串，伺服器無從判斷所有權；
+    #     dataset_id 讓伺服器自己去查（見 crud.resolve_dataset_for_user）。
+    dataset_id = Column(String, ForeignKey("datasets.id", ondelete="SET NULL"))
     # ZH: v3.6 —— worker 回傳的模型檔大小。**有值＝服務層這邊真的有那個檔**。
     #     刻意不存路徑：路徑由 job_id 推導（/data/artifacts/<job_id>/model.pt），
     #     少一個會跟實體檔案漂開的字串。
@@ -166,6 +170,29 @@ class TrainingJob(Base):
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     started_at = Column(DateTime)
     completed_at = Column(DateTime)
+
+
+# ==============================================================================
+# ZH: 表 3b: Dataset - 使用者上傳的資料集 (v3.6)
+# EN: Table 3b: Dataset - user-uploaded datasets (v3.6)
+# ==============================================================================
+# ZH: 為什麼需要這張表（原本只有磁碟上的檔案，沒有任何紀錄）：
+#       1. **沒有紀錄就沒有刪除**。每人 2 GB 配額，傳滿之後使用者永遠卡住。
+#       2. **原始檔名會遺失**。存檔名為了防命令注入已經清成 ASCII，
+#          「我的圖片.zip」在磁碟上是 `0fad32ff_dataset.zip`——列表裡沒得顯示。
+#       3. **所有權沒有地方查**。原本送單時的 dataset_path 是客戶端給的，
+#          伺服器無從判斷那是不是他自己的（實測證實：別人的照收）。
+class Dataset(Base):
+    __tablename__ = "datasets"
+
+    id = Column(String, primary_key=True, default=generate_uuid)
+    user_id = Column(String, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    # ZH: 使用者當初上傳的檔名（可能是中文）。只用於顯示，**不拿來組路徑**。
+    original_name = Column(String, nullable=False)
+    # ZH: 磁碟上的實際檔名（已清成安全字元）。與 user_id 一起就能推出完整路徑。
+    stored_name = Column(String, nullable=False)
+    size_bytes = Column(Integer, nullable=False, default=0)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
 
 # ==============================================================================

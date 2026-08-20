@@ -115,6 +115,16 @@
         if (page === 'lab.html') lab.setAttribute('aria-current', 'page');
         nav.appendChild(lab);
 
+        // ZH: v3.6 「我的資料集」。放進主導覽而不是埋在某一頁的連結裡，
+        //     因為使用者會需要它的時機是「傳不上去了」——那時他不會記得
+        //     從哪一頁進得去。訓練頁與這一頁是互相到得了的一組。
+        var ds = document.createElement('a');
+        ds.href = 'datasets.html';
+        ds.setAttribute('data-i18n', 'nav_datasets');
+        ds.textContent = T('nav_datasets', '我的資料集');
+        if (page === 'datasets.html' || page === 'train.html') ds.setAttribute('aria-current', 'page');
+        nav.appendChild(ds);
+
         // ── 帳號選單（永遠在最右邊；色系切換是開發期的，上線會整塊移除）
         var acc = document.createElement('div');
         acc.className = 'account';

@@ -253,6 +253,9 @@ def init_db():
             # --- v3.6 訓練產出（模型檔）回傳到服務層 ---
             try: conn.execute(text("ALTER TABLE training_jobs ADD COLUMN artifact_bytes INTEGER"))
             except Exception: pass
+            # --- v3.6 任務指向的資料集（取代由客戶端傳路徑）---
+            try: conn.execute(text("ALTER TABLE training_jobs ADD COLUMN dataset_id VARCHAR"))
+            except Exception: pass
 
     except Exception as e:
         logger.warning(f"Manual DB migration skipped or partially failed: {e}")

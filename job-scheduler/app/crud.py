@@ -409,6 +409,7 @@ def create_job(db: Session, job: schemas.JobCreate, user_id: str) -> models.Trai
         config=json.dumps(job.config) if job.config else None,
         script_path=job.script_path,
         dataset_path=job.dataset_path,
+        dataset_id=getattr(job, "dataset_id", None),
         # ZH: Notebook 欄位 | EN: Notebook fields
         docker_image=job.docker_image,
         inline_code=job.inline_code,
@@ -651,6 +652,99 @@ def append_job_log(db: Session, job_id: str, new_log: str) -> Optional[models.Tr
         db.commit()
         db.refresh(job)
     return job
+
+
+def resolve_dataset_for_user(db: Session, user_id: str, root: str,
+                             dataset_id=None, dataset_path=None):
+    """ZH: 把送單帶來的資料集參照解析成「**確認屬於這個人**」的一份資料集。
+
+    ZH: 回傳 (dataset, path) 或 (None, None)。兩種輸入都走這裡，
+        避免兩條路各驗一次而其中一條忘了驗——那正是原本的情況。
+
+    ZH: `dataset_id` 是正解：伺服器自己去查，客戶端拿不到也改不了別人的。
+        `dataset_path` 是相容用法：**比對它是不是這個人自己的某一份**，
+        不是「看起來像在資料集目錄底下就好」——後者連別人的目錄都算通過。
+
+    @node job-scheduler/app/crud.py::resolve_dataset_for_user
+    """
+    import os as _os
+    if dataset_id:
+        ds = get_dataset(db, dataset_id)
+        if not ds or ds.user_id != user_id:
+            return None, None
+        return ds, dataset_file_path(root, ds)
+
+    if dataset_path:
+        want = _os.path.normpath(dataset_path)
+        for ds in list_datasets(db, user_id):
+            if _os.path.normpath(dataset_file_path(root, ds)) == want:
+                return ds, dataset_path
+        return None, None
+
+    return None, None
+
+
+def dataset_file_path(root: str, ds) -> str:
+    """ZH: 一份資料集在磁碟上的位置。**唯一定義**——上傳、下載、刪除都走這裡。
+
+    @node job-scheduler/app/crud.py::dataset_file_path
+    """
+    import os as _os
+    return _os.path.join(root, ds.user_id, ds.stored_name)
+
+
+def list_datasets(db: Session, user_id: str) -> List[models.Dataset]:
+    """ZH: 某人的資料集，新的在前。
+
+    @node job-scheduler/app/crud.py::list_datasets
+    """
+    return (db.query(models.Dataset)
+            .filter(models.Dataset.user_id == user_id)
+            .order_by(desc(models.Dataset.created_at))
+            .all())
+
+
+def get_dataset(db: Session, dataset_id: str) -> Optional[models.Dataset]:
+    """@node job-scheduler/app/crud.py::get_dataset"""
+    return db.query(models.Dataset).filter(models.Dataset.id == dataset_id).first()
+
+
+def dataset_active_jobs(db: Session, dataset_id: str) -> int:
+    """ZH: 有幾張**還沒跑完**的單在用這份資料集。
+
+    ZH: 刪除前要看這個：資料集刪掉、任務還在排隊的話，
+        它會在領工之後才失敗，而使用者根本不會把兩件事聯想在一起。
+
+    @node job-scheduler/app/crud.py::dataset_active_jobs
+    """
+    return (db.query(models.TrainingJob)
+            .filter(models.TrainingJob.dataset_id == dataset_id,
+                    models.TrainingJob.status.in_(("pending", "queued", "running")))
+            .count())
+
+
+def delete_dataset(db: Session, ds, remove_file) -> None:
+    """ZH: 刪掉一份資料集（實體 + DB）。
+
+    ZH: 已經跑完的任務**保留**它的 dataset_id 參照——DB 那邊是 SET NULL，
+        紀錄還在，只是指不到檔案了。刪資料集不該連歷史紀錄一起消失。
+
+    @node job-scheduler/app/crud.py::delete_dataset
+    """
+    remove_file(ds)
+    db.delete(ds)
+    db.commit()
+
+
+def create_dataset(db: Session, user_id: str, original_name: str,
+                   stored_name: str, size_bytes: int) -> models.Dataset:
+    """@node job-scheduler/app/crud.py::create_dataset"""
+    ds = models.Dataset(user_id=user_id, original_name=original_name,
+                        stored_name=stored_name, size_bytes=size_bytes)
+    db.add(ds)
+    db.commit()
+    db.refresh(ds)
+    return ds
 
 
 def purge_artifact(db: Session, job, remove_file) -> int:

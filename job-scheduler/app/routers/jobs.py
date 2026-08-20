@@ -45,6 +45,7 @@ import urllib.parse
 # ZH: v3.6 —— 模型檔的實際位置由 worker router 那邊定義（唯一定義），
 #     這裡引用而不是再抄一份路徑規則。
 from . import worker as worker_router
+from . import datasets as datasets_router
 
 logger = logging.getLogger(__name__)
 
@@ -172,6 +173,28 @@ def submit_job(
                    "EN: No compute node can currently read your Code Lab files, so this "
                    "kind of job cannot run right now; please try later or contact an admin"
         )
+
+    # ------------------------------------------------------------------
+    # ZH: 政策檢查 e2 — 資料集必須是自己的
+    # EN: Policy check e2 — the dataset must belong to the submitter
+    # ------------------------------------------------------------------
+    # ZH: 🔴 原本**完全沒有這一段**：客戶端送什麼 dataset_path 就收什麼，
+    #     別人的照收、憑空編的也照收（實測證實）。
+    #     根因是路徑由客戶端傳——伺服器手上只有一個字串，無從判斷是誰的。
+    #     現在一律經由 crud.resolve_dataset_for_user 解析，兩種輸入走同一條路。
+    if job.dataset_id or job.dataset_path:
+        ds, resolved = crud.resolve_dataset_for_user(
+            db, current_user.id, datasets_router.DATASET_DIR,
+            dataset_id=job.dataset_id, dataset_path=job.dataset_path)
+        if ds is None:
+            # ZH: 「不是你的」與「不存在」回同一個 403 —— 分開回等於告訴對方
+            #     哪些 id／路徑是存在的。
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="ZH: 找不到這份資料集，或它不屬於你 | "
+                       "EN: No such dataset, or it does not belong to you")
+        job.dataset_path = resolved
+        job.dataset_id = ds.id
 
     # ------------------------------------------------------------------
     # ZH: 政策檢查 f — 指名的內建訓練種類必須認得
