@@ -14,6 +14,12 @@
 # ZH: MYAI 廠商 session cookie 快取（機敏、執行期產生，勿進版控）| EN: cached vendor session cookie (sensitive, runtime)
 **/data/myai_session.json
 
+# ZH: 使用者上傳的資料集 —— **絕不進版控**。
+#     這條是被真實事件逼出來的（2026-08-20）：我做的測試資料集被 commit 進去了，
+#     而同一條路徑在正式環境裝的是學生上傳的檔案。
+# EN: User-uploaded datasets must never be committed.
+**/data/datasets/
+
 # ZH: Python 快取 | EN: Python cache
 __pycache__/
 *.py[cod]
