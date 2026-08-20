@@ -429,6 +429,28 @@ def report_update(job_id, payload, *, retries: int = 3, backoff: float = 2.0) ->
             time.sleep(backoff * attempt)  # ZH: 線性退避 | EN: linear backoff
     logger.error("report_update gave up after %d attempts for job %s", retries, job_id)
 
+# ZH: 內建腳本用來回報結構化指標的標記（見 builtin_scripts/*.py 的 METRIC_PREFIX）。
+#     兩邊必須一致；改一邊不改另一邊的症狀是「指標永遠是空的」，而且不報錯。
+METRIC_PREFIX = "@@METRIC "
+
+
+def parse_metric(log_line):
+    """ZH: 這一行是不是結構化指標？是就回 dict，不是回 None。
+
+    ZH: 解析失敗**不當成指標**（回 None）→ 那行會照常進 log，
+        使用者至少看得到原始輸出，而不是整行消失。
+
+    @node gpu-worker/worker.py::parse_metric
+    """
+    if not log_line.startswith(METRIC_PREFIX):
+        return None
+    try:
+        m = json.loads(log_line[len(METRIC_PREFIX):])
+    except (ValueError, TypeError):
+        return None
+    return m if isinstance(m, dict) else None
+
+
 def parse_progress(log_line):
     """
     ZH: 解析常見的進度格式
@@ -659,6 +681,13 @@ def execute_job(job):
         for line in process.stdout:
             line = line.strip()
             if not line:
+                continue
+
+            # ZH: 指標行不進使用者看得到的 log —— 讓 `@@METRIC {...}` 出現在
+            #     學生的訓練紀錄裡只會讓人困惑。解析失敗時它不算指標，會照常留在 log。
+            m = parse_metric(line)
+            if m is not None:
+                report_update(job_id, {"metric": m})
                 continue
 
             logger.info(f"[{job_id}] {line}")

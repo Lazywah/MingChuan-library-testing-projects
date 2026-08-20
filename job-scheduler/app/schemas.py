@@ -25,6 +25,7 @@ EN: Modular design:
 
 from pydantic import BaseModel, EmailStr, Field, ConfigDict, field_validator, field_serializer
 from datetime import datetime, timezone
+import json
 from typing import Optional, Dict, Any, List
 
 
@@ -276,6 +277,27 @@ class JobStatusResponse(BaseModel):
     error_message: Optional[str] = None
     output_path: Optional[str] = None
     logs: Optional[str] = None
+    # ZH: v3.6 訓練指標。DB 存的是 JSON **字串**，這裡出去必須是陣列——
+    #     不轉的話前端拿到一坨字串，而 `JSON.parse` 該由誰做會變成兩邊各猜一次。
+    metrics: Optional[List[Dict[str, Any]]] = None
+
+    @field_validator("metrics", mode="before")
+    @classmethod
+    def _parse_metrics(cls, v):
+        """ZH: 字串 → 陣列。壞掉的 JSON 回 None（不是丟例外）——
+           指標壞掉不該讓整個任務查詢 500，狀態與日誌還是要看得到。
+
+        @node job-scheduler/app/schemas.py::JobStatusResponse._parse_metrics
+        """
+        if v is None or isinstance(v, list):
+            return v
+        if isinstance(v, str):
+            try:
+                parsed = json.loads(v)
+            except (ValueError, TypeError):
+                return None
+            return parsed if isinstance(parsed, list) else None
+        return None
 
 
 class JobListItem(BaseModel):

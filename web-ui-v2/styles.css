@@ -162,8 +162,14 @@ body {
     border: 1px solid transparent;
     border-radius: var(--radius-md);
     cursor: pointer;
+    /* ZH: `<a class="btn">` 會帶著 UA 的底線，於是一顆按鈕看起來像一條連結。
+           在 <button> 上這行沒有作用，所以放在 .btn 裡是安全的。 */
+    text-decoration: none;
     transition: background-color 0.15s ease, border-color 0.15s ease;
 }
+/* ZH: 要與上方 .btn--primary 疊成一組動作時用。primary 自己就是 width:100%，
+       第二顆不跟著滿版的話會在滿版按鈕底下縮成一小塊，看起來像註腳而不是動作。 */
+.btn--block { width: 100%; margin-top: var(--space-2); }
 .btn--primary {
     background-color: var(--accent);
     color: var(--on-accent);          /* ⚠ 黃底＝深字、藍底＝白字，由 token 決定 */
@@ -345,6 +351,22 @@ body {
     min-height: var(--tap-min);
     display: flex;
     align-items: center;
+    /* ZH: `display: flex` 會讓 Chrome **拿掉 <summary> 的原生展開三角**，
+           於是這一行看起來就是一段不能點的灰字——沒有人會去點它。
+           flex 是為了 min-height + 垂直置中，不能不要，所以自己畫一個指示符。
+           （login.html 的「管理者本機登入」本來也是這樣，一起修好。） */
+    list-style: none;
+}
+.fold__summary::-webkit-details-marker { display: none; }
+.fold__summary::before {
+    content: "▸";                     /* ▸ */
+    display: inline-block;
+    margin-right: var(--space-2);
+    transition: transform 0.15s ease;
+}
+details[open] > .fold__summary::before { transform: rotate(90deg); }
+@media (prefers-reduced-motion: reduce) {
+    .fold__summary::before { transition: none; }
 }
 .fold__summary:hover { color: var(--text); }
 .fold__summary:focus-visible { outline: var(--focus-ring); outline-offset: 2px; }
@@ -829,9 +851,76 @@ textarea.field__input { resize: vertical; min-height: 6rem; }
 /* 兩顆按鈕在同一張卡裡時要有間距 */
 .primary-card .btn + .btn { margin-top: var(--space-3); }
 
+/* ==========================================================================
+   交給平台訓練（train.html）
+   ========================================================================== */
+
+/* ZH: 拖放區。它是 role="button" 的 div，所以 :focus-visible 一定要有——
+       沒有的話鍵盤使用者按 Tab 過去完全看不出焦點在哪。
+   ZH: 高度 ≥ 44px 遠遠有餘（WCAG 2.5.8 AAA 的觸控目標），這裡本來就很大。 */
+.drop {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-2);
+    min-height: 8rem;
+    padding: var(--space-5) var(--space-4);
+    margin-bottom: var(--space-4);
+    border: 2px dashed var(--hairline);
+    border-radius: var(--radius);
+    background-color: var(--surface-2);
+    cursor: pointer;
+    text-align: center;
+    transition: border-color 0.15s, background-color 0.15s;
+}
+.drop:hover { border-color: var(--link); background-color: var(--surface); }
+.drop:focus-visible { outline: var(--focus-ring); outline-offset: 2px; }
+.drop--over { border-color: var(--accent); background-color: var(--surface); }
+.drop--has { border-style: solid; border-color: var(--accent); }
+.drop__icon { font-size: 1.5rem; color: var(--text-muted); line-height: 1; }
+.drop__main { color: var(--text-strong); font-weight: 600; word-break: break-all; }
+.drop__sub { font-size: 0.85rem; color: var(--text-muted); }
+
+/* ZH: 進度條。動畫在 prefers-reduced-motion 下關掉——
+       這是進度指示，不是裝飾，關掉動畫仍然看得到寬度。 */
+.bar {
+    height: 0.5rem;
+    border-radius: 999px;
+    background-color: var(--surface-2);
+    overflow: hidden;
+    margin-bottom: var(--space-3);
+}
+.bar__fill {
+    height: 100%;
+    width: 0;
+    background-color: var(--accent);
+    transition: width 0.4s ease;
+}
+@media (prefers-reduced-motion: reduce) { .bar__fill { transition: none } }
+
+/* ZH: 每輪結果的表格。窄畫面時讓它自己橫向捲，不要把整頁撐寬。 */
+.tbl {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.9375rem;
+    margin-bottom: var(--space-5);
+}
+.tbl th,
+.tbl td {
+    text-align: left;
+    padding: var(--space-2) var(--space-3);
+    border-bottom: 1px solid var(--hairline);
+    font-variant-numeric: tabular-nums;
+}
+.tbl th { color: var(--text-muted); font-weight: 600; font-size: 0.85rem; }
+.tbl td { color: var(--text); }
+
 @media (max-width: 640px) {
     .page { padding: var(--space-5) var(--space-4) var(--space-7); }
     .balance__value { font-size: 2rem; }
     .hero__title { font-size: 1.3rem; }
     .chart__box { height: 12rem; }
+    /* ZH: 每輪結果在窄畫面自己捲，不要把頁面撐寬（頁面橫捲是版面壞掉的訊號）。 */
+    #epochs-table { overflow-x: auto; }
 }

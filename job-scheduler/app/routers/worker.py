@@ -78,6 +78,10 @@ class TakeJobResponse(BaseModel):
 
 class JobUpdatePayload(BaseModel):
     status: Optional[str] = None
+    # ZH: v3.6 —— 一筆結構化訓練指標（dataset / epoch / summary）。
+    #     沒有這個欄位的話，訓練結果只存在 GPU 主機的 result.json 上，
+    #     跨機部署時服務層根本讀不到，畫面就只能說「完成」而說不出正確率。
+    metric: Optional[dict] = None
     progress: Optional[float] = None
     log: Optional[str] = None
     output_path: Optional[str] = None
@@ -320,6 +324,9 @@ def update_job(
 
     if payload.log:
         crud.append_job_log(db, job_id, payload.log)
+
+    if payload.metric is not None:
+        crud.append_job_metric(db, job_id, payload.metric)
 
     if payload.status:
         crud.update_job_status(

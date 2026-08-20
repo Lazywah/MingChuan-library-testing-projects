@@ -39,6 +39,20 @@ SEED        = int(os.environ.get("SEED", "42"))
 IMG_SIZE = 224
 
 
+# ZH: worker 認得的機器可讀標記。印出來的那一行**不會**進使用者看得到的 log
+#     （worker 解析完就吃掉），所以格式可以醜，但不可以隨便改——
+#     要改請一起改 gpu-worker/worker.py::parse_metric。
+METRIC_PREFIX = "@@METRIC "
+
+
+def metric(**kv) -> None:
+    """ZH: 回報一筆結構化指標。`kind` 區分是哪一種（dataset / epoch / summary）。
+
+    @node gpu-worker/builtin_scripts/image_classification.py::metric
+    """
+    print(METRIC_PREFIX + json.dumps(kv, ensure_ascii=False), flush=True)
+
+
 def fail(msg: str, hint: str = "") -> None:
     """ZH: 明確失敗。訊息是給**使用者**看的（會出現在任務日誌裡），所以講人話。
 
@@ -113,8 +127,10 @@ def main() -> int:
 
     classes = full.classes
     n_total = len(full)
-    print(f"類別：{len(classes)} 個 → {', '.join(classes)}", flush=True)
-    print(f"圖片：{n_total} 張", flush=True)
+    # ZH: 這幾行是**使用者**看得到的訓練紀錄。英文模式的人也只看得到這裡，
+    #     所以一律雙語——不是為了好看，是那是他唯一的線索。
+    print(f"類別 / Classes: {len(classes)} → {', '.join(classes)}", flush=True)
+    print(f"圖片 / Images: {n_total}", flush=True)
 
     if len(classes) < 2:
         fail(f"只找到 {len(classes)} 個類別，分不出東西。",
@@ -129,7 +145,9 @@ def main() -> int:
     n_train = n_total - n_val
     train_set, val_set = random_split(
         full, [n_train, n_val], generator=torch.Generator().manual_seed(SEED))
-    print(f"訓練 {n_train} 張 / 驗證 {n_val} 張", flush=True)
+    print(f"訓練 / train {n_train}　驗證 / validation {n_val}", flush=True)
+    metric(kind="dataset", classes=classes, images=n_total,
+           train_images=n_train, val_images=n_val, epochs=EPOCHS)
 
     bs = min(BATCH_SIZE, n_train)
     train_loader = DataLoader(train_set, batch_size=bs, shuffle=True, num_workers=2)
@@ -189,7 +207,9 @@ def main() -> int:
         acc = correct / max(1, n_val)
         history.append({"epoch": epoch, "train_loss": round(train_loss, 4),
                         "val_accuracy": round(acc, 4)})
-        print(f"  loss {train_loss:.4f} | 驗證正確率 {acc * 100:.1f}%", flush=True)
+        metric(kind="epoch", epoch=epoch, epochs=EPOCHS,
+               train_loss=round(train_loss, 4), val_accuracy=round(acc, 4))
+        print(f"  loss {train_loss:.4f} | 驗證正確率 / val accuracy {acc * 100:.1f}%", flush=True)
 
         if acc >= best_acc:
             best_acc = acc
@@ -216,9 +236,12 @@ def main() -> int:
 
     # ZH: 不到一分鐘就寫秒——「花了 0.0 分鐘」看起來像壞掉了。
     took = f"{elapsed:.0f} 秒" if elapsed < 60 else f"{elapsed / 60:.1f} 分鐘"
+    metric(kind="summary", best_val_accuracy=round(best_acc, 4),
+           elapsed_seconds=round(elapsed, 1), classes=classes, images=n_total)
     print("=" * 60, flush=True)
-    print(f"完成。最佳驗證正確率 {best_acc * 100:.1f}%，花了 {took}。", flush=True)
-    print(f"模型：{OUTPUT_DIR}/model.pt", flush=True)
+    print(f"完成 / Done. 最佳驗證正確率 / best val accuracy {best_acc * 100:.1f}%"
+          f"，花了 / took {took}。", flush=True)
+    print(f"模型 / Model: {OUTPUT_DIR}/model.pt", flush=True)
     return 0
 
 

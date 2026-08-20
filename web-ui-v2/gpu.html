@@ -10,7 +10,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Open+Sans:wght@400;600;700&display=swap" rel="stylesheet">
 
     <link rel="stylesheet" href="tokens.css?v=dd946cc2">
-    <link rel="stylesheet" href="styles.css?v=b38f8f3d">
+    <link rel="stylesheet" href="styles.css?v=a9794ebd">
 </head>
 <body>
 
@@ -40,6 +40,10 @@
         <button class="btn btn--primary" id="go-example" type="button" disabled>
             檢查算力中…
         </button>
+        <!-- ZH: 第二顆按鈕（擁有者裁定 2026-08-20）。給「已經有資料、而且不想寫程式」的人。
+                 用 btn--ghost 而不是第二顆 primary：兩顆同權重會讓第一次來的人不知道該按哪個。
+                 位階仍高於底下的文字連結——不會寫程式的學生不該靠一條小連結才找得到。 -->
+        <a class="btn btn--ghost btn--block" href="train.html" id="go-own-zip" data-i18n="gpu_own_zip">我有分好類的圖片，交給平台訓練</a>
         <div class="handoff" id="pool-note" hidden></div>
     </section>
 
@@ -54,7 +58,7 @@
         <li class="steps__item">
             <span class="steps__n">2</span>
             <span class="steps__t" data-i18n="gpu_s2t">在實驗室裡跑</span>
-            <span class="steps__d" data-i18n="gpu_s2d">開啟後已經有寫好的程式，逐格執行即可。</span>
+            <span class="steps__d" data-i18n="gpu_s2d">開啟後已經有寫好的程式，逐格執行即可。或者交給平台，完全不用寫。</span>
         </li>
         <li class="steps__item">
             <span class="steps__n">3</span>
@@ -81,9 +85,9 @@
 
 <script src="docs-entry.js?v=4fa954e4"></script>
 <script src="tz.js?v=3608fea5"></script>
-<script src="i18n.js?v=ae3878a7"></script>
+<script src="i18n.js?v=b58b8fc1"></script>
 <script src="prefs.js?v=8b7b4277"></script>
-<script src="chrome.js?v=57a21b75"></script>
+<script src="chrome.js?v=3fb4110f"></script>
 <script src="gpu.js?v=5391952b"></script>
 </body>
 </html>

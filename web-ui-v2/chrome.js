@@ -83,7 +83,9 @@
         if (!nav) {
             nav = document.createElement('nav');
             nav.className = 'topnav';
-            nav.setAttribute('aria-label', '主要');
+            // ZH: 這個 aria-label 原本寫死中文——**每一頁都是**，而只有用螢幕閱讀器
+            //     的英文使用者會遇到，所以沒有人會回報。
+            nav.setAttribute('aria-label', T('nav_aria', '主要'));
             // ZH: 插在色系切換**之前**。色系切換是開發期的東西（Decision Log #16，
             //     上線擇一後整塊移除），順序要讓「移除它之後仍然正確」：
             //       現在   MYAI Lab [黃][藍] [學號▾]

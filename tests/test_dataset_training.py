@@ -353,3 +353,85 @@ def test_non_builtin_job_keeps_none_image(client, db, user_headers):
     _heartbeat(client)
     assert _submit(client, user_headers).status_code == 201
     assert _take(client)["docker_image"] is None
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# ZH: 六、實際在瀏覽器走一遍才查到的三件事（2b）
+# ──────────────────────────────────────────────────────────────────────────
+
+def test_cjk_filename_survives_upload_then_submit(client, db, user_headers, tmp_path):
+    """ZH: 🔴 中文檔名讓「上傳→送單」整條路走不通。
+
+    ZH: 症狀：上傳 `我的圖片.zip` 回 201，拿回傳的 dataset_path 去送單卻 422——
+        因為 `JobCreate.dataset_path` 有字元白名單（防命令注入，那條是對的），
+        而上傳端把原始檔名原封不動接進路徑。**中文檔名對這裡的使用者是常態。**
+        修在上傳端：存到磁碟的名字不需要是使用者的名字。
+    """
+    import io as _io
+    z = _io.BytesIO()
+    with zipfile.ZipFile(z, "w") as zf:
+        zf.writestr("貓/a.jpg", "x")
+    r = client.post("/api/v1/datasets/upload", headers=user_headers,
+                    files={"file": ("我的圖片.zip", z.getvalue(), "application/zip")})
+    assert r.status_code == 200, r.text
+    path = r.json()["dataset_path"]
+
+    # ZH: 這才是重點——回傳的路徑必須送得出去
+    _heartbeat(client)
+    s = client.post("/api/v1/jobs", headers=user_headers,
+                    json={"job_name": "我的圖片", "model_name": "resnet18",
+                          "dataset_path": path, "config": {"epochs": 1}})
+    assert s.status_code == 201, f"中文檔名的路徑送不出去：{s.text}"
+
+
+def test_upload_keeps_the_extension(client, db, user_headers):
+    """ZH: 清檔名時**不可以把副檔名一起吃掉**。
+
+    ZH: 第一版把整個名字（含副檔名）一起清再 strip('._-')，於是
+        `我的圖片.zip` 變成 `..._zip` —— 上傳成功、送單成功、然後 worker 那邊
+        會拿到一個沒有副檔名的東西。實測踩過。
+    """
+    import io as _io
+    z = _io.BytesIO()
+    with zipfile.ZipFile(z, "w") as zf:
+        zf.writestr("a/b.jpg", "x")
+    r = client.post("/api/v1/datasets/upload", headers=user_headers,
+                    files={"file": ("我的圖片.zip", z.getvalue(), "application/zip")})
+    assert r.json()["dataset_path"].endswith(".zip"), r.json()["dataset_path"]
+
+
+def test_job_status_returns_metrics(client, db, user_headers):
+    """ZH: 🔴 指標存進 DB 了，但 `GET /jobs/{id}` 永遠回 null。
+
+    ZH: 原因：那個端點回的是**手工組的 dict**，不是 ORM 物件——
+        只在 JobStatusResponse 加欄位不會自動帶上。
+        症狀是「後端明明有、前端永遠拿不到」，而兩邊各自看都正常。
+    """
+    _heartbeat(client)
+    job_id = _submit(client, user_headers).json()["job_id"]
+
+    for m in ({"kind": "dataset", "classes": ["a", "b"], "images": 10},
+              {"kind": "epoch", "epoch": 1, "epochs": 2, "val_accuracy": 0.5}):
+        u = client.post(f"/api/v1/worker/jobs/{job_id}/update",
+                        json={"metric": m}, headers=WORKER_AUTH)
+        assert u.status_code == 200, u.text
+
+    got = client.get(f"/api/v1/jobs/{job_id}", headers=user_headers).json()
+    assert isinstance(got.get("metrics"), list), got.get("metrics")
+    assert len(got["metrics"]) == 2
+    assert got["metrics"][0]["kind"] == "dataset"
+
+
+def test_broken_metrics_json_does_not_break_the_whole_query(client, db, user_headers):
+    """ZH: 指標壞掉時回 None，**不要讓整個任務查詢 500**——狀態與日誌還是要看得到。"""
+    from app import models
+    _heartbeat(client)
+    job_id = _submit(client, user_headers).json()["job_id"]
+    row = db.query(models.TrainingJob).filter_by(id=job_id).first()
+    row.metrics = "{這不是合法的 JSON"
+    db.commit()
+
+    r = client.get(f"/api/v1/jobs/{job_id}", headers=user_headers)
+    assert r.status_code == 200, r.text
+    assert r.json()["metrics"] is None
+    assert r.json()["status"] == "pending"

@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="zh-Hant" data-theme="yellow">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title data-i18n="tr_title">交給平台訓練 · MCU AI Base</title>
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Open+Sans:wght@400;600;700&display=swap" rel="stylesheet">
+
+    <link rel="stylesheet" href="tokens.css?v=dd946cc2">
+    <link rel="stylesheet" href="styles.css?v=a9794ebd">
+</head>
+<body>
+
+<header class="topbar">
+    <span class="topbar__brand">MCU AI Base</span>
+    <span class="topbar__spacer"></span>
+    <!-- ZH: 導覽與帳號選單由 chrome.js 產生（唯一真相來源）。 -->
+    <div class="theme-switch" role="group" aria-label="色系" data-i18n-aria="theme_aria">
+        <button type="button" data-set-theme="yellow" aria-pressed="true" data-i18n="theme_yellow">黃</button>
+        <button type="button" data-set-theme="blue" aria-pressed="false" data-i18n="theme_blue">藍</button>
+    </div>
+</header>
+
+<main class="page page--narrow">
+
+    <!-- ==================================================================
+         ZH: 這個畫面存在的理由：**不會寫程式也能訓練出一個模型。**
+             所以整頁只問兩件事——「你的圖片」與「跑幾輪」，其餘一律由平台決定。
+             刻意不露出 batch_size / learning_rate / 模型架構：
+             會調那些的人本來就該去程式實驗室，而不會調的人看到只會卡住。
+         ================================================================== -->
+    <section class="primary-card" aria-labelledby="tr-title">
+        <h1 class="hero__title" id="tr-title" data-i18n="tr_h1">交給平台訓練</h1>
+        <p class="hero__sub">
+            <span data-i18n="tr_sub1">上傳一包分好類的圖片，平台幫你訓練，不用寫程式。</span><br>
+            <span data-i18n="tr_sub2">結果會顯示在這一頁。</span>
+        </p>
+
+        <!-- ZH: 版面要求講在「選檔案之前」。等他選完才說格式不對，
+                 是把可以避免的失敗留到最後一刻。 -->
+        <div class="fold">
+            <details>
+                <summary class="fold__summary" data-i18n="tr_fmt_title">壓縮檔要長什麼樣子？</summary>
+                <div class="fold__body">
+                    <p data-i18n="tr_fmt_p">每個類別一個資料夾，圖片放進去，整包壓成 zip。資料夾的名字就是類別的名字。</p>
+                    <!-- ZH: 這張示意圖裡的資料夾名字**就是類別名**，所以要跟著語言換。
+                             英文模式留著「貓／狗」會讓看不懂中文的人以為那是必須的字面值。 -->
+                    <pre class="diag" id="tree" data-i18n="tr_tree">我的資料.zip
+├── 貓/
+│   ├── 001.jpg
+│   └── 002.jpg
+└── 狗/
+    ├── 001.jpg
+    └── 002.jpg</pre>
+                    <p class="field__label" data-i18n="tr_fmt_note">外面多包一層資料夾也沒關係，平台會自己往下找。至少要兩個類別。</p>
+                </div>
+            </details>
+        </div>
+
+        <!-- ZH: 拖放**與**點選都要能用。只做拖放的話，手機與不熟滑鼠拖曳的人就進不來。 -->
+        <div class="drop" id="drop" tabindex="0" role="button"
+             aria-describedby="drop-hint" data-i18n-aria="tr_drop_aria">
+            <span class="drop__icon" aria-hidden="true">＋</span>
+            <span class="drop__main" id="drop-main" data-i18n="tr_drop">把 zip 拖到這裡，或點一下選檔案</span>
+            <span class="drop__sub" id="drop-hint" data-i18n="tr_drop_sub">只收 .zip，每人上限 2 GB</span>
+        </div>
+        <input type="file" id="file" accept=".zip" hidden>
+
+        <label class="field" id="epochs-field">
+            <span class="field__label" for="epochs" data-i18n="tr_epochs">要練幾輪</span>
+            <input class="field__input" id="epochs" type="number" min="1" max="50" value="10"
+                   inputmode="numeric">
+            <span class="field__label" data-i18n="tr_epochs_hint">練越多輪越久，也不一定越準。不確定就用預設的 10。</span>
+        </label>
+
+        <button class="btn btn--primary" id="go" type="button" disabled data-i18n="tr_go">開始訓練</button>
+        <div class="handoff" id="note" hidden></div>
+    </section>
+
+    <!-- ==================================================================
+         ZH: 進度區。送出前整段不存在（不是隱藏一個空殼），
+             免得使用者以為有東西壞掉。
+         ================================================================== -->
+    <section id="run" hidden aria-live="polite">
+        <h2 class="chart__title" data-i18n="tr_run_title">訓練進度</h2>
+        <div class="primary-card">
+            <div class="bar" role="progressbar" aria-valuemin="0" aria-valuemax="100"
+                 aria-valuenow="0" id="bar-wrap">
+                <div class="bar__fill" id="bar"></div>
+            </div>
+            <p class="hero__sub" id="run-state" data-i18n="tr_queued">排隊中…</p>
+            <div class="stats" id="run-stats" hidden></div>
+        </div>
+
+        <!-- ZH: 每輪一列。刻意用表格而不是折線圖：
+                 「第 3 輪之後就沒再進步」用數字看得比曲線清楚，而且不必額外相依。 -->
+        <h2 class="chart__title" id="epochs-title" hidden data-i18n="tr_epochs_title">每一輪的結果</h2>
+        <div id="epochs-table" hidden></div>
+
+        <details class="fold" id="log-fold" hidden>
+            <summary class="fold__summary" data-i18n="tr_log">訓練紀錄（出問題時貼這個給管理者）</summary>
+            <pre class="diag" id="log"></pre>
+        </details>
+    </section>
+
+    <nav class="minor">
+        <a href="gpu.html" data-i18n="tr_back">回到上一頁</a>
+        <a href="lab.html" data-i18n="tr_to_lab">改用程式實驗室自己寫</a>
+    </nav>
+
+</main>
+
+<script src="tz.js?v=3608fea5"></script>
+<script src="i18n.js?v=b58b8fc1"></script>
+<script src="prefs.js?v=8b7b4277"></script>
+<script src="chrome.js?v=3fb4110f"></script>
+<script src="train.js?v=037479b2"></script>
+</body>
+</html>

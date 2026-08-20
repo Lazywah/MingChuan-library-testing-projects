@@ -329,6 +329,11 @@ def get_job_status(
         "error_message": job.error_message,
         "output_path": job.output_path,
         "logs": job.logs,
+        # ZH: v3.6 —— 這裡是**手工組的 dict**，不是 ORM 物件。
+        #     只在 JobStatusResponse 加欄位是不夠的（`from_attributes` 對 dict 不適用），
+        #     漏了這一行的症狀是「指標存進 DB 了，但前端永遠拿到 null」。踩過。
+        #     DB 存的是 JSON 字串，由 schema 的 field_validator 轉成陣列。
+        "metrics": job.metrics,
     }
 
 

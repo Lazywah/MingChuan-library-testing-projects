@@ -95,6 +95,23 @@ def dict_keys() -> dict:
     return out
 
 
+def html_fallbacks() -> list:
+    """ZH: 取出各 HTML 裡 `data-i18n="k">文字<` 的 (檔名, key, 文字)。
+
+    ZH: 只看**單純的文字節點**——內容含標籤的（例：`<strong>`）跳過，
+        那種是刻意分段標記的，與字典的整句本來就不會逐字相同。
+
+    @node scripts/check_i18n.py::html_fallbacks
+    """
+    out = []
+    pat = re.compile(r'data-i18n="([a-z0-9_]+)"[^>]*>([^<>]+)<')
+    for f in sorted(UI.glob("*.html")):
+        html = f.read_text(encoding="utf-8")
+        for key, text in pat.findall(html):
+            out.append((f.name, key, text.strip()))
+    return out
+
+
 PLACEHOLDER = re.compile(r"\{[a-z]\}")
 
 
@@ -125,6 +142,23 @@ def main() -> int:
         b = sorted(PLACEHOLDER.findall(en[k]))
         if a != b:
             problems.append(f"`{k}` 的佔位符不一致：zh {a or '無'} vs en {b or '無'}")
+
+    # ZH: HTML 的 fallback 文字 vs zh 字典。同一句兩份，只改一份是靜默的。
+    #     執行時字典會蓋掉 HTML，所以「改了 HTML 沒改字典」＝改了等於沒改。
+    for fname, key, text in html_fallbacks():
+        want = zh.get(key)
+        if want is None:
+            continue
+        # ZH: 字典是 JS 原始碼，值裡的 \n / \' 是**逸出序列**；HTML 裡是真正的字元。
+        #     不解逸出就比，多行文案一定報假陽性（第一版就是這樣，被 tr_tree 抓到）。
+        want_decoded = (want.replace("\\n", "\n").replace("\\t", "\t")
+                            .replace("\\'", "'").replace('\\"', '"'))
+        if want_decoded.strip() != text.strip():
+            problems.append(
+                f"{fname} 的 `{key}` fallback 與 zh 字典不一致"
+                f"（HTML:「{text[:24]}」/ 字典:「{want[:24]}」）"
+                f"—— 執行時字典會蓋掉 HTML，只改 HTML 等於沒改"
+            )
 
     print("翻譯完整性檢查（web-ui-v2）")
     print(f"  程式碼用到 {len(used)} 個 key　字典 zh {len(zh)} / en {len(en)}")
