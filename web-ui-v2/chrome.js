@@ -108,7 +108,7 @@
         var lab = document.createElement('a');
         lab.href = 'lab.html';
         lab.setAttribute('data-i18n', 'nav_lab');
-        lab.textContent = T('nav_lab', 'Lab');
+        lab.textContent = T('nav_lab', '程式實驗室');
         // ZH: 底色只給「目前所在頁」（擁有者裁定）。
         if (page === 'lab.html') lab.setAttribute('aria-current', 'page');
         nav.appendChild(lab);

@@ -59,7 +59,7 @@ const mins = (s) => (s == null ? '—' : `${Math.floor(s / 60)}${T('unit_min', '
 function render(d) {
     const running = d.status === 'running';
     $('state').textContent = running ? T('lab_st_running', '執行中') : T('lab_st_stopped', '未啟動');
-    setPrimary({ label: running ? T('lab_open', '開啟 Lab') : T('lab_start_open', '啟動並開啟 Lab'), enabled: true });
+    setPrimary({ label: running ? T('lab_open', '開啟實驗室') : T('lab_start_open', '啟動並開啟實驗室'), enabled: true });
     $('stop').hidden = !running;
 
     $('meta').hidden = !running;
@@ -91,7 +91,7 @@ async function load() {
     } catch (e) {
         $('state').textContent = T('lab_st_unknown', '讀不到');
         setPrimary({ label: T('btn_retry', '重試'), enabled: true });
-        note(T('lab_state_fail', '暫時取不到 Lab 狀態') + `（${e.message || e}）。`);
+        note(T('lab_state_fail', '暫時取不到實驗室狀態') + `（${e.message || e}）。`);
     }
 }
 
@@ -101,7 +101,7 @@ function openTab(url) {
     if (!w) {
         // ZH: 被瀏覽器擋下時**不可以毫無反應**（與首頁前往 MYAI 同一條規則）。
         $('note').innerHTML = T('popup_blocked', '瀏覽器擋下了新分頁。')
-            + `<a href="${url}" target="_blank" rel="noopener">${T('lab_open_here', '點這裡開啟 Lab')}</a>`;
+            + `<a href="${url}" target="_blank" rel="noopener">${T('lab_open_here', '點這裡開啟實驗室')}</a>`;
         $('note').hidden = false;
         return;
     }
@@ -113,7 +113,7 @@ $('go').addEventListener('click', async () => {
     note(T('lab_start_hint', '容器啟動大約需要 5–10 秒，好了會自動開新分頁。'));
 
     if (FORCED) {                       // 檢視模式：走完流程但不打後端
-        setTimeout(() => { setPrimary({ label: T('lab_open', '開啟 Lab'), enabled: true });
+        setTimeout(() => { setPrimary({ label: T('lab_open', '開啟實驗室'), enabled: true });
                            note('（檢視模式：不會真的開容器）'); }, 600);
         return;
     }
@@ -128,7 +128,7 @@ $('go').addEventListener('click', async () => {
         //     但**不要立刻開** —— 先輪詢到 running 再開，否則新分頁是空白。
         await waitReady(started.url);
     } catch (e) {
-        setPrimary({ label: T('lab_start_open', '啟動並開啟 Lab'), enabled: true });
+        setPrimary({ label: T('lab_start_open', '啟動並開啟實驗室'), enabled: true });
         // ZH: 429 是額度/頻率限制，訊息由後端給，照實顯示不要改寫。
         note(T('lab_start_fail', '啟動失敗') + `：${e.message || e}`);
     }
@@ -150,7 +150,7 @@ async function waitReady(url) {
         } catch (e) { /* 輪詢期間的暫時失敗不打斷，由次數上限收尾 */ }
         if (tries >= 20) {                     // 20 × 1.5s = 30 秒
             clearInterval(POLL);
-            setPrimary({ label: T('lab_start_open', '啟動並開啟 Lab'), enabled: true });
+            setPrimary({ label: T('lab_start_open', '啟動並開啟實驗室'), enabled: true });
             note(T('lab_timeout', '等了 30 秒仍未就緒。可以再試一次，或回報問題。（容器可能仍在背景啟動，重新整理這一頁可以看到最新狀態。）'));
         }
     }, 1500);
@@ -160,13 +160,13 @@ async function waitReady(url) {
 $('stop').addEventListener('click', async (ev) => {
     ev.preventDefault();
     // ZH: 停止會關掉容器但**不會刪檔案**——講明才不會有人不敢按。
-    if (!confirm(T('lab_stop_confirm', '要停止 Lab 嗎？容器會關閉，但你的檔案都會保留。'))) return;
+    if (!confirm(T('lab_stop_confirm', '要關閉實驗室嗎？容器會停止，但你的檔案都會保留。'))) return;
     try {
         if (!FORCED) await api('/lab/stop', { method: 'POST' });
-        note(T('lab_stopped', '已停止。檔案都還在，下次啟動會回到原樣。'));
+        note(T('lab_stopped', '已關閉。檔案都還在，下次啟動會回到原樣。'));
         await load();
     } catch (e) {
-        note(T('lab_stop_fail', '停止失敗') + `：${e.message || e}`);
+        note(T('lab_stop_fail', '關閉失敗') + `：${e.message || e}`);
     }
 });
 

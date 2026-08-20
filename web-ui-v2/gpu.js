@@ -83,7 +83,7 @@ function poolDown(nextOpen, why) {
 $('go-example').addEventListener('click', async () => {
     const btn = $('go-example');
     btn.disabled = true;
-    btn.textContent = T('gpu_opening', '正在開啟 Lab…');
+    btn.textContent = T('gpu_opening', '正在開啟實驗室…');
     try {
         await fetch(`${API}/lab/start`, { method: 'POST', headers: authHeaders() });
         // ZH: 交給 v2 自己的 Lab 畫面接手 —— 它會輪詢到就緒才開新分頁（D3）。
