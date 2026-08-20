@@ -14,16 +14,9 @@ const FORCED = new URLSearchParams(location.search).get('state');
 
 const $ = (id) => document.getElementById(id);
 
-// ── 色系切換（開發期）────────────────────────────────────────────────
-document.querySelectorAll('[data-set-theme]').forEach((b) => {
-    b.addEventListener('click', () => {
-        const t = b.dataset.setTheme;
-        document.documentElement.dataset.theme = t;
-        document.querySelectorAll('[data-set-theme]').forEach((x) => {
-            x.setAttribute('aria-pressed', String(x.dataset.setTheme === t));
-        });
-    });
-});
+// ZH: 色系切換已集中到 prefs.js（跟帳號走）。
+//     原本九個頁面各寫一份，**只有 app.js 那份會存與還原**——
+//     於是「有些頁面換了顏色，其他頁面還沒變」。同一條規則不要有第二份實作。
 
 // ZH: ⚠ 鍵名必須與 v1／v1.5／首頁一致。用錯不會報錯，只會讓每個請求都 401，
 //     而畫面看起來像「後端壞了」。首頁實作時踩過。
@@ -64,7 +57,7 @@ async function loadPool() {
         //     後端語意：interactive 已含 batch 墊底。
         const pool = p.interactive || p.batch || {};
         if (pool.available) {
-            setPrimary({ label: '用範例資料開始', note: '', enabled: true });
+            setPrimary({ label: T('gpu_start_sample', '用範例資料開始'), note: '', enabled: true });
         } else {
             poolDown(pool.next_open, null);
         }
@@ -77,10 +70,11 @@ async function loadPool() {
 function poolDown(nextOpen, why) {
     const when = fmtWhen(nextOpen);
     setPrimary({
-        label: '目前無可用算力',
+        label: T('gpu_no_capacity', '目前無可用算力'),
         note: when
-            ? `下次開放：${when}。這段說明照常可看，之後再回來開始即可。`
-            : (why ? `暫時查不到算力狀態（${why}）。` : '等待機器上線。'),
+            ? T('gpu_next_open', '下次開放：{w}。這段說明照常可看，之後再回來開始即可。').replace('{w}', when)
+            : (why ? T('gpu_state_fail', '暫時查不到算力狀態') + `（${why}）。`
+                   : T('gpu_waiting', '等待機器上線。')),
         enabled: false,
     });
 }
@@ -89,7 +83,7 @@ function poolDown(nextOpen, why) {
 $('go-example').addEventListener('click', async () => {
     const btn = $('go-example');
     btn.disabled = true;
-    btn.textContent = '正在開啟 Lab…';
+    btn.textContent = T('gpu_opening', '正在開啟 Lab…');
     try {
         await fetch(`${API}/lab/start`, { method: 'POST', headers: authHeaders() });
         // ZH: 交給 v2 自己的 Lab 畫面接手 —— 它會輪詢到就緒才開新分頁（D3）。
@@ -97,8 +91,8 @@ $('go-example').addEventListener('click', async () => {
         location.href = 'lab.html';
     } catch (e) {
         setPrimary({
-            label: '用範例資料開始',
-            note: `開啟失敗（${e.message || e}）。可以再試一次。`,
+            label: T('gpu_start_sample', '用範例資料開始'),
+            note: T('gpu_open_fail', '開啟失敗') + `（${e.message || e}）。` + T('retry_once', '可以再試一次。'),
             enabled: true,
         });
     }
@@ -111,19 +105,25 @@ $('link-own-data').addEventListener('click', (ev) => {
 
 // ── 層級 3：磁碟配額 ─────────────────────────────────────────────────
 async function loadQuota() {
-    if (FORCED === 'noquota') { $('quota').textContent = '磁碟配額：暫時查不到（不影響開始）'; return; }
+    if (FORCED === 'noquota') { $('quota').textContent = T('gpu_quota_unknown', '磁碟配額：暫時查不到（不影響開始）'); return; }
     try {
         const s = await get('/lab/status');
         const gb = s.effective_quota_gb;
         $('quota').textContent = (gb == null)
-            ? '磁碟配額：暫時查不到（不影響開始）'
-            : `磁碟配額：${gb} GB`;
+            ? T('gpu_quota_unknown', '磁碟配額：暫時查不到（不影響開始）')
+            : T('gpu_quota', '磁碟配額：{g} GB').replace('{g}', gb);
     } catch {
         // ZH: 這是層級 3，失敗不該吵。但也不能留著「讀取中…」假裝還在跑。
-        $('quota').textContent = '磁碟配額：暫時查不到（不影響開始）';
+        $('quota').textContent = T('gpu_quota_unknown', '磁碟配額：暫時查不到（不影響開始）');
     }
 }
 
 // ── 啟動 ─────────────────────────────────────────────────────────────
 loadPool();
 loadQuota();
+
+
+// ── 語言切換時重繪 ───────────────────────────────────────────────────
+// ZH: prefs.js 的字典掃描只換得掉 `data-i18n` 元素；本頁 JS 產生的內容要自己重跑。
+//     只在語言**改變**時觸發（不是每次套用），所以不會在載入時多跑一次。
+document.addEventListener('prefs:langchanged', () => { loadPool(); loadQuota(); });

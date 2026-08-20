@@ -25,10 +25,12 @@
     var API = '/api/v1';
     var KEY_SCALE = 'ai_hud_font_scale';
     var KEY_LANG = 'ai_hud_lang';
+    var KEY_THEME = 'ai_hud_theme';
     var MIN = 80, MAX = 150;              // ZH: 與後端 schemas.FONT_SCALE_MIN/MAX 一致
     var LANGS = ['zh', 'en'];
+    var THEMES = ['yellow', 'blue'];
 
-    var state = { ui_font_scale: 100, ui_lang: 'zh' };
+    var state = { ui_font_scale: 100, ui_lang: 'zh', ui_theme: 'yellow' };
 
     function clampScale(v) {
         var n = parseInt(v, 10);
@@ -36,6 +38,7 @@
         return Math.min(MAX, Math.max(MIN, n));
     }
     function okLang(v) { return LANGS.indexOf(v) >= 0 ? v : 'zh'; }
+    function okTheme(v) { return THEMES.indexOf(v) >= 0 ? v : 'yellow'; }
 
     function authHeaders() {
         var t = sessionStorage.getItem('ai_hud_token') || localStorage.getItem('ai_hud_token');
@@ -78,35 +81,83 @@
         });
     }
 
+    // ZH: 上一次真的套用過的語言。用來判斷「這次是不是**改變**」。
+    var _lastLang = null;
+
+    // ZH: 色系。原本九個頁面各寫一份切換處理，**只有 app.js 那份會存/還原**，
+    //     其餘八頁改了就忘——症狀正是「有些頁面換了顏色，其他頁面還沒變」。
+    //     與 tz.js、topbar 同一類：同一條規則寫了 N 份，只有一份是完整的。
+    function applyTheme(name) {
+        var t = okTheme(name);
+        document.documentElement.dataset.theme = t;
+        document.querySelectorAll('[data-set-theme]').forEach(function (b) {
+            b.setAttribute('aria-pressed', String(b.dataset.setTheme === t));
+        });
+    }
+
     function apply() {
         applyScale(state.ui_font_scale);
+        applyTheme(state.ui_theme);
         applyLang(state.ui_lang);
         // ZH: 讓後加進 DOM 的東西（chrome.js 的選單）也能重新套用。
         document.dispatchEvent(new CustomEvent('prefs:applied', { detail: getState() }));
+
+        // ⚠ ZH: **字典掃描只換得掉 `data-i18n` 元素。**
+        //   各頁 JS 產生的內容（「查看全部 2 則」「使用量明細」這種組合字串）
+        //   沒有那個屬性，就地切換語言時會留在原本的語言——
+        //   實測在部署上抓到：切成英文後首頁仍有兩處中文。
+        //   所以語言**改變**時另發一個事件，讓各頁重跑自己的 render。
+        //   為什麼不共用 prefs:applied：頁面 JS 早於 DOMContentLoaded 執行，
+        //   會接到「初次套用」那一發而白跑一次載入。
+        if (_lastLang !== null && _lastLang !== state.ui_lang) {
+            document.dispatchEvent(new CustomEvent('prefs:langchanged', { detail: getState() }));
+        }
+        _lastLang = state.ui_lang;
     }
 
-    function getState() { return { ui_font_scale: state.ui_font_scale, ui_lang: state.ui_lang }; }
+    function getState() {
+        return { ui_font_scale: state.ui_font_scale, ui_lang: state.ui_lang, ui_theme: state.ui_theme };
+    }
 
     // ── 快取（第一次繪製前就要套用，所以是同步的）────────────────────
     function loadCache() {
         state.ui_font_scale = clampScale(localStorage.getItem(KEY_SCALE) || 100);
         state.ui_lang = okLang(localStorage.getItem(KEY_LANG) || 'zh');
+        // ZH: 'v2-theme' 是舊鍵（只有 app.js 用過）。讀得到就沿用，使用者不會突然被重設。
+        state.ui_theme = okTheme(localStorage.getItem(KEY_THEME)
+                                 || localStorage.getItem('v2-theme') || 'yellow');
     }
     function saveCache() {
         localStorage.setItem(KEY_SCALE, String(state.ui_font_scale));
         localStorage.setItem(KEY_LANG, state.ui_lang);
+        localStorage.setItem(KEY_THEME, state.ui_theme);
     }
 
     // ── 與帳號對帳 ────────────────────────────────────────────────────
     // ZH: 由 chrome.js 呼叫（它本來就會打 /auth/me，不要再打第二次）。
     //     登入頁沒有 chrome.js，就只用快取——那裡也還沒有帳號可對。
+    //
+    // ⚠⚠ **「後端沒有這個欄位」不等於「後端說要用預設值」。**
+    //   原本寫成 `okLang(me.ui_lang || 'zh')`，於是後端沒回這個欄位時
+    //   會被解讀成「帳號設定是中文」，**把使用者剛選的英文蓋掉**。
+    //
+    //   實測（部署中的 Docker 後端就是這個情況——它的映像早於這個功能）：
+    //     選了英文 → 畫面變英文 ✅
+    //     /auth/me 回來（沒有 ui_lang 欄位）→ **一秒後整頁跳回中文** 🔴
+    //   使用者看到的症狀是「很多地方沒有英文」＋「設定不持久化」，
+    //   而那是**同一個原因**。
+    //
+    //   缺值必須是 no-op：欄位不在就維持目前的值，不要當成預設值。
+    //   （與 archgraph 規格 §26.3「缺值不得以哨兵值表示」同一件事。）
     function syncFrom(me) {
         if (!me) return;
-        var s = clampScale(me.ui_font_scale == null ? 100 : me.ui_font_scale);
-        var l = okLang(me.ui_lang || 'zh');
-        if (s === state.ui_font_scale && l === state.ui_lang) return;   // 相同就不重畫
+        var s = (me.ui_font_scale == null) ? state.ui_font_scale : clampScale(me.ui_font_scale);
+        var l = (me.ui_lang == null) ? state.ui_lang : okLang(me.ui_lang);
+        var th = (me.ui_theme == null) ? state.ui_theme : okTheme(me.ui_theme);
+        if (s === state.ui_font_scale && l === state.ui_lang && th === state.ui_theme) return;
         state.ui_font_scale = s;
         state.ui_lang = l;
+        state.ui_theme = th;
         saveCache();
         apply();
     }
@@ -118,6 +169,7 @@
     async function set(patch) {
         if (patch.ui_font_scale != null) state.ui_font_scale = clampScale(patch.ui_font_scale);
         if (patch.ui_lang != null) state.ui_lang = okLang(patch.ui_lang);
+        if (patch.ui_theme != null) state.ui_theme = okTheme(patch.ui_theme);
         saveCache();
         apply();
         try {
@@ -133,16 +185,31 @@
     }
 
     loadCache();
-    // ZH: 立刻套用，不等 DOMContentLoaded —— 等的話會先看到未縮放的一瞬間。
+    // ZH: 立刻套用，不等 DOMContentLoaded —— 等的話會先看到未縮放／舊色系的一瞬間。
     applyScale(state.ui_font_scale);
+    document.documentElement.dataset.theme = state.ui_theme;
+
+    // ZH: 色系鈕的處理也集中在這裡（九頁各寫一份就是這次的 bug）。
+    //     用委派而不是逐一綁定：chrome.js 之後才建的按鈕也接得到。
+    document.addEventListener('click', function (ev) {
+        var b = ev.target && ev.target.closest && ev.target.closest('[data-set-theme]');
+        if (b) set({ ui_theme: b.dataset.setTheme });
+    });
     if (document.readyState === 'loading') {
         document.addEventListener('DOMContentLoaded', apply);
     } else {
         apply();
     }
 
+    // ZH: 全域捷徑。各頁 JS 產生的文案用 `T('key', '中文原文')`——
+    //     第二個參數是 fallback，字典缺 key 時維持中文而不是變空白。
+    global.T = function (key, fallback) {
+        var dict = (global.I18N && global.I18N[state.ui_lang]) || null;
+        return (dict && dict[key]) || fallback;
+    };
+
     global.Prefs = {
-        MIN: MIN, MAX: MAX, LANGS: LANGS,
+        MIN: MIN, MAX: MAX, LANGS: LANGS, THEMES: THEMES,
         get: getState, set: set, syncFrom: syncFrom, apply: apply,
         t: function (key, fallback) {
             var dict = (global.I18N && global.I18N[state.ui_lang]) || null;

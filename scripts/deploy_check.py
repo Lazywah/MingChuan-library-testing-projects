@@ -243,6 +243,25 @@ def check_timezone():
     return PASS, "tz.js 五份一致、載入順序正確、行為測試通過（全站 Asia/Taipei）"
 
 
+def check_i18n():
+    """ZH: 翻譯完整性——key 齊全、無多餘、佔位符一致。
+
+    ZH: 為什麼列進部署前健檢：漏翻**不會報錯**，那一句只是永遠維持中文，
+        而看得出來的人正是看不懂中文的那個。
+
+    @node scripts/deploy_check.py::check_i18n
+    """
+    script = SCRIPTS_DIR / "check_i18n.py"
+    if not script.exists():
+        return WARN, "找不到 check_i18n.py，略過翻譯完整性檢查"
+    r = subprocess.run([sys.executable, str(script)], capture_output=True,
+                       text=True, encoding="utf-8", errors="replace")
+    if r.returncode != 0:
+        first = next((l.strip() for l in (r.stdout or "").splitlines() if "[FAIL]" in l), "")
+        return FAIL, f"翻譯不完整 → python scripts/check_i18n.py　{first}"
+    return PASS, "翻譯 key 兩種語言齊全、佔位符一致"
+
+
 def check_ports():
     """回傳單一彙總（有占用列為 WARN，因可能是本平台已在跑）。
 
@@ -276,6 +295,7 @@ def main():
         ("gpu-worker 收斂", check_worker_convergence()),
         ("前端 ?v=",       check_asset_versions()),
         ("時間時區",       check_timezone()),
+        ("翻譯完整性",     check_i18n()),
         ("主機埠",         check_ports()),
     ]
 

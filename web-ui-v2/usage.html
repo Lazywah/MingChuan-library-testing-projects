@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>使用量明細 · MCU AI Base</title>
+    <title data-i18n="usage_title">使用量明細 · MCU AI Base</title>
 
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -22,9 +22,9 @@
     <span class="topbar__spacer"></span>
     <!-- ZH: 導覽與帳號選單由 chrome.js 產生（唯一真相來源）。
              版面：只有 LOGO 在左，其餘全部靠右。 -->
-    <div class="theme-switch" role="group" aria-label="色系">
-        <button type="button" data-set-theme="yellow" aria-pressed="true">黃</button>
-        <button type="button" data-set-theme="blue" aria-pressed="false">藍</button>
+    <div class="theme-switch" role="group" aria-label="色系" data-i18n-aria="theme_aria">
+        <button type="button" data-set-theme="yellow" aria-pressed="true" data-i18n="theme_yellow">黃</button>
+        <button type="button" data-set-theme="blue" aria-pressed="false" data-i18n="theme_blue">藍</button>
     </div>
 </header>
 
@@ -35,7 +35,7 @@
              他就得回上一頁才記得起自己剩多少。v1.5 把餘額縮在角落的小灰字，
              那是把決策資訊當成裝飾。 -->
     <section class="primary-card" aria-labelledby="bal-label">
-        <div class="balance__label" id="bal-label">我的 AI 額度</div>
+        <div class="balance__label" id="bal-label" data-i18n="bal_label">我的 AI 額度</div>
         <div class="balance__value">
             <span id="bal-value"><span class="skeleton" aria-hidden="true"></span></span><span
                 class="balance__unit" id="bal-unit" hidden>Token</span>
@@ -44,10 +44,10 @@
     </section>
 
     <!-- 期間切換。ZH: 「全部」送 days=0 —— 後端曾把 0 當 falsy 換成 30（已修）。 -->
-    <div class="seg" role="group" aria-label="統計期間">
-        <button type="button" data-days="30" aria-pressed="true">近 30 天</button>
-        <button type="button" data-days="90" aria-pressed="false">近 90 天</button>
-        <button type="button" data-days="0" aria-pressed="false">全部</button>
+    <div class="seg" role="group" aria-label="統計期間" data-i18n-aria="usage_range_aria">
+        <button type="button" data-days="30" aria-pressed="true" data-i18n="usage_r30">近 30 天</button>
+        <button type="button" data-days="90" aria-pressed="false" data-i18n="usage_r90">近 90 天</button>
+        <button type="button" data-days="0" aria-pressed="false" data-i18n="docs_all">全部</button>
     </div>
 
     <!-- 訊息區：未綁定 / 無資料 / 錯誤 都落在這裡，**圖表區隨之隱藏** -->
@@ -62,12 +62,12 @@
         <p class="hint" id="no-peer" hidden></p>
 
         <section class="chart">
-            <h2 class="chart__title">每日消耗趨勢</h2>
+            <h2 class="chart__title" data-i18n="usage_daily">每日消耗趨勢</h2>
             <div class="chart__box"><canvas id="trend"></canvas></div>
         </section>
 
         <section class="chart">
-            <h2 class="chart__title">我用了哪些模型／工具</h2>
+            <h2 class="chart__title" data-i18n="usage_models">我用了哪些模型／工具</h2>
             <div class="chart__box"><canvas id="models"></canvas></div>
             <p class="hint" id="models-more" hidden></p>
         </section>
@@ -75,9 +75,9 @@
 
 </main>
 
-<script src="i18n.js?v=3372d8fa"></script>
-<script src="prefs.js?v=489e5856"></script>
-<script src="chrome.js?v=7c850da4"></script>
-<script src="usage.js?v=d7f90ea5"></script>
+<script src="i18n.js?v=99a402ea"></script>
+<script src="prefs.js?v=8b7b4277"></script>
+<script src="chrome.js?v=d50fe353"></script>
+<script src="usage.js?v=7e49458c"></script>
 </body>
 </html>

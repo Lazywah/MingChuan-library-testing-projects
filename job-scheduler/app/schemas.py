@@ -157,6 +157,7 @@ class UserResponse(BaseModel):
     # ZH: v3.5 介面偏好。放在 /auth/me 一起回，前端本來就會呼叫它——**不必多一次往返**。
     ui_font_scale: int = 100
     ui_lang: str = "zh"
+    ui_theme: str = "yellow"
     created_at: datetime
 
 
@@ -579,6 +580,7 @@ class AdminIssueReportUpdate(BaseModel):
 # ZH: v3.5 介面偏好（字級 / 語言），跟帳號走
 # ==============================================================================
 UI_LANGS = ("zh", "en")
+UI_THEMES = ("yellow", "blue")                # ZH: 開發期雙色系；上線擇一後這裡收斂
 FONT_SCALE_MIN, FONT_SCALE_MAX = 80, 150      # ZH: 沿用 v1.5 的範圍
 
 
@@ -586,10 +588,18 @@ class UserPreferencesUpdate(BaseModel):
     """ZH: 兩個欄位都可選——只改字級、只改語言、兩個一起改，都是合法的。"""
     ui_font_scale: Optional[int] = Field(None, ge=FONT_SCALE_MIN, le=FONT_SCALE_MAX)
     ui_lang: Optional[str] = None
+    ui_theme: Optional[str] = None
 
     @field_validator("ui_lang")
     @classmethod
     def _known_lang(cls, v: Optional[str]) -> Optional[str]:
         if v is not None and v not in UI_LANGS:
             raise ValueError(f"ui_lang 必須是 {UI_LANGS} 其中之一")
+        return v
+
+    @field_validator("ui_theme")
+    @classmethod
+    def _known_theme(cls, v: Optional[str]) -> Optional[str]:
+        if v is not None and v not in UI_THEMES:
+            raise ValueError(f"ui_theme 必須是 {UI_THEMES} 其中之一")
         return v

@@ -329,6 +329,8 @@ def update_my_preferences(
         current_user.ui_font_scale = payload.ui_font_scale
     if payload.ui_lang is not None:
         current_user.ui_lang = payload.ui_lang
+    if payload.ui_theme is not None:
+        current_user.ui_theme = payload.ui_theme
     db.commit()
     db.refresh(current_user)
     return current_user

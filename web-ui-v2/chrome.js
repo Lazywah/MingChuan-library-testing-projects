@@ -301,14 +301,33 @@
         if (_toggle && _menu) render(_toggle, _menu, _me);
     });
 
+    // ZH: 取自己的身分。**「請求失敗」與「沒登入」必須分開**——
+    //     原本兩者都落到 me=null，於是網路抖一下就宣稱使用者「未登入」，
+    //     而且偏好（字級／語言／色系）也不會同步，畫面停在預設值。
+    //     實測抓到：同樣的頁面重覆載入，偶爾出現「未登入」而 /auth/me 直打是 200。
+    //     401/403 才是真的沒登入；其餘一律視為暫時失敗，重試一次。
+    async function fetchMe(tries) {
+        try {
+            var r = await fetch(API + '/auth/me', { credentials: 'include',
+                headers: Object.assign({ Accept: 'application/json' }, authHeaders()) });
+            if (r.ok) return { me: await r.json() };
+            if (r.status === 401 || r.status === 403) return { me: null, anon: true };
+            throw new Error('HTTP ' + r.status);
+        } catch (e) {
+            if ((tries || 0) < 1) {
+                await new Promise(function (rs) { setTimeout(rs, 600); });
+                return fetchMe((tries || 0) + 1);
+            }
+            // ZH: 重試後仍失敗 —— **不要說「未登入」**，那是另一回事。
+            return { me: null, anon: false, error: String(e && e.message || e) };
+        }
+    }
+
     async function fillAccount(toggle, menu) {
         _toggle = toggle; _menu = menu;
-        var me = null;
-        try {
-            var r = await fetch(API + '/auth/me',
-                                { headers: Object.assign({ Accept: 'application/json' }, authHeaders()) });
-            if (r.ok) me = await r.json();
-        } catch (e) { /* 下面會處理 */ }
+        var res = await fetchMe(0);
+        var me = res.me;
+        _anon = res.anon !== false;      // 只有明確 401/403 才當成未登入
 
         // ZH: 偏好跟帳號走。這裡順便對帳——**不要再打一次 /auth/me**。
         //     ⚠ syncFrom 會觸發 prefs:applied → render()，所以要先存 _me。
@@ -317,7 +336,26 @@
         render(toggle, menu, me);
     }
 
+    // ZH: true = 後端明確說沒登入；false = 只是這次拿不到（網路／5xx）。
+    var _anon = true;
+
     function render(toggle, menu, me) {
+        if (!me && !_anon) {
+            // ZH: 拿不到身分**不等於**沒登入。說「未登入」會讓已登入的人以為被登出了，
+            //     還會誘導他去點「前往登入」——那是錯的去處。
+            toggle.removeAttribute('data-i18n');
+            toggle.textContent = T('acct_unavailable', '暫時讀不到');
+            menu.textContent = '';
+            var again = document.createElement('button');
+            again.type = 'button';
+            again.addEventListener('click', function (ev) {
+                ev.stopPropagation();
+                fillAccount(toggle, menu);
+            });
+            menu.appendChild(item(again, 'btn_retry', '重試'));
+            menu.appendChild(prefsSection());
+            return;
+        }
         if (!me) {
             // ZH: 取不到身分就不要假裝有人登入。給的是「去登入」而不是空選單。
             toggle.setAttribute('data-i18n', 'acct_anon');

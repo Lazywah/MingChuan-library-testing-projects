@@ -15,6 +15,7 @@ def test_defaults_are_zh_and_100(client, db):
     me = client.get("/api/v1/auth/me", headers=h).json()
     assert me["ui_font_scale"] == 100
     assert me["ui_lang"] == "zh"
+    assert me["ui_theme"] == "yellow"
 
 
 def test_update_and_read_back(client, db):
@@ -89,3 +90,33 @@ def test_boundaries_accepted(client, db):
         r = client.patch("/api/v1/auth/me/preferences",
                          json={"ui_font_scale": ok}, headers=h)
         assert r.status_code == 200, f"{ok} 被誤擋"
+
+
+def test_theme_follows_the_account(client, db):
+    """ZH: 色系原本九個頁面各寫一份切換處理，**只有首頁那份會存與還原**——
+    症狀是「有些頁面換了顏色，其他頁面還沒變」。現在跟字級／語言同一條路。
+    """
+    make_user(db)
+    h = auth_headers(client)
+    out = client.patch("/api/v1/auth/me/preferences", json={"ui_theme": "blue"},
+                       headers=h).json()
+    assert out["ui_theme"] == "blue"
+    assert client.get("/api/v1/auth/me", headers=auth_headers(client)).json()["ui_theme"] == "blue"
+
+
+def test_unknown_theme_rejected(client, db):
+    make_user(db)
+    h = auth_headers(client)
+    assert client.patch("/api/v1/auth/me/preferences", json={"ui_theme": "pink"},
+                        headers=h).status_code == 422
+
+
+def test_theme_partial_update_keeps_others(client, db):
+    """ZH: 三個欄位都可選——只改色系不該把字級或語言洗掉。"""
+    make_user(db)
+    h = auth_headers(client)
+    client.patch("/api/v1/auth/me/preferences",
+                 json={"ui_font_scale": 130, "ui_lang": "en"}, headers=h)
+    out = client.patch("/api/v1/auth/me/preferences", json={"ui_theme": "blue"},
+                       headers=h).json()
+    assert (out["ui_font_scale"], out["ui_lang"], out["ui_theme"]) == (130, "en", "blue")

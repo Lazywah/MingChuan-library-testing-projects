@@ -21,16 +21,9 @@ const $ = (id) => document.getElementById(id);
 
 let POLL = null;
 
-// ── 色系切換（開發期）────────────────────────────────────────────────
-document.querySelectorAll('[data-set-theme]').forEach((b) => {
-    b.addEventListener('click', () => {
-        const t = b.dataset.setTheme;
-        document.documentElement.dataset.theme = t;
-        document.querySelectorAll('[data-set-theme]').forEach((x) => {
-            x.setAttribute('aria-pressed', String(x.dataset.setTheme === t));
-        });
-    });
-});
+// ZH: 色系切換已集中到 prefs.js（跟帳號走）。
+//     原本九個頁面各寫一份，**只有 app.js 那份會存與還原**——
+//     於是「有些頁面換了顏色，其他頁面還沒變」。同一條規則不要有第二份實作。
 
 function authHeaders() {
     const t = sessionStorage.getItem('ai_hud_token') || localStorage.getItem('ai_hud_token');
@@ -60,19 +53,19 @@ function note(text) {
     $('note').hidden = !text;
 }
 
-const mins = (s) => (s == null ? '—' : `${Math.floor(s / 60)} 分`);
+const mins = (s) => (s == null ? '—' : `${Math.floor(s / 60)}${T('unit_min', ' 分')}`);
 
 // ── 狀態 ─────────────────────────────────────────────────────────────
 function render(d) {
     const running = d.status === 'running';
-    $('state').textContent = running ? '執行中' : '未啟動';
-    setPrimary({ label: running ? '開啟 Lab' : '啟動並開啟 Lab', enabled: true });
+    $('state').textContent = running ? T('lab_st_running', '執行中') : T('lab_st_stopped', '未啟動');
+    setPrimary({ label: running ? T('lab_open', '開啟 Lab') : T('lab_start_open', '啟動並開啟 Lab'), enabled: true });
     $('stop').hidden = !running;
 
     $('meta').hidden = !running;
     if (running) {
         $('m-remaining').textContent = d.today_remaining_min != null
-            ? `${d.today_remaining_min} 分` : '—';
+            ? `${d.today_remaining_min}${T('unit_min', ' 分')}` : '—';
         $('m-elapsed').textContent = mins(d.elapsed_seconds);
         $('m-quota').textContent = d.effective_quota_gb != null
             ? `${d.effective_quota_gb} GB` : '—';
@@ -85,7 +78,7 @@ function render(d) {
     $('secrets').hidden = !has;
     if (has) {
         const names = Array.isArray(sec) ? sec : Object.keys(sec);
-        $('secrets').textContent = `啟動時會注入這些環境變數：${names.join('、')}`;
+        $('secrets').textContent = T('lab_env', '啟動時會注入這些環境變數：{n}').replace('{n}', names.join('、'));
     }
 }
 
@@ -96,9 +89,9 @@ async function load() {
         render(d);
         note('');
     } catch (e) {
-        $('state').textContent = '讀不到';
-        setPrimary({ label: '重試', enabled: true });
-        note(`暫時取不到 Lab 狀態（${e.message || e}）。`);
+        $('state').textContent = T('lab_st_unknown', '讀不到');
+        setPrimary({ label: T('btn_retry', '重試'), enabled: true });
+        note(T('lab_state_fail', '暫時取不到 Lab 狀態') + `（${e.message || e}）。`);
     }
 }
 
@@ -107,20 +100,20 @@ function openTab(url) {
     const w = window.open(url, '_blank');
     if (!w) {
         // ZH: 被瀏覽器擋下時**不可以毫無反應**（與首頁前往 MYAI 同一條規則）。
-        $('note').innerHTML = `瀏覽器擋下了新分頁。<a href="${url}" target="_blank" rel="noopener">點這裡開啟 Lab</a>`;
+        $('note').innerHTML = T('popup_blocked', '瀏覽器擋下了新分頁。')
+            + `<a href="${url}" target="_blank" rel="noopener">${T('lab_open_here', '點這裡開啟 Lab')}</a>`;
         $('note').hidden = false;
         return;
     }
-    note('已在新分頁開啟。若看到「未授權」，請回首頁重新登入一次'
-        + '（新分頁靠 cookie 認證，與這一頁不同）。');
+    note(T('lab_opened', '已在新分頁開啟。若看到「未授權」，請回首頁重新登入一次（新分頁靠 cookie 認證，與這一頁不同）。'));
 }
 
 $('go').addEventListener('click', async () => {
-    setPrimary({ label: '啟動中…', enabled: false });
-    note('容器啟動大約需要 5–10 秒，好了會自動開新分頁。');
+    setPrimary({ label: T('lab_starting', '啟動中…'), enabled: false });
+    note(T('lab_start_hint', '容器啟動大約需要 5–10 秒，好了會自動開新分頁。'));
 
     if (FORCED) {                       // 檢視模式：走完流程但不打後端
-        setTimeout(() => { setPrimary({ label: '開啟 Lab', enabled: true });
+        setTimeout(() => { setPrimary({ label: T('lab_open', '開啟 Lab'), enabled: true });
                            note('（檢視模式：不會真的開容器）'); }, 600);
         return;
     }
@@ -135,9 +128,9 @@ $('go').addEventListener('click', async () => {
         //     但**不要立刻開** —— 先輪詢到 running 再開，否則新分頁是空白。
         await waitReady(started.url);
     } catch (e) {
-        setPrimary({ label: '啟動並開啟 Lab', enabled: true });
+        setPrimary({ label: T('lab_start_open', '啟動並開啟 Lab'), enabled: true });
         // ZH: 429 是額度/頻率限制，訊息由後端給，照實顯示不要改寫。
-        note(`啟動失敗：${e.message || e}`);
+        note(T('lab_start_fail', '啟動失敗') + `：${e.message || e}`);
     }
 });
 
@@ -157,9 +150,8 @@ async function waitReady(url) {
         } catch (e) { /* 輪詢期間的暫時失敗不打斷，由次數上限收尾 */ }
         if (tries >= 20) {                     // 20 × 1.5s = 30 秒
             clearInterval(POLL);
-            setPrimary({ label: '啟動並開啟 Lab', enabled: true });
-            note('等了 30 秒仍未就緒。可以再試一次，或回報問題。'
-                + '（容器可能仍在背景啟動，重新整理這一頁可以看到最新狀態。）');
+            setPrimary({ label: T('lab_start_open', '啟動並開啟 Lab'), enabled: true });
+            note(T('lab_timeout', '等了 30 秒仍未就緒。可以再試一次，或回報問題。（容器可能仍在背景啟動，重新整理這一頁可以看到最新狀態。）'));
         }
     }, 1500);
 }
@@ -168,13 +160,13 @@ async function waitReady(url) {
 $('stop').addEventListener('click', async (ev) => {
     ev.preventDefault();
     // ZH: 停止會關掉容器但**不會刪檔案**——講明才不會有人不敢按。
-    if (!confirm('要停止 Lab 嗎？容器會關閉，但你的檔案都會保留。')) return;
+    if (!confirm(T('lab_stop_confirm', '要停止 Lab 嗎？容器會關閉，但你的檔案都會保留。'))) return;
     try {
         if (!FORCED) await api('/lab/stop', { method: 'POST' });
-        note('已停止。檔案都還在，下次啟動會回到原樣。');
+        note(T('lab_stopped', '已停止。檔案都還在，下次啟動會回到原樣。'));
         await load();
     } catch (e) {
-        note(`停止失敗：${e.message || e}`);
+        note(T('lab_stop_fail', '停止失敗') + `：${e.message || e}`);
     }
 });
 
@@ -197,3 +189,9 @@ function requireLogin() {
     return false;
 }
 if (requireLogin()) load();
+
+
+// ── 語言切換時重繪 ───────────────────────────────────────────────────
+// ZH: prefs.js 的字典掃描只換得掉 `data-i18n` 元素；本頁 JS 產生的內容要自己重跑。
+//     只在語言**改變**時觸發（不是每次套用），所以不會在載入時多跑一次。
+document.addEventListener('prefs:langchanged', () => { load(); });

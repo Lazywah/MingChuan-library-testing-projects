@@ -17,22 +17,18 @@ const $ = (id) => document.getElementById(id);
 const FILTER_MIN_ITEMS = 6;
 const MAX_ITEMS = 60;
 
-const TYPES = {
-    work: '學生作品',
-    video: '教學影片',
-    solution: '問題解法',
-};
+// ZH: 分類的**鍵**是資料契約（docs-content.json 用它），不能翻；顯示名稱才翻。
+//     用函式而非常數：模組層的物件在載入時就定案，切換語言不會更新。
+const TYPE_KEYS = ['work', 'video', 'solution'];
+const typeLabel = (k) => ({
+    work: T('docs_t_work', '學生作品'),
+    video: T('docs_t_video', '教學影片'),
+    solution: T('docs_t_solution', '問題解法'),
+}[k] || T('docs_t_other', '其他'));
 
-// ── 色系切換（開發期）────────────────────────────────────────────────
-document.querySelectorAll('[data-set-theme]').forEach((b) => {
-    b.addEventListener('click', () => {
-        const t = b.dataset.setTheme;
-        document.documentElement.dataset.theme = t;
-        document.querySelectorAll('[data-set-theme]').forEach((x) => {
-            x.setAttribute('aria-pressed', String(x.dataset.setTheme === t));
-        });
-    });
-});
+// ZH: 色系切換已集中到 prefs.js（跟帳號走）。
+//     原本九個頁面各寫一份，**只有 app.js 那份會存與還原**——
+//     於是「有些頁面換了顏色，其他頁面還沒變」。同一條規則不要有第二份實作。
 
 // ── 取內容 ───────────────────────────────────────────────────────────
 async function fetchItems() {
@@ -72,11 +68,11 @@ function card(it) {
 
     const tag = document.createElement('span');
     tag.className = 'card__tag';
-    tag.textContent = TYPES[it.type] || '其他';
+    tag.textContent = typeLabel(it.type);
 
     const h = document.createElement('h2');
     h.className = 'card__title';
-    h.textContent = it.title || '(無標題)';      // ⚠ textContent，內容是人工輸入
+    h.textContent = it.title || T('news_untitled', '(無標題)');      // ⚠ textContent，內容是人工輸入
 
     const p = document.createElement('p');
     p.className = 'card__desc';
@@ -98,18 +94,19 @@ function render() {
 
     $('more').hidden = list.length <= MAX_ITEMS;
     if (!$('more').hidden) {
-        $('more').textContent = `只顯示前 ${MAX_ITEMS} 筆（共 ${list.length} 筆）。`;
+        $('more').textContent = T('docs_truncated', '只顯示前 {n} 筆（共 {t} 筆）。')
+            .replace('{n}', MAX_ITEMS).replace('{t}', list.length);
     }
 }
 
 function buildFilters() {
-    const kinds = [...new Set(ALL.map((x) => x.type))].filter((k) => TYPES[k]);
+    const kinds = [...new Set(ALL.map((x) => x.type))].filter((k) => TYPE_KEYS.includes(k));
     // ZH: 只有一種分類時篩選毫無作用；項目太少時它比內容還顯眼。
     if (ALL.length < FILTER_MIN_ITEMS || kinds.length < 2) return;
 
     const box = $('filters');
     box.textContent = '';
-    [['all', '全部'], ...kinds.map((k) => [k, TYPES[k]])].forEach(([k, label], i) => {
+    [['all', T('docs_all', '全部')], ...kinds.map((k) => [k, typeLabel(k)])].forEach(([k, label], i) => {
         const b = document.createElement('button');
         b.type = 'button';
         b.textContent = label;
@@ -132,16 +129,17 @@ async function load() {
             // ZH: 空狀態兼任引導（Nielsen #10）——不要只說「沒有內容」就停在那裡。
             // ZH: 引導的去處用 .btn--minor 而非句中連結：實測句中那顆只有 19px，
             //     不到 --tap-min 44px。這裡是**動作**（去訓練第一個模型），不是引述連結。
-            return showMsg('文件庫還沒有內容。<br>'
-                + '這裡之後會放同學的作品與教學影片。想成為第一個嗎？<br>'
-                + '<a class="btn--minor" href="gpu.html">從訓練你的第一個模型開始</a>');
+            return showMsg(T('docs_empty1', '文件庫還沒有內容。') + '<br>'
+                + T('docs_empty2', '這裡之後會放同學的作品與教學影片。想成為第一個嗎？') + '<br>'
+                + `<a class="btn--minor" href="gpu.html">${T('docs_empty_cta', '從訓練你的第一個模型開始')}</a>`);
         }
         ALL.sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')));
         $('msg').hidden = true;
         buildFilters();
         render();
     } catch (e) {
-        showMsg(`暫時取不到文件庫內容（${e.message || e}）。可以重新整理再試一次。`);
+        showMsg(T('docs_fail', '暫時取不到文件庫內容') + `（${e.message || e}）。`
+            + T('retry_refresh', '可以重新整理再試一次。'));
     }
 }
 
@@ -169,3 +167,9 @@ function mock(kind) {
 // ZH: 這一頁**不擋登入**——文件庫是「看別人做過什麼」，沒有個人資料，
 //     也是新生評估這個平台值不值得用的地方。要求先登入等於在入口就流失。
 load();
+
+
+// ── 語言切換時重繪 ───────────────────────────────────────────────────
+// ZH: prefs.js 的字典掃描只換得掉 `data-i18n` 元素；本頁 JS 產生的內容要自己重跑。
+//     只在語言**改變**時觸發（不是每次套用），所以不會在載入時多跑一次。
+document.addEventListener('prefs:langchanged', () => { load(); });

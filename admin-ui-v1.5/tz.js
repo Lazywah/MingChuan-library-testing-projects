@@ -117,8 +117,14 @@
     function twWhen(v) {
         var p = parts(v);
         if (!p) return '';
-        return (twIsToday(v) ? '今天' : (Number(p.month) + '/' + Number(p.day)))
+        return (twIsToday(v) ? L('tz_today', '今天') : (Number(p.month) + '/' + Number(p.day)))
              + ' ' + p.hour + ':' + p.minute;
+    }
+
+    // ZH: 文案。有 web-ui-v2 的 prefs.js 時走它的字典，沒有就用中文。
+    //     這樣**五份副本仍可逐位元組相同**：其餘四個 UI 沒有 Prefs，自然落到 fallback。
+    function L(key, fallback) {
+        return (global.Prefs && global.Prefs.t) ? global.Prefs.t(key, fallback) : fallback;
     }
 
     /** ZH: 相對時間。未來時間回 '剛剛'——時鐘些微不同步不該顯示成「-3 分鐘前」。 */
@@ -127,10 +133,10 @@
         if (!d) return '';
         var s = (Date.now() - d.getTime()) / 1000;
         if (s < 0) s = 0;
-        if (s < 60) return Math.floor(s) + ' 秒前';
-        if (s < 3600) return Math.floor(s / 60) + ' 分鐘前';
-        if (s < 86400) return Math.floor(s / 3600) + ' 小時前';
-        if (s < 2592000) return Math.floor(s / 86400) + ' 天前';
+        if (s < 60) return Math.floor(s) + L('tz_sec_ago', ' 秒前');
+        if (s < 3600) return Math.floor(s / 60) + L('tz_min_ago', ' 分鐘前');
+        if (s < 86400) return Math.floor(s / 3600) + L('tz_hour_ago', ' 小時前');
+        if (s < 2592000) return Math.floor(s / 86400) + L('tz_day_ago', ' 天前');
         return twDate(v);
     }
 

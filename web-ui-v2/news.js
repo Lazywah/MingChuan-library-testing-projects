@@ -15,16 +15,9 @@ const $ = (id) => document.getElementById(id);
 // ZH: 後端 limit 上限 100。要更多得先有分頁，不是把上限調大。
 const LIMIT = 50;
 
-// ── 色系切換（開發期）────────────────────────────────────────────────
-document.querySelectorAll('[data-set-theme]').forEach((b) => {
-    b.addEventListener('click', () => {
-        const t = b.dataset.setTheme;
-        document.documentElement.dataset.theme = t;
-        document.querySelectorAll('[data-set-theme]').forEach((x) => {
-            x.setAttribute('aria-pressed', String(x.dataset.setTheme === t));
-        });
-    });
-});
+// ZH: 色系切換已集中到 prefs.js（跟帳號走）。
+//     原本九個頁面各寫一份，**只有 app.js 那份會存與還原**——
+//     於是「有些頁面換了顏色，其他頁面還沒變」。同一條規則不要有第二份實作。
 
 function authHeaders() {
     const t = sessionStorage.getItem('ai_hud_token') || localStorage.getItem('ai_hud_token');
@@ -58,7 +51,7 @@ function render(list) {
         if (a.is_pinned) {
             const tag = document.createElement('span');
             tag.className = 'post__pin';
-            tag.textContent = '置頂';
+            tag.textContent = T('news_pinned', '置頂');
             head.appendChild(tag);
         }
 
@@ -67,16 +60,16 @@ function render(list) {
         date.textContent = fmtDate(a.posted_at);
         head.appendChild(date);
 
-        if (a.posted_by) {
-            const who = document.createElement('span');
-            who.className = 'post__by';
-            who.textContent = a.posted_by;
-            head.appendChild(who);
-        }
+        // ZH: **不顯示 posted_by。** 後端回的是 `users.id` 的 UUID 而不是名字
+        //     （AnnouncementResponse.posted_by 是外鍵），實際畫面上會變成
+        //     「2026/08/20  3ad36141-3bd9-4a14-bcef-4b23dcbf92b3  標題」。
+        //     假資料用的是 'admin' 這種人名，所以檢視模式下看起來正常——
+        //     **這個缺陷只在接真實 API 時才會出現**。
+        //     對學生而言「誰發的」本來也不重要；要顯示的話後端得另外回名字。
 
         const h = document.createElement('h2');
         h.className = 'post__title';
-        h.textContent = a.title || '(無標題)';
+        h.textContent = a.title || T('news_untitled', '(無標題)');
 
         const body = document.createElement('p');
         body.className = 'post__body';
@@ -89,7 +82,8 @@ function render(list) {
     // 過多：後端 limit 上限 100，這裡只取 LIMIT。取滿就明講可能還有更舊的。
     $('more').hidden = list.length < LIMIT;
     if (!$('more').hidden) {
-        $('more').textContent = `只顯示最新的 ${LIMIT} 則。更舊的公告目前無法在這裡瀏覽。`;
+        $('more').textContent = T('news_truncated', '只顯示最新的 {n} 則。更舊的公告目前無法在這裡瀏覽。')
+            .replace('{n}', LIMIT);
     }
 }
 
@@ -106,12 +100,13 @@ async function load() {
             list = await r.json();
         }
         if (!Array.isArray(list) || !list.length) {
-            return showMsg('目前沒有公告。');
+            return showMsg(T('news_empty', '目前沒有公告。'));
         }
         render(list);
         $('msg').hidden = true;
     } catch (e) {
-        showMsg(`暫時取不到公告（${e.message || e}）。可以重新整理再試一次。`);
+        showMsg(T('news_fail', '暫時取不到公告') + `（${e.message || e}）。`
+            + T('retry_refresh', '可以重新整理再試一次。'));
     }
 }
 
@@ -137,3 +132,9 @@ function requireLogin() {
     return false;
 }
 if (requireLogin()) load();
+
+
+// ── 語言切換時重繪 ───────────────────────────────────────────────────
+// ZH: prefs.js 的字典掃描只換得掉 `data-i18n` 元素；本頁 JS 產生的內容要自己重跑。
+//     只在語言**改變**時觸發（不是每次套用），所以不會在載入時多跑一次。
+document.addEventListener('prefs:langchanged', () => { load(); });

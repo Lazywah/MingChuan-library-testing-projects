@@ -83,6 +83,7 @@ class User(Base):
     #     但**真相是這裡**。
     ui_font_scale = Column(Integer, default=100)                              # ZH: 介面字級 %（80–150）| EN: UI font scale %
     ui_lang       = Column(String, default="zh")                              # ZH: 介面語言 zh / en | EN: UI language
+    ui_theme      = Column(String, default="yellow")                          # ZH: 色系 yellow / blue | EN: colour scheme
     login_count = Column(Integer, default=0)                                  # ZH: 登入次數 | EN: Login count
     lifetime_tokens_used = Column(Integer, default=0)                         # ZH: 歷史累計 Token 數 | EN: Lifetime tokens used
     disk_quota_gb = Column(Integer, default=10)                               # ZH: 個人磁碟配額 GB (v2.0 Lab) | EN: Personal disk quota GB

@@ -21,17 +21,12 @@ let DAYS = 30;
 let LAST = null;                 // 最近一次的資料，供切換色系時重繪
 let charts = { trend: null, models: null };
 
-// ── 色系切換：**要重繪圖表**，否則顏色停在切換前 ─────────────────────
-document.querySelectorAll('[data-set-theme]').forEach((b) => {
-    b.addEventListener('click', () => {
-        const t = b.dataset.setTheme;
-        document.documentElement.dataset.theme = t;
-        document.querySelectorAll('[data-set-theme]').forEach((x) => {
-            x.setAttribute('aria-pressed', String(x.dataset.setTheme === t));
-        });
-        if (LAST) drawCharts(LAST);
-    });
-});
+// ZH: 色系切換已集中到 prefs.js（跟帳號走）。
+//     原本九個頁面各寫一份，**只有 app.js 那份會存與還原**——
+//     於是「有些頁面換了顏色，其他頁面還沒變」。同一條規則不要有第二份實作。
+//     ⚠ 但**圖表仍要自己重繪**：Chart.js 把顏色烤進 dataset，
+//     改 CSS 變數不會讓已經畫好的圖跟著變。初次套用時 LAST 還是 null，所以無害。
+document.addEventListener('prefs:applied', () => { if (LAST) drawCharts(LAST); });
 
 // ── 期間切換 ─────────────────────────────────────────────────────────
 document.querySelectorAll('[data-days]').forEach((b) => {
@@ -70,12 +65,12 @@ function renderBalance(acc) {
     if (pts == null) {
         $('bal-value').textContent = '—';
         $('bal-unit').hidden = true;
-        $('bal-meta').textContent = '暫時取不到額度，不影響以下統計';
+        $('bal-meta').textContent = T('usage_bal_fail', '暫時取不到額度，不影響以下統計');
         return;
     }
     $('bal-value').textContent = num(pts);
     $('bal-unit').hidden = false;
-    $('bal-meta').textContent = acc.expiry ? `有效至 ${acc.expiry}` : '';
+    $('bal-meta').textContent = acc.expiry ? T('usage_valid_until', '有效至 {d}').replace('{d}', acc.expiry) : '';
 }
 
 // ── 三個數字 ─────────────────────────────────────────────────────────
@@ -96,17 +91,18 @@ function renderStats(d) {
         ? (s.consumed || 0) / peer.avg_consumed : null;
 
     $('stats').innerHTML =
-        cell('消耗點數', s.consumed,
-             show ? `全體人均 ${num(peer.avg_consumed)}`
-                    + (ratio != null ? ` · ${ratio.toFixed(1)}× 平均` : '') : '')
-        + cell('AI 使用次數', s.uses, show ? `全體人均 ${num(peer.avg_uses)}` : '')
-        + cell('登入次數', s.logins, '');
+        cell(T('usage_consumed', '消耗點數'), s.consumed,
+             show ? T('usage_peer_avg', '全體人均 {n}').replace('{n}', num(peer.avg_consumed))
+                    + (ratio != null ? ` · ${ratio.toFixed(1)}× ${T('usage_avg', '平均')}` : '') : '')
+        + cell(T('usage_uses', 'AI 使用次數'), s.uses,
+               show ? T('usage_peer_avg', '全體人均 {n}').replace('{n}', num(peer.avg_uses)) : '')
+        + cell(T('usage_logins', '登入次數'), s.logins, '');
 
     const np = $('no-peer');
     np.hidden = show;
     if (!show) {
-        np.textContent = '目前使用者樣本太少，暫不顯示全體人均對照——'
-            + '樣本太小時「人均」會反推出特定個人。你自己的數字不受影響。';
+        np.textContent = T('usage_small_sample',
+            '目前使用者樣本太少，暫不顯示全體人均對照——樣本太小時「人均」會反推出特定個人。你自己的數字不受影響。');
     }
 }
 
@@ -133,12 +129,12 @@ function drawCharts(d) {
     // 趨勢：我＝實線；全體人均＝虛線（樣本足夠時才有）
     const series = d.series || [];
     const ds = [{
-        label: '我', data: series.map((x) => x.consumed),
+        label: T('usage_me', '我'), data: series.map((x) => x.consumed),
         borderColor: me, backgroundColor: me + '22',
         fill: true, tension: 0.25, pointRadius: 0, borderWidth: 2,
     }];
     if (show) ds.push({
-        label: '全體人均', data: series.map((x) => x.peer_avg),
+        label: T('usage_peer', '全體人均'), data: series.map((x) => x.peer_avg),
         borderColor: pr, borderDash: [5, 4], borderWidth: 2,
         fill: false, tension: 0.25, pointRadius: 0,
     });
@@ -155,9 +151,9 @@ function drawCharts(d) {
     const cap = show ? 5 : 8;
     const mdl = all.slice(0, cap);
     const mds = show
-        ? [{ label: '我的佔比 %', data: mdl.map((m) => m.share), backgroundColor: me, borderRadius: 3 },
-           { label: '全體佔比 %', data: mdl.map((m) => m.peer_share), backgroundColor: pr, borderRadius: 3 }]
-        : [{ label: '消耗點數', data: mdl.map((m) => m.points), backgroundColor: me, borderRadius: 3 }];
+        ? [{ label: T('usage_my_share', '我的佔比 %'), data: mdl.map((m) => m.share), backgroundColor: me, borderRadius: 3 },
+           { label: T('usage_peer_share', '全體佔比 %'), data: mdl.map((m) => m.peer_share), backgroundColor: pr, borderRadius: 3 }]
+        : [{ label: T('usage_consumed', '消耗點數'), data: mdl.map((m) => m.points), backgroundColor: me, borderRadius: 3 }];
 
     charts.models = new Chart($('models').getContext('2d'), {
         type: 'bar',
@@ -172,7 +168,8 @@ function drawCharts(d) {
     // 過多狀態：明講截斷了幾個。v1.5 是靜默取前 N —— 那讓人以為自己只用過這幾個。
     const more = $('models-more');
     more.hidden = all.length <= cap;
-    if (!more.hidden) more.textContent = `另有 ${all.length - cap} 個模型未列出（依消耗排序取前 ${cap}）。`;
+    if (!more.hidden) more.textContent = T('usage_more_models', '另有 {n} 個模型未列出（依消耗排序取前 {c}）。')
+        .replace('{n}', all.length - cap).replace('{c}', cap);
 }
 
 // ── 載入 ─────────────────────────────────────────────────────────────
@@ -194,14 +191,13 @@ async function load() {
         renderBalance(d.account);
 
         if (!d.bound) {
-            return showMsg('你的 AI 帳號還沒綁定，所以還沒有使用紀錄。'
-                + '第一次前往 MYAI 使用後，這裡就會有資料。');
+            return showMsg(T('usage_unbound', '你的 AI 帳號還沒綁定，所以還沒有使用紀錄。第一次前往 MYAI 使用後，這裡就會有資料。'));
         }
         const s = d.summary || {};
         if (!(s.uses > 0) && !(s.logins > 0)) {
             return showMsg(DAYS === 0
-                ? '目前還沒有任何使用紀錄。'
-                : `近 ${DAYS} 天沒有使用紀錄。可以切到「全部」看看更早的。`);
+                ? T('usage_none_ever', '目前還沒有任何使用紀錄。')
+                : T('usage_none_range', '近 {d} 天沒有使用紀錄。可以切到「全部」看看更早的。').replace('{d}', DAYS));
         }
 
         LAST = d;
@@ -211,7 +207,8 @@ async function load() {
     } catch (e) {
         // ZH: 額度區照常顯示（部分失敗不整頁死，與首頁同一條規則）。
         renderBalance(null);
-        showMsg(`暫時取不到使用紀錄（${e.message || e}）。可以重新整理再試一次。`);
+        showMsg(T('usage_fail', '暫時取不到使用紀錄') + `（${e.message || e}）。`
+            + T('retry_refresh', '可以重新整理再試一次。'));
     }
 }
 
@@ -246,3 +243,9 @@ function requireLogin() {
     return false;
 }
 if (requireLogin()) load();
+
+
+// ── 語言切換時重繪 ───────────────────────────────────────────────────
+// ZH: prefs.js 的字典掃描只換得掉 `data-i18n` 元素；本頁 JS 產生的內容要自己重跑。
+//     只在語言**改變**時觸發（不是每次套用），所以不會在載入時多跑一次。
+document.addEventListener('prefs:langchanged', () => { load(); });

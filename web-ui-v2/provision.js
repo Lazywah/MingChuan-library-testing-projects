@@ -14,16 +14,9 @@ const API = '/api/v1';
 const FORCED = new URLSearchParams(location.search).get('state');
 const $ = (id) => document.getElementById(id);
 
-// ── 色系切換（開發期）────────────────────────────────────────────────
-document.querySelectorAll('[data-set-theme]').forEach((b) => {
-    b.addEventListener('click', () => {
-        const t = b.dataset.setTheme;
-        document.documentElement.dataset.theme = t;
-        document.querySelectorAll('[data-set-theme]').forEach((x) => {
-            x.setAttribute('aria-pressed', String(x.dataset.setTheme === t));
-        });
-    });
-});
+// ZH: 色系切換已集中到 prefs.js（跟帳號走）。
+//     原本九個頁面各寫一份，**只有 app.js 那份會存與還原**——
+//     於是「有些頁面換了顏色，其他頁面還沒變」。同一條規則不要有第二份實作。
 
 function authHeaders() {
     // ZH: ⚠ 鍵名必須與 v1／v1.5／其他 v2 畫面一致（'ai_hud_token'）。
@@ -53,24 +46,26 @@ async function load() {
             d = await r.json();
         }
     } catch (e) {
-        return showMsg(`暫時取不到開通狀態（${e.message || e}）。可以重新整理再試一次。`);
+        return showMsg(T('prov_state_fail', '暫時取不到開通狀態') + `（${e.message || e}）。`
+                       + T('prov_retry', '可以重新整理再試一次。'));
     }
 
     if (!d.provisioned) {
-        return showMsg('你的 MYAI 帳號還在開通中，目前還沒有初始密碼。'
-            + '開通完成後回到首頁就會看到提示。');
+        return showMsg(T('prov_pending', '你的 MYAI 帳號還在開通中，目前還沒有初始密碼。')
+            + T('prov_after', '開通完成後回到首頁就會看到提示。'));
     }
     if (!d.initial_password) {
         // ZH: 這兩種原因在後端是同一個結果（密碼為 null），前端**不要猜**是哪一種。
-        return showMsg('目前沒有可顯示的初始密碼——你已經確認過，或是保留期已過。'
-            + '若忘記密碼，請在 MYAI 平台用忘記密碼功能重設。');
+        return showMsg(T('prov_none', '目前沒有可顯示的初始密碼——你已經確認過，或是保留期已過。')
+            + T('prov_forgot', '若忘記密碼，請在 MYAI 平台用忘記密碼功能重設。'));
     }
 
     $('acct').textContent = d.email || '—';
     $('pw').textContent = d.initial_password;
     $('intro').textContent = d.retention_days
-        ? `這組密碼只在開通後 ${d.retention_days} 天內看得到。請盡快到 MYAI 登入並改成自己的密碼。`
-        : '請盡快到 MYAI 登入並改成自己的密碼。';
+        ? T('prov_window', '這組密碼只在開通後 {d} 天內看得到。').replace('{d}', d.retention_days)
+          + T('prov_change_soon', '請盡快到 MYAI 登入並改成自己的密碼。')
+        : T('prov_change_soon', '請盡快到 MYAI 登入並改成自己的密碼。');
     $('card').hidden = false;
     $('how').hidden = false;
 }
@@ -80,12 +75,12 @@ $('copy').addEventListener('click', async () => {
     const pw = $('pw').textContent;
     try {
         await navigator.clipboard.writeText(pw);
-        $('note').textContent = '已複製到剪貼簿。';
+        $('note').textContent = T('prov_copied', '已複製到剪貼簿。');
         $('note').hidden = false;
     } catch {
         // ZH: 剪貼簿在非 https 或權限被拒時不可用。不要靜默失敗——
         //     密碼已設 user-select:all，直接告訴使用者可以手動選取。
-        $('note').textContent = '這個瀏覽器不允許自動複製，請直接選取上面那一行。';
+        $('note').textContent = T('prov_copy_manual', '這個瀏覽器不允許自動複製，請直接選取上面那一行。');
         $('note').hidden = false;
     }
 });
@@ -94,7 +89,7 @@ $('copy').addEventListener('click', async () => {
 $('ack').addEventListener('click', async () => {
     const btn = $('ack');
     btn.disabled = true;
-    btn.textContent = '處理中…';
+    btn.textContent = T('prov_working', '處理中…');
     try {
         if (FORCED) {
             // 檢視模式不打後端，但流程走完整條，才看得到成功後的樣子
@@ -103,12 +98,12 @@ $('ack').addEventListener('click', async () => {
                                   { method: 'POST', headers: authHeaders() });
             if (!r.ok) throw new Error(`HTTP ${r.status}`);
         }
-        showMsg('已清除暫存的初始密碼。之後這裡不會再顯示它。');
+        showMsg(T('prov_cleared', '已清除暫存的初始密碼。之後這裡不會再顯示它。'));
     } catch (e) {
         btn.disabled = false;
-        btn.textContent = '我已經改好密碼了';
-        $('note').textContent = `清除失敗（${e.message || e}）。可以再試一次；`
-            + '不影響你在 MYAI 已經改好的密碼。';
+        btn.textContent = T('prov_ack', '我已經改好密碼了');
+        $('note').textContent = T('prov_clear_fail', '清除失敗') + `（${e.message || e}）。`
+            + T('prov_clear_fail2', '可以再試一次；不影響你在 MYAI 已經改好的密碼。');
         $('note').hidden = false;
     }
 });
@@ -138,3 +133,9 @@ function requireLogin() {
     return false;
 }
 if (requireLogin()) load();
+
+
+// ── 語言切換時重繪 ───────────────────────────────────────────────────
+// ZH: prefs.js 的字典掃描只換得掉 `data-i18n` 元素；本頁 JS 產生的內容要自己重跑。
+//     只在語言**改變**時觸發（不是每次套用），所以不會在載入時多跑一次。
+document.addEventListener('prefs:langchanged', () => { load(); });

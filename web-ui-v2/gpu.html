@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>訓練你的第一個模型 · MCU AI Base</title>
+    <title data-i18n="gpu_title">訓練你的第一個模型 · MCU AI Base</title>
 
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -19,9 +19,9 @@
     <span class="topbar__spacer"></span>
     <!-- ZH: 導覽與帳號選單由 chrome.js 產生（唯一真相來源）。
              版面：只有 LOGO 在左，其餘全部靠右。 -->
-    <div class="theme-switch" role="group" aria-label="色系">
-        <button type="button" data-set-theme="yellow" aria-pressed="true">黃</button>
-        <button type="button" data-set-theme="blue" aria-pressed="false">藍</button>
+    <div class="theme-switch" role="group" aria-label="色系" data-i18n-aria="theme_aria">
+        <button type="button" data-set-theme="yellow" aria-pressed="true" data-i18n="theme_yellow">黃</button>
+        <button type="button" data-set-theme="blue" aria-pressed="false" data-i18n="theme_blue">藍</button>
     </div>
 </header>
 
@@ -29,10 +29,10 @@
 
     <!-- 層級 1 · 做完會得到什麼 + 需要準備什麼。這兩句是這個畫面存在的理由。 -->
     <section class="primary-card" aria-labelledby="gpu-title">
-        <h1 class="hero__title" id="gpu-title">做出一個能分辨貓和狗的模型</h1>
+        <h1 class="hero__title" id="gpu-title" data-i18n="gpu_h1">做出一個能分辨貓和狗的模型</h1>
         <p class="hero__sub">
-            用學校的 GPU，大約 20 分鐘。<br>
-            需要一包分好類的圖片——<strong>或直接用我們準備好的範例</strong>。
+            <span data-i18n="gpu_sub1">用學校的 GPU，大約 20 分鐘。</span><br>
+            <span data-i18n="gpu_sub2">需要一包分好類的圖片——</span><strong data-i18n="gpu_sub3">或直接用我們準備好的範例</strong><span data-i18n="gpu_sub4">。</span>
         </p>
 
         <!-- 主要動作（唯一）。刻意不是「上傳你的資料」：
@@ -45,27 +45,27 @@
 
     <!-- 層級 2 · 三步驟預覽（純說明、不可點）。
          ZH: 用 <ol> 而非按鈕，因為它們不是入口，是預期管理。 -->
-    <ol class="steps" aria-label="流程預覽">
+    <ol class="steps" aria-label="流程預覽" data-i18n-aria="gpu_steps_aria">
         <li class="steps__item">
             <span class="steps__n">1</span>
-            <span class="steps__t">準備資料</span>
-            <span class="steps__d">每個類別一個資料夾。用範例的話這步跳過。</span>
+            <span class="steps__t" data-i18n="gpu_s1t">準備資料</span>
+            <span class="steps__d" data-i18n="gpu_s1d">每個類別一個資料夾。用範例的話這步跳過。</span>
         </li>
         <li class="steps__item">
             <span class="steps__n">2</span>
-            <span class="steps__t">在 Lab 裡跑</span>
-            <span class="steps__d">開啟後已經有寫好的程式，逐格執行即可。</span>
+            <span class="steps__t" data-i18n="gpu_s2t">在 Lab 裡跑</span>
+            <span class="steps__d" data-i18n="gpu_s2d">開啟後已經有寫好的程式，逐格執行即可。</span>
         </li>
         <li class="steps__item">
             <span class="steps__n">3</span>
-            <span class="steps__t">看結果</span>
-            <span class="steps__d">正確率、以及模型判斷錯的那幾張圖。</span>
+            <span class="steps__t" data-i18n="gpu_s3t">看結果</span>
+            <span class="steps__d" data-i18n="gpu_s3d">正確率、以及模型判斷錯的那幾張圖。</span>
         </li>
     </ol>
 
     <!-- 層級 2 · 已有資料的人的旁路（文字連結，不是第二顆按鈕） -->
     <nav class="minor">
-        <a href="#" id="link-own-data">我已經有資料了，直接開 Lab</a>
+        <a href="#" id="link-own-data" data-i18n="gpu_own_data">我已經有資料了，直接開 Lab</a>
     </nav>
 
     <!-- 層級 3 · 次要 -->
@@ -74,16 +74,16 @@
     <!-- ZH: 「看別人做過什麼」僅在文件庫有內容時出現（V3 修正）。
              由 docs-entry.js 統一處理，本頁不做判斷。 -->
     <nav class="minor">
-        <a href="docs.html" data-docs-entry hidden>看別人做過什麼</a>
+        <a href="docs.html" data-docs-entry hidden data-i18n="entry_docs_title">看別人做過什麼</a>
     </nav>
 
 </main>
 
 <script src="docs-entry.js?v=4fa954e4"></script>
-<script src="tz.js?v=cc2c69cc"></script>
-<script src="i18n.js?v=3372d8fa"></script>
-<script src="prefs.js?v=489e5856"></script>
-<script src="chrome.js?v=7c850da4"></script>
-<script src="gpu.js?v=f4654983"></script>
+<script src="tz.js?v=3608fea5"></script>
+<script src="i18n.js?v=99a402ea"></script>
+<script src="prefs.js?v=8b7b4277"></script>
+<script src="chrome.js?v=d50fe353"></script>
+<script src="gpu.js?v=3ab4595b"></script>
 </body>
 </html>

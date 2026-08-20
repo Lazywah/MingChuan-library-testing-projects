@@ -18,21 +18,9 @@ const FORCED = new URLSearchParams(location.search).get('state');
 
 const $ = (id) => document.getElementById(id);
 
-// ── 色系切換（開發期）────────────────────────────────────────────────
-(function themeSwitch() {
-    const saved = localStorage.getItem('v2-theme') || 'yellow';
-    apply(saved);
-    document.querySelectorAll('[data-set-theme]').forEach((b) => {
-        b.addEventListener('click', () => apply(b.dataset.setTheme));
-    });
-    function apply(name) {
-        document.documentElement.dataset.theme = name;
-        localStorage.setItem('v2-theme', name);
-        document.querySelectorAll('[data-set-theme]').forEach((b) => {
-            b.setAttribute('aria-pressed', String(b.dataset.setTheme === name));
-        });
-    }
-})();
+// ZH: 色系切換已集中到 prefs.js（跟帳號走）。
+//     原本九個頁面各寫一份，**只有 app.js 那份會存與還原**——
+//     於是「有些頁面換了顏色，其他頁面還沒變」。同一條規則不要有第二份實作。
 
 // ── 取資料 ───────────────────────────────────────────────────────────
 function authHeaders() {
@@ -87,21 +75,22 @@ async function loadBalance() {
         if (prov && prov.initial_password) {
             $('handoff').hidden = false;
             $('handoff').innerHTML =
-                '你的 MYAI 初始密碼還沒改 · <a href="provision.html">查看初始密碼</a>';
+                T('idx_pw_unchanged', '你的 MYAI 初始密碼還沒改')
+                + ` · <a href="provision.html">${T('idx_see_pw', '查看初始密碼')}</a>`;
         }
         // ZH: Token 即基準（Decision Log #15）——不換算成「約可再問 N 次」。
         //     但「低於門檻」要看得出來，用的是後端已回傳的 below 旗標。
         card.dataset.low = bal.below ? '1' : '0';
         meta.innerHTML = bal.below
-            ? '額度偏低（低於 ' + bal.threshold.toLocaleString('en-US') + '）'
-              + ' · <a href="#" id="link-usage-inline">看用在哪</a>'
-            : '<a href="#" id="link-usage-inline">使用量明細</a>';
+            ? T('idx_low_balance', '額度偏低（低於 {n}）').replace('{n}', bal.threshold.toLocaleString('en-US'))
+              + ` · <a href="#" id="link-usage-inline">${T('idx_see_where', '看用在哪')}</a>`
+            : `<a href="#" id="link-usage-inline">${T('acct_usage', '使用量明細')}</a>`;
         wireUsageLink();
     } catch (e) {
         // 錯誤：**主要動作照常可用**——看不到額度不是不能用 AI 的理由
         value.textContent = '—';
         unit.hidden = true;
-        meta.innerHTML = '<span class="inline-error">暫時取不到額度，不影響使用</span>';
+        meta.innerHTML = `<span class="inline-error">${T('idx_bal_fail', '暫時取不到額度，不影響使用')}</span>`;
     }
 }
 
@@ -110,7 +99,7 @@ async function loadBalance() {
 function renderProvisioning() {
     $('balance-value').textContent = '—';
     $('balance-unit').hidden = true;
-    $('balance-meta').textContent = '你的 AI 帳號正在開通，完成後這裡會顯示額度。';
+    $('balance-meta').textContent = T('idx_provisioning', '你的 AI 帳號正在開通，完成後這裡會顯示額度。');
 }
 
 // ZH: 已開通但額度讀不到 —— 那是額度的問題，不是開通的問題，兩者文案不能共用。
@@ -118,7 +107,7 @@ function renderNoBalance() {
     $('balance-value').textContent = '—';
     $('balance-unit').hidden = true;
     $('balance-meta').innerHTML =
-        '<span class="inline-error">暫時取不到額度，不影響使用</span>';
+        `<span class="inline-error">${T('idx_bal_fail', '暫時取不到額度，不影響使用')}</span>`;
 }
 
 // ── 公告（層級 0，條件式）──────────────────────────────────────────────
@@ -144,7 +133,7 @@ async function loadNotice() {
         $('notice-title').textContent = top.title;
         if (list.length > 1) {
             const more = $('notice-more');
-            more.textContent = '查看全部 ' + list.length + ' 則';
+            more.textContent = T('idx_see_all', '查看全部 {n} 則').replace('{n}', list.length);
             more.hidden = false;
             more.addEventListener('click', (ev) => { ev.preventDefault(); location.href = 'news.html'; });
         }
@@ -161,7 +150,7 @@ async function loadNotice() {
 async function goMyai() {
     const box = $('handoff');
     box.hidden = false;
-    box.textContent = '正在帶你前往 MYAI…（會另開分頁，並需要登入一次）';
+    box.textContent = T('myai_going', '正在帶你前往 MYAI…（會另開分頁，並需要登入一次）');
 
     let logoutUrl = 'https://www.myai168.com/mcu/ai/user/logout_info';
     try {
@@ -179,18 +168,18 @@ async function goMyai() {
         box.textContent = lead;
         const a = document.createElement('a');
         a.href = loginUrl; a.target = '_blank'; a.rel = 'noopener';
-        a.textContent = '點這裡前往 MYAI';
+        a.textContent = T('myai_click_here', '點這裡前往 MYAI');
         box.appendChild(a);
     };
 
     if (!win) {
         // ⚠ V1 的核心修正：被瀏覽器阻擋時**不可以毫無反應**
-        fallback('瀏覽器擋下了新分頁。');
+        fallback(T('popup_blocked', '瀏覽器擋下了新分頁。'));
         return;
     }
     setTimeout(() => {
         try { if (win && !win.closed) win.location.replace(loginUrl); } catch (e) { /* 跨網域寫入被拒 */ }
-        fallback('已在新分頁開啟 MYAI。');
+        fallback(T('myai_opened', '已在新分頁開啟 MYAI。'));
     }, 1000);
 }
 
@@ -236,3 +225,9 @@ if (requireLogin()) {
     loadBalance();
     loadNotice();
 }
+
+
+// ── 語言切換時重繪 ───────────────────────────────────────────────────
+// ZH: prefs.js 的字典掃描只換得掉 `data-i18n` 元素；本頁 JS 產生的內容要自己重跑。
+//     只在語言**改變**時觸發（不是每次套用），所以不會在載入時多跑一次。
+document.addEventListener('prefs:langchanged', () => { loadBalance(); loadNotice(); });

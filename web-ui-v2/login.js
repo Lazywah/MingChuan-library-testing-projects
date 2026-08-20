@@ -15,16 +15,9 @@ const FORCED = new URLSearchParams(location.search).get('state');
 
 const $ = (id) => document.getElementById(id);
 
-// ── 色系切換（開發期）────────────────────────────────────────────────
-document.querySelectorAll('[data-set-theme]').forEach((b) => {
-    b.addEventListener('click', () => {
-        const t = b.dataset.setTheme;
-        document.documentElement.dataset.theme = t;
-        document.querySelectorAll('[data-set-theme]').forEach((x) => {
-            x.setAttribute('aria-pressed', String(x.dataset.setTheme === t));
-        });
-    });
-});
+// ZH: 色系切換已集中到 prefs.js（跟帳號走）。
+//     原本九個頁面各寫一份，**只有 app.js 那份會存與還原**——
+//     於是「有些頁面換了顏色，其他頁面還沒變」。同一條規則不要有第二份實作。
 
 // ── 主要動作：學校 SSO ────────────────────────────────────────────────
 // ZH: 三種結局各有不同的按鈕文字。**沒有一種是「按了沒反應」**。
@@ -47,7 +40,7 @@ async function loadProviders() {
         const data = await r.json();
         const list = Array.isArray(data.providers) ? data.providers : [];
         if (!list.includes('oidc')) return noSso();
-        setPrimary({ label: '用學校帳號登入', note: '', enabled: true });
+        setPrimary({ label: T('login_sso', '用學校帳號登入'), note: '', enabled: true });
     } catch (e) {
         failSso(String(e.message || e));
     }
@@ -56,8 +49,8 @@ async function loadProviders() {
 function failSso(why) {
     // ZH: 線框指定的文案。**不自動展開摺疊區**——那是 C2 修正的重點。
     setPrimary({
-        label: '用學校帳號登入',
-        note: `學校登入暫時不可用，請稍後再試。（${why}）`,
+        label: T('login_sso', '用學校帳號登入'),
+        note: T('login_sso_down', '學校登入暫時不可用，請稍後再試。') + `（${why}）`,
         enabled: false,
     });
 }
@@ -65,8 +58,8 @@ function failSso(why) {
 function noSso() {
     // ZH: 設定上沒有啟用 OIDC —— 這不是錯誤，是這台機器的狀態，文案要分開。
     setPrimary({
-        label: '用學校帳號登入',
-        note: '這台伺服器尚未啟用學校登入。若你是管理者，請用下方的本機登入。',
+        label: T('login_sso', '用學校帳號登入'),
+        note: T('login_no_sso', '這台伺服器尚未啟用學校登入。若你是管理者，請用下方的本機登入。'),
         enabled: false,
     });
 }
@@ -83,7 +76,7 @@ $('admin-form').addEventListener('submit', async (ev) => {
     const err = $('admin-error');
     err.hidden = true;
     btn.disabled = true;
-    btn.textContent = '登入中…';
+    btn.textContent = T('login_working', '登入中…');
 
     try {
         // ZH: ⚠ 這個端點用 OAuth2PasswordRequestForm，**吃 form-urlencoded 不吃 JSON**。
@@ -103,7 +96,7 @@ $('admin-form').addEventListener('submit', async (ev) => {
             credentials: 'include',
         });
         const data = await r.json().catch(() => ({}));
-        if (!r.ok) throw new Error(data.detail || `登入失敗（HTTP ${r.status}）`);
+        if (!r.ok) throw new Error(data.detail || T('login_failed', '登入失敗') + `（HTTP ${r.status}）`);
 
         // ZH: ⚠ 鍵名必須與 v1／v1.5／首頁一致（'ai_hud_token'）。
         //     用別的鍵名不會報錯，只會讓登入後的頁面「一直取不到額度」——
@@ -115,16 +108,22 @@ $('admin-form').addEventListener('submit', async (ev) => {
         err.hidden = false;
     } finally {
         btn.disabled = false;
-        btn.textContent = '登入';
+        btn.textContent = T('btn_login', '登入');
     }
 });
 
 $('forgot').addEventListener('click', (ev) => {
     ev.preventDefault();
     const err = $('admin-error');
-    err.textContent = '忘記密碼：請聯絡圖書館 AI 基地管理者重設。（自助重設尚未接上）';
+    err.textContent = T('login_forgot_msg', '忘記密碼：請聯絡圖書館 AI 基地管理者重設。（自助重設尚未接上）');
     err.hidden = false;
 });
 
 // ── 啟動 ─────────────────────────────────────────────────────────────
 loadProviders();
+
+
+// ── 語言切換時重繪 ───────────────────────────────────────────────────
+// ZH: prefs.js 的字典掃描只換得掉 `data-i18n` 元素；本頁 JS 產生的內容要自己重跑。
+//     只在語言**改變**時觸發（不是每次套用），所以不會在載入時多跑一次。
+document.addEventListener('prefs:langchanged', () => { loadProviders(); });
