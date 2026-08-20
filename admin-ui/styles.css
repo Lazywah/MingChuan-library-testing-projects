@@ -1491,6 +1491,68 @@ ion-icon {
     box-shadow: 0 0 12px var(--border-glow-color);
 }
 
+/* v3.4: 側邊分頁的計數徽章（目前只有「問題回報」的未處理數） */
+/* ZH: 數字**只是強調**，分頁名稱本身已經說明是什麼（WCAG 1.4.1）。
+ *     0 的時候由 JS 隱藏 —— 永遠掛著一個 0 會把人訓練成不看它。 */
+.side-tab-badge {
+    margin-left: auto;
+    min-width: 20px;
+    padding: 0 6px;
+    border-radius: 999px;
+    background: #b91c1c;
+    color: #ffffff;                /* 對 #b91c1c 為 6.47（實算，非估）通過 AA */
+    font-size: 0.75em;
+    font-weight: 700;
+    line-height: 18px;
+    text-align: center;
+    flex-shrink: 0;
+}
+
+/* v3.4: 問題回報卡片 */
+.report-card {
+    border: 1px solid var(--border-color);
+    border-radius: 10px;
+    padding: 14px 16px;
+    background: rgba(255, 255, 255, 0.02);
+}
+.report-card__head {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 12px;
+    color: var(--text-muted);
+    margin-bottom: 8px;
+    flex-wrap: wrap;
+}
+/* ZH: 狀態用文字，不只用顏色。未處理才給紅底 —— 它是唯一代表「有人在等」的狀態。 */
+.report-status {
+    padding: 1px 8px;
+    border-radius: 6px;
+    font-weight: 700;
+    background: rgba(255, 255, 255, 0.08);
+    color: var(--text-primary);
+}
+.report-status[data-status="open"] { background: #b91c1c; color: #ffffff; }
+.report-card__body {
+    white-space: pre-wrap;
+    font-size: 14px;
+    line-height: 1.8;
+    color: var(--text-primary);
+    margin: 0 0 10px;
+}
+.report-card__reply {
+    border-left: 3px solid var(--accent-glow);
+    padding: 8px 12px;
+    margin: 0 0 10px;
+    white-space: pre-wrap;
+    font-size: 13px;
+    line-height: 1.8;
+    color: var(--text-muted);
+}
+/* ZH: 帳號已刪除的回報仍會留著（ondelete SET NULL）。標出來，
+ *     否則管理者會以為是資料壞了。 */
+.report-card__gone { font-style: italic; }
+
 /* v2.3: Side Bar 底部（字體大小 + 返回 + 登出） */
 .admin-sidebar-footer {
     display: flex;

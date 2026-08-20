@@ -589,3 +589,43 @@ class MyaiModelMap(Base):
     note         = Column(Text, nullable=True)                                 # ZH: 備註(自用) | EN: admin note
     updated_at   = Column(DateTime, default=lambda: datetime.now(timezone.utc),
                           onupdate=lambda: datetime.now(timezone.utc))
+
+
+# ==============================================================================
+# ZH: 表 22: IssueReport - 使用者問題回報 (v3.4 新增)
+# EN: Table 22: IssueReport - user-submitted issue reports (v3.4)
+#
+# ZH: 使用者在 web-ui 的「問題回報」頁送出，管理端可見、可回應。
+#     v3.4 範圍：**單則回應**（管理者寫一段回覆，使用者看得到，不能再回）。
+#     來回對話串需要另一張表 + 未讀狀態 + 通知，範圍差很多，刻意不做。
+#
+# ⚠ ZH: **這張表不存任何使用者沒看到的欄位——包括 IP。**
+#     report.html 把診斷資訊整段攤開給使用者看，並寫著「要別人交出診斷資訊，
+#     就不能讓他不知道交了什麼」。後端若在送出時偷偷補上 IP 或 session 資訊，
+#     那句話就變成假的。diagnostics 原封不動存前端送來的那份。
+#     （與 myai_transactions 不存 IP 是同一條原則。）
+# EN: Stores ONLY what the user was shown before submitting — no IP, no
+#     server-side fingerprinting. The report page displays the exact diagnostics
+#     payload; silently enriching it server-side would make that display a lie.
+#
+# ZH: user_id 是 SET NULL 而非 CASCADE：帳號刪了，問題可能還在，
+#     那仍是管理者的待辦。username_at_report 留下快照，刪帳號後仍知道是誰報的。
+# ==============================================================================
+class IssueReport(Base):
+    __tablename__ = "issue_reports"
+
+    id          = Column(Integer, primary_key=True, autoincrement=True)
+    user_id     = Column(String, ForeignKey("users.id", ondelete="SET NULL"),
+                         nullable=True, index=True)
+    username_at_report = Column(String, nullable=True)                        # ZH: 送出當下的帳號名快照
+    body        = Column(Text, nullable=False)                                # ZH: 使用者描述
+    diagnostics = Column(Text, nullable=True)                                 # ZH: JSON，前端攤開給使用者看的那份
+    status      = Column(String, default="open", index=True)                  # ZH: open / in_progress / resolved
+    created_at  = Column(DateTime, default=lambda: datetime.now(timezone.utc), index=True)
+    updated_at  = Column(DateTime, default=lambda: datetime.now(timezone.utc),
+                         onupdate=lambda: datetime.now(timezone.utc))
+
+    admin_reply = Column(Text, nullable=True)                                 # ZH: 管理者回應（單則）
+    replied_by  = Column(String, ForeignKey("users.id", ondelete="SET NULL"),
+                         nullable=True, index=True)
+    replied_at  = Column(DateTime, nullable=True)

@@ -301,6 +301,7 @@ from .routers import chat, admin, datasets, worker, sso, lab, secrets, announcem
 from .routers import models as models_router
 from .routers import external_ai
 from .routers import assistant
+from .routers import reports
 app.include_router(chat.router,      prefix="/api/v1/chat")
 app.include_router(admin.router,     prefix="/api/v1/admin")
 # ZH: 動態模型清單（各 AI 工具的下拉依 tool_type 抓取）| EN: Dynamic model list per tool
@@ -322,6 +323,10 @@ app.include_router(external_ai.router,          prefix="/api/v1/external-ai")
 # ZH: v2.6 客服／導覽助手（RAG + 本地 Ollama；/ask 公開）
 # EN: v2.6 Support/guide assistant (RAG + local Ollama; /ask public)
 app.include_router(assistant.router,            prefix="/api/v1/assistant")
+# ZH: v3.4 問題回報（使用者送出 + 自己看歷史；admin 看全部 + 回應）
+# EN: v3.4 issue reports (user submits & reads own history; admin lists & replies)
+app.include_router(reports.router,              prefix="/api/v1/reports")
+app.include_router(reports.admin_router,        prefix="/api/v1/admin/reports")
 
 
 # ==============================================================================

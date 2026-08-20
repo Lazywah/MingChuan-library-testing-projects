@@ -626,6 +626,15 @@ def admin_delete_user(
     #   2. 解開稽核類外鍵參照（admin_actions / quota_grants 為 ON DELETE NO ACTION，
     #      不處理會讓刪除直接 IntegrityError → 500；target_user 可為 NULL，
     #      故解參照而非刪紀錄，稽核軌跡得以保留）
+    #   2b. v3.4 issue_reports **不在這裡處理**，因為它的兩個 users FK 都宣告了
+    #       ondelete="SET NULL"，DB 自己會解 —— 與第 4 點同類，不是漏掉。
+    #       （admin_actions / quota_grants 之所以要手動處理，是因為它們沒宣告
+    #        ondelete，預設 NO ACTION，刪除會直接 IntegrityError。差別在這裡。）
+    #       選 SET NULL 而非 CASCADE 是刻意的：**帳號刪了，問題可能還在**，
+    #       那仍是管理者的待辦。username_at_report 留下送出當下的快照，
+    #       所以解參照之後仍看得出是誰報的；replied_by 解掉但回應內容保留。
+    #       ⚠ 這條路徑由 tests/test_reports.py 兩支刪帳號測試守著，而那兩支
+    #        **要有 conftest 的 PRAGMA foreign_keys=ON 才驗得到**（見該處註解）。
     #   3. 清掉無 FK 約束、不會自動 cascade 的表（chat_history / training_jobs / token_usage）
     #   4. 其餘（external_ai_accounts / lab_sessions / user_secrets / user_session_usage /
     #      user_storage_state / quota_grants.user_id）由 DB 的 ON DELETE CASCADE 處理

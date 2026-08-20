@@ -831,6 +831,8 @@ function switchAdminMainTab(tabId) {
             systemSettings.load();   // v3.1 step 6：回到管理分頁時重新載入系統設定
         } else if (tabId === 'gpu-nodes') {
             gpuNodes.load();         // v3.2：GPU 節點狀態 + 設定
+        } else if (tabId === 'reports') {
+            issueReports.init();     // v3.4：問題回報
         }
     }
 }
@@ -1635,6 +1637,159 @@ const gpuNodes = {
         } catch (e) {
             if (msg) { msg.style.color = '#fb7185'; msg.textContent = '✗ ' + (e.message || '儲存失敗'); }
             showToast('儲存失敗', true);
+        }
+    },
+};
+
+// ============================================================
+// v3.4 問題回報（使用者送出 → 這裡可見 → 回覆 → 使用者在自己那頁看到）
+//
+// ZH: 這一版刻意不做的事：
+//     - **不通知使用者**（不寄信、不站內信）。回覆寫在這裡，他要自己回那頁看。
+//       分頁的說明文字必須講這件事，否則管理者會以為對方收得到通知。
+//     - **單則回應**，不是對話串。
+// ZH: 帳號被刪除的回報**仍會留著**（user_id 是 ondelete SET NULL）——
+//     帳號刪了問題可能還在，那仍是待辦。列表要標出來，不然看起來像資料壞了。
+// ============================================================
+const issueReports = {
+    _rows: [],
+
+    _authHeaders() {
+        return { 'Authorization': `Bearer ${authToken}`, 'Content-Type': 'application/json' };
+    },
+    _esc(v) {
+        return String(v == null ? '' : v).replace(/[&<>"']/g,
+            c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+    },
+    _STATUS: { open: '未處理', in_progress: '處理中', resolved: '已解決' },
+    _fmt(t) {
+        if (!t) return '';
+        const d = new Date(t);
+        return isNaN(d.getTime()) ? t : d.toLocaleString('zh-TW', { hour12: false });
+    },
+
+    init() {
+        const sel = document.getElementById('reports-filter');
+        if (sel && !sel._wired) {
+            sel.addEventListener('change', () => this.load());
+            sel._wired = true;
+        }
+        this.load();
+    },
+
+    async load() {
+        const box = document.getElementById('reports-list');
+        if (!box) return;
+        const status = (document.getElementById('reports-filter') || {}).value || '';
+        try {
+            const url = `${API_BASE}/admin/reports` + (status ? `?status=${encodeURIComponent(status)}` : '');
+            const res = await fetch(url, { headers: { 'Authorization': `Bearer ${authToken}` } });
+            if (!res.ok) throw new Error(String(res.status));
+            this._rows = await res.json();
+            this.render();
+        } catch (e) {
+            // ZH: 不要顯示「沒有回報」——「沒有」與「讀不到」是兩件事，
+            //     顯示成一樣會讓管理者以為沒人回報而不再進來看。
+            box.innerHTML = '<span style="color:#fb7185;">讀取回報失敗（' + this._esc(e.message)
+                          + '）。這不代表沒有回報。</span>';
+        }
+        this.refreshBadge();
+    },
+
+    render() {
+        const box = document.getElementById('reports-list');
+        if (!box) return;
+        if (!this._rows.length) {
+            box.innerHTML = '<span style="color:var(--text-muted,#888);">目前沒有符合條件的回報。</span>';
+            return;
+        }
+        box.innerHTML = this._rows.map(r => {
+            const who = r.username_at_report
+                ? this._esc(r.username_at_report)
+                  + (r.user_id ? '' : '<span class="report-card__gone">（帳號已刪除）</span>')
+                : '（不明）';
+            const reply = r.admin_reply
+                ? '<div class="report-card__reply"><b>已回覆</b> · ' + this._esc(this._fmt(r.replied_at))
+                  + '<br>' + this._esc(r.admin_reply) + '</div>'
+                : '';
+            return `
+            <div class="report-card">
+                <div class="report-card__head">
+                    <span class="report-status" data-status="${this._esc(r.status)}">${this._esc(this._STATUS[r.status] || r.status)}</span>
+                    <span>#${r.id}</span>
+                    <span>${who}</span>
+                    <span>${this._esc(this._fmt(r.created_at))}</span>
+                </div>
+                <p class="report-card__body">${this._esc(r.body)}</p>
+                ${reply}
+                <button class="ready-btn" onclick="issueReports.openModal(${r.id})"
+                        style="width:auto; padding:6px 14px; margin:0; font-size:13px;">
+                    <ion-icon name="create-outline"></ion-icon> 回覆 / 改狀態
+                </button>
+            </div>`;
+        }).join('');
+    },
+
+    // ZH: 徽章只在有未處理時出現。永遠掛著一個 0 會把人訓練成不看它。
+    //     用 /summary 而非算列表長度 —— 列表可能被 status 篩選過，
+    //     用篩過的長度當「未處理數」會在切到「已解決」時顯示 0，那是假的。
+    async refreshBadge() {
+        const el = document.getElementById('reports-open-badge');
+        if (!el) return;
+        try {
+            const res = await fetch(`${API_BASE}/admin/reports/summary`,
+                                    { headers: { 'Authorization': `Bearer ${authToken}` } });
+            if (!res.ok) return;
+            const n = (await res.json()).open || 0;
+            el.textContent = String(n);
+            el.hidden = n === 0;
+        } catch (e) { /* 靜默：徽章拿不到不該擋住其他功能 */ }
+    },
+
+    openModal(id) {
+        const r = this._rows.find(x => x.id === id);
+        if (!r) return;
+        document.getElementById('report-modal-id').value = String(id);
+        document.getElementById('report-modal-meta').textContent =
+            '#' + r.id + ' · ' + (r.username_at_report || '（不明）')
+            + (r.user_id ? '' : '（帳號已刪除）') + ' · ' + this._fmt(r.created_at);
+        document.getElementById('report-modal-body').textContent = r.body;
+
+        let diag = r.diagnostics;
+        try {
+            const o = JSON.parse(r.diagnostics || '{}');
+            diag = Object.entries(o).map(([k, v]) => k + '：' + v).join('\n');
+        } catch (e) { /* 存進來就不是 JSON 的話原樣顯示，不要吞掉 */ }
+        document.getElementById('report-modal-diag').textContent = diag || '（無）';
+
+        document.getElementById('report-modal-reply').value = r.admin_reply || '';
+        document.getElementById('report-modal-status').value = r.status || 'open';
+        document.getElementById('report-modal').classList.remove('hidden');
+    },
+
+    closeModal() {
+        document.getElementById('report-modal').classList.add('hidden');
+    },
+
+    async submitReply(ev) {
+        ev.preventDefault();
+        const id = document.getElementById('report-modal-id').value;
+        // ZH: admin_reply 一律送（含空字串）——空字串是「收回回覆」的意思，
+        //     後端會把 replied_by/at 一併清掉。省略欄位則代表「不改」。
+        const payload = {
+            status: document.getElementById('report-modal-status').value,
+            admin_reply: document.getElementById('report-modal-reply').value,
+        };
+        try {
+            const res = await fetch(`${API_BASE}/admin/reports/${id}`, {
+                method: 'PUT', headers: this._authHeaders(), body: JSON.stringify(payload),
+            });
+            if (!res.ok) throw new Error(String(res.status));
+            this.closeModal();
+            showToast('已更新');
+            this.load();
+        } catch (e) {
+            showToast('更新失敗：' + e.message, true);
         }
     },
 };
@@ -3505,6 +3660,7 @@ function initAdminDashboard() {
     fetchAdminData();
     systemSettings.load();   // v3.1 step 6：系統設定在 management 分頁（預設分頁）
     gpuNodes.checkConflictBanner();   // v3.2 Phase 1.5：登入即檢查 NODE_ID 撞名（全站橫幅）
+    issueReports.refreshBadge();      // v3.4：登入即顯示未處理回報數（不進分頁也看得到有人在等）
     checkBootstrapAdminBanner();      // v3.3：初始管理員仍用預設密碼 → 提醒橫幅
     applyTranslations();
 

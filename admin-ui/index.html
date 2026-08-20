@@ -9,7 +9,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Playpen+Sans:wght@400;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="styles.css?v=f0314822">
+    <link rel="stylesheet" href="styles.css?v=f6b7527c">
     <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
@@ -160,6 +160,12 @@
                 </button>
                 <button id="nav-tab-gpu-nodes" class="admin-side-tab" onclick="switchAdminMainTab('gpu-nodes')">
                     <ion-icon name="hardware-chip-outline"></ion-icon> <span data-i18n="tab_gpu_nodes">GPU 節點</span>
+                </button>
+                <!-- v3.4 問題回報。徽章顯示「未處理」筆數 —— 這個分頁有待辦性質，
+                     不進來就看不到有人在等，等於沒有這個功能。 -->
+                <button id="nav-tab-reports" class="admin-side-tab" onclick="switchAdminMainTab('reports')">
+                    <ion-icon name="chatbox-ellipses-outline"></ion-icon> <span data-i18n="tab_reports">問題回報</span>
+                    <span id="reports-open-badge" class="side-tab-badge" hidden>0</span>
                 </button>
             </nav>
 
@@ -1501,8 +1507,82 @@
                 </section>
             </div>
         </div> <!-- End of tab-gpu-nodes -->
+
+        <!-- v3.4 問題回報 -->
+        <div id="tab-reports" class="admin-tab-content" style="display: none;">
+            <div class="admin-grid">
+                <section class="widget form-box-panel" style="grid-column: 1 / -1;">
+                    <div class="widget-header split" style="margin-bottom:6px;">
+                        <h3><ion-icon name="chatbox-ellipses-outline" style="margin-right:6px;"></ion-icon>
+                            <span data-i18n="reports_title">問題回報</span></h3>
+                        <div style="display:flex; gap:8px; align-items:center;">
+                            <select id="reports-filter" class="config-select"
+                                    style="padding:6px 10px; font-size:13px; border-radius:8px;">
+                                <option value="">全部</option>
+                                <option value="open" selected>未處理</option>
+                                <option value="in_progress">處理中</option>
+                                <option value="resolved">已解決</option>
+                            </select>
+                            <button class="ready-btn" onclick="issueReports.load()" style="width:auto; padding:6px 14px; margin:0;">
+                                <ion-icon name="refresh-outline"></ion-icon> <span data-i18n="btn_refresh">重新整理</span>
+                            </button>
+                        </div>
+                    </div>
+                    <p style="font-size:0.82rem; color:var(--text-muted,#888); margin:0 15px 12px;" data-i18n="reports_hint">
+                        使用者從「問題回報」頁送出。<b>系統不會通知他</b>——回覆寫在這裡，他要自己回那一頁看。
+                        帳號被刪除的回報仍會留著（顯示為已刪除帳號）。</p>
+                    <div id="reports-list" style="padding:0 15px 15px; display:flex; flex-direction:column; gap:12px;">
+                        <span style="color:var(--text-muted,#888);" data-i18n="msg_loading">載入中...</span>
+                    </div>
+                </section>
+            </div>
+        </div> <!-- End of tab-reports -->
         </main> <!-- End of admin-content -->
     </div> <!-- End of admin-layout -->
+
+    <!-- v3.4 問題回報的回覆 Modal；同樣置於頂層 —— 放在分頁裡會被 display:none 連帶隱藏 -->
+    <div id="report-modal" class="tutorial-modal hidden">
+        <div class="tutorial-backdrop" onclick="issueReports.closeModal()"></div>
+        <div class="tutorial-content login-modal" style="max-width: 640px; padding: 30px;">
+            <button class="tutorial-close" onclick="issueReports.closeModal()"><ion-icon name="close-outline"></ion-icon></button>
+            <h2 style="margin-bottom: 14px; display:flex; align-items:center; gap:8px;">
+                <ion-icon name="chatbox-ellipses-outline"></ion-icon>
+                <span data-i18n="report_reply_title">回覆問題回報</span>
+            </h2>
+            <input type="hidden" id="report-modal-id" value="">
+            <div id="report-modal-meta" style="font-size:12px; color:var(--text-muted); margin-bottom:10px;"></div>
+            <div id="report-modal-body" style="white-space:pre-wrap; font-size:14px; line-height:1.8;
+                 background:rgba(255,255,255,0.04); border:1px solid var(--border-color);
+                 border-radius:8px; padding:12px; margin-bottom:12px; max-height:180px; overflow:auto;"></div>
+            <details style="margin-bottom:14px;">
+                <summary style="cursor:pointer; font-size:13px; color:var(--text-muted);">診斷資訊</summary>
+                <pre id="report-modal-diag" style="font-size:12px; line-height:1.7; white-space:pre-wrap;
+                     word-break:break-all; margin:8px 0 0; max-height:200px; overflow:auto;"></pre>
+            </details>
+            <form onsubmit="issueReports.submitReply(event)" style="display:flex; flex-direction:column; gap:12px;">
+                <label style="font-size:13px; color:var(--text-muted);">回覆內容（使用者看得到；清空即收回回覆）</label>
+                <textarea id="report-modal-reply" rows="5" maxlength="4000"
+                          style="width:100%; padding:10px; border-radius:8px; background:rgba(255,255,255,0.05);
+                                 border:1px solid var(--border-color); color:var(--text-primary);
+                                 font-family:inherit; font-size:14px; resize:vertical;"></textarea>
+                <div style="display:flex; gap:18px; align-items:center; font-size:14px;">
+                    <label style="display:flex; align-items:center; gap:6px;">狀態
+                        <select id="report-modal-status" class="config-select" style="padding:6px 10px; border-radius:8px;">
+                            <option value="open">未處理</option>
+                            <option value="in_progress">處理中</option>
+                            <option value="resolved">已解決</option>
+                        </select>
+                    </label>
+                </div>
+                <div style="display:flex; gap:10px; justify-content:flex-end; margin-top:6px;">
+                    <button type="button" class="ready-btn" onclick="issueReports.closeModal()"
+                            style="width:auto; padding:8px 18px; font-size:13px;" data-i18n="btn_cancel">取消</button>
+                    <button type="submit" class="ready-btn config-save-btn"
+                            style="width:auto; padding:8px 22px; font-size:13px;" data-i18n="btn_save">儲存</button>
+                </div>
+            </form>
+        </div>
+    </div>
 
     <!-- v2.8 新增 Email 綁定 Modal（平台帳號 ↔ myai Email）；置於頂層避免被隱藏分頁 display:none 連帶隱藏 -->
     <div id="add-binding-modal" class="tutorial-modal hidden">
@@ -1658,7 +1738,7 @@
     <script type="module" src="https://unpkg.com/ionicons@7.1.0/dist/ionicons/ionicons.esm.js"></script>
     <script nomodule src="https://unpkg.com/ionicons@7.1.0/dist/ionicons/ionicons.js"></script>
     <!-- 載入 Admin 邏輯 -->
-    <script src="admin.js?v=0802d22e"></script>
+    <script src="admin.js?v=766ffc61"></script>
 </body>
 
 </html>

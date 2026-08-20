@@ -544,6 +544,43 @@ textarea.field__input { resize: vertical; min-height: 6rem; }
     border-radius: var(--radius-sm);
 }
 
+/* 問題回報：狀態徽章與管理者回覆（v3.4）*/
+/* ZH: 狀態的主要訊號是**文字**（未處理／處理中／已解決），顏色只是次要強調
+ *     —— WCAG 1.4.1。這裡沒有用 --warn 當文字色：實測 --warn 對 --warn-soft
+ *     只有 3.72，小字不到 AA 的 4.5。改用 --text-strong（14.35）。
+ *     ⚠ 這個數字是算出來的不是估的（上一次估錯過 6.31 vs 實際 5.37）。 */
+.rep-badge {
+    font-size: 0.7rem;
+    font-weight: 600;
+    padding: 1px var(--space-2);
+    border-radius: var(--radius-sm);
+    border: 1px solid transparent;
+    color: var(--text-strong);
+    background-color: var(--surface-2);
+}
+/* ZH: 只有「未處理」給強調 —— 它是唯一代表「還在等」的狀態。
+ *     邊框 --warn 對 --warn-soft 是 3.72，圖形元件門檻 3.0，過。
+ *     不靠底色區分 open/in_progress：黃色系下 warn-050 與 yellow-050
+ *     幾乎同色，看起來會像同一個狀態。 */
+.rep-badge[data-status="open"] {
+    background-color: var(--warn-soft);
+    border-color: var(--warn);
+}
+.rep-badge[data-status="resolved"] { color: var(--text); }
+
+.rep-reply {
+    margin-top: var(--space-3);
+    padding: var(--space-3);
+    background-color: var(--accent-soft);
+    border-radius: var(--radius-sm);
+}
+.rep-reply__head {
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: var(--text-strong);
+    margin-bottom: var(--space-2);
+}
+
 /* 兩顆按鈕在同一張卡裡時要有間距 */
 .primary-card .btn + .btn { margin-top: var(--space-3); }
 

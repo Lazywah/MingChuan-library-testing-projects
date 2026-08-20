@@ -23,8 +23,8 @@ EN: Modular design:
 ==============================================================================
 """
 
-from pydantic import BaseModel, EmailStr, Field, ConfigDict, field_validator
-from datetime import datetime
+from pydantic import BaseModel, EmailStr, Field, ConfigDict, field_validator, field_serializer
+from datetime import datetime, timezone
 from typing import Optional, Dict, Any, List
 
 
@@ -495,3 +495,78 @@ class ExternalAiImportResult(BaseModel):
     updated: int = 0
     skipped: int = 0
     errors: List[str] = Field(default_factory=list)
+
+
+# ==============================================================================
+# ZH: v3.4 問題回報 (Issue Reports)
+# EN: v3.4 user issue reports
+# ==============================================================================
+ISSUE_STATUSES = ("open", "in_progress", "resolved")
+
+
+class IssueReportCreate(BaseModel):
+    """ZH: 使用者送出問題回報 | EN: User submits an issue report
+
+    ⚠ ZH: diagnostics 是**前端攤開給使用者看的那一份**，原封不動送上來。
+        後端不補任何使用者沒看到的欄位（IP、session…）——見 models.IssueReport 註解。
+    """
+    body: str = Field(..., min_length=1, max_length=4000,
+                      description="ZH: 使用者描述 | EN: what happened")
+    diagnostics: Dict[str, Any] = Field(default_factory=dict,
+                                        description="ZH: 頁面上顯示過的診斷欄位")
+
+    @field_validator("body")
+    @classmethod
+    def _body_not_blank(cls, v: str) -> str:
+        # ZH: min_length 擋不掉整串空白——那會產生一筆管理者看不懂的空回報。
+        s = v.strip()
+        if not s:
+            raise ValueError("描述不可為空白")
+        return s
+
+
+class IssueReportResponse(BaseModel):
+    """ZH: 回報內容（使用者與 admin 共用；欄位相同，差別在誰看得到哪些筆）"""
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    user_id: Optional[str] = None
+    username_at_report: Optional[str] = None
+    body: str
+    diagnostics: Optional[str] = None       # ZH: 存的是 JSON 字串，前端自己 parse
+    status: str = "open"
+    created_at: datetime
+    updated_at: Optional[datetime] = None
+    admin_reply: Optional[str] = None
+    replied_at: Optional[datetime] = None
+
+    # ZH: ⚠ 時間欄位存的是 **UTC**（models 用 datetime.now(timezone.utc)），
+    #     但 SQLite 存回來是 naive datetime，序列化出去長這樣：
+    #         "2026-08-20T01:42:38.152605"          ← 沒有時區
+    #     瀏覽器的 new Date(...) 會把沒有時區的字串當成**本地時間**，
+    #     於是 +08:00 的使用者看到的時間**早了 8 小時**。
+    #     不會報錯、不會壞版面，只是每個時間都是錯的 —— 實測抓到（送出 09:42 顯示 01:42）。
+    #     這裡明講它是 UTC，前端就不必各自補救。
+    # EN: Naive UTC datetimes serialize without an offset; browsers then read them as
+    #     local time (8h early for +08:00). Emit an explicit UTC marker instead.
+    @field_serializer("created_at", "updated_at", "replied_at")
+    def _as_utc(self, v: Optional[datetime]) -> Optional[str]:
+        if v is None:
+            return None
+        return (v.replace(tzinfo=timezone.utc) if v.tzinfo is None else v).isoformat()
+
+
+class AdminIssueReportUpdate(BaseModel):
+    """ZH: admin 更新狀態 / 寫回應 | EN: Admin updates status / writes a reply
+
+    ZH: 兩個欄位都可選：只改狀態、只寫回應、兩個一起改，都是合法的。
+    """
+    status: Optional[str] = None
+    admin_reply: Optional[str] = Field(None, max_length=4000)
+
+    @field_validator("status")
+    @classmethod
+    def _known_status(cls, v: Optional[str]) -> Optional[str]:
+        if v is not None and v not in ISSUE_STATUSES:
+            raise ValueError(f"status 必須是 {ISSUE_STATUSES} 其中之一")
+        return v

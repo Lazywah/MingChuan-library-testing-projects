@@ -110,6 +110,27 @@ def db_engine():
         connect_args={"check_same_thread": False},
         poolclass=StaticPool,  # share one connection so in-memory tables persist
     )
+
+    # ZH: ⚠ 測試引擎必須與正式環境一樣開啟外鍵約束。
+    #     database.py 的 PRAGMA 是掛在**它自己那個 engine** 上的 event listener，
+    #     這裡的測試 engine 拿不到 —— SQLite 預設 foreign_keys=0，於是
+    #     「users FK 沒處理好」這一整類缺陷**在測試裡完全看不見**，上線才會 500。
+    #
+    #     v3.4 實測（先關再開，兩邊都跑過）：
+    #       關閉時 —— ondelete="SET NULL" **完全不生效卻也不報錯**，
+    #                 NO ACTION 的違反也不會拋 IntegrityError。
+    #                 於是「宣告對了」與「根本沒宣告」在測試裡是同一個結果。
+    #       開啟後 —— 兩者才分得開，刪帳號的行為與正式環境一致。
+    #
+    #     這與「測試繼承正式設定」是反過來的同一個病：測試環境與正式不一致。
+    from sqlalchemy import event as _event
+
+    @_event.listens_for(engine, "connect")
+    def _fk_on(dbapi_conn, _rec):            # noqa: ANN001
+        cur = dbapi_conn.cursor()
+        cur.execute("PRAGMA foreign_keys=ON")
+        cur.close()
+
     Base.metadata.create_all(bind=engine)
     yield engine
     Base.metadata.drop_all(bind=engine)
