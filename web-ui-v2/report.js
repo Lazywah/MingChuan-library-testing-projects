@@ -45,7 +45,8 @@ function authHeaders() {
 function diagnostics() {
     const nav = window.navigator || {};
     return [
-        ['時間', new Date().toString()],
+        // ZH: 標明台灣時間 —— 這一行會被貼給管理者，對方不該去猜是哪個時區。
+        ['時間', TW.full(new Date()) + '（台灣時間）'],
         ['使用者', ME ? `${ME.username || '?'}（${ME.id || '?'}）` : '（未取得，可能未登入）'],
         ['介面版本', 'v2'],
         ['來源頁', document.referrer || '（直接開啟）'],
@@ -157,10 +158,10 @@ $('copy').addEventListener('click', async () => {
 });
 
 // ── 我的回報 ─────────────────────────────────────────────────────────
+// ZH: 時間一律走 tz.js（釘死 Asia/Taipei）。
+//     本端點的 created_at 已帶 +00:00，但 tz.js 兩種形狀都吃，這裡不必分。
 function fmtDate(s) {
-    if (!s) return '';
-    const d = new Date(s);
-    return Number.isNaN(d.getTime()) ? s : d.toLocaleString('zh-TW', { hour12: false });
+    return TW.full(s) || (s ? String(s) : '');
 }
 
 function renderMine(rows) {

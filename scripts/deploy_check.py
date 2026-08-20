@@ -10,7 +10,8 @@ ZH: 在 `docker compose up` 之前跑一次，把常見的無聲地雷一次檢�
     3. 設定漂移（.env.example vs compose∪Settings）與 .env 完整性
     4. gpu-worker 是否已收斂（沒有殘留的 gpu-worker/.env）
     5. 前端 ?v= 是否為最新內容 hash（呼叫 bump_assets.py --check）
-    6. 主機埠（80/8888/8002/3000/8787/11434）占用狀況
+    6. 全站時間是否一律 Asia/Taipei（呼叫 check_timezone.py）
+    7. 主機埠（80/8888/8002/3000/8787/11434）占用狀況
 
     退出碼：有 FAIL → 1（別部署）；只有 WARN 或全過 → 0。
 
@@ -218,6 +219,30 @@ def check_asset_versions():
     return WARN, "前端 ?v= 有過期 → 跑 python scripts/bump_assets.py 後再部署"
 
 
+def check_timezone():
+    """ZH: 全站時間一律 Asia/Taipei —— tz.js 五份一致 + 載入順序 + 行為測試。
+
+    ZH: 為什麼列進部署前健檢：時區壞掉**不會報錯、不會壞版面**，
+        只是每個時間都錯 8 小時。沒有人會回報這種東西，只會慢慢不信任畫面上的數字。
+
+    @node scripts/deploy_check.py::check_timezone
+    """
+    script = SCRIPTS_DIR / "check_timezone.py"
+    if not script.exists():
+        return WARN, "找不到 check_timezone.py，略過時區一致性檢查"
+    r = subprocess.run([sys.executable, str(script)], capture_output=True,
+                       text=True, encoding="utf-8", errors="replace")
+    out = (r.stdout or "") + (r.stderr or "")
+    if r.returncode != 0:
+        first = next((l.strip() for l in out.splitlines() if "[FAIL]" in l), "")
+        return FAIL, f"tz.js 時區檢查不通過 → python scripts/check_timezone.py　{first}"
+    if "[WARN]" in out:
+        # ZH: 行為測試沒跑到（多半是機器沒有 node）。**不要顯示成通過**——
+        #     「沒檢查」與「檢查過了」必須看得出來（§26.8）。
+        return WARN, "tz.js 五份一致，但**行為測試未執行**（機器沒有 node）"
+    return PASS, "tz.js 五份一致、載入順序正確、行為測試通過（全站 Asia/Taipei）"
+
+
 def check_ports():
     """回傳單一彙總（有占用列為 WARN，因可能是本平台已在跑）。
 
@@ -250,6 +275,7 @@ def main():
         (".env 完整性",    check_env_completeness(env)),
         ("gpu-worker 收斂", check_worker_convergence()),
         ("前端 ?v=",       check_asset_versions()),
+        ("時間時區",       check_timezone()),
         ("主機埠",         check_ports()),
     ]
 

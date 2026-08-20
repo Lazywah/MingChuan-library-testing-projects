@@ -1176,11 +1176,11 @@ const emailLog = {
         return String(s == null ? '' : s).replace(/[&<>"']/g,
             c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
     },
+    // ZH: 時間一律走 tz.js（釘死 Asia/Taipei）。原本 getHours() 走瀏覽器時區，
+    //     且後端的 naive 字串會被當成本地時間 → 早 8 小時。
     _fmt(iso) {
         if (!iso) return '—';
-        const d = new Date(iso);
-        return `${String(d.getMonth() + 1).padStart(2, '0')}/${String(d.getDate()).padStart(2, '0')} ` +
-               `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+        return `${TW.monthDay(iso)} ${TW.time(iso)}`.trim() || '—';
     },
     async load() {
         const tbody = document.querySelector('#admin-email-log-table tbody');
@@ -1260,13 +1260,10 @@ const liveUsage = {
         return String(s == null ? '' : s).replace(/[&<>"']/g,
             c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
     },
+    // ZH: 改走 tz.js —— 原本 new Date(iso) 把 naive 字串當本地時間，
+    //     於是「3 分鐘前」實際上是「8 小時 3 分鐘前」。相對時間錯得最不容易被發現。
     _rel(iso) {
-        if (!iso) return '—';
-        const s = Math.max(0, (Date.now() - new Date(iso).getTime()) / 1000);
-        if (s < 90) return `${Math.round(s)} 秒前`;
-        if (s < 5400) return `${Math.round(s / 60)} 分鐘前`;
-        if (s < 86400) return `${Math.round(s / 3600)} 小時前`;
-        return `${Math.round(s / 86400)} 天前`;
+        return TW.relative(iso) || '—';
     },
     async load() {
         const box = document.getElementById('live-usage-cards');
@@ -1533,21 +1530,18 @@ const gpuNodes = {
         };
         return map[n.state] || [n.state, '#6b7280'];
     },
+    // ZH: 改走 tz.js（同 liveUsage._rel）。心跳時間差 8 小時會讓「離線判定」看起來全錯。
     _fmtRel(iso) {
-        if (!iso) return '—';
-        const s = Math.max(0, (Date.now() - new Date(iso).getTime()) / 1000);
-        if (s < 90) return `${Math.round(s)} 秒前`;
-        if (s < 5400) return `${Math.round(s/60)} 分鐘前`;
-        if (s < 86400*2) return `${Math.round(s/3600)} 小時前`;
-        return `${Math.round(s/86400)} 天前`;
+        return TW.relative(iso) || '—';
     },
     _fmtNext(n) {
         // 顯示「下次開放/關閉」：window_open_now=目前時段內 → next_change 是關閉時刻
         if (!n.schedule) return '全天可排';
         if (n.schedule_error) return '⚠ 時段設定損壞（暫視為全天）';
         if (!n.next_change) return n.window_open_now ? '全週開放' : '永不開放';
-        const d = new Date(n.next_change);
-        const hhmm = `${String(d.getMonth()+1).padStart(2,'0')}/${String(d.getDate()).padStart(2,'0')} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+        // ZH: 台灣時間（tz.js）。gpu_schedule.py 本來就以 UTC+8 排時段，
+        //     這裡若用瀏覽器時區顯示，設定畫面與實際生效時間會對不起來。
+        const hhmm = `${TW.monthDay(n.next_change)} ${TW.time(n.next_change)}`;
         return n.window_open_now ? `開放中 · ${hhmm} 關閉` : `時段外 · ${hhmm} 開放`;
     },
 
@@ -1777,7 +1771,8 @@ const externalAi = {
     },
     _renderMyai(data) {
         const at = document.getElementById('myai-synced-at');
-        if (at) at.textContent = data.synced_at ? ('上次同步：' + new Date(data.synced_at).toLocaleString()) : '尚未同步';
+        // ZH: synced_at 是 UTC（與同表的 occurred_at 不同，那個是廠商當地時間）。走 tz.js。
+        if (at) at.textContent = data.synced_at ? ('上次同步：' + TW.full(data.synced_at)) : '尚未同步';
         const tbody = document.querySelector('#myai-accounts-table tbody');
         if (!tbody) return;
         const rows = data.accounts || [];
@@ -2532,6 +2527,9 @@ function renderUserQuery(d) {
     const rows = (d.recent || []).map(r => {
         const ev = r.event === 'login' ? '登入' : (r.event === 'ai_usage' ? '使用 ' + esc(r.model || '') : (r.event === 'transfer' ? '配點' : esc(r.event)));
         const pts = (r.points > 0 ? '+' : '') + (r.points ?? 0);
+        // ZH: ⚠ **這裡刻意不用 tz.js。** r.time 來自 myai_transactions.occurred_at，
+        //     那是**廠商當地時間**（已經是台灣時間的 naive 值），不是 UTC。
+        //     套 tz.js 會再推 8 小時。原字串切片顯示才是對的。同表的 synced_at 則是 UTC。
         return `<tr><td style="font-size:12px;">${esc((r.time || '').replace('T', ' ').slice(0, 19))}</td><td>${ev}</td><td style="font-family:monospace;">${pts}</td><td style="font-family:monospace;">${Number(r.balance || 0).toLocaleString()}</td></tr>`;
     }).join('');
     const table = `<div style="font-size:12px;color:var(--text-muted);margin-bottom:4px;">${tl.uq_recent || '近期事件（最多 40 筆）'}</div>
@@ -2639,7 +2637,8 @@ function renderAnalyticsUI(data) {
     document.getElementById('stat-total-logins').textContent = userCount.toLocaleString();
     document.getElementById('stat-total-tokens').textContent = totalPoints.toLocaleString();
     const at = document.getElementById('analytics-synced-at');
-    if (at) at.textContent = data.synced_at ? ('上次同步：' + new Date(data.synced_at).toLocaleString()) : '尚未同步';
+    // ZH: 台灣時間（tz.js）。
+    if (at) at.textContent = data.synced_at ? ('上次同步：' + TW.full(data.synced_at)) : '尚未同步';
 
     // 2) 長條圖：點數 Top 10 帳號
     const top = [...rows].sort((a, b) => (Number(b.points) || 0) - (Number(a.points) || 0)).slice(0, 10);
@@ -2860,9 +2859,8 @@ function renderUserAnalyticsModal(data) {
         sidTd.textContent = (s.session_id || '').substring(0, 8);
 
         const timeTd = document.createElement('td');
-        timeTd.textContent = s.started_at
-            ? new Date(s.started_at).toLocaleString()
-            : 'N/A';
+        // ZH: 台灣時間（tz.js）。
+        timeTd.textContent = s.started_at ? TW.full(s.started_at) : 'N/A';
 
         const msgTd = document.createElement('td');
         msgTd.textContent = s.message_count || 0;
@@ -3070,8 +3068,9 @@ function renderAdminUsers(users) {
             // v2.2: 更新「最後刷新時間」徽章，讓 admin 知道 polling 真的在跑
             const stamp = document.getElementById('admin-users-last-updated');
             if (stamp) {
-                const t = new Date();
-                stamp.textContent = `${t.getHours().toString().padStart(2,'0')}:${t.getMinutes().toString().padStart(2,'0')}:${t.getSeconds().toString().padStart(2,'0')}`;
+                // ZH: 台灣時間（tz.js）。這是「現在幾點」，人在國外時也顯示台北的鐘。
+                const p = TW.parts(new Date());
+                stamp.textContent = `${p.hour}:${p.minute}:${p.second}`;
             }
         }
         const tbody = document.getElementById('admin-users-body');
@@ -3092,8 +3091,10 @@ function renderAdminUsers(users) {
         filteredUsers.forEach(u => {
             const tr = document.createElement('tr');
             const tl = TRANSLATIONS[currentLang] || {};
-            const loginStr = u.last_login_time ? new Date(u.last_login_time).toLocaleString() : 'N/A';
-            const createdStr = u.created_at ? new Date(u.created_at).toLocaleString() : 'N/A';
+            // ZH: 台灣時間（tz.js）。這兩欄是 admin 判斷「誰還在用」的主要依據，
+            //     差 8 小時會讓判斷整個錯掉。
+            const loginStr = u.last_login_time ? TW.full(u.last_login_time) : 'N/A';
+            const createdStr = u.created_at ? TW.full(u.created_at) : 'N/A';
             const roleLabel = tl[`role_${u.role}`] || u.role;
             const roleStr = u.role === 'admin'
                 ? `<span class="status-badge running">${roleLabel}</span>`
@@ -3115,7 +3116,9 @@ function renderAdminUsers(users) {
             // 計算「上次登入距今多久」當 tooltip 補充資訊
             let detailTooltip = '';
             if (u.last_login_time) {
-                const diffMs = Date.now() - new Date(u.last_login_time).getTime();
+                // ZH: 用 TW.parse —— new Date() 把 naive 字串當本地時間，
+                //     算出來的「距今」會多 8 小時，剛登入的人會顯示成 8 小時前。
+                const diffMs = Date.now() - TW.parse(u.last_login_time).getTime();
                 const diffMin = Math.floor(diffMs / 60000);
                 if (diffMin < 1) detailTooltip = ' (剛剛登入)';
                 else if (diffMin < 60) detailTooltip = ` (上次登入 ${diffMin} 分鐘前)`;
@@ -3915,8 +3918,8 @@ async function fetchAnnouncementsAdmin() {
             return;
         }
         tbody.innerHTML = items.map(a => {
-            const dt = new Date(a.posted_at);
-            const dateStr = `${dt.getFullYear()}-${String(dt.getMonth()+1).padStart(2,'0')}-${String(dt.getDate()).padStart(2,'0')} ${String(dt.getHours()).padStart(2,'0')}:${String(dt.getMinutes()).padStart(2,'0')}`;
+            // ZH: 台灣時間（tz.js）。
+            const dateStr = TW.dateTime(a.posted_at);
             const pinIcon = a.is_pinned ? '<ion-icon name="pin" style="color:var(--neon-yellow); font-size:18px;" title="置頂"></ion-icon>' : '<span style="color:var(--text-muted);">—</span>';
             const visIcon = a.is_visible ? '<ion-icon name="eye-outline" style="color:var(--neon-green); font-size:18px;" title="公開"></ion-icon>' : '<ion-icon name="eye-off-outline" style="color:var(--text-muted); font-size:18px;" title="隱藏"></ion-icon>';
             const titleSpan = document.createElement('span');
@@ -4714,10 +4717,10 @@ const adminLab = (() => {
         while (v >= 1024 && i < u.length - 1) { v /= 1024; i++; }
         return `${v.toFixed(i ? 1 : 0)}${u[i]}`;
     }
+    // ZH: 台灣時間（tz.js）。封存到期日差一天會讓人以為資料還在。
     function _fmtDate(iso) {
         if (!iso) return '—';
-        const d = new Date(iso);
-        return `${d.getFullYear()}/${String(d.getMonth() + 1).padStart(2, '0')}/${String(d.getDate()).padStart(2, '0')}`;
+        return TW.date(iso, '/') || '—';
     }
 
     async function refreshArchives() {

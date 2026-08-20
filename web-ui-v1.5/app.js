@@ -2468,8 +2468,8 @@ function renderAnnouncements(items) {
         return;
     }
     listEl.innerHTML = items.map(a => {
-        const dt = new Date(a.posted_at);
-        const dateStr = `${dt.getFullYear()}-${String(dt.getMonth()+1).padStart(2,'0')}-${String(dt.getDate()).padStart(2,'0')}`;
+        // ZH: 台灣時間，見 tz.js。原本 getFullYear() 走瀏覽器時區且把 naive 當本地。
+        const dateStr = TW.date(a.posted_at);
         const titleEl = document.createElement('span');
         titleEl.textContent = a.title;
         const bodyEl = document.createElement('p');
@@ -2725,10 +2725,11 @@ function updateTokenDisplay() { /* deprecated: internal metering off */ }
 function updateTokenDisplayFromLocal() { /* deprecated: internal metering off */ }
 function trackTokenUsage() { /* deprecated: internal metering off */ }
 
+// ZH: 時間一律走 tz.js（釘死 Asia/Taipei）。原本用 getFullYear()/getHours()，
+//     那是**瀏覽器所在時區**，且後端的 naive 字串會被當成本地時間 → 差 8 小時。
 function formatDate(dateStr) {
     if (!dateStr) return '--';
-    const d = new Date(dateStr);
-    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    return TW.date(dateStr) || '--';
 }
 
 // ==============================================================================
@@ -2762,9 +2763,8 @@ async function refreshPoolHints() {
         if (info.available) { hint.style.display = 'none'; return; }
         let text;
         if (info.next_open) {
-            const d = new Date(info.next_open);
-            const hhmm = `${String(d.getMonth() + 1).padStart(2, '0')}/${String(d.getDate()).padStart(2, '0')} ` +
-                         `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+            // ZH: 台灣時間（見 tz.js）——GPU 時段本來就以 UTC+8 排，顯示必須同一個鐘。
+            const hhmm = `${TW.monthDay(info.next_open)} ${TW.time(info.next_open)}`;
             text = (t.pool_hint_next || '').replace('{time}', hhmm);
         } else {
             text = t.pool_hint_offline || '';
@@ -4137,13 +4137,11 @@ async function refreshCurrentUserData() {
 }
 
 /** 將時間字串格式化為 "YYYY-MM-DD HH:MM" */
+// ZH: 時間一律走 tz.js（釘死 Asia/Taipei）。原本用 getFullYear()/getHours()，
+//     那是**瀏覽器所在時區**，且後端的 naive 字串會被當成本地時間 → 差 8 小時。
 function formatDateTime(iso) {
     if (!iso) return '—';
-    try {
-        const d = new Date(iso);
-        const pad = (n) => String(n).padStart(2, '0');
-        return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
-    } catch { return iso; }
+    return TW.dateTime(iso) || String(iso);
 }
 
 /** 數字加千分位 */

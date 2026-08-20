@@ -47,14 +47,10 @@ function setPrimary({ label, note, enabled }) {
     $('pool-note').hidden = !note;
 }
 
+// ZH: 時間一律走 tz.js（釘死 Asia/Taipei）。原本用 getHours()/getMonth()，
+//     那是**瀏覽器所在時區**，而且後端的 naive 字串會被當成本地時間，差 8 小時。
 function fmtWhen(iso) {
-    if (!iso) return null;
-    const d = new Date(iso);
-    if (Number.isNaN(d.getTime())) return null;
-    const hh = String(d.getHours()).padStart(2, '0');
-    const mm = String(d.getMinutes()).padStart(2, '0');
-    const today = new Date().toDateString() === d.toDateString();
-    return `${today ? '今天' : `${d.getMonth() + 1}/${d.getDate()}`} ${hh}:${mm}`;
+    return TW.when(iso) || null;
 }
 
 async function loadPool() {

@@ -38,12 +38,9 @@ function showMsg(text) {
     $('more').hidden = true;
 }
 
+// ZH: 時間一律走 tz.js（釘死 Asia/Taipei）——見該檔檔頭的兩個問題。
 function fmtDate(iso) {
-    if (!iso) return '';
-    const d = new Date(iso);
-    if (Number.isNaN(d.getTime())) return String(iso).slice(0, 10);
-    return `${d.getFullYear()}/${String(d.getMonth() + 1).padStart(2, '0')}/`
-         + `${String(d.getDate()).padStart(2, '0')}`;
+    return TW.date(iso, '/') || String(iso || '').slice(0, 10);
 }
 
 function render(list) {
