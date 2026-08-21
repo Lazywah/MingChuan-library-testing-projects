@@ -489,6 +489,15 @@ class WorkerNodeListResponse(BaseModel):
 
 
 # ==============================================================================
+class LabSessionCreate(BaseModel):
+    """ZH: 新增一份實驗室存檔 | EN: Create a Code Lab workspace
+
+    ZH: 只收使用者看得懂的名字（可中文）。進容器名與網址的那個鍵由伺服器
+        自己 slugify —— 讓客戶端決定那個鍵等於讓它決定容器叫什麼。
+    """
+    display_name: str = Field(min_length=1, max_length=60)
+
+
 # ZH: 公告 Schema (v2.2 新增) | EN: Announcement Schemas (v2.2)
 # ==============================================================================
 

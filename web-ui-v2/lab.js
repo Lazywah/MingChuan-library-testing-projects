@@ -16,6 +16,15 @@
  *   若日後 v2 也放小基，這個決定要重新檢視。
  * ========================================================================== */
 const API = '/api/v1';
+
+// ZH: v3.6 —— 目前選中的存檔。null＝預設那一份（既有使用者的行為完全不變）。
+let currentSession = null;
+
+// ZH: 名稱來自使用者自己取的名字，一律逸出。
+function esc(s) {
+    return String(s).replace(/[&<>"']/g, (c) =>
+        ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
 const FORCED = new URLSearchParams(location.search).get('state');
 const $ = (id) => document.getElementById(id);
 
@@ -122,8 +131,14 @@ $('go').addEventListener('click', async () => {
         const started = await api('/lab/start', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({}),
+            // ZH: v3.6 —— 要開哪一份存檔。沒選過就是 default（既有行為）。
+            body: JSON.stringify(currentSession ? { session: currentSession } : {}),
         });
+        // ZH: 伺服器順手關掉了別份時會回報 —— **要說出來**，
+        //     使用者按下「開啟 B」而 A 被靜靜關掉會以為 A 壞了。
+        if (started.switched_from) {
+            note(T('ws_switched', '已切換存檔（原本那一份已關閉，檔案都保留）'));
+        }
         // ZH: /lab/start 回的 url 已經是 /code/<uid>/?folder=...，直接用。
         //     但**不要立刻開** —— 先輪詢到 running 再開，否則新分頁是空白。
         await waitReady(started.url);
@@ -195,3 +210,121 @@ if (requireLogin()) load();
 // ZH: prefs.js 的字典掃描只換得掉 `data-i18n` 元素；本頁 JS 產生的內容要自己重跑。
 //     只在語言**改變**時觸發（不是每次套用），所以不會在載入時多跑一次。
 document.addEventListener('prefs:langchanged', () => { load(); });
+
+
+// ==========================================================================
+// ZH: v3.6 多份存檔
+// ==========================================================================
+// ZH: 一次只開一份 —— 切換就是關掉舊的、開新的。**檔案全部保留**，
+//     這件事一定要在畫面上講，不然使用者會以為舊的那份壞了。
+
+let sessions = [];
+
+async function loadSessions() {
+    // ZH: 🔴 try 只包**拿資料**這一段，不包渲染。
+    //     原本連 renderSessions 一起包住，結果渲染裡的 `TW is not defined`
+    //     被吃掉、畫面顯示「暫時讀不到存檔清單」——而網路其實好好的、資料也拿到了。
+    //     一個假的網路錯誤訊息會把人帶去查完全錯的方向；渲染的錯就該是紅色的例外。
+    let body;
+    try {
+        const r = await fetch(`${API}/lab/sessions`, { headers: authHeaders() });
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        body = await r.json();
+    } catch {
+        // ZH: 讀不到就說讀不到 —— **不要顯示空清單**，那看起來像「你沒有存檔」。
+        $('ws-list').innerHTML =
+            `<p class="footnote">${esc(T('ws_load_fail', '暫時讀不到存檔清單（不影響上面的開啟）'))}</p>`;
+        return;
+    }
+    sessions = body.sessions || [];
+    renderSessions(body.max || 5);
+}
+
+function renderSessions(max) {
+    $('ws-count').textContent =
+        T('ws_count', '{n} / {m} 份').replace('{n}', sessions.length).replace('{m}', max);
+    $('ws-new').disabled = sessions.length >= max;
+
+    $('ws-list').innerHTML = sessions.map((s) => {
+        const running = s.status === 'running' || s.status === 'starting';
+        const isDefault = s.session_name === 'default';
+        return `
+        <div class="entry">
+            <div class="entry__title">${esc(s.display_name)}
+                ${running ? `<span class="footnote">　${esc(T('ws_running', '執行中'))}</span>` : ''}</div>
+            <div class="entry__desc">${s.last_activity
+                ? esc(T('ws_last', '最後使用：{w}').replace('{w}', TW.when(s.last_activity) || ''))
+                : esc(T('ws_never', '還沒開過'))}</div>
+            <div class="ds__actions">
+                <button class="btn btn--minor" type="button" data-open="${esc(s.session_name)}">
+                    ${esc(running ? T('ws_go', '前往') : T('ws_open', '開啟這一份'))}</button>
+                ${isDefault ? '' : `<button class="btn btn--minor" type="button"
+                    data-del="${esc(s.session_name)}" ${running ? 'disabled' : ''}>
+                    ${esc(T('ws_delete', '刪除'))}</button>`}
+            </div>
+        </div>`;
+    }).join('');
+
+    $('ws-list').querySelectorAll('[data-open]').forEach((b) =>
+        b.addEventListener('click', () => openSession(b.dataset.open)));
+    $('ws-list').querySelectorAll('[data-del]').forEach((b) =>
+        b.addEventListener('click', () => deleteSession(b.dataset.del, b)));
+}
+
+async function openSession(name) {
+    // ZH: 切換前先講清楚 —— 使用者按下「開啟 B」時，A 會被關掉。
+    //     不問就關掉的話，他回頭找 A 會以為壞了。
+    const running = sessions.find((s) => (s.status === 'running' || s.status === 'starting')
+                                         && s.session_name !== name);
+    if (running && !confirm(T('ws_switch_confirm',
+            '要切換到這一份嗎？「{n}」會關閉，但它的檔案都會保留。')
+            .replace('{n}', running.display_name))) return;
+
+    // ZH: 交給既有的啟動流程（它會輪詢到就緒才開新分頁）。
+    // ZH: 交給既有的啟動流程（`#go` 的 handler 會輪詢到就緒才開新分頁）。
+    //     ⚠ 不要自己再寫一份啟動邏輯 —— 那條路已經處理了「容器要 5–10 秒」
+    //       與「不要開出空白分頁」，重寫一定會漏掉其中一件。
+    currentSession = name;
+    $('go').click();
+}
+
+async function deleteSession(name, btn) {
+    const s = sessions.find((x) => x.session_name === name);
+    if (!confirm(T('ws_delete_confirm', '要刪掉「{n}」嗎？裡面的檔案會一起消失，沒辦法復原。')
+        .replace('{n}', s ? s.display_name : ''))) return;
+    btn.disabled = true;
+    try {
+        const r = await fetch(`${API}/lab/sessions/${encodeURIComponent(name)}`,
+                              { method: 'DELETE', headers: authHeaders() });
+        if (!r.ok) {
+            const body = await r.json().catch(() => ({}));
+            throw new Error(String(body.detail || `HTTP ${r.status}`));
+        }
+        await loadSessions();
+    } catch (e) {
+        btn.disabled = false;
+        alert(String(e.message).replace(/^ZH:\s*/, '').split(' | ')[0]);
+    }
+}
+
+$('ws-new').addEventListener('click', async () => {
+    const name = prompt(T('ws_new_prompt', '這一份要叫什麼名字？'));
+    if (!name || !name.trim()) return;
+    try {
+        const r = await fetch(`${API}/lab/sessions`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', ...authHeaders() },
+            body: JSON.stringify({ display_name: name.trim() }),
+        });
+        if (!r.ok) {
+            const body = await r.json().catch(() => ({}));
+            throw new Error(String(body.detail || `HTTP ${r.status}`));
+        }
+        await loadSessions();
+    } catch (e) {
+        alert(String(e.message).replace(/^ZH:\s*/, '').split(' | ')[0]);
+    }
+});
+
+loadSessions();
+document.addEventListener('prefs:langchanged', () => loadSessions());

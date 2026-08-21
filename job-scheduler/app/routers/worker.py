@@ -34,6 +34,7 @@ from datetime import datetime, timezone
 from ..database import get_db
 from .. import crud, models, schemas
 from ..config import settings
+from ..services import lab_manager
 
 logger = logging.getLogger(__name__)
 
@@ -227,7 +228,11 @@ def take_job(
             # ZH: per-user home volume → /home/coder（與 code-server 共用）
             # EN: per-user home volume → /home/coder (shared with code-server)
             volume_mounts.append({
-                "name":   f"home_{job.user_id}",
+                # ZH: 🔴 名字**一定要與 lab_manager 一致**。這裡原本自己寫
+                #     `f"home_{user_id}"`，而 lab_manager 用的是把連字號換成底線的版本
+                #     —— 兩個名字不同，docker 就在那台**自動建一個空的**同名 volume：
+                #     不報錯、資料不在、訓練出沒有意義的結果。已在真實使用者身上發生過。
+                "name":   lab_manager.volume_name_for(job.user_id),
                 "target": "/home/coder",
                 "mode":   "rw",
             })

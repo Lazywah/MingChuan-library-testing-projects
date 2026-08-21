@@ -13,7 +13,8 @@ ZH: 在 `docker compose up` 之前跑一次，把常見的無聲地雷一次檢�
     6. 全站時間是否一律 Asia/Taipei（呼叫 check_timezone.py）
     7. Python 模組層有沒有重複定義（呼叫 check_duplicate_defs.py）
     8. 回應的時間欄位有沒有明示時區（呼叫 check_naive_datetime.py）
-    7. 主機埠（80/8888/8002/3000/8787/11434）占用狀況
+    9. 每頁 HTML 有沒有載它的 JS 用到的共用檔（呼叫 check_js_globals.py）
+   10. 主機埠（80/8888/8002/3000/8787/11434）占用狀況
 
     退出碼：有 FAIL → 1（別部署）；只有 WARN 或全過 → 0。
 
@@ -284,6 +285,28 @@ def check_naive_datetime():
     return PASS, "回應的時間欄位都有明示時區（UTC）"
 
 
+def check_js_globals():
+    """ZH: 每頁 HTML 有沒有載它的 JS 會用到的共用檔（tz.js / i18n.js / prefs.js）。
+
+    ZH: 為什麼列進部署前健檢：漏一個 `<script>` 標籤的症狀**會騙人**。
+        實際發生過 —— `lab.js` 用了 `TW.when()` 而 `lab.html` 沒載 `tz.js`：
+        頁面正常載入、console 乾乾淨淨（例外被 catch 吃掉），
+        畫面顯示「暫時讀不到清單」，看起來完全像**後端或網路**壞了。
+        而後端好好的、資料也真的拿到了。
+
+    @node scripts/deploy_check.py::check_js_globals
+    """
+    script = SCRIPTS_DIR / "check_js_globals.py"
+    if not script.exists():
+        return WARN, "找不到 check_js_globals.py，略過共用檔載入檢查"
+    r = subprocess.run([sys.executable, str(script)], capture_output=True,
+                       text=True, encoding="utf-8", errors="replace")
+    if r.returncode != 0:
+        first = next((l.strip() for l in (r.stdout or "").splitlines() if l.strip().startswith("-")), "")
+        return FAIL, f"有頁面少載共用檔 → python scripts/check_js_globals.py　{first}"
+    return PASS, "每頁都載了它用到的共用檔"
+
+
 def check_duplicate_defs():
     """ZH: Python 模組層重複定義——同名的 def/class 出現兩次，後者無聲蓋掉前者。
 
@@ -340,6 +363,7 @@ def main():
         ("翻譯完整性",     check_i18n()),
         ("重複定義",       check_duplicate_defs()),
         ("時間帶時區",     check_naive_datetime()),
+        ("共用檔載入",     check_js_globals()),
         ("主機埠",         check_ports()),
     ]
 

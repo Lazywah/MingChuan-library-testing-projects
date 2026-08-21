@@ -382,13 +382,21 @@ class LabSession(Base):
     __tablename__ = "lab_sessions"
 
     user_id        = Column(String, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
-    session_name   = Column(String, default="default")                        # ZH: v2.0 強制 "default" | EN: v2.0 = "default"
+    # ZH: v3.6 —— 多份存檔的鍵。`default` 是原本那一份（沿用舊的容器／volume／網址名）。
+    #     ⚠ 這個值會進**容器名與網址**，所以只允許 [a-z0-9-]；使用者看得懂的名字
+    #       存在 display_name，兩者刻意分開（中文不能進 DNS 名稱）。
+    session_name   = Column(String, default="default")                        # ZH: v3.6 多份存檔的鍵
+    display_name   = Column(String, nullable=True)                            # ZH: 使用者取的名字（可中文）
     container_id   = Column(String, nullable=True)                            # ZH: Docker 容器 ID | EN: Docker container ID
     container_name = Column(String, nullable=True)                            # ZH: 容器名稱 cs-{user_id} | EN: Container name
     status         = Column(String, default="stopped")                        # ZH: stopped / starting / running / stopping
     volume_name    = Column(String, nullable=False)                           # ZH: 對應 named volume，如 home_alice
     base_image     = Column(String, nullable=False, default="aibase/pytorch:2026-spring")  # ZH: 目前使用的 image
-    last_activity  = Column(DateTime, default=lambda: datetime.now(timezone.utc))          # ZH: 最後活動時間
+    # ZH: 🔴 **不要**給 default=now。只有 start_session / touch_activity 寫這個欄位，
+    #     兩處都明確給值；而有 default 的話「剛建好、還沒開過」的存檔會被填上「現在」，
+    #     畫面就會寫「最後使用：今天 09:22」——陳述一件沒發生過的事。
+    #     （SQLAlchemy 把 `last_activity=None` 當成「沒給值」，所以在建立端寫 None 沒有用。）
+    last_activity  = Column(DateTime, nullable=True)                                      # ZH: 最後活動時間（沒開過 = None）
     started_at     = Column(DateTime, nullable=True)                          # ZH: 啟動時間
     cpu_quota      = Column(Float,   default=0.5)                             # ZH: CPU cores
     mem_quota_mb   = Column(Integer, default=2048)                            # ZH: RAM MB

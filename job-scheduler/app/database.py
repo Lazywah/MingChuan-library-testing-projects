@@ -259,6 +259,9 @@ def init_db():
             # --- v3.6 使用者自帶的訓練程式 ---
             try: conn.execute(text("ALTER TABLE training_jobs ADD COLUMN script_source TEXT"))
             except Exception: pass
+            # --- v3.6 實驗室多份存檔：使用者取的名字 ---
+            try: conn.execute(text("ALTER TABLE lab_sessions ADD COLUMN display_name VARCHAR"))
+            except Exception: pass
 
     except Exception as e:
         logger.warning(f"Manual DB migration skipped or partially failed: {e}")

@@ -165,13 +165,63 @@ def test_home_volume_only_mounted_when_colocated(client, db, user_headers):
 
 
 def test_home_volume_mounted_when_colocated(client, db, user_headers):
-    """ZH: 陰性對照 —— 同機時 home_<uid> 有掛上去。"""
+    """ZH: 陰性對照 —— 同機時 home_<uid> 有掛上去，**而且是對的那一個名字**。
+
+    ZH: 🔴 這條原本只斷言 `startswith("home_")` —— 對的名字與錯的名字都會過，
+        於是下面那個缺陷在它眼皮底下活了下來。斷言改成完整比對。
+    """
+    import sys, pathlib
+    sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent / "job-scheduler"))
+    from app.services import lab_manager
+    from app import models
+
     _heartbeat(client, node_id="local", shares=True)
     assert _submit(client, user_headers, inline=False).status_code == 201
 
+    uid = db.query(models.User).filter_by(username="testuser").first().id
     job = _take(client, node_id="local", shares=True)
     names = [m["name"] for m in (job.get("volume_mounts") or [])]
-    assert any(n.startswith("home_") for n in names), names
+    assert lab_manager.volume_name_for(uid) in names, (names, uid)
+
+
+def test_mounted_home_volume_is_the_one_the_lab_actually_uses(client, db, user_headers):
+    """ZH: 🔴 派工掛的 volume **必須就是實驗室真正在用的那一個**。
+
+    ZH: 真實發生過的缺陷。`routers/worker.py` 自己寫了 `f"home_{user_id}"`，
+        而 lab_manager 是 `home_<uid 的連字號換成底線>`：
+
+            lab_manager  → home_dfea61fa_0d76_4390_af93_4c9df5606d6f
+            worker       → home_dfea61fa-0d76-4390-af93-4c9df5606d6f
+
+        兩個是**不同的 volume**，docker 遇到不存在的名字會**自動建一個空的**。
+        不報錯、資料不在、訓練跑完、結果沒有意義 —— 正是同機閘門要防的那種沉默失敗，
+        只是這次原因不是跨機而是名字對不上。
+
+        查證方式（volume 標籤 + 內容量）：
+            lab_manager 建的帶 `aibase.purpose=home`，399 MB / 3718 檔（真資料）
+            自動建出來的沒有標籤，              84 KB / 7 檔（映像檔預設內容）
+        當時有一位真實使用者兩種都有。
+
+    ZH: 斷言寫成「等於 lab_manager 的輸出」而不是寫死字串 ——
+        以後改命名規則時兩邊會一起動，這條測試不會變成過時的複製品。
+    """
+    import sys, pathlib
+    sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent / "job-scheduler"))
+    from app.services import lab_manager
+    from app import models
+
+    _heartbeat(client, node_id="local", shares=True)
+    assert _submit(client, user_headers, inline=False).status_code == 201
+
+    uid = db.query(models.User).filter_by(username="testuser").first().id
+    job = _take(client, node_id="local", shares=True)
+
+    home = [m for m in (job.get("volume_mounts") or []) if m["name"].startswith("home_")]
+    assert len(home) == 1, job.get("volume_mounts")
+    assert home[0]["name"] == lab_manager.volume_name_for(uid)
+    # ZH: 明確擋掉那個錯的寫法（uid 是 UUID，一定含連字號）
+    assert home[0]["name"] != f"home_{uid}", "又寫回連字號版了"
+    assert "-" not in home[0]["name"][len("home_"):], home[0]["name"]
 
 
 # ──────────────────────────────────────────────────────────────────────────

@@ -104,6 +104,23 @@
             login_forgot: '忘記密碼',
             login_forgot_msg: '忘記密碼：請聯絡圖書館 AI 基地管理者重設。（自助重設尚未接上）',
 
+            // ── 實驗室多份存檔 ───────────────────────────────────
+            ws_title: '我的存檔',
+            ws_sub: '可以有好幾份各自獨立的工作區。一次只開一份——切換時舊的會關閉，檔案都保留。',
+            ws_new: '新增一份存檔',
+            ws_new_prompt: '這一份要叫什麼名字？',
+            ws_count: '{n} / {m} 份',
+            ws_running: '執行中',
+            ws_open: '開啟這一份',
+            ws_go: '前往',
+            ws_delete: '刪除',
+            ws_last: '最後使用：{w}',
+            ws_never: '還沒開過',
+            ws_load_fail: '暫時讀不到存檔清單（不影響上面的開啟）',
+            ws_switch_confirm: '要切換到這一份嗎？「{n}」會關閉，但它的檔案都會保留。',
+            ws_delete_confirm: '要刪掉「{n}」嗎？裡面的檔案會一起消失，沒辦法復原。',
+            ws_switched: '已切換存檔（原本那一份已關閉，檔案都保留）',
+
             // ── 我的訓練（jobs.html）──────────────────────────────
             jl_title: '我的訓練 · MCU AI Base',
             jl_h1: '我的訓練',
@@ -449,6 +466,23 @@
             login_failed: 'Sign-in failed',
             login_forgot: 'Forgot password',
             login_forgot_msg: 'Forgot password: please contact the Library AI Base administrator to reset it. (Self-service reset is not available yet.)',
+
+            // ── Code Lab workspaces ──────────────────────────────
+            ws_title: 'My workspaces',
+            ws_sub: 'You can keep several separate workspaces. Only one runs at a time — switching closes the other one, and all files are kept.',
+            ws_new: 'Add a workspace',
+            ws_new_prompt: 'What should this workspace be called?',
+            ws_count: '{n} of {m}',
+            ws_running: 'running',
+            ws_open: 'Open this one',
+            ws_go: 'Go to it',
+            ws_delete: 'Delete',
+            ws_last: 'Last used: {w}',
+            ws_never: 'Never opened',
+            ws_load_fail: 'Cannot read the workspace list right now (does not affect opening above)',
+            ws_switch_confirm: 'Switch to this workspace? "{n}" will be closed, but all its files are kept.',
+            ws_delete_confirm: 'Delete "{n}"? Everything inside goes with it and cannot be recovered.',
+            ws_switched: 'Switched workspace (the previous one is closed; all files are kept)',
 
             // ── My training runs (jobs.html) ─────────────────────
             jl_title: 'My training runs · MCU AI Base',
