@@ -1,0 +1,941 @@
+/* ==============================================================================
+   styles.css — v2 元件樣式
+   ==============================================================================
+   ⚠ 本檔**不得出現任何色碼**。顏色一律走 tokens.css 的第 2 層語意 token。
+     檢查方式：grep -nE "#[0-9a-fA-F]{3,6}|rgb\(" styles.css  應為空。
+   ============================================================================== */
+
+/* ZH: 純色用 background-color（長寫）而非 background 簡寫——
+       簡寫會一併重設 background-image / -position 等，這裡不需要那些。
+       純粹是精確性，不是為了繞過什麼。 */
+
+*, *::before, *::after { box-sizing: border-box; }
+
+/* ZH: **不要釘 px。** `100%` ＝ 使用者瀏覽器的預設字級。
+ *     把瀏覽器預設調大的人多半是真的需要（擁有者裁定 2026-08-20），
+ *     釘 16px 等於默默取消他的無障礙設定——而且他關掉 JS 時連 prefs.js 都救不了。
+ *     v2 的字級全走 rem，所以這一行決定了整體大小。
+ *     ⚠ 間距（--space-*）仍是 px，不會跟著放大：那個取捨已由
+ *     .topbar 的 min-height + flex-wrap 承接（見該處註解）。 */
+html { font-size: 100%; }
+
+body {
+    margin: 0;
+    font-family: var(--font);
+    font-size: 1rem;
+    line-height: 1.65;
+    color: var(--text);
+    background-color: var(--surface-2);
+}
+
+/* ZH: 鍵盤使用者要看得見焦點。用 box-shadow 而非 outline，圓角才會跟著彎。 */
+:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 3px var(--focus-ring);
+    border-radius: var(--radius-sm);
+}
+
+/* ── 版面骨架 ───────────────────────────────────────────────────────── */
+/* ZH: 內容先於外框（design-before-code 的 content-out）——
+       三個畫面定案後只需要頂部一條，不需要側邊欄。 */
+/* ZH: `min-height` + `flex-wrap` 而不是固定 `height: 56px`。
+ *
+ *   實測 375px 寬 × 字級 150%：內容 448px > 視窗 375px，**帳號鈕整個跑到畫面外**——
+ *   而最需要放大字的人正是構不到自己設定的那個人（要橫向捲動才找得到）。
+ *   固定高度時 flex 不換行，只會往外長。
+ *
+ *   放得下時（桌面 100%）行為與原本完全相同：min-height 56、不換行。
+ */
+.topbar {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    row-gap: var(--space-2);
+    gap: var(--space-4);
+    padding: var(--space-1) var(--space-5);
+    min-height: 56px;
+    background-color: var(--surface);
+    border-bottom: 1px solid var(--hairline);
+}
+/* ZH: 換行時 spacer 不該再把右側推走，否則第二行只有一個孤零零的元素。 */
+@media (max-width: 640px) {
+    .topbar { gap: var(--space-2); padding-inline: var(--space-4); }
+}
+/* ZH: LOGO 是回首頁的連結（chrome.js 會把 span 換成 a）。
+ *     版面規則：**只有 LOGO 在左，其餘全部靠右**，靠 .topbar__spacer 撐開。 */
+.topbar__brand {
+    font-weight: 700;
+    color: var(--text-strong);
+    letter-spacing: 0.01em;
+    text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+    min-height: var(--tap-min);
+}
+.topbar__spacer { flex: 1; }
+
+.page {
+    max-width: var(--content-max);
+    margin: 0 auto;
+    padding: var(--space-6) var(--space-5) var(--space-8);
+}
+
+/* ⚠⚠ ZH: `[hidden]` 必須勝過任何 display 規則。
+ *
+ *   瀏覽器內建的是 `[hidden] { display: none }`，但**作者寫的 display 一律贏過它**
+ *   （UA 樣式表的優先序最低）。這個檔裡到處都是 `display: flex/grid/block`，
+ *   於是 `el.hidden = true` 設得下去、屬性也對，**元素卻照樣看得見**。
+ *
+ *   實測一次抓到五處都在這個坑裡：
+ *     .account__menu   帳號選單收不回去（使用者回報的症狀）
+ *     .notice          沒有公告時橫幅仍占一條
+ *     .entry           文件庫入口在沒有內容時仍出現（Decision Log #30 的規則等於沒生效）
+ *     .minor a         **「停止 Lab」在 Lab 沒執行時也看得到**
+ *
+ *   ⚠ 這件事**不會報錯**，而且 `el.hidden` 讀回來是 true ——
+ *     用屬性驗證會全部通過。要驗**可見性**（getBoundingClientRect().height）。
+ */
+[hidden] { display: none !important; }
+
+/* ── 層級 0 · 公告橫幅（條件式，沒有公告時整條不存在）──────────────── */
+.notice {
+    display: flex;
+    align-items: baseline;
+    gap: var(--space-3);
+    padding: var(--space-3) var(--space-4);
+    margin-bottom: var(--space-5);
+    background-color: var(--accent-soft);
+    border: 1px solid var(--hairline);
+    border-radius: var(--radius-md);
+    font-size: 0.9375rem;
+}
+.notice__date { color: var(--text-muted); font-size: 0.875rem; white-space: nowrap; }
+.notice__more { margin-left: auto; white-space: nowrap; }
+
+/* ── 層級 1 · 額度 + 主要動作（主線的核心）────────────────────────── */
+.primary-card {
+    background-color: var(--surface);
+    border: 1px solid var(--hairline);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-1);
+    padding: var(--space-6) var(--space-5);
+    text-align: center;
+}
+.balance__label { font-size: 0.875rem; color: var(--text-muted); }
+.balance__value {
+    font-size: 2.5rem;
+    font-weight: 700;
+    color: var(--text-strong);
+    line-height: 1.2;
+    font-variant-numeric: tabular-nums;   /* ZH: 數字等寬，輪詢更新時不會左右跳 */
+}
+.balance__unit { font-size: 1rem; font-weight: 400; color: var(--text-muted); margin-left: var(--space-1); }
+.balance__meta { font-size: 0.875rem; color: var(--text-muted); }
+.balance__meta a { color: var(--link); }
+
+/* ZH: 低於門檻（/my-balance 的 below 旗標）——視覺上必須不一樣。
+       這不是新機制，是用後端已經算好的判定。 */
+.primary-card[data-low="1"] { border-color: var(--warn); background-color: var(--warn-soft); }
+.primary-card[data-low="1"] .balance__value { color: var(--warn); }
+
+/* 骨架（載入中）——保留高度，避免版面跳動 */
+.skeleton {
+    display: inline-block;
+    min-width: 8ch; height: 1em;
+    background-color: var(--surface-2);
+    border-radius: var(--radius-sm);
+    animation: pulse 1.4s ease-in-out infinite;
+}
+@keyframes pulse { 0%,100% { opacity: 1 } 50% { opacity: 0.55 } }
+@media (prefers-reduced-motion: reduce) { .skeleton { animation: none } }
+
+/* ── 按鈕 ───────────────────────────────────────────────────────────── */
+.btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-2);
+    min-height: var(--tap-min);
+    padding: 0 var(--space-5);
+    font: inherit;
+    font-weight: 600;
+    border: 1px solid transparent;
+    border-radius: var(--radius-md);
+    cursor: pointer;
+    /* ZH: `<a class="btn">` 會帶著 UA 的底線，於是一顆按鈕看起來像一條連結。
+           在 <button> 上這行沒有作用，所以放在 .btn 裡是安全的。 */
+    text-decoration: none;
+    transition: background-color 0.15s ease, border-color 0.15s ease;
+}
+/* ZH: 要與上方 .btn--primary 疊成一組動作時用。primary 自己就是 width:100%，
+       第二顆不跟著滿版的話會在滿版按鈕底下縮成一小塊，看起來像註腳而不是動作。 */
+.btn--block { width: 100%; margin-top: var(--space-2); }
+.btn--primary {
+    background-color: var(--accent);
+    color: var(--on-accent);          /* ⚠ 黃底＝深字、藍底＝白字，由 token 決定 */
+    width: 100%;
+    font-size: 1.0625rem;
+    margin-top: var(--space-4);
+}
+.btn--primary:hover:not(:disabled) { background-color: var(--accent-hover); }
+.btn:disabled { opacity: 0.55; cursor: not-allowed; }
+
+.btn--ghost {
+    background: transparent;
+    color: var(--link);
+    border-color: var(--hairline);
+}
+.btn--ghost:hover { background-color: var(--surface-2); }
+
+/* ── 層級 3 的動作按鈕 ────────────────────────────────────────────
+ * ZH: 這一組的成員全都是「動作」，原本卻是純文字連結：實測高 18–23px，
+ *     連這個設計系統自己定的 --tap-min: 44px 都不到。
+ *
+ *     為什麼另開一種而不是直接用 --ghost：ghost 是層級 2。
+ *     三層（實心 / 外框 / 小外框）要分得出來，全變同一種就等於沒有階層。
+ *
+ *     `.minor a` / `.handoff a` 用後代選擇器一起納入，而不是要求每個連結
+ *     自己加 class —— 以後在那兩區加連結的人不必「記得」，
+ *     漏掉就會是一個 23px 的可點目標，而那種東西沒有人會回報。
+ * ──────────────────────────────────────────────────────────────── */
+.btn--minor,
+.minor a,
+.minor button,
+.handoff a {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: var(--tap-min);
+    padding: 0 var(--space-4);
+    border: 1px solid var(--hairline);
+    border-radius: var(--radius-md);
+    background: transparent;
+    color: var(--link);
+    font: inherit;
+    font-size: 0.875rem;
+    font-weight: 600;
+    text-decoration: none;
+    cursor: pointer;
+}
+/* ZH: hover 底色用 --surface（白）**不是** --surface-2 ——
+ *     實測這一組全部坐在 --surface-2 上（頁面底色就是它），
+ *     設成 --surface-2 等於 hover 完全看不出來。
+ *     邊框轉成 --link（對底色 6.30）才是主要訊號，底色只是輔助的「浮起」。 */
+.btn--minor:hover,
+.minor a:hover,
+.minor button:hover,
+.handoff a:hover { background-color: var(--surface); border-color: var(--link); }
+.btn--minor:focus-visible,
+.minor a:focus-visible,
+.minor button:focus-visible,
+.handoff a:focus-visible { outline: var(--focus-ring); outline-offset: 2px; }
+
+/* ZH: 主要動作按下後的過渡——V1 修正。
+       實際流程會先開廠商登出頁再轉登入頁，中間有約 1 秒空窗；
+       這一條讓本站在那段時間有話說，而不是「按了沒反應」。 */
+.handoff {
+    margin-top: var(--space-3);
+    font-size: 0.9375rem;
+    color: var(--text-muted);
+}
+/* ZH: ⚠ .handoff 裡的連結是**彈窗被瀏覽器擋下時唯一的出路**，原本高 18px，
+ *     是全站最小的可點目標——最需要被點到的東西反而最難點。
+ *     形狀見上方「層級 3 的動作按鈕」；這裡只補讓它脫離句子行高的間距。 */
+.handoff a { margin-top: var(--space-2); }
+
+/* ── 層級 2 · 入口卡 ─────────────────────────────────────────────── */
+.entries { margin-top: var(--space-6); display: grid; gap: var(--space-4); }
+
+.entry {
+    display: block;
+    text-align: left;
+    width: 100%;
+    background-color: var(--surface);
+    border: 1px solid var(--hairline);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-1);
+    padding: var(--space-4) var(--space-5);
+    cursor: pointer;
+    font: inherit;
+    color: inherit;
+    transition: box-shadow 0.2s ease, transform 0.2s ease, border-color 0.2s ease;
+}
+.entry:hover { box-shadow: var(--shadow-2); transform: translateY(-2px); border-color: var(--accent); }
+.entry__title { font-weight: 700; color: var(--text-strong); font-size: 1.0625rem; }
+.entry__desc { font-size: 0.9375rem; color: var(--text-muted); margin-top: var(--space-1); }
+
+/* ZH: 機制甲——GPU 入口卡。文案是成果不是功能名，所以視覺上也該比其他入口重一階。 */
+.entry--feature { border-left: 4px solid var(--accent); }
+
+/* ── 層級 3 · 次要 ──────────────────────────────────────────────── */
+.minor {
+    margin-top: var(--space-6);
+    padding-top: var(--space-4);
+    border-top: 1px solid var(--hairline);
+    font-size: 0.875rem;
+    color: var(--text-muted);
+    display: flex; gap: var(--space-4); flex-wrap: wrap;
+}
+/* ZH: .minor 內的連結／按鈕外觀見上方「層級 3 的動作按鈕」那一組。 */
+
+/* ── 錯誤區塊（部分失敗不整頁死）──────────────────────────────── */
+.inline-error {
+    font-size: 0.875rem;
+    color: var(--error);
+    background-color: var(--error-soft);
+    border-radius: var(--radius-sm);
+    padding: var(--space-2) var(--space-3);
+    margin-top: var(--space-2);
+}
+
+/* ── 色系切換（開發期展示用；上線擇一後可移除）─────────────────── */
+.theme-switch { display: flex; gap: var(--space-1); }
+.theme-switch button {
+    font: inherit; font-size: 0.8125rem;
+    padding: var(--space-1) var(--space-3);
+    min-height: 32px;
+    border: 1px solid var(--hairline);
+    border-radius: var(--radius-pill);
+    background-color: var(--surface);
+    color: var(--text);
+    cursor: pointer;
+}
+.theme-switch button[aria-pressed="true"] {
+    background-color: var(--accent); color: var(--on-accent); border-color: var(--accent);
+}
+
+/* ==========================================================================
+ * 登入 / GPU 引導（第二批畫面）
+ * ========================================================================== */
+
+/* ZH: 這兩個畫面只有一件事，內容比首頁窄一些，視線不用左右掃。 */
+.page--narrow { max-width: 34rem; }
+
+.topbar__back {
+    color: var(--text-muted);
+    text-decoration: none;
+    font-size: 0.9rem;
+    margin-right: var(--space-4);
+    padding: var(--space-2);
+    min-height: var(--tap-min);
+    display: inline-flex;
+    align-items: center;
+}
+.topbar__back:hover { color: var(--text); }
+
+.hero__title {
+    margin: 0 0 var(--space-3);
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: var(--text-strong);
+    line-height: 1.3;
+}
+.hero__sub {
+    margin: 0 0 var(--space-5);
+    color: var(--text-muted);
+    line-height: 1.7;
+}
+
+/* ── 摺疊區（管理者本機登入）────────────────────────────────────────
+ * ZH: 預設收合，且**錯誤時不自動展開**（C2 修正）。展開與否只由使用者決定。 */
+.fold {
+    margin-top: var(--space-5);
+    border-top: 1px solid var(--hairline);
+    padding-top: var(--space-4);
+}
+.fold__summary {
+    cursor: pointer;
+    color: var(--text-muted);
+    font-size: 0.9rem;
+    padding: var(--space-2) 0;
+    min-height: var(--tap-min);
+    display: flex;
+    align-items: center;
+    /* ZH: `display: flex` 會讓 Chrome **拿掉 <summary> 的原生展開三角**，
+           於是這一行看起來就是一段不能點的灰字——沒有人會去點它。
+           flex 是為了 min-height + 垂直置中，不能不要，所以自己畫一個指示符。
+           （login.html 的「管理者本機登入」本來也是這樣，一起修好。） */
+    list-style: none;
+}
+.fold__summary::-webkit-details-marker { display: none; }
+.fold__summary::before {
+    content: "▸";                     /* ▸ */
+    display: inline-block;
+    margin-right: var(--space-2);
+    transition: transform 0.15s ease;
+}
+details[open] > .fold__summary::before { transform: rotate(90deg); }
+@media (prefers-reduced-motion: reduce) {
+    .fold__summary::before { transition: none; }
+}
+.fold__summary:hover { color: var(--text); }
+.fold__summary:focus-visible { outline: var(--focus-ring); outline-offset: 2px; }
+.fold__body {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+    padding: var(--space-4) 0 var(--space-2);
+}
+/* ZH: 原本 38px，差一點就到 --tap-min。它是連結不是動作，所以不做成按鈕，
+ *     但可點區域仍要夠大 —— 用 inline-flex + min-height 撐開，外觀不變。 */
+.fold__link {
+    display: inline-flex;
+    align-items: center;
+    min-height: var(--tap-min);
+    color: var(--link);
+    font-size: 0.85rem;
+    align-self: flex-start;
+    padding: var(--space-2) 0;
+}
+
+/* ── 表單欄位 ─────────────────────────────────────────────────────
+ * ZH: ⚠ `width:100%` + `border-box` 缺一不可。少了它們，兩個輸入框會因為
+ *     各自的 padding 不同而**長度不一** —— v1.5 就是這樣被使用者一眼看出來的。 */
+.field { display: flex; flex-direction: column; gap: var(--space-2); }
+.field__label { font-size: 0.85rem; color: var(--text-muted); }
+.field__input {
+    width: 100%;
+    box-sizing: border-box;
+    min-height: var(--tap-min);
+    padding: var(--space-3);
+    font: inherit;
+    color: var(--text);
+    background-color: var(--surface);
+    border: 1px solid var(--hairline);
+    border-radius: var(--radius-sm);
+}
+.field__input:focus-visible { outline: var(--focus-ring); outline-offset: 1px; }
+
+/* ── 三步驟預覽（純說明、不可點）───────────────────────────────────
+ * ZH: 刻意不做成卡片或按鈕。它們不是入口，做得像入口會搶走主要動作的注意力
+ *     （Von Restorff：一個畫面只能有一個被隔離的東西）。 */
+.steps {
+    list-style: none;
+    margin: var(--space-5) 0 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+}
+.steps__item {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    grid-template-areas: "n t" "n d";
+    gap: 0 var(--space-3);
+    align-items: baseline;
+}
+.steps__n {
+    grid-area: n;
+    width: 1.5rem; height: 1.5rem;
+    display: inline-flex; align-items: center; justify-content: center;
+    border-radius: 50%;
+    background-color: var(--accent-soft);
+    color: var(--text-strong);
+    font-size: 0.8rem;
+    font-weight: 600;
+}
+.steps__t { grid-area: t; color: var(--text-strong); font-weight: 600; }
+.steps__d { grid-area: d; color: var(--text-muted); font-size: 0.9rem; line-height: 1.6; }
+
+.footnote {
+    margin-top: var(--space-5);
+    color: var(--text-muted);
+    font-size: 0.85rem;
+}
+
+/* ==========================================================================
+ * 使用量明細
+ * ========================================================================== */
+
+/* 期間切換 —— 分段控制項，一次只有一個生效 */
+.seg {
+    display: flex;
+    gap: 0;
+    margin: var(--space-5) 0 var(--space-4);
+    border: 1px solid var(--hairline);
+    border-radius: var(--radius-sm);
+    overflow: hidden;
+    width: fit-content;
+}
+.seg button {
+    font: inherit;
+    font-size: 0.875rem;
+    padding: var(--space-2) var(--space-4);
+    min-height: var(--tap-min);
+    border: 0;
+    border-right: 1px solid var(--hairline);
+    background-color: var(--surface);
+    color: var(--text);
+    cursor: pointer;
+}
+.seg button:last-child { border-right: 0; }
+.seg button[aria-pressed="true"] {
+    background-color: var(--accent);
+    color: var(--on-accent);
+    font-weight: 600;
+}
+.seg button:focus-visible { outline: var(--focus-ring); outline-offset: -2px; }
+
+/* 三個數字 */
+.stats {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));
+    gap: var(--space-4);
+    margin-bottom: var(--space-4);
+}
+.stat__label { font-size: 0.8rem; color: var(--text-muted); }
+.stat__value {
+    font-size: 1.75rem;
+    font-weight: 700;
+    color: var(--text-strong);
+    line-height: 1.2;
+}
+.stat__sub { font-size: 0.75rem; color: var(--text-muted); margin-top: var(--space-1); }
+
+/* ZH: 說明性提示。用 --surface-2 而非警示色 —— 「樣本不足所以沒有對照」
+ *     是設計上的正常結果，不是錯誤，配色不該讓人以為出事了。 */
+/* ZH: .hint 的字級 0.8rem 會被 .btn--minor 的 font:inherit 繼承下去，
+ *     按鈕字會比別頁小一號。給它自己的字級，不跟著容器縮。 */
+.hint .btn--minor { font-size: 0.875rem; margin-top: var(--space-2); }
+/* ZH: 空狀態的引導按鈕（文件庫的 #msg 用 .inline-error）——補間距。 */
+.inline-error .btn--minor { margin-top: var(--space-3); }
+
+.hint {
+    font-size: 0.8rem;
+    line-height: 1.7;
+    color: var(--text-muted);
+    background-color: var(--surface-2);
+    border-radius: var(--radius-sm);
+    padding: var(--space-3);
+    margin: 0 0 var(--space-4);
+}
+
+.chart { margin-bottom: var(--space-5); }
+.chart__title {
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--text-muted);
+    margin: 0 0 var(--space-2);
+}
+/* ZH: 固定高度是必要的 —— Chart.js 的 maintainAspectRatio:false 需要容器有高，
+ *     否則 canvas 會塌成 0 高，圖表「沒畫出來」但也不報錯。 */
+.chart__box {
+    position: relative;
+    height: 14rem;
+    padding: var(--space-3);
+    background-color: var(--surface-2);
+    border-radius: var(--radius-sm);
+}
+
+/* 常駐導覽（§Chrome：Lab 與使用量常駐頂部，常用者不必每次經過引導頁）*/
+.topnav { display: flex; gap: var(--space-2); align-items: center; }
+.topnav a,
+.topnav button {
+    background: transparent;
+    border: 0;
+    font: inherit;
+    cursor: pointer;
+}
+.topnav a,
+.topnav button {
+    color: var(--text-muted);
+    text-decoration: none;
+    font-size: 0.875rem;
+    padding: var(--space-2) var(--space-3);
+    min-height: var(--tap-min);
+    display: inline-flex;
+    align-items: center;
+    border-radius: var(--radius-sm);
+}
+.topnav a:hover,
+.topnav button:hover { color: var(--text); background-color: var(--surface-2); }
+.topnav a:focus-visible,
+.topnav button:focus-visible { outline: var(--focus-ring); outline-offset: 2px; }
+
+/* ZH: 目前所在頁要看得出來。擁有者裁定：**只有目前頁有底色**，
+ *     其餘維持透明文字。MYAI 是動作不是頁面，永遠不會是 current。 */
+.topnav a[aria-current="page"] {
+    color: var(--text-strong);
+    font-weight: 600;
+    background-color: var(--accent-soft);
+}
+
+/* ── 帳號選單（頂部列最右）──────────────────────────────────────── */
+.account { position: relative; }
+.account__toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
+    min-height: var(--tap-min);
+    padding: 0 var(--space-3);
+    background: transparent;
+    border: 1px solid var(--hairline);
+    border-radius: var(--radius-md);
+    font: inherit;
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: var(--text);
+    cursor: pointer;
+}
+.account__toggle:hover { background-color: var(--surface-2); border-color: var(--link); }
+.account__toggle:focus-visible { outline: var(--focus-ring); outline-offset: 2px; }
+.account__caret { color: var(--text-muted); font-size: 0.75rem; }
+
+.account__menu {
+    position: absolute;
+    top: calc(100% + var(--space-2));
+    right: 0;
+    z-index: 20;
+    min-width: 13rem;
+    padding: var(--space-2);
+    background-color: var(--surface);
+    border: 1px solid var(--hairline);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-2);
+    display: flex;
+    flex-direction: column;
+}
+/* ZH: 選單項也要 44px —— 下拉選單裡的項目最常被做成 28px 高。 */
+.account__menu a,
+.account__menu button {
+    display: flex;
+    align-items: center;
+    min-height: var(--tap-min);
+    padding: 0 var(--space-3);
+    border: 0;
+    border-radius: var(--radius-sm);
+    background: transparent;
+    font: inherit;
+    font-size: 0.9375rem;
+    color: var(--text);
+    text-align: left;
+    text-decoration: none;
+    cursor: pointer;
+}
+.account__menu a:hover,
+.account__menu button:hover { background-color: var(--surface-2); }
+.account__menu a:focus-visible,
+.account__menu button:focus-visible { outline: var(--focus-ring); outline-offset: -2px; }
+/* ZH: 登出是唯一不可逆的項目，用 --error 與其他項分開（文字本身也已說明，不只靠顏色）。 */
+.account__logout { color: var(--error) !important; }
+
+/* ── 帳號選單裡的顯示設定 ─────────────────────────────────────────── */
+/* ZH: 放在這裡而不是另開設定頁：只有兩個設定，開一頁的成本遠大於收益。 */
+.account__prefs {
+    border-top: 1px solid var(--hairline);
+    margin-top: var(--space-2);
+    padding-top: var(--space-2);
+}
+.account__prefs-title {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    padding: 0 var(--space-3) var(--space-1);
+}
+.account__prefs-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-3);
+    padding: var(--space-1) var(--space-3);
+    font-size: 0.875rem;
+    color: var(--text);
+}
+.account__seg { display: flex; gap: var(--space-1); }
+/* ZH: 這幾顆比 44px 小是**知情的例外**：三顆並排在 13rem 寬的選單裡放不下 44px，
+ *     而 WCAG 2.5.8 的 AA 門檻是 24×24（AAA 才是 44）。這裡取 32×32，
+ *     並讓「目前值」那一格兼任還原鍵（省一顆按鈕、也讓中間那格更大）。 */
+.account__seg button {
+    min-width: 32px;
+    min-height: 32px;
+    padding: 0 var(--space-2);
+    border: 1px solid var(--hairline);
+    border-radius: var(--radius-sm);
+    background: transparent;
+    font: inherit;
+    font-size: 0.8125rem;
+    font-weight: 600;
+    color: var(--text);
+    cursor: pointer;
+}
+.account__seg button:hover { background-color: var(--surface-2); border-color: var(--link); }
+.account__seg button:focus-visible { outline: var(--focus-ring); outline-offset: 1px; }
+.account__seg button[aria-pressed="true"] {
+    background-color: var(--accent-soft);
+    border-color: var(--accent);
+    color: var(--text-strong);
+}
+.account__seg-reset { min-width: 46px; }
+.account__seg-value { font-variant-numeric: tabular-nums; }
+
+/* ZH: 存不回帳號時的提示。畫面**不回滾**（他看到的就是他選的），
+ *     但要講清楚「這台機器有效、沒存回帳號」。 */
+.account__prefs-warn {
+    margin: var(--space-2) var(--space-3) 0;
+    padding: var(--space-2);
+    background-color: var(--warn-soft);
+    border-radius: var(--radius-sm);
+    font-size: 0.75rem;
+    line-height: 1.6;
+    color: var(--text-strong);
+}
+
+.account__id {
+    padding: var(--space-2) var(--space-3) var(--space-3);
+    border-bottom: 1px solid var(--hairline);
+    margin-bottom: var(--space-2);
+}
+.account__id-name { font-weight: 700; color: var(--text-strong); font-size: 0.9375rem; }
+.account__id-sub { font-size: 0.8125rem; color: var(--text-muted); margin-top: 2px; }
+
+
+/* 文件庫卡片 */
+.cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(16rem, 1fr));
+    gap: var(--space-4);
+    margin-top: var(--space-4);
+}
+.card {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    padding: var(--space-4);
+    background-color: var(--surface);
+    border: 1px solid var(--hairline);
+    border-radius: var(--radius-sm);
+    text-decoration: none;
+    color: inherit;
+}
+.card:hover { border-color: var(--accent); }
+.card:focus-visible { outline: var(--focus-ring); outline-offset: 2px; }
+/* ZH: 分類用文字標籤，不只用顏色（WCAG 1.4.1）——與公告的置頂標籤同一個理由。 */
+.card__tag {
+    align-self: flex-start;
+    font-size: 0.7rem;
+    font-weight: 600;
+    color: var(--text-strong);
+    background-color: var(--accent-soft);
+    padding: 0 var(--space-2);
+    border-radius: var(--radius-sm);
+}
+.card__title {
+    font-size: 1rem;
+    font-weight: 600;
+    color: var(--text-strong);
+    margin: 0;
+    line-height: 1.4;
+}
+.card__desc {
+    margin: 0;
+    font-size: 0.875rem;
+    color: var(--text);
+    line-height: 1.7;
+    flex: 1;
+}
+.card__foot { font-size: 0.75rem; color: var(--text-muted); }
+
+/* 公告列表 */
+.post {
+    padding: var(--space-4) 0;
+    border-bottom: 1px solid var(--hairline);
+}
+.post__head {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    margin-bottom: var(--space-2);
+}
+/* ZH: 置頂用標籤而非顏色 —— 只靠顏色的話色盲使用者分不出來（WCAG 1.4.1）。 */
+.post__pin {
+    background-color: var(--accent);
+    color: var(--on-accent);
+    padding: 0 var(--space-2);
+    border-radius: var(--radius-sm);
+    font-weight: 600;
+}
+.post__title {
+    font-size: 1.0625rem;
+    font-weight: 600;
+    color: var(--text-strong);
+    margin: 0 0 var(--space-2);
+    line-height: 1.4;
+}
+/* ZH: white-space: pre-wrap —— 公告是純文字（不用 innerHTML），
+ *     沒有這個換行會全部黏成一段。 */
+.post__body {
+    margin: 0;
+    color: var(--text);
+    line-height: 1.8;
+    white-space: pre-wrap;
+}
+.skeleton--line { display: block; height: 1.25rem; margin: var(--space-3) 0; }
+
+/* 問題回報的診斷區 */
+.diag {
+    font-family: ui-monospace, "Consolas", monospace;
+    font-size: 0.8rem;
+    line-height: 1.7;
+    color: var(--text);
+    background-color: var(--surface-2);
+    border-radius: var(--radius-sm);
+    padding: var(--space-3);
+    margin: 0;
+    white-space: pre-wrap;
+    word-break: break-all;
+    user-select: all;
+}
+textarea.field__input { resize: vertical; min-height: 6rem; }
+
+/* 鍵值列（開通確認）*/
+.kv {
+    display: flex;
+    align-items: baseline;
+    gap: var(--space-3);
+    padding: var(--space-3) 0;
+    border-bottom: 1px solid var(--hairline);
+}
+.kv__k { font-size: 0.8rem; color: var(--text-muted); min-width: 4.5rem; }
+.kv__v { color: var(--text-strong); word-break: break-all; }
+
+/* ZH: 密碼要能一鍵選取 —— 剪貼簿在非 https 或權限被拒時不可用，
+ *     `user-select: all` 讓使用者點一下就整段選中（沿用 v1.5 的做法）。 */
+.kv__v--pw {
+    font-family: ui-monospace, "Consolas", monospace;
+    font-size: 1.125rem;
+    letter-spacing: 0.02em;
+    user-select: all;
+    background-color: var(--accent-soft);
+    padding: var(--space-2) var(--space-3);
+    border-radius: var(--radius-sm);
+}
+
+/* 問題回報：狀態徽章與管理者回覆（v3.4）*/
+/* ZH: 狀態的主要訊號是**文字**（未處理／處理中／已解決），顏色只是次要強調
+ *     —— WCAG 1.4.1。這裡沒有用 --warn 當文字色：實測 --warn 對 --warn-soft
+ *     只有 3.72，小字不到 AA 的 4.5。改用 --text-strong（14.35）。
+ *     ⚠ 這個數字是算出來的不是估的（上一次估錯過 6.31 vs 實際 5.37）。 */
+.rep-badge {
+    font-size: 0.7rem;
+    font-weight: 600;
+    padding: 1px var(--space-2);
+    border-radius: var(--radius-sm);
+    border: 1px solid transparent;
+    color: var(--text-strong);
+    background-color: var(--surface-2);
+}
+/* ZH: 只有「未處理」給強調 —— 它是唯一代表「還在等」的狀態。
+ *     邊框 --warn 對 --warn-soft 是 3.72，圖形元件門檻 3.0，過。
+ *     不靠底色區分 open/in_progress：黃色系下 warn-050 與 yellow-050
+ *     幾乎同色，看起來會像同一個狀態。 */
+.rep-badge[data-status="open"] {
+    background-color: var(--warn-soft);
+    border-color: var(--warn);
+}
+.rep-badge[data-status="resolved"] { color: var(--text); }
+
+.rep-reply {
+    margin-top: var(--space-3);
+    padding: var(--space-3);
+    background-color: var(--accent-soft);
+    border-radius: var(--radius-sm);
+}
+.rep-reply__head {
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: var(--text-strong);
+    margin-bottom: var(--space-2);
+}
+
+/* 兩顆按鈕在同一張卡裡時要有間距 */
+.primary-card .btn + .btn { margin-top: var(--space-3); }
+
+/* ==========================================================================
+   交給平台訓練（train.html）
+   ========================================================================== */
+
+/* ZH: 拖放區。它是 role="button" 的 div，所以 :focus-visible 一定要有——
+       沒有的話鍵盤使用者按 Tab 過去完全看不出焦點在哪。
+   ZH: 高度 ≥ 44px 遠遠有餘（WCAG 2.5.8 AAA 的觸控目標），這裡本來就很大。 */
+.drop {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-2);
+    min-height: 8rem;
+    padding: var(--space-5) var(--space-4);
+    margin-bottom: var(--space-4);
+    border: 2px dashed var(--hairline);
+    border-radius: var(--radius);
+    background-color: var(--surface-2);
+    cursor: pointer;
+    text-align: center;
+    transition: border-color 0.15s, background-color 0.15s;
+}
+.drop:hover { border-color: var(--link); background-color: var(--surface); }
+.drop:focus-visible { outline: var(--focus-ring); outline-offset: 2px; }
+.drop--over { border-color: var(--accent); background-color: var(--surface); }
+.drop--has { border-style: solid; border-color: var(--accent); }
+.drop__icon { font-size: 1.5rem; color: var(--text-muted); line-height: 1; }
+/* ZH: 摺疊區裡的選檔區。矮一點——它是次要路徑，不該和主要的上傳區搶視覺重量。 */
+.drop--small { min-height: 4.5rem; padding: var(--space-4); margin-bottom: 0; }
+.drop__main { color: var(--text-strong); font-weight: 600; word-break: break-all; }
+.drop__sub { font-size: 0.85rem; color: var(--text-muted); }
+
+/* ZH: 進度條。動畫在 prefers-reduced-motion 下關掉——
+       這是進度指示，不是裝飾，關掉動畫仍然看得到寬度。 */
+.bar {
+    height: 0.5rem;
+    border-radius: 999px;
+    background-color: var(--surface-2);
+    overflow: hidden;
+    margin-bottom: var(--space-3);
+}
+.bar__fill {
+    height: 100%;
+    width: 0;
+    background-color: var(--accent);
+    transition: width 0.4s ease;
+}
+@media (prefers-reduced-motion: reduce) { .bar__fill { transition: none } }
+
+/* ZH: 資料集列表的動作列。窄畫面時自己換行，不要把卡片撐破。 */
+.ds__actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-2);
+    margin-top: var(--space-3);
+}
+.ds__actions .footnote { margin: 0; }
+
+/* ZH: 配額快滿時的警示色。這一頁的來訪者多半就是為了這件事。 */
+.bar--warn .bar__fill { background-color: var(--warn); }
+
+/* ZH: 每輪結果的表格。窄畫面時讓它自己橫向捲，不要把整頁撐寬。 */
+.tbl {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.9375rem;
+    margin-bottom: var(--space-5);
+}
+.tbl th,
+.tbl td {
+    text-align: left;
+    padding: var(--space-2) var(--space-3);
+    border-bottom: 1px solid var(--hairline);
+    font-variant-numeric: tabular-nums;
+}
+.tbl th { color: var(--text-muted); font-weight: 600; font-size: 0.85rem; }
+.tbl td { color: var(--text); }
+
+@media (max-width: 640px) {
+    .page { padding: var(--space-5) var(--space-4) var(--space-7); }
+    .balance__value { font-size: 2rem; }
+    .hero__title { font-size: 1.3rem; }
+    .chart__box { height: 12rem; }
+    /* ZH: 每輪結果在窄畫面自己捲，不要把頁面撐寬（頁面橫捲是版面壞掉的訊號）。 */
+    #epochs-table { overflow-x: auto; }
+}

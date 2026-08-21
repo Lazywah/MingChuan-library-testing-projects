@@ -25,6 +25,8 @@ services:
       - ./web-ui-v1.5:/usr/share/nginx/html/train-v1.5:ro
       - ./web-ui-v2:/usr/share/nginx/html/train-v2:ro
       - ./admin-ui-v1.5:/usr/share/nginx/html/admin-ui-v1.5:ro
+      # ZH: 管理端 UI v2（規格 docs/10-admin-ui-v2-design.md）。舊版仍在 `/`。
+      - ./admin-ui-v2:/usr/share/nginx/html/admin-ui-v2:ro
     depends_on:
       job-scheduler:
         condition: service_healthy

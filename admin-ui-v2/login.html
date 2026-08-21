@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="zh-Hant" data-theme="yellow">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title data-i18n="adm_login_title">管理員登入 · MCU AI Base</title>
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Open+Sans:wght@400;600;700&display=swap" rel="stylesheet">
+
+    <link rel="stylesheet" href="tokens.css?v=dd946cc2">
+    <link rel="stylesheet" href="styles.css?v=e917e7df">
+    <link rel="stylesheet" href="admin.css?v=5dfa3798">
+</head>
+<body>
+
+<header class="topbar">
+    <span class="topbar__brand" data-i18n="adm_brand">MCU AI Base 管理端</span>
+    <span class="topbar__spacer"></span>
+    <div class="theme-switch" role="group" aria-label="色系" data-i18n-aria="theme_aria">
+        <button type="button" data-set-theme="yellow" aria-pressed="true" data-i18n="theme_yellow">黃</button>
+        <button type="button" data-set-theme="blue" aria-pressed="false" data-i18n="theme_blue">藍</button>
+    </div>
+</header>
+
+<main class="page page--narrow">
+
+    <!-- ZH: 管理端**沒有 SSO 分流的問題** —— 它只有一種登入方式，
+             所以帳密表單就是主要動作，不像使用者端那樣收在 <details> 裡。
+             （使用者端把它收起來是為了不把管理者通道曝光給學生；
+               這一頁本身就是管理者通道，沒有那個顧慮。） -->
+    <section class="primary-card" aria-labelledby="adm-title">
+        <h1 class="hero__title" id="adm-title" data-i18n="adm_login_h1">管理員登入</h1>
+        <p class="hero__sub"><span data-i18n="adm_login_sub">這裡是平台的管理介面。學生請從一般入口登入。</span></p>
+
+        <form id="adm-form" autocomplete="on">
+            <label class="field">
+                <span class="field__label" for="adm-user" data-i18n="label_account">帳號</span>
+                <input class="field__input" id="adm-user" name="username"
+                       type="text" autocomplete="username" required autofocus>
+            </label>
+
+            <label class="field">
+                <span class="field__label" for="adm-pass" data-i18n="label_password">密碼</span>
+                <input class="field__input" id="adm-pass" name="password"
+                       type="password" autocomplete="current-password" required>
+            </label>
+
+            <button class="btn btn--primary" id="adm-submit" type="submit"
+                    data-i18n="adm_login_submit">登入</button>
+            <div class="inline-error" id="adm-error" hidden></div>
+        </form>
+    </section>
+
+    <nav class="minor">
+        <a href="http://localhost/v2/" data-i18n="adm_to_user_site">回使用者端</a>
+        <a href="/" data-i18n="adm_old_ui">舊版管理介面</a>
+    </nav>
+
+</main>
+
+<script src="tz.js?v=3608fea5"></script>
+<script src="i18n.js?v=0d8098dc"></script>
+<script src="i18n-admin.js?v=5ce941ff"></script>
+<script src="prefs.js?v=8b7b4277"></script>
+<script src="login.js?v=da10f066"></script>
+</body>
+</html>

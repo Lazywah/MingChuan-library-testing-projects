@@ -32,8 +32,18 @@ except (AttributeError, ValueError):
     pass
 
 ROOT = Path(__file__).parent.parent.resolve()
-UI = ROOT / "web-ui-v2"
-DICT = UI / "i18n.js"
+
+# ZH: 🔴 要檢查的每一個 UI 目錄，以及它的字典由哪幾個檔案組成。
+#     管理端 v2 的字典是 `i18n.js`（共用正本，一個字都不改）
+#     + `i18n-admin.js`（管理端專屬 key，用 Object.assign 併進去）。
+#
+# ZH: 為什麼要明寫而不是自動探索：一個目錄的字典由哪些檔案組成**是設計決定**，
+#     不是可以從檔名猜的。猜錯的方向會是「少算一個字典檔 → 把有翻譯的 key
+#     報成缺翻譯」，那會讓人去補一個已經存在的東西。
+TARGETS = [
+    ("web-ui-v2", ["i18n.js"]),
+    ("admin-ui-v2", ["i18n.js", "i18n-admin.js"]),
+]
 
 # ZH: 不是 key 的東西：
 #   key   — 函式簽章裡的參數名（`t(key, fallback)`）
@@ -44,15 +54,16 @@ IGNORE_USED = {"key", "zh", "en"}
 DYNAMIC_PREFIXES = ("role_",)
 
 
-def used_keys() -> dict:
+def used_keys(ui: Path, dict_files: list) -> dict:
     """ZH: 掃 HTML 的 data-i18n* 與 JS 的 T('…') / Prefs.t('…') / L('…')。"""
     found = {}
-    for f in sorted(UI.glob("*.html")):
+    for f in sorted(ui.glob("*.html")):
         s = f.read_text(encoding="utf-8")
         for m in re.finditer(r'data-i18n(?:-placeholder|-aria)?="([^"]+)"', s):
             found.setdefault(m.group(1), set()).add(f.name)
-    for f in sorted(UI.glob("*.js")):
-        if f.name == "i18n.js":
+    for f in sorted(ui.glob("*.js")):
+        # ZH: 字典檔本身不算「使用」—— 它裡面全是 key 的定義。
+        if f.name in dict_files:
             continue
         s = f.read_text(encoding="utf-8")
         # ZH: 判準是**形狀**不是函式名：「key 後面接一個含中文的 fallback」。
@@ -64,38 +75,59 @@ def used_keys() -> dict:
             found.setdefault(m.group(1), set()).add(f.name)
         for m in re.finditer(r"setAttribute\(\s*'data-i18n[a-z-]*'\s*,\s*'([a-z0-9_]+)'", s):
             found.setdefault(m.group(1), set()).add(f.name)
+        # ZH: JS 直接組 HTML 字串時寫的 `data-i18n="key"`。
+        #     管理端的 admin-chrome.js 就是這樣產生頂部列的，
+        #     漏掉這個形狀會把**實際有在用**的 key 報成「沒有人用」——
+        #     而照著那個報告修，會把還在用的翻譯刪掉。
+        for m in re.finditer(r'data-i18n(?:-placeholder|-aria)?="([a-z0-9_]+)"', s):
+            found.setdefault(m.group(1), set()).add(f.name)
     return {k: v for k, v in found.items() if k not in IGNORE_USED}
 
 
-def dict_keys() -> dict:
-    """ZH: 從 i18n.js 取出 zh / en 兩份的 key → 值。
+def dict_keys(ui: Path, dict_files: list) -> dict:
+    """ZH: 從這個目錄的字典檔取出 zh / en 兩份的 key → 值。
 
-    ZH: 用括號配對切出兩個語言區塊，不用「找下一個 `},`」——
-        字典值裡本來就有 `}`（佔位符），那種切法會在第一個佔位符就切斷。
+    ZH: 一個目錄的字典可能由**多個檔案**組成：管理端是
+        `i18n.js`（共用正本，一個字都不改）+ `i18n-admin.js`（自己的 key）。
+        後者靠 `Object.assign` 併進同一本字典，所以這裡也要把兩份合起來算。
     """
-    s = DICT.read_text(encoding="utf-8")
-    out = {}
-    for lang in ("zh", "en"):
-        m = re.search(r"\n\s+%s:\s*\{" % lang, s)
-        if not m:
-            out[lang] = {}
-            continue
-        i = s.index("{", m.start())
-        depth, j = 0, i
-        while j < len(s):
-            if s[j] == "{":
-                depth += 1
-            elif s[j] == "}":
-                depth -= 1
-                if depth == 0:
-                    break
-            j += 1
-        body = s[i:j]
-        out[lang] = dict(re.findall(r"\n\s+([a-z0-9_]+):\s*'((?:[^'\\]|\\.)*)'", body))
+    out = {"zh": {}, "en": {}}
+    for name in dict_files:
+        s = (ui / name).read_text(encoding="utf-8")
+        for lang in ("zh", "en"):
+            out[lang].update(_one_lang(s, lang))
     return out
 
 
-def html_fallbacks() -> list:
+def _one_lang(s: str, lang: str) -> dict:
+    """ZH: 從一份原始碼裡切出某個語言的 key → 值。
+
+    ZH: 用括號配對切區塊，不用「找下一個 `},`」——
+        字典值裡本來就有 `}`（佔位符），那種切法會在第一個佔位符就切斷。
+
+    ZH: 兩種寫法都要認：
+          `zh: {`                            → i18n.js 的本體
+          `I18N.zh, {`                       → i18n-admin.js 的 Object.assign 擴充
+    """
+    m = (re.search(r"\n\s+%s:\s*\{" % lang, s)
+         or re.search(r"I18N\.%s\s*,\s*\{" % lang, s))
+    if not m:
+        return {}
+    i = s.index("{", m.start())
+    depth, j = 0, i
+    while j < len(s):
+        if s[j] == "{":
+            depth += 1
+        elif s[j] == "}":
+            depth -= 1
+            if depth == 0:
+                break
+        j += 1
+    body = s[i:j]
+    return dict(re.findall(r"\n\s+([a-z0-9_]+):\s*'((?:[^'\\]|\\.)*)'", body))
+
+
+def html_fallbacks(ui: Path) -> list:
     """ZH: 取出各 HTML 裡 `data-i18n="k">文字<` 的 (檔名, key, 文字)。
 
     ZH: 只看**單純的文字節點**——內容含標籤的（例：`<strong>`）跳過，
@@ -105,7 +137,7 @@ def html_fallbacks() -> list:
     """
     out = []
     pat = re.compile(r'data-i18n="([a-z0-9_]+)"[^>]*>([^<>]+)<')
-    for f in sorted(UI.glob("*.html")):
+    for f in sorted(ui.glob("*.html")):
         html = f.read_text(encoding="utf-8")
         for key, text in pat.findall(html):
             out.append((f.name, key, text.strip()))
@@ -115,15 +147,18 @@ def html_fallbacks() -> list:
 PLACEHOLDER = re.compile(r"\{[a-z]\}")
 
 
-def main() -> int:
-    if not DICT.is_file():
-        print(f"[FAIL] 找不到 {DICT.relative_to(ROOT)}")
-        return 1
-
-    used = used_keys()
-    d = dict_keys()
-    zh, en = d.get("zh", {}), d.get("en", {})
+def check_one(dirname: str, dict_files: list) -> list:
+    """ZH: 檢查一個 UI 目錄，回傳問題清單（空的代表過）。"""
+    ui = ROOT / dirname
     problems = []
+
+    missing = [f for f in dict_files if not (ui / f).is_file()]
+    if missing:
+        return [f"{dirname} 找不到字典檔：{', '.join(missing)}"]
+
+    used = used_keys(ui, dict_files)
+    d = dict_keys(ui, dict_files)
+    zh, en = d.get("zh", {}), d.get("en", {})
 
     for k, where in sorted(used.items()):
         if k.startswith(DYNAMIC_PREFIXES):
@@ -134,7 +169,16 @@ def main() -> int:
 
     dynamic_ok = {k for k in list(zh) + list(en) if k.startswith(DYNAMIC_PREFIXES)}
     unused = (set(zh) | set(en)) - set(used) - dynamic_ok
-    for k in sorted(unused):
+    # ZH: 🔴 共用的 i18n.js 在管理端**一定會有一堆沒人用的 key**
+    #     （使用者端的文案），那不是錯誤。只把「這個目錄自己的字典檔」
+    #     定義的 key 拿來算多餘。
+    own = set()
+    for name in dict_files:
+        if name == "i18n.js" and dirname != "web-ui-v2":
+            continue        # 共用正本，歸使用者端管
+        own |= set(dict_keys(ui, [name]).get("zh", {}))
+        own |= set(dict_keys(ui, [name]).get("en", {}))
+    for k in sorted(unused & own):
         problems.append(f"字典有 `{k}` 但沒有人用（改文案時忘了刪？）")
 
     for k in sorted(set(zh) & set(en)):
@@ -145,7 +189,7 @@ def main() -> int:
 
     # ZH: HTML 的 fallback 文字 vs zh 字典。同一句兩份，只改一份是靜默的。
     #     執行時字典會蓋掉 HTML，所以「改了 HTML 沒改字典」＝改了等於沒改。
-    for fname, key, text in html_fallbacks():
+    for fname, key, text in html_fallbacks(ui):
         want = zh.get(key)
         if want is None:
             continue
@@ -160,8 +204,18 @@ def main() -> int:
                 f"—— 執行時字典會蓋掉 HTML，只改 HTML 等於沒改"
             )
 
-    print("翻譯完整性檢查（web-ui-v2）")
-    print(f"  程式碼用到 {len(used)} 個 key　字典 zh {len(zh)} / en {len(en)}")
+    print(f"  {dirname}：程式碼用到 {len(used)} 個 key　字典 zh {len(zh)} / en {len(en)}")
+    return [f"{dirname}: {x}" for x in problems]
+
+
+def main() -> int:
+    print("翻譯完整性檢查")
+    problems = []
+    for dirname, dict_files in TARGETS:
+        if not (ROOT / dirname).is_dir():
+            continue          # ZH: 目錄還沒建 → 不是錯誤（例如尚未開始的版本）
+        problems += check_one(dirname, dict_files)
+
     if problems:
         for p in problems:
             print(f"  [FAIL] {p}")

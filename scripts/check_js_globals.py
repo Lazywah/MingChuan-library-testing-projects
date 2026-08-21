@@ -61,9 +61,15 @@ def main() -> int:
     problems = []
     checked = 0
 
-    for ui_dir in sorted(ROOT.glob("web-ui*")):
-        if not ui_dir.is_dir():
-            continue
+    # ZH: 🔴 要涵蓋 **admin-ui\* 也要**。第一版只寫了 `web-ui*`，
+    #     那正是 check_timezone.py 註解裡警告過的坑：
+    #     「寫死的話新增的 UI 目錄自動免疫」——而它免疫時是**安靜的**，
+    #     檢查照樣印 [OK]，只是它根本沒去看那個目錄。
+    ui_dirs = sorted(
+        d for d in ROOT.iterdir()
+        if d.is_dir() and (d.name.startswith("web-ui") or d.name.startswith("admin-ui"))
+    )
+    for ui_dir in ui_dirs:
         for html_path in sorted(ui_dir.glob("*.html")):
             html = html_path.read_text(encoding="utf-8", errors="replace")
             loaded = set(_scripts(html))

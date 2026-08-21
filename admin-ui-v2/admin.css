@@ -1,0 +1,151 @@
+/* ==============================================================================
+   admin.css — 管理端**專屬**樣式
+   ==============================================================================
+   ZH: 基礎樣式在共用的 `styles.css`（正本在 web-ui-v2，
+       `scripts/check_shared_ui_files.py` 守著逐位元組相同）。
+       這個檔案只放使用者端沒有的東西：管理端導覽、常駐的顯示設定、
+       以及之後幾個階段要用的密集表格。
+
+   ⚠ **不准出現色碼。** 只准用 tokens.css 第 2 層的語意 token。
+     理由見 tokens.css 檔頭——色碼散落各處時「改了沒效果」極難查。
+   ============================================================================== */
+
+/* ── 導覽 ──────────────────────────────────────────────────────────────────
+   ZH: 放在頂部列而不是側邊欄。舊版是**右側**側邊欄，那個位置很少見
+       （Jakob's Law：使用者的習慣來自其他網站，不是來自我們）。
+       改成頂部之後與使用者端 v2 一致，兩邊切換不需要重新找。 */
+.adm-nav {
+    display: flex;
+    gap: var(--space-1);
+    flex-wrap: wrap;
+}
+
+.adm-nav__item {
+    display: inline-flex;
+    align-items: center;
+    min-height: var(--tap-min);
+    padding: 0 var(--space-3);
+    border-radius: var(--radius-sm);
+    color: var(--text);
+    text-decoration: none;
+    font-size: 0.9375rem;
+}
+
+.adm-nav__item:hover { background-color: var(--surface-2); }
+
+/* ZH: 只有「現在在哪一頁」給底色。全部都給底色等於全部都沒給。 */
+.adm-nav__item.is-current {
+    background-color: var(--accent-soft);
+    color: var(--text-strong);
+    font-weight: 600;
+}
+
+/* ── 常駐的顯示設定 ────────────────────────────────────────────────────────
+   ZH: 字級 / 語言 / 色系。舊版把這三個放在側邊欄常駐，
+       這裡保留那個習慣（使用者端則是收在帳號選單裡——那邊版面窄）。 */
+.adm-prefs {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+}
+
+.adm-font {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-1);
+}
+
+.adm-font > span {
+    min-width: 3.5em;                 /* ZH: 用 em 不用 px —— 字級放大時這格要跟著長，
+                                             釘 px 會在 150% 時把 "100%" 擠掉 */
+    text-align: center;
+    font-size: 0.8125rem;
+    color: var(--text-muted);
+    font-variant-numeric: tabular-nums;   /* ZH: 等寬數字，數值變動時不會左右跳動 */
+}
+
+.adm-font > button,
+.adm-lang {
+    min-height: var(--tap-min);
+    min-width: var(--tap-min);
+    padding: 0 var(--space-2);
+    border: 1px solid var(--hairline);
+    border-radius: var(--radius-sm);
+    background-color: var(--surface);
+    color: var(--text);
+    font: inherit;
+    font-size: 0.8125rem;
+    cursor: pointer;
+}
+
+.adm-font > button:hover:not(:disabled),
+.adm-lang:hover { background-color: var(--surface-2); }
+
+/* ZH: 到頂／到底就停用，而且**看得出來被停用了**。
+       沒有這個視覺差異的話，使用者會一直按而畫面毫無反應——那看起來像壞了。 */
+.adm-font > button:disabled {
+    opacity: 0.4;
+    cursor: default;
+}
+
+/* ── 帳號與登出 ───────────────────────────────────────────────────────────── */
+.adm-who {
+    font-size: 0.875rem;
+    color: var(--text-muted);
+    max-width: 12em;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.adm-logout {
+    min-height: var(--tap-min);
+    padding: 0 var(--space-3);
+    border: 1px solid var(--hairline);
+    border-radius: var(--radius-sm);
+    background-color: var(--surface);
+    color: var(--text);
+    font: inherit;
+    font-size: 0.875rem;
+    cursor: pointer;
+}
+
+.adm-logout:hover { background-color: var(--surface-2); }
+
+/* ── 焦點 ──────────────────────────────────────────────────────────────────
+   ZH: **這裡刻意什麼都不寫。** 共用的 styles.css 有一條全域
+       `:focus-visible { outline: none; box-shadow: 0 0 0 3px var(--focus-ring) }`，
+       所有可聚焦的元素都已經涵蓋。
+
+   ⚠ 我原本在每個元件上補了 `outline: var(--focus-ring)` —— 那是**死碼**：
+     `--focus-ring` 是顏色，而 `outline` 簡寫在 style 仍為初始值 `none` 時
+     不會畫出任何東西。看起來很負責，實際上一點作用也沒有。
+     （共用的 styles.css 裡也有三行同樣的寫法，但那是既有檔案，不在本次範圍。） */
+
+/* ── 尚未實作的頁 ──────────────────────────────────────────────────────────
+   ZH: 階段 1 只有骨架。**明講「還沒做」**而不是給一個空白畫面——
+       空白會讓人以為是壞了，然後去查一個不存在的問題。 */
+.adm-wip {
+    border: 1px dashed var(--hairline);
+    border-radius: var(--radius-sm);
+    padding: var(--space-6);
+    text-align: center;
+    color: var(--text-muted);
+    background-color: var(--surface-2);
+}
+
+.adm-wip h2 {
+    margin: 0 0 var(--space-2);
+    color: var(--text-strong);
+    font-size: 1.0625rem;
+}
+
+.adm-wip p { margin: 0; }
+
+/* ── 管理端的版面比使用者端寬 ──────────────────────────────────────────────
+   ZH: 使用者端 `--content-max` 是為了「一行字不要太長」而設的閱讀寬度。
+       管理端要放九欄的表格，那個寬度會逼出橫向捲軸。
+       ⚠ 只在管理端覆寫，不動共用的 token。 */
+.page--admin {
+    max-width: 1440px;
+}

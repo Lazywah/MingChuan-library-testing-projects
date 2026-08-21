@@ -14,6 +14,7 @@ ZH: 在 `docker compose up` 之前跑一次，把常見的無聲地雷一次檢�
     7. Python 模組層有沒有重複定義（呼叫 check_duplicate_defs.py）
     8. 回應的時間欄位有沒有明示時區（呼叫 check_naive_datetime.py）
     9. 每頁 HTML 有沒有載它的 JS 用到的共用檔（呼叫 check_js_globals.py）
+    9b. 各 v2 目錄的共用檔是否與正本一致（呼叫 check_shared_ui_files.py）
    10. 主機埠（80/8888/8002/3000/8787/11434）占用狀況
 
     退出碼：有 FAIL → 1（別部署）；只有 WARN 或全過 → 0。
@@ -285,6 +286,29 @@ def check_naive_datetime():
     return PASS, "回應的時間欄位都有明示時區（UTC）"
 
 
+def check_shared_ui_files():
+    """ZH: 各 v2 目錄的共用檔（tokens/styles/i18n/prefs）是否與正本逐位元組相同。
+
+    ZH: 為什麼列進部署前健檢：nginx 每個 UI 版本是各自的 alias 根目錄，跨不過去，
+        所以共用檔只能每個目錄各放一份。重複的檔案**沒有機械檢查就一定會漂開**——
+        症狀是「同一個功能在管理端好好的、在使用者端壞掉」，
+        而兩邊的程式碼看起來都對，因為沒有人會同時打開四個檔案比對。
+
+    @node scripts/deploy_check.py::check_shared_ui_files
+    """
+    script = SCRIPTS_DIR / "check_shared_ui_files.py"
+    if not script.exists():
+        return WARN, "找不到 check_shared_ui_files.py，略過共用檔一致性檢查"
+    r = subprocess.run([sys.executable, str(script)], capture_output=True,
+                       text=True, encoding="utf-8", errors="replace")
+    if r.returncode != 0:
+        first = next((l.strip() for l in (r.stdout or "").splitlines()
+                      if l.strip().startswith("-")), "")
+        return FAIL, ("共用檔已漂開 → python scripts/check_shared_ui_files.py --fix　"
+                      f"{first}")
+    return PASS, "各 v2 目錄的共用檔與正本一致"
+
+
 def check_js_globals():
     """ZH: 每頁 HTML 有沒有載它的 JS 會用到的共用檔（tz.js / i18n.js / prefs.js）。
 
@@ -364,6 +388,7 @@ def main():
         ("重複定義",       check_duplicate_defs()),
         ("時間帶時區",     check_naive_datetime()),
         ("共用檔載入",     check_js_globals()),
+        ("共用檔一致",     check_shared_ui_files()),
         ("主機埠",         check_ports()),
     ]
 
