@@ -33,7 +33,15 @@
              完全不傳達資訊。橫條在任何筆數下都讀得出來，長度可以直接比。 -->
 
     <section class="adm-sec" aria-labelledby="h-myai">
-        <div class="adm-sec__head"><h2 id="h-myai" data-i18n="an_myai">MYAI 點數消耗</h2></div>
+        <div class="adm-sec__head">
+            <h2 id="h-myai" data-i18n="an_myai">MYAI 點數消耗</h2>
+            <span class="topbar__spacer"></span>
+            <!-- ZH: 這一頁的數字全部來自廠商的交易日誌。日誌是定期同步來的，
+                     所以「資料看起來不對」十次有九次是還沒同步 ——
+                     把重新同步放在這裡，就不必為了這件事跑去別的頁面。 -->
+            <button class="btn btn--minor" type="button" id="sync" data-i18n="an_sync">向廠商重新同步</button>
+        </div>
+        <div class="inline-error" id="sync-msg" hidden></div>
         <div id="myai" aria-live="polite"><span class="skeleton skeleton--line"></span></div>
     </section>
 
@@ -52,9 +60,9 @@
 <script src="tz.js?v=3608fea5"></script>
 <!-- ⚠ ZH: 順序不能動 —— i18n-admin 在 i18n 之後、prefs 之前。 -->
 <script src="i18n.js?v=adcdce5a"></script>
-<script src="i18n-admin.js?v=57977653"></script>
+<script src="i18n-admin.js?v=09cded16"></script>
 <script src="prefs.js?v=8b7b4277"></script>
 <script src="admin-chrome.js?v=3c57b044"></script>
-<script src="analytics.js?v=87aa6fc9"></script>
+<script src="analytics.js?v=379b139f"></script>
 </body>
 </html>

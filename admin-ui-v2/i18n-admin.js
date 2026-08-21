@@ -339,6 +339,10 @@
         an_all: '全部',
 
         an_myai: 'MYAI 點數消耗',
+        an_sync: '向廠商重新同步',
+        an_syncing: '同步中…',
+        an_synced: '抓到 {f} 筆，新增 {c} 筆，重新分類 {r} 筆。',
+        an_sync_fail: '同步失敗（{w}）',
         an_myai_src: '資料來自廠商的交易日誌（逐筆、含模型）。點數是廠商計費的單位，不是平台自己的 Token。',
         an_consumed: '期間總消耗',
         an_tx: '交易筆數',
@@ -693,6 +697,10 @@
         an_all: 'All',
 
         an_myai: 'MYAI credit usage',
+        an_sync: 'Re-sync from vendor',
+        an_syncing: 'Syncing…',
+        an_synced: 'Fetched {f}, added {c}, reclassified {r}.',
+        an_sync_fail: 'Sync failed ({w})',
         an_myai_src: 'From the vendor transaction log (per transaction, with model). Credits are the vendor’s billing unit, not the platform’s own tokens.',
         an_consumed: 'Credits used',
         an_tx: 'Transactions',

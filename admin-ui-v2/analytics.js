@@ -3,6 +3,7 @@
  *
  * ZH: 兩個來源：
  *       GET /external-ai/admin/consumption   MYAI 點數（**目前唯一有量的資料**）
+ *       POST /external-ai/admin/sync-transactions  向廠商重新抓交易日誌
  *       GET /admin/analytics                 平台自己的學系／工具用量
  *       GET /admin/jobs                      訓練任務
  *
@@ -59,6 +60,31 @@
         if (r.status === 401) { location.replace('login.html'); throw new Error('401'); }
         if (!r.ok) throw new Error('HTTP ' + r.status);
         return r.json();
+    }
+
+    // ZH: 這個檔案原本只讀不寫，所以只有 get()。
+    async function post(path) {
+        var r = await fetch(API + path, {
+            method: 'POST',
+            headers: { Authorization: 'Bearer ' + token() },
+        });
+        if (r.status === 401) { location.replace('login.html'); throw new Error('401'); }
+        var body = await r.json().catch(function () { return {}; });
+        if (!r.ok) throw new Error(detailText(body) || ('HTTP ' + r.status));
+        return body;
+    }
+
+    // ZH: 後端的錯誤訊息是「ZH: … | EN: …」的雙語格式，只挑當前語言那半。
+    function detailText(body) {
+        var d = body && body.detail;
+        if (!d) return '';
+        if (typeof d !== 'string') return String(d);
+        var parts = d.split(' | ');
+        var lang = (window.Prefs && Prefs.get().ui_lang) || 'zh';
+        var want = parts.filter(function (p) {
+            return p.indexOf(lang === 'en' ? 'EN:' : 'ZH:') === 0;
+        })[0];
+        return (want || parts[0] || '').replace(/^(ZH|EN):\s*/, '');
     }
 
     function safe(p) {
@@ -415,6 +441,59 @@
         });
     }
 
+    // ── 向廠商重新同步 ────────────────────────────────────────────────────
+    //
+    // ZH: 🔴 這一步是**headless 登入廠商網站再匯出**，慢，而且慢得沒有徵兆。
+    //     所以按下去要立刻把按鈕停用並改字 —— 不然使用者會以為沒反應而一直按，
+    //     每按一次就多開一個 session。
+    //
+    // ZH: 成功用 flash（看完就沒用了），失敗用 say（留著讓人看清楚）。
+    var SYNCING = false;
+
+    async function syncNow() {
+        if (SYNCING) return;
+        SYNCING = true;
+        var btn = $('sync');
+        var was = btn.textContent;
+        btn.disabled = true;
+        btn.textContent = T('an_syncing', '同步中…');
+        say('sync-msg', '');
+        try {
+            var r = await post('/external-ai/admin/sync-transactions');
+            // ZH: 三個數字分開講：抓到幾筆、其中幾筆是新的、幾筆被重新分類。
+            //     只說「同步完成」的話，沒有人知道到底有沒有拿到東西。
+            flash('sync-msg', T('an_synced', '抓到 {f} 筆，新增 {c} 筆，重新分類 {r} 筆。')
+                .replace('{f}', num(r.fetched)).replace('{c}', num(r.created))
+                .replace('{r}', num(r.reclassified)));
+            await load();
+        } catch (e) {
+            say('sync-msg', T('an_sync_fail', '同步失敗（{w}）').replace('{w}', e.message));
+        } finally {
+            SYNCING = false;
+            btn.disabled = false;
+            btn.textContent = was;
+        }
+    }
+
+    function say(id, text) {
+        var el = $(id);
+        if (!el) return;
+        el.textContent = text;
+        el.hidden = !text;
+    }
+
+    // ZH: 只給成功訊息用的短暫提示。錯誤訊息不要用它 ——
+    //     還沒解決的事情需要留在畫面上。
+    var _t = null;
+    function flash(id, text) {
+        say(id, text);
+        clearTimeout(_t);
+        _t = setTimeout(function () {
+            var el = $(id);
+            if (el && el.textContent === text) say(id, '');
+        }, 6000);
+    }
+
     function stat(labelKey, zh, value) {
         return '<div class="adm-stat">'
             + '<div class="adm-stat__label">' + esc(T(labelKey, zh)) + '</div>'
@@ -663,6 +742,8 @@
         renderJobs(out[1]);
         renderPlatform(out[2]);
     }
+
+    $('sync').addEventListener('click', syncNow);
 
     load();
     document.addEventListener('prefs:langchanged', load);
