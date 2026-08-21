@@ -60,6 +60,33 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
 # ZH: 使用者 CRUD | EN: User CRUD
 # ==============================================================================
 
+def disable_expired_temp_accounts(db: Session) -> int:
+    """ZH: 把已到期的臨時帳號設成停用。回傳這次改了幾個。
+
+    ZH: 到期本身在**登入路徑**就已經擋住了（見 auth.is_expired），
+        這裡做的是另一件事：把 `is_active` 也設成 0，
+        好讓管理端的清單**看得出來**這個帳號已經不能用了。
+        少了這一步，畫面上它還是「啟用」，而實際上登不進來——
+        那種不一致會讓人以為是登入壞了。
+
+    ZH: 🔴 只改「還是啟用中」的那些。已經被手動停用的不要動，
+        否則每天都會重複寫一次、稽核紀錄被灌滿沒有意義的變更。
+
+    @node job-scheduler/app/crud.py::disable_expired_temp_accounts
+    """
+    now = datetime.now(timezone.utc)
+    rows = (db.query(models.User)
+            .filter(models.User.expires_at.isnot(None),
+                    models.User.expires_at <= now,
+                    models.User.is_active == 1)
+            .all())
+    for u in rows:
+        u.is_active = 0
+    if rows:
+        db.commit()
+    return len(rows)
+
+
 def get_user_by_username(db: Session, username: str) -> Optional[models.User]:
     """ZH: 依使用者名稱查詢 | EN: Query user by username
 

@@ -259,6 +259,11 @@ def init_db():
             # --- v3.6 使用者自帶的訓練程式 ---
             try: conn.execute(text("ALTER TABLE training_jobs ADD COLUMN script_source TEXT"))
             except Exception: pass
+            # --- v3.7 臨時帳號：到期時間與用途 ---
+            try: conn.execute(text("ALTER TABLE users ADD COLUMN expires_at DATETIME"))
+            except Exception: pass
+            try: conn.execute(text("ALTER TABLE users ADD COLUMN temp_purpose VARCHAR"))
+            except Exception: pass
             # --- v3.6 實驗室多份存檔：使用者取的名字 ---
             try: conn.execute(text("ALTER TABLE lab_sessions ADD COLUMN display_name VARCHAR"))
             except Exception: pass

@@ -24,6 +24,7 @@ EN: v2.0 uses Protocol abstraction; v2.1 can add KernelLifecycle without
 
 from __future__ import annotations
 
+import json
 import logging
 import os
 import secrets as _stdlib_secrets
@@ -864,6 +865,11 @@ def list_all_sessions(db: Session) -> list[dict]:
         out.append({
             "user_id": s.user_id,
             "username": user.username if user else s.user_id,
+            # ZH: 🔴 v3.6 —— 多份存檔之後，管理端必須看得出「是哪一份」。
+            #     這個函式寫在多份存檔之前，原本只回 user_id，
+            #     於是管理端把每一份都顯示成 default（看起來很正常的錯誤答案）。
+            "session_name": s.session_name,
+            "display_name": s.display_name or s.session_name,
             "status": s.status,
             "container_name": s.container_name,
             "base_image": s.base_image,
@@ -879,6 +885,42 @@ def list_all_sessions(db: Session) -> list[dict]:
 # ZH: v3.3 Lab 資料封存 / 還原 / 逾期銷毀（刪除使用者時不直接毀掉學生檔案）
 # EN: v3.3 archive / restore / purge of per-user Lab volumes on account deletion
 # ==============================================================================
+def force_stop(db: Session, user_id: str, admin_id: str,
+               session: Optional[str] = None) -> bool:
+    """ZH: 管理員強制關閉某人的實驗室。回傳有沒有真的關掉。
+
+    ZH: 🔴 這支函式**原本不存在**，而 `/admin/lab/sessions/{id}/force-stop`
+        一直在呼叫它 —— 那個端點從上線到 2026-08-21 為止**每次都是 500**。
+        沒有任何測試涵蓋它，所以測試一直是綠的；也沒有人回報，
+        因為要真的有人去按那顆按鈕才會發現。
+        （「呼叫端打錯名字」在這個 repo 的第八次。）
+
+    ZH: `session` 留空 = 關掉**他目前正在跑的那一份**。
+        一次只開一份是既有的約束，所以「正在跑的那一份」是明確的；
+        但**不要預設成 `default`** —— 他跑的可能是別份，
+        那樣會回 404（找不到執行中的 default），看起來像「沒有實驗室在跑」。
+
+    ZH: 寫進 admin_actions —— 這是會影響到別人工作的動作，要留下是誰做的。
+
+    @node job-scheduler/app/services/lab_manager.py::force_stop
+    """
+    target = session or current_session_name(db, user_id)
+    ok = stop_session(db, user_id, reason="admin_forced", session=target)
+    if not ok:
+        return False
+
+    db.add(models.AdminAction(
+        admin_id=admin_id,
+        target_user=user_id,
+        action="force_stop_lab",
+        payload=json.dumps({"session": target}, ensure_ascii=False),
+        timestamp=datetime.now(timezone.utc),
+    ))
+    db.commit()
+    logger.info("Admin %s force-stopped lab %s/%s", admin_id[:8], user_id[:8], target)
+    return True
+
+
 def _volume_size(vol_name: str) -> Optional[int]:
     """ZH: 由 docker df 取 volume 大小（取不到回 None，不阻斷流程）
 

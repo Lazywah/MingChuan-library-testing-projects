@@ -451,3 +451,86 @@ def test_status_without_a_workspace_falls_back_to_default(client, db, user_heade
     """ZH: 陰性對照 —— 都沒在跑時仍是 default（升級前的所有人結果不變）。"""
     body = client.get("/api/v1/lab/status", headers=user_headers).json()
     assert body["session_name"] == lm.DEFAULT_SESSION, body
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# ZH: 六、管理端 —— 強制關閉與「是哪一份」
+#
+# ZH: 🔴 這一節存在的理由：`/admin/lab/sessions/{id}/force-stop` 呼叫
+#     `lab_manager.force_stop(...)`，而**那個函式從來不存在** ——
+#     這個端點從上線到 2026-08-21 為止每次都是 500。
+#     沒有任何測試涵蓋它，所以整份測試一直是綠的；
+#     也沒有人回報，因為要真的有人去按那顆按鈕才會發現。
+# ──────────────────────────────────────────────────────────────────────────
+
+def test_admin_force_stop_endpoint_does_not_500(client, db, fake_lc):
+    """ZH: 🔴 最基本的一條：這個端點**不可以是 500**。
+
+    ZH: 缺陷版會在 `lab_manager.force_stop` 上拋 AttributeError → 500。
+        先釘住「不是 500」，再談它做得對不對。
+    """
+    from app import models
+    make_user(db, username="alice", email="a@example.com")
+    make_user(db, username="root", email="root@example.com", role="admin")
+    uid = db.query(models.User).filter_by(username="alice").first().id
+    lm.start_session(db, uid)
+
+    r = client.post(f"/api/v1/admin/lab/sessions/{uid}/force-stop",
+                    headers=auth_headers(client, "root"))
+    assert r.status_code != 500, r.text
+    assert r.status_code == 200, r.text
+
+
+def test_force_stop_targets_the_running_workspace_not_default(client, db, fake_lc):
+    """ZH: 🔴 沒指定存檔時要關**正在跑的那一份**，不是死板的 default。
+
+    ZH: 預設成 default 的話，使用者跑的是「畢業專題」時會回 404
+        （找不到執行中的 default）—— 畫面上看起來像「他沒有實驗室在跑」，
+        而他明明開著。
+    """
+    from app import models
+    make_user(db, username="alice", email="a@example.com")
+    make_user(db, username="root", email="root@example.com", role="admin")
+    uid = db.query(models.User).filter_by(username="alice").first().id
+    lm.start_session(db, uid, session="ws2")          # ← 跑的是 ws2，不是 default
+
+    r = client.post(f"/api/v1/admin/lab/sessions/{uid}/force-stop",
+                    headers=auth_headers(client, "root"))
+    assert r.status_code == 200, r.text
+
+    row = db.query(models.LabSession).filter_by(user_id=uid, session_name="ws2").first()
+    assert row.status == "stopped", row.status
+
+
+def test_force_stop_is_audited(client, db, fake_lc):
+    """ZH: 這是會影響到別人工作的動作 —— 要留下是誰做的。"""
+    from app import models
+    make_user(db, username="alice", email="a@example.com")
+    make_user(db, username="root", email="root@example.com", role="admin")
+    uid = db.query(models.User).filter_by(username="alice").first().id
+    lm.start_session(db, uid)
+
+    client.post(f"/api/v1/admin/lab/sessions/{uid}/force-stop",
+                headers=auth_headers(client, "root"))
+
+    act = (db.query(models.AdminAction)
+           .filter_by(action="force_stop_lab", target_user=uid).first())
+    assert act is not None, "沒有寫進 admin_actions"
+
+
+def test_admin_session_list_says_which_workspace(client, db, fake_lc):
+    """ZH: 🔴 管理端的清單要看得出**是哪一份存檔**。
+
+    ZH: `list_all_sessions` 寫在多份存檔之前，原本不回 `session_name`，
+        於是管理端把每一份都顯示成 `default` ——
+        那是一個看起來完全正常的**錯誤答案**，比空白危險。
+    """
+    from app import models
+    make_user(db, username="alice", email="a@example.com")
+    uid = db.query(models.User).filter_by(username="alice").first().id
+    lm.start_session(db, uid, session="ws2")
+
+    rows = lm.list_all_sessions(db)
+    mine = [r for r in rows if r["user_id"] == uid]
+    assert mine, rows
+    assert mine[0]["session_name"] == "ws2", mine[0]

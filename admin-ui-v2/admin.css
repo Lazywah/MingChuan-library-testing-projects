@@ -321,3 +321,53 @@
 .adm-pill--out_of_window,
 .adm-pill--out_of_window_draining,
 .adm-pill--pending { background-color: var(--warn-soft); color: var(--warn); }
+
+/* ==============================================================================
+   人（階段 3）
+   ============================================================================== */
+
+/* ZH: 可點的列要**看起來可點**，而且鍵盤也要能選。
+       整列可點卻只有滑鼠能用，等於把鍵盤使用者擋在外面。 */
+.adm-table tr.is-clickable { cursor: pointer; }
+.adm-table tr.is-picked { background-color: var(--accent-soft); }
+.adm-table tr.is-picked td { color: var(--text-strong); }
+
+/* ZH: 三欄自動排 —— 視窗窄就自己疊起來，不必寫斷點。 */
+.adm-cols {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: var(--space-4);
+    align-items: start;
+}
+
+/* ZH: 危險操作用**左側粗邊**標示，不整塊染紅 ——
+       整塊紅色會讓人不敢看，但這一區平常就是要看的（停用/啟用都在這）。 */
+.adm-card--danger {
+    border-left: 4px solid var(--error);
+    margin-top: var(--space-4);
+}
+
+/* ZH: 一行放得下的輸入組（加額度那排）。窄視窗時自己換行。 */
+.adm-inline {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-2);
+    margin-top: var(--space-3);
+}
+
+.adm-inline > input { flex: 1 1 8em; min-width: 0; }
+
+.adm-pill--ok { background-color: var(--accent-soft); color: var(--text-strong); }
+
+/* ── 臨時帳號 ─────────────────────────────────────────────────────────────
+   ZH: 用左側粗邊標示「這是例外用途」，但不整塊染色 ——
+       建立臨時帳號本身是正常操作，不是危險操作。 */
+.adm-card--temp {
+    border-left: 4px solid var(--accent);
+}
+
+/* ZH: 清單裡的臨時標示。**到期與未到期要分得出來** ——
+       都用同一個顏色的話，「還有效」與「已經失效」看起來一樣，
+       那個標示就等於沒有。 */
+.adm-pill--temp    { background-color: var(--accent-soft); color: var(--text-strong); }
+.adm-pill--expired { background-color: var(--error-soft);  color: var(--error); }

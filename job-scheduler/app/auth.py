@@ -80,7 +80,30 @@ def authenticate_user(db: Session, username: str, password: str):
         return None
     if not user.is_active:
         return None
+    # ZH: 臨時帳號到期 —— 與停用給**同一個結果**（登不進來），
+    #     但理由不同，所以分開判斷；日後要改成不同訊息時才有地方改。
+    if is_expired(user):
+        return None
     return user
+
+
+def is_expired(user) -> bool:
+    """ZH: 臨時帳號是否已經過期。
+
+    ZH: 🔴 到期**不能只靠每日排程**。排程一天跑一次，中間最多有一整天的空窗——
+        「到期日是昨天」的帳號今天照樣登得進來。所以登入與每次帶 token 的請求
+        都要即時判斷。排程的角色是把 is_active 也設成 0，讓管理端看得出來。
+
+    ZH: 沒有 expires_at = 永久帳號，不受影響。
+
+    @node job-scheduler/app/auth.py::is_expired
+    """
+    exp = getattr(user, "expires_at", None)
+    if exp is None:
+        return False
+    if exp.tzinfo is None:
+        exp = exp.replace(tzinfo=timezone.utc)
+    return datetime.now(timezone.utc) >= exp
 
 
 def create_access_token(data: dict, expires_delta: timedelta = None) -> str:
@@ -141,6 +164,13 @@ async def get_current_user(
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="ZH: 帳號已停用 | EN: Account is disabled"
+        )
+    # ZH: 🔴 已經發出去的 token 也要擋。只在登入時檢查的話，
+    #     到期前登入的人可以繼續用到 token 自己過期為止（預設 120 分鐘）。
+    if is_expired(user):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="ZH: 臨時帳號已到期 | EN: Temporary account has expired"
         )
 
     # v2.1 在線狀態修正：每次 API 呼叫節流更新 last_activity（避免每 request 都寫 DB）

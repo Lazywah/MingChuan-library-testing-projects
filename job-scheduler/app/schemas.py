@@ -108,6 +108,48 @@ class AdminUserUpdate(BaseModel):
     department: Optional[str] = None                 # ZH: 學系資訊 | EN: Department
 
 
+class AdminTempUserCreate(BaseModel):
+    """ZH: 建立臨時帳號（校外人士、長官視察、例外用途）。
+
+    ZH: 為什麼不沿用 `AdminProvisionUser`：那條路**強制要 email 而且會寄信**，
+        而臨時帳號的典型對象沒有學校信箱。填一個假的進去會**真的寄出去然後退信**
+        （這個專案已經因為類似的事寄出過約 35 封必退信件）。
+
+    @node job-scheduler/app/schemas.py::AdminTempUserCreate
+    """
+    username: str
+    purpose: str                                     # ZH: 為什麼開這個帳號 —— **必填**
+    days: int = 1                                    # ZH: 幾天後到期
+    role: Optional[str] = "student"
+    department: Optional[str] = None
+    email: Optional[EmailStr] = None                 # ZH: 有就填，沒有就留空（不寄信）
+
+    @field_validator("purpose")
+    @classmethod
+    def purpose_required(cls, v: str) -> str:
+        """ZH: 空白字串不算填了。
+
+        ZH: 半年後在清單裡看到一個叫 guest3 的帳號，沒有用途就沒有人敢刪它，
+            於是它會一直留著——那正是臨時帳號最後變成永久帳號的方式。
+
+        @node job-scheduler/app/schemas.py::AdminTempUserCreate.purpose_required
+        """
+        if not (v or "").strip():
+            raise ValueError("ZH: 請說明這個臨時帳號的用途 | EN: Purpose is required")
+        return v.strip()
+
+    @field_validator("days")
+    @classmethod
+    def days_in_range(cls, v: int) -> int:
+        """ZH: 上限 90 天 —— 再長就不叫臨時了，該走正式開帳號的流程。
+
+        @node job-scheduler/app/schemas.py::AdminTempUserCreate.days_in_range
+        """
+        if not (1 <= v <= 90):
+            raise ValueError("ZH: 有效天數必須在 1–90 之間 | EN: days must be 1–90")
+        return v
+
+
 class AdminProvisionUser(BaseModel):
     """ZH: 管理員初始化帳號請求 | EN: Admin provision user request"""
     username: str                                    # ZH: 使用者名稱 | EN: Username
@@ -428,6 +470,12 @@ class AdminUserListItem(BaseModel):
     tokens_limit: int = 0
     # v2.1: 給 admin UI 的 3-tab 分頁 (local / sso_oidc / sso_mock) 用
     auth_source: str = "local"
+
+    # ZH: v3.7 臨時帳號 —— 管理端要看得出**這個帳號什麼時候會失效、為什麼存在**。
+    #     沒有這兩個欄位的話，臨時帳號在清單裡與一般帳號長得一模一樣，
+    #     那它就會被當成一般帳號留下來（臨時帳號變成永久帳號的標準路徑）。
+    expires_at: Optional[UtcDatetime] = None
+    temp_purpose: Optional[str] = None
 
 
 class AdminJobListItem(BaseModel):

@@ -75,6 +75,17 @@ class User(Base):
     last_activity = Column(DateTime, nullable=True, index=True)               # ZH: 最後活動時間 (v2.1 修正：取代 online_status) | EN: Last activity time (v2.1: supersedes online_status)
     online_status = Column(Integer, default=0)                                # ZH: 已 deprecated，admin 端動態計算 | EN: Deprecated, computed dynamically
     is_test_account = Column(Integer, default=0)                              # ZH: 測試帳號標記 (0:否, 1:是) | EN: Test account flag
+
+    # ZH: v3.7 臨時帳號（校外人士、長官視察、例外用途）
+    #
+    # ⚠ **不要用 is_test_account 做這件事**：帶那個旗標的帳號會在**每次服務重啟時
+    #   被刪掉**（見 main.py 的開機清理）。長官視察當天重啟一次，帳號就沒了。
+    #
+    # ZH: `expires_at` 到期後由每日排程把 is_active 設成 0（**不刪帳號**，
+    #   擁有者裁定）——留著才查得到「誰、什麼時候、為了什麼而開過帳號」。
+    #   登入路徑也會即時擋（不能只靠排程，那中間有最多一天的空窗）。
+    expires_at   = Column(DateTime, nullable=True, index=True)                # ZH: 臨時帳號的到期時間（None=永久）
+    temp_purpose = Column(String, nullable=True)                              # ZH: 為什麼開這個帳號（臨時帳號必填）
     tutorial_dismissed = Column(Integer, default=0)                           # ZH: 是否不再顯示教學 (0:否, 1:是) | EN: Tutorial dismissed (0:no, 1:yes)
     department = Column(String, nullable=True)                                # ZH: 學系資訊 | EN: Department
     # ZH: v3.5 介面偏好——**跟帳號走，不是跟裝置走**（擁有者裁定）：換一台機器登入設定要在。

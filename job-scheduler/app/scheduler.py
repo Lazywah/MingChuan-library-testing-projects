@@ -211,6 +211,15 @@ async def _storage_lifecycle_loop():
                     _ms.purge_expired_initial_passwords(db, days)
                 except Exception as e:  # noqa: BLE001
                     logger.error(f"ZH: MYAI 初始密碼清理錯誤: {e}")
+                # ZH: v3.7 到期的臨時帳號 → 標成停用（不刪，擁有者裁定）
+                #     ⚠ 這只是讓管理端**看得出來**；真正擋登入的是 auth.is_expired，
+                #       排程一天一次，中間有空窗，不能只靠這裡。
+                try:
+                    n = crud.disable_expired_temp_accounts(db)
+                    if n:
+                        logger.info(f"ZH: 已停用 {n} 個到期的臨時帳號")
+                except Exception as e:  # noqa: BLE001
+                    logger.error(f"ZH: 臨時帳號到期處理錯誤: {e}")
                 # ZH: v3.6 逾期的訓練產出（模型檔）
                 #     另有「每人最多 N 個」的硬上限在上傳時就套用；這裡收拾的是
                 #     不再使用的帳號留下的長尾。

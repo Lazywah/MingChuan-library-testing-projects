@@ -1,0 +1,597 @@
+/* ==========================================================================
+ * people.js — 人（處理某一個人）
+ *
+ * ZH: 這一頁的使用時機與總覽完全不同：總覽是「每天開機看一眼」，
+ *     這裡是「有人來求助才打開」。所以入口是**搜尋**，不是瀏覽 ——
+ *     你已經知道要找誰了。
+ *
+ * ZH: 一個人的所有東西集中在同一個地方：基本資料、額度、實驗室、危險操作。
+ *     舊版把這些散在「帳號管理」與「Lab 管理」兩個分頁，
+ *     處理一個人要跳來跳去、而且兩邊各自有一份搜尋。
+ *
+ * 🔴 使用者清單**沒有後端搜尋**（GET /admin/users 只有 skip/limit，上限 500）。
+ *    所以搜尋是前端做的，而這帶來一個陷阱：只抓第一頁的話，
+ *    **第 501 個人之後搜不到，而且畫面上不會有任何提示** ——
+ *    你會得到「查無此人」而不是「我只看了前 500 個」。
+ *    這裡改成**逐頁抓完**（抓到不足一頁為止），把那個天花板拿掉。
+ *
+ * ⚠ 破壞性操作（刪除帳號、凍結儲存）後端要求**再輸入一次管理員密碼**。
+ *   那是後端的設計，不是這裡加的；介面照做，不把密碼存在任何地方。
+ * ========================================================================== */
+(function () {
+    'use strict';
+
+    var API = '/api/v1';
+    var PAGE = 500;               // ZH: 後端 limit 的上限
+    var MAX_PAGES = 40;           // ZH: 20000 人的保險絲；真的到這個量就該做後端搜尋了
+
+    var ALL = [];                 // 全部使用者
+    var CURRENT = null;           // 目前選中的人
+
+    function $(id) { return document.getElementById(id); }
+
+    function token() {
+        return sessionStorage.getItem('ai_hud_token') || localStorage.getItem('ai_hud_token');
+    }
+
+    function esc(s) {
+        return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+            return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+        });
+    }
+
+    async function api(path, opts) {
+        var o = opts || {};
+        o.headers = Object.assign({ Authorization: 'Bearer ' + token() }, o.headers || {});
+        var r = await fetch(API + path, o);
+        if (r.status === 401) { location.replace('login.html'); throw new Error('401'); }
+        if (!r.ok) {
+            var body = await r.json().catch(function () { return {}; });
+            throw new Error(detailText(body) || ('HTTP ' + r.status));
+        }
+        return r.status === 204 ? null : r.json();
+    }
+
+    // ZH: FastAPI 的 422 `detail` 是**陣列**，直接塞進畫面會變成 [object Object]。
+    //     （使用者端踩過同一個坑。）
+    function detailText(body) {
+        var d = body && body.detail;
+        if (!d) return '';
+        if (typeof d === 'string') return zhOnly(d);
+        if (Array.isArray(d)) {
+            return d.map(function (x) {
+                // ZH: 422 的每一條訊息也要拆中英 —— 只在字串那條路徑拆的話，
+                //     欄位驗證的錯誤會把「ZH: … | EN: …」整句噴在畫面上。
+                //     pydantic 還會在前面加 "Value error, "，一併去掉。
+                return (x.loc ? x.loc[x.loc.length - 1] + '：' : '')
+                    + zhOnly(String(x.msg || '').replace(/^Value error,\s*/, ''));
+            }).join('；');
+        }
+        return String(d);
+    }
+
+    // ZH: 後端的訊息統一是「ZH: 中文 | EN: english」。畫面上只顯示目前語言那半。
+    function zhOnly(text) {
+        var parts = String(text).split(' | ');
+        var lang = (window.Prefs && Prefs.get().ui_lang) || 'zh';
+        var want = parts.filter(function (p) {
+            return p.indexOf(lang === 'en' ? 'EN:' : 'ZH:') === 0;
+        })[0];
+        return (want || parts[0] || '').replace(/^(ZH|EN):\s*/, '');
+    }
+
+    // ── 載入全部使用者 ────────────────────────────────────────────────────
+    async function loadAll() {
+        var out = [], skip = 0, pages = 0;
+        while (pages < MAX_PAGES) {
+            var batch = await api('/admin/users?skip=' + skip + '&limit=' + PAGE);
+            out = out.concat(batch);
+            pages += 1;
+            if (batch.length < PAGE) break;      // ZH: 不足一頁 = 已經是最後一頁
+            skip += PAGE;
+        }
+        if (pages >= MAX_PAGES) {
+            // ZH: 真的撞到保險絲時**要講出來**。默默截斷會讓搜尋結果看起來很正常，
+            //     只是少了人 —— 那正是這整段要防的事。
+            console.warn('使用者超過 ' + (MAX_PAGES * PAGE) + ' 人，清單已截斷');
+        }
+        return out;
+    }
+
+    // ── 列表 ──────────────────────────────────────────────────────────────
+    function matches(u, q) {
+        if (!q) return true;
+        return [u.username, u.email, u.department, u.id, u.role]
+            .some(function (v) { return v && String(v).toLowerCase().indexOf(q) >= 0; });
+    }
+
+
+    // ZH: 臨時帳號沒填 email 時，後端會合成一個 `.invalid` 的位址
+    //     （`users.email` 是 NOT NULL + UNIQUE，一定要填點什麼；
+    //       `.invalid` 是 RFC 2606 保留、永遠不會存在的網域）。
+    //     那是**實作細節，不該給人看** —— 秀出來的話管理者會以為那是對方的信箱，
+    //     然後試著寄信過去。
+    function shownEmail(u) {
+        var e = u.email || '';
+        if (!e || /@invalid$/i.test(e)) return T('pp_no_email', '—（無信箱）');
+        return e;
+    }
+
+    function renderList() {
+        var q = $('q').value.trim().toLowerCase();
+        var rows = ALL.filter(function (u) { return matches(u, q); });
+
+        $('count').textContent = q
+            ? T('pp_count_filtered', '{n} / {t} 人')
+                .replace('{n}', rows.length).replace('{t}', ALL.length)
+            : T('pp_count', '{n} 人').replace('{n}', ALL.length);
+
+        if (!rows.length) {
+            $('list').innerHTML = '<p class="footnote">' + esc(T('pp_none', '找不到符合的人。')) + '</p>';
+            return;
+        }
+
+        var head = [
+            ['pp_c_user', '帳號'], ['', 'Email'], ['pp_c_dept', '學系'],
+            ['pp_c_role', '角色'], ['pp_c_state', '狀態'], ['pp_c_source', '來源'],
+            ['pp_c_seen', '最後登入'],
+        ];
+
+        $('list').innerHTML =
+            '<div class="adm-tablewrap"><table class="adm-table"><thead><tr>'
+            + head.map(function (h) { return '<th>' + esc(T(h[0], h[1])) + '</th>'; }).join('')
+            + '</tr></thead><tbody>'
+            + rows.map(function (u) {
+                return '<tr class="is-clickable' + (CURRENT && CURRENT.id === u.id ? ' is-picked' : '')
+                    + '" data-id="' + esc(u.id) + '" tabindex="0">'
+                    + '<td>' + esc(u.username) + '</td>'
+                    + '<td>' + esc(shownEmail(u)) + '</td>'
+                    + '<td>' + esc(u.department || '—') + '</td>'
+                    + '<td>' + esc(T('role_' + u.role, u.role)) + '</td>'
+                    + '<td>' + stateCell(u) + '</td>'
+                    + '<td>' + esc(u.auth_source || '—') + '</td>'
+                    + '<td>' + esc(u.last_login_time ? TW.when(u.last_login_time) : '—') + '</td>'
+                    + '</tr>';
+            }).join('')
+            + '</tbody></table></div>';
+
+        $('list').querySelectorAll('tr[data-id]').forEach(function (tr) {
+            tr.addEventListener('click', function () { pick(tr.dataset.id); });
+            // ZH: 鍵盤也要能選 —— 整列可點卻只有滑鼠能用，等於把鍵盤使用者擋在外面。
+            tr.addEventListener('keydown', function (ev) {
+                if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); pick(tr.dataset.id); }
+            });
+        });
+    }
+
+
+    // ── 臨時帳號 ──────────────────────────────────────────────────────────
+    // ZH: 給校外人士、長官視察、例外用途。
+    //
+    // ZH: 🔴 密碼**只會出現這一次** —— 這種帳號通常沒有信箱可寄，
+    //     所以畫面必須把「現在就抄走」講得很明白。做不到這件事的話，
+    //     管理者會關掉視窗然後回來問「密碼在哪」，而答案是沒有了。
+    function openTempForm() {
+        var box = $('temp-box');
+        box.hidden = false;
+        box.innerHTML =
+            '<div class="adm-card__title">' + esc(T('tmp_title', '建立臨時帳號')) + '</div>'
+            + '<p class="footnote">' + esc(T('tmp_why',
+                '給校外人士、長官視察或其他例外用途。到期會自動停用，帳號與紀錄都留著。')) + '</p>'
+            + field('t-user', T('tmp_user', '帳號名稱'), '')
+            + field('t-why', T('tmp_purpose', '用途（必填）'), '')
+            + '<p class="footnote">' + esc(T('tmp_purpose_hint',
+                '例如「教育部訪視 2026-09-03」。半年後看到一個沒有用途的帳號，沒有人敢刪它。')) + '</p>'
+            + field('t-days', T('tmp_days', '有效天數'), '1', 'number')
+            + '<p class="footnote">' + esc(T('tmp_days_hint', '1–90 天')) + '</p>'
+            + field('t-email', T('tmp_email', 'Email（可留空，平台不會寄信）'), '', 'email')
+            + '<div class="ds__actions">'
+            + '<button class="btn btn--primary" type="button" id="t-go">'
+            + esc(T('tmp_create', '建立')) + '</button>'
+            + '<button class="btn btn--minor" type="button" id="t-cancel">'
+            + esc(T('tmp_cancel', '取消')) + '</button>'
+            + '</div>'
+            + '<div class="inline-error" id="t-msg" hidden></div>';
+
+        $('t-cancel').addEventListener('click', function () { box.hidden = true; });
+        $('t-go').addEventListener('click', createTemp);
+        $('t-user').focus();
+    }
+
+    async function createTemp() {
+        var body = {
+            username: $('t-user').value.trim(),
+            purpose: $('t-why').value.trim(),
+            days: parseInt($('t-days').value, 10) || 1,
+        };
+        var em = $('t-email').value.trim();
+        if (em) body.email = em;
+
+        try {
+            var out = await api('/admin/users/temporary', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body),
+            });
+            showPassword(out);
+            ALL = await loadAll();          // ZH: 讓新帳號立刻出現在清單裡
+            renderList();
+        } catch (e) {
+            say('t-msg', T('tmp_fail', '建立失敗（{w}）').replace('{w}', e.message));
+        }
+    }
+
+    function showPassword(out) {
+        var box = $('temp-box');
+        box.innerHTML =
+            '<div class="adm-card__title">' + esc(T('tmp_done', '帳號建好了')) + '</div>'
+            // ZH: 警告放在密碼**上面** —— 放下面的話，人已經在複製了才讀到。
+            + '<div class="adm-alert adm-alert--error"><span>'
+            + esc(T('tmp_pw_once',
+                '🔴 這組密碼只會顯示這一次。現在就抄下來交給對方 —— 關掉之後就看不到了。'))
+            + '</span></div>'
+            + '<div class="kv"><span class="kv__k">' + esc(T('pp_c_user', '帳號')) + '</span>'
+            + '<span class="kv__v mono">' + esc(out.username) + '</span></div>'
+            + '<div class="kv"><span class="kv__k">' + esc(T('tmp_pw', '密碼')) + '</span>'
+            + '<span class="kv__v mono" id="t-pw">' + esc(out.password) + '</span></div>'
+            + '<div class="kv"><span class="kv__k">' + esc(T('tmp_expires', '到期')) + '</span>'
+            + '<span class="kv__v">' + esc(TW.dateTime(out.expires_at)) + '</span></div>'
+            + '<div class="ds__actions">'
+            + '<button class="btn btn--primary" type="button" id="t-copy">'
+            + esc(T('tmp_copy', '複製帳號與密碼')) + '</button>'
+            + '<button class="btn btn--minor" type="button" id="t-close">'
+            + esc(T('tmp_close', '知道了')) + '</button>'
+            + '</div>'
+            + '<div class="inline-error" id="t-msg" hidden></div>';
+
+        $('t-copy').addEventListener('click', async function () {
+            var text = out.username + ' / ' + out.password;
+            try {
+                await navigator.clipboard.writeText(text);
+                say('t-msg', T('tmp_copied', '已複製'));
+            } catch (e) {
+                // ZH: 剪貼簿被擋時**不要只說失敗** —— 幫他選起來，他自己按 Ctrl+C。
+                //     （使用者端也是這樣處理的。）
+                var r = document.createRange();
+                r.selectNodeContents($('t-pw'));
+                window.getSelection().removeAllRanges();
+                window.getSelection().addRange(r);
+                say('t-msg', T('copy_manual',
+                    '這個瀏覽器不允許自動複製。已經幫你選起來了，按 Ctrl+C 複製。'));
+            }
+        });
+        $('t-close').addEventListener('click', function () { box.hidden = true; });
+    }
+
+
+    // ZH: 臨時帳號在清單裡要**一眼看得出來**，而且看得到什麼時候失效。
+    //     沒有這個標示的話，它與一般帳號長得一模一樣，
+    //     於是就會被當成一般帳號留下來 —— 那是臨時帳號變成永久帳號的標準路徑。
+    function stateCell(u) {
+        var gone = u.expires_at && Date.parse(u.expires_at) <= Date.now();
+
+        // ZH: 🔴 到期**蓋過**啟用，不要兩個一起顯示。
+        //     每日掃描是凌晨 03:00 才把 is_active 設成 0，所以中間有一段時間
+        //     資料上它還是「啟用」而人其實已經登不進來（登入路徑即時擋）。
+        //     那段時間同時秀「啟用 · 已到期」是自相矛盾的；
+        //     這一格要回答的是「他現在能不能用」，答案是不能。
+        if (gone) {
+            return '<span class="adm-pill adm-pill--expired" title="'
+                + esc(u.temp_purpose || '') + '">'
+                + esc(T('tmp_expired', '已到期')) + '</span>';
+        }
+
+        var out = '<span class="adm-pill adm-pill--' + (u.is_active ? 'ok' : 'disabled') + '">'
+            + esc(u.is_active ? T('pp_active', '啟用') : T('pp_inactive', '已停用')) + '</span>';
+        if (!u.expires_at) return out;
+
+        // ZH: 還沒到期的臨時帳號 —— 標出**哪一天**失效，不是只標「臨時」。
+        //     只寫「臨時」的話你還是得點進去才知道剩幾天。
+        out += ' <span class="adm-pill adm-pill--temp" title="' + esc(u.temp_purpose || '') + '">'
+            + esc(T('tmp_until', '到期 {d}').replace('{d}', TW.date(u.expires_at)))
+            + '</span>';
+        return out;
+    }
+
+    // ── 一個人的全部 ──────────────────────────────────────────────────────
+    function pick(id) {
+        CURRENT = ALL.filter(function (u) { return u.id === id; })[0] || null;
+        renderList();
+        renderDetail();
+    }
+
+    function field(id, label, value, type) {
+        return '<label class="field">'
+            + '<span class="field__label" for="' + id + '">' + esc(label) + '</span>'
+            + '<input class="field__input" id="' + id + '" type="' + (type || 'text') + '"'
+            + ' value="' + esc(value == null ? '' : value) + '">'
+            + '</label>';
+    }
+
+    function renderDetail() {
+        var box = $('detail');
+        if (!CURRENT) {
+            box.innerHTML = '<p class="footnote">' + esc(T('pp_pick', '點一列看這個人的詳細資料。')) + '</p>';
+            return;
+        }
+        var u = CURRENT;
+        box.innerHTML =
+            '<div class="adm-sec__head"><h2>'
+            + esc(T('pp_detail', '{name} 的資料').replace('{name}', u.username)) + '</h2>'
+            + '<span class="footnote mono">' + esc(u.id) + '</span></div>'
+
+            + '<div class="adm-cols">'
+            // 基本資料
+            + '<section class="adm-card">'
+            + '<div class="adm-card__title">' + esc(T('pp_basic', '基本資料')) + '</div>'
+            + field('f-email', 'Email', u.email, 'email')
+            + field('f-dept', T('pp_c_dept', '學系'), u.department)
+            + '<label class="field"><span class="field__label" for="f-role">'
+            + esc(T('pp_c_role', '角色')) + '</span>'
+            + '<select class="field__input" id="f-role">'
+            + ['student', 'teacher', 'admin'].map(function (r) {
+                return '<option value="' + r + '"' + (u.role === r ? ' selected' : '') + '>'
+                    + esc(T('role_' + r, r)) + '</option>';
+            }).join('')
+            + '</select></label>'
+            + field('f-pw', T('pp_new_pw', '新密碼'), '', 'password')
+            + '<p class="footnote">' + esc(T('pp_pw_hint', '留空就不改密碼')) + '</p>'
+            + '<button class="btn btn--primary" type="button" id="save">'
+            + esc(T('pp_save', '儲存')) + '</button>'
+            + '<div class="inline-error" id="save-msg" hidden></div>'
+            + '</section>'
+
+            // 額度 / 實驗室（非同步填）
+            + '<section class="adm-card" id="quota-box">'
+            + '<div class="adm-card__title">' + esc(T('pp_quota', '磁碟配額')) + '</div>'
+            + '<span class="skeleton skeleton--line"></span></section>'
+
+            + '<section class="adm-card" id="lab-box">'
+            + '<div class="adm-card__title">' + esc(T('pp_lab', '程式實驗室')) + '</div>'
+            + '<span class="skeleton skeleton--line"></span></section>'
+            + '</div>'
+
+            // 危險操作
+            + '<section class="adm-card adm-card--danger">'
+            + '<div class="adm-card__title">' + esc(T('pp_danger', '需要再確認的操作')) + '</div>'
+            + '<p class="footnote">' + esc(T('pp_danger_why', '這幾項會影響使用者，所以要再輸入一次你的密碼。')) + '</p>'
+            + field('f-adminpw', T('pp_admin_pw', '你的管理員密碼'), '', 'password')
+            + '<div class="ds__actions">'
+            + '<button class="btn btn--minor" type="button" id="toggle-active">'
+            + esc(u.is_active ? T('pp_disable', '停用帳號') : T('pp_enable', '啟用帳號')) + '</button>'
+            + '<button class="btn btn--minor" type="button" id="del">'
+            + esc(T('pp_delete', '刪除帳號')) + '</button>'
+            + '</div>'
+            + '<div class="inline-error" id="danger-msg" hidden></div>'
+            + '</section>';
+
+        wireDetail(u);
+        loadQuota(u);
+        loadLab(u);
+    }
+
+    function say(id, text) {
+        var el = $(id);
+        el.textContent = text;
+        el.hidden = !text;
+    }
+
+    function wireDetail(u) {
+        $('save').addEventListener('click', async function () {
+            var patch = {
+                email: $('f-email').value.trim() || null,
+                department: $('f-dept').value.trim() || null,
+                role: $('f-role').value,
+            };
+            // ZH: 密碼留空 = 不改。送空字串會**把密碼設成空的**。
+            var pw = $('f-pw').value;
+            if (pw) patch.password = pw;
+
+            try {
+                await api('/admin/users/' + encodeURIComponent(u.id), {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(patch),
+                });
+                Object.assign(u, { email: patch.email, department: patch.department, role: patch.role });
+                $('f-pw').value = '';
+                say('save-msg', T('pp_saved', '已儲存'));
+                renderList();
+            } catch (e) {
+                say('save-msg', T('pp_save_fail', '存不起來（{w}）').replace('{w}', e.message));
+            }
+        });
+
+        $('toggle-active').addEventListener('click', async function () {
+            try {
+                await api('/admin/users/' + encodeURIComponent(u.id), {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ is_active: u.is_active ? 0 : 1 }),
+                });
+                u.is_active = u.is_active ? 0 : 1;
+                renderList();
+                renderDetail();
+            } catch (e) {
+                say('danger-msg', e.message);
+            }
+        });
+
+        $('del').addEventListener('click', async function () {
+            var pw = $('f-adminpw').value;
+            if (!pw) { say('danger-msg', T('pp_need_pw', '請先輸入你的管理員密碼。')); return; }
+            if (!confirm(T('pp_delete_confirm', '要刪除「{n}」嗎？').replace('{n}', u.username))) return;
+            try {
+                await api('/admin/users/' + encodeURIComponent(u.id) + '/delete', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ admin_password: pw }),
+                });
+                ALL = ALL.filter(function (x) { return x.id !== u.id; });
+                CURRENT = null;
+                renderList();
+                renderDetail();
+            } catch (e) {
+                say('danger-msg', e.message);
+            }
+        });
+    }
+
+    // ── 額度 ──────────────────────────────────────────────────────────────
+    async function loadQuota(u) {
+        var box = $('quota-box');
+        try {
+            var q = await api('/admin/quota/' + encodeURIComponent(u.id));
+            var live = (q.grants || []).filter(function (g) { return !g.revoked_at; });
+            box.innerHTML =
+                '<div class="adm-card__title">' + esc(T('pp_quota', '磁碟配額')) + '</div>'
+                + '<div class="kv"><span class="kv__k">' + esc(T('pp_q_base', '基本')) + '</span>'
+                + '<span class="kv__v">' + esc(q.base_quota_gb) + ' GB</span></div>'
+                + '<div class="kv"><span class="kv__k">' + esc(T('pp_q_effective', '實際可用')) + '</span>'
+                + '<span class="kv__v">' + esc(q.effective_quota_gb) + ' GB</span></div>'
+
+                + '<div class="adm-card__title" style="margin-top:1rem">'
+                + esc(T('pp_q_grants', '額外授與')) + '</div>'
+                + (live.length
+                    ? live.map(function (g) {
+                        return '<div class="adm-alert">'
+                            + '<span>+' + esc(g.extra_quota_gb) + ' GB　'
+                            + '<span class="footnote">' + esc(g.reason || '')
+                            + (g.expires_at ? '　→ ' + esc(TW.date(g.expires_at)) : '') + '</span></span>'
+                            + '<button class="btn btn--minor" type="button" data-revoke="' + esc(g.id) + '">'
+                            + esc(T('pp_q_revoke', '收回')) + '</button></div>';
+                    }).join('')
+                    : '<p class="footnote">' + esc(T('pp_q_none', '沒有額外授與。')) + '</p>')
+
+                + '<div class="adm-inline">'
+                + '<input class="field__input" id="g-gb" type="number" min="1" placeholder="GB">'
+                + '<input class="field__input" id="g-why" type="text" placeholder="'
+                + esc(T('pp_q_reason', '原因（必填）')) + '">'
+                // ZH: 日期欄位一定要有標示 —— 一個空的 date 框看不出是「到期日」
+                //     還是「起始日」，而填錯的後果是額度提早消失。
+                + '<input class="field__input" id="g-exp" type="date" title="'
+                + esc(T('pp_q_expires', '到期日（可留空）')) + '" aria-label="'
+                + esc(T('pp_q_expires', '到期日（可留空）')) + '">'
+                + '<button class="btn btn--minor" type="button" id="g-add">'
+                + esc(T('pp_q_add', '加額度')) + '</button>'
+                + '</div>'
+                + '<div class="inline-error" id="q-msg" hidden></div>';
+
+            box.querySelectorAll('[data-revoke]').forEach(function (b) {
+                b.addEventListener('click', async function () {
+                    try {
+                        await api('/admin/quota/grant/' + encodeURIComponent(b.dataset.revoke),
+                                  { method: 'DELETE' });
+                        loadQuota(u);
+                    } catch (e) { say('q-msg', e.message); }
+                });
+            });
+
+            $('g-add').addEventListener('click', async function () {
+                var gb = parseInt($('g-gb').value, 10);
+                var why = $('g-why').value.trim();
+                if (!gb || !why) {
+                    // ZH: 原因是必填 —— 半年後看到一筆沒有原因的加額，沒有人記得為什麼。
+                    say('q-msg', T('pp_q_reason', '原因（必填）'));
+                    return;
+                }
+                var body = { user_id: u.id, extra_quota_gb: gb, reason: why };
+                if ($('g-exp').value) body.expires_at = $('g-exp').value;
+                try {
+                    await api('/admin/quota/grant', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(body),
+                    });
+                    loadQuota(u);
+                } catch (e) { say('q-msg', e.message); }
+            });
+        } catch (e) {
+            box.innerHTML = '<div class="adm-card__title">' + esc(T('pp_quota', '磁碟配額')) + '</div>'
+                + '<p class="footnote">' + esc(T('ov_fail_part', '這一段暫時讀不到（{w}）')
+                    .replace('{w}', e.message)) + '</p>';
+        }
+    }
+
+    // ── 實驗室 ────────────────────────────────────────────────────────────
+    async function loadLab(u) {
+        var box = $('lab-box');
+        try {
+            var all = await api('/admin/lab/sessions');
+            var list = (all.sessions || all || []).filter(function (s) {
+                return s.user_id === u.id;
+            });
+            box.innerHTML = '<div class="adm-card__title">' + esc(T('pp_lab', '程式實驗室')) + '</div>'
+                + (list.length
+                    ? list.map(function (s) {
+                        // ZH: 顯示**使用者取的名字**，容器名放在後面當佐證。
+                        //     ⚠ 不要寫 `s.session_name || 'default'` —— 後端一度不回這個欄位，
+                        //     那樣會讓每一份都顯示「default」，是個看起來很正常的錯誤答案。
+                        //     現在後端會回了（force_stop 那次一起補的），但這個寫法的教訓留著。
+                        return '<div class="adm-alert"><span>'
+                            + esc(s.display_name || s.session_name || '—') + '　'
+                            + '<span class="footnote mono">' + esc(s.container_name || '') + '</span>　'
+                            + '<span class="adm-pill adm-pill--' + esc(s.status) + '">'
+                            + esc(s.status) + '</span>'
+                            + (s.started_at ? '　<span class="footnote">'
+                                + esc(TW.when(s.started_at)) + '</span>' : '')
+                            + '</span>'
+                            // ZH: 用 data 屬性而不是 id —— 同一個 id 出現多次是無效的 HTML，
+                            //     而且 `getElementById` 只拿得到第一顆：
+                            //     第二份存檔的按鈕會**看得到但按不動**。
+                            //     （目前一次只開一份，所以這是預防性的；但約束在別處，
+                            //       這裡不該建立在「那邊不會改」之上。）
+                            + '<button class="btn btn--minor" type="button" data-stop="'
+                            + esc(s.session_name || '') + '">'
+                            + esc(T('pp_lab_stop', '強制關閉')) + '</button></div>';
+                    }).join('')
+                    : '<p class="footnote">' + esc(T('pp_lab_none', '目前沒有執行中的實驗室。')) + '</p>')
+                + '<div class="inline-error" id="lab-msg" hidden></div>';
+
+            box.querySelectorAll('[data-stop]').forEach(function (btn) {
+                btn.addEventListener('click', async function () {
+                    if (!confirm(T('pp_lab_confirm', '要強制關閉「{n}」的實驗室嗎？')
+                        .replace('{n}', u.username))) return;
+                    try {
+                        // ZH: 明確指名要關哪一份。留空時後端會關「正在跑的那一份」，
+                        //     但既然畫面上就是按著某一列，指名比較不會有意外。
+                        var q = btn.dataset.stop ? '?session=' + encodeURIComponent(btn.dataset.stop) : '';
+                        await api('/admin/lab/sessions/' + encodeURIComponent(u.id) + '/force-stop' + q,
+                                  { method: 'POST' });
+                        loadLab(u);
+                    } catch (e) { say('lab-msg', e.message); }
+                });
+            });
+        } catch (e) {
+            box.innerHTML = '<div class="adm-card__title">' + esc(T('pp_lab', '程式實驗室')) + '</div>'
+                + '<p class="footnote">' + esc(T('ov_fail_part', '這一段暫時讀不到（{w}）')
+                    .replace('{w}', e.message)) + '</p>';
+        }
+    }
+
+    // ── 啟動 ──────────────────────────────────────────────────────────────
+    $('new-temp').addEventListener('click', openTempForm);
+
+    var typing = null;
+    $('q').addEventListener('input', function () {
+        // ZH: 節流 —— 幾千人的清單每敲一個字就重畫會頓。
+        clearTimeout(typing);
+        typing = setTimeout(renderList, 120);
+    });
+
+    (async function () {
+        try {
+            ALL = await loadAll();
+            renderList();
+            renderDetail();
+        } catch (e) {
+            $('list').innerHTML = '<p class="footnote">'
+                + esc(T('pp_fail', '讀不到使用者清單（{w}）。').replace('{w}', e.message)) + '</p>';
+        }
+    })();
+
+    document.addEventListener('prefs:langchanged', function () {
+        renderList();
+        renderDetail();
+    });
+})();

@@ -28,12 +28,12 @@ ZH: 端點清單：
 ==============================================================================
 """
 
-from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, Query, Body
+from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, Query, Body, Request
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
 import csv
 import io
@@ -326,6 +326,10 @@ def get_all_users(
                 tokens_used=t.tokens_used if t else 0,
                 tokens_limit=t.tokens_limit if t else 0,
                 auth_source=getattr(u, "auth_source", "local") or "local",  # v2.1: 3-tab 分頁
+                # ⚠ ZH: 這裡是**手工建構**的，光在 schema 加欄位沒有用 ——
+                #   會靜靜地永遠回 None。這個坑在 v3.6 踩過兩次（metrics、has_model）。
+                expires_at=u.expires_at,
+                temp_purpose=u.temp_purpose,
             )
         )
     return result
@@ -767,6 +771,96 @@ def admin_verify_action(
     if not crud.verify_password(payload.admin_password, current_user.hashed_password):
         raise HTTPException(status_code=403, detail="Invalid admin password")
     return {"message": "Verification successful"}
+
+
+@router.post("/users/temporary", summary="建立臨時帳號")
+def create_temp_user(
+    data: schemas.AdminTempUserCreate,
+    request: Request,
+    db: Session = Depends(get_db),
+    admin: models.User = Depends(require_admin),
+) -> Any:
+    """
+    ZH: 建立有到期日的臨時帳號（校外人士、長官視察、例外用途）。
+
+    ZH: 與 `/users/provision` 的三個差別，每一個都有理由：
+        1. **email 可以不填** —— 校外人士多半沒有學校信箱
+        2. **絕不寄信** —— 填假信箱會真的寄出去然後退信
+        3. **密碼直接回傳** —— 沒有信可寄，只能當面交給對方
+
+    ZH: 🔴 `users.email` 是 NOT NULL + UNIQUE，改成可空要重建整張表。
+        所以沒填 email 時合成一個 RFC 2606 保留網域的位址（`.invalid`）——
+        那個網域**永遠不可能存在**，而 `send_email` 早就有保留網域閘門擋著。
+        管理端看到 `.invalid` 會顯示成「無信箱」而不是把假位址秀出來。
+
+    ZH: **不用 is_test_account** —— 帶那個旗標的帳號每次服務重啟就被刪掉。
+
+    @node job-scheduler/app/routers/admin.py::create_temp_user
+    """
+    if crud.get_user_by_username(db, data.username):
+        raise HTTPException(status_code=400,
+                            detail="ZH: 這個帳號名稱已經有人用了 | EN: Username already exists")
+    if data.email and crud.get_user_by_email(db, data.email):
+        raise HTTPException(status_code=400,
+                            detail="ZH: 這個 Email 已經有人用了 | EN: Email already exists")
+
+    import secrets as _secrets
+    import uuid as _uuid
+    temp_password = _secrets.token_urlsafe(9)
+
+    # ZH: 見上面的說明 —— 合成位址只是為了滿足 NOT NULL + UNIQUE，
+    #     `.invalid` 是 RFC 2606 保留、永遠不會存在的網域。
+    email = data.email or f"temp-{_uuid.uuid4().hex[:12]}@invalid"
+
+    expires_at = datetime.now(timezone.utc) + timedelta(days=data.days)
+
+    user = models.User(
+        id=str(_uuid.uuid4()),
+        username=data.username,
+        email=email,
+        hashed_password=crud.get_password_hash(temp_password),
+        role=data.role or "student",
+        department=data.department,
+        is_active=1,
+        expires_at=expires_at,
+        temp_purpose=data.purpose,
+    )
+    db.add(user)
+    # ZH: 🔴 一定要先 flush。`admin_actions.target_user` 有指向 `users.id` 的外鍵，
+    #     而同一個交易裡 User 還沒寫出去 —— 直接 add 稽核列會 FOREIGN KEY constraint failed。
+    db.flush()
+
+    # ZH: 稽核 —— 「誰、什麼時候、為了什麼開了這個帳號」要留得住。
+    db.add(models.AdminAction(
+        admin_id=admin.id,
+        target_user=user.id,
+        action="create_temp_account",
+        payload=json.dumps({
+            "username": data.username,
+            "purpose": data.purpose,
+            "days": data.days,
+            "role": user.role,
+            "expires_at": expires_at.isoformat(),
+        }, ensure_ascii=False),
+        timestamp=datetime.now(timezone.utc),
+        ip_address=(request.client.host if request.client else None),
+    ))
+    db.commit()
+
+    logger.info("建立臨時帳號 %s（%d 天，用途：%s）by %s",
+                data.username, data.days, data.purpose, admin.username)
+
+    return {
+        "id": user.id,
+        "username": user.username,
+        # ZH: 只有這一次拿得到明文 —— 畫面要提醒管理者現在就抄走。
+        "password": temp_password,
+        "expires_at": expires_at.isoformat(),
+        "purpose": data.purpose,
+        "role": user.role,
+        # ZH: 讓前端知道要不要顯示信箱（合成的那個不該給人看）
+        "has_email": bool(data.email),
+    }
 
 
 @router.post("/users/provision")
@@ -1475,14 +1569,21 @@ def list_lab_sessions(
 @router.post("/lab/sessions/{user_id}/force-stop")
 def force_stop_session(
     user_id: str,
+    session: Optional[str] = Query(None, description="ZH: 要關哪一份存檔；留空=目前在跑的那一份"),
     db: Session = Depends(get_db),
     admin: models.User = Depends(require_admin),
 ) -> Any:
     """ZH: 強制停止特定使用者 lab session | EN: Force-stop a user's lab session
 
+    ZH: 🔴 `lab_manager.force_stop` **原本不存在**，這個端點從上線起每次都是 500。
+        沒有測試涵蓋，所以測試一直綠著。2026-08-21 補上（見該函式的註解）。
+
+    ZH: v3.6 —— `session` 留空代表「他目前正在跑的那一份」，不是 default。
+        一次只開一份，所以「正在跑的那一份」是明確的。
+
     @node job-scheduler/app/routers/admin.py::force_stop_session
     """
-    success = lab_manager.force_stop(db, user_id=user_id, admin_id=admin.id)
+    success = lab_manager.force_stop(db, user_id=user_id, admin_id=admin.id, session=session)
     if not success:
         raise HTTPException(404, "Session not found or already stopped")
     return {"status": "stopped", "user_id": user_id}
