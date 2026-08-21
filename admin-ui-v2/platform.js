@@ -145,14 +145,12 @@
             + '</select></td>';
     }
 
-    function cellCheck(f, on, o) {
-        o = o || {};
-        return '<td><input type="checkbox" data-f="' + esc(f) + '"'
-            + (on ? ' checked' : '') + (o.disabled ? ' disabled' : '') + '></td>';
-    }
-
     // ZH: 把畫面上的值收回物件。checkbox 要讀 checked 不是 value ——
     //     讀 value 的話永遠拿到字串 "on"，勾不勾都一樣。
+    //
+    // ZH: 這一頁**目前沒有任何 checkbox**（布林值都改成下拉了），所以那一支
+    //     現在走不到。留著是因為 readRow 是通用的：日後誰加一個 checkbox，
+    //     沒有這一行就會靜默讀成 "on"，而且不會有任何錯誤。
     function readRow(tr, target) {
         tr.querySelectorAll('[data-f]').forEach(function (el) {
             target[el.dataset.f] = (el.type === 'checkbox') ? el.checked : el.value;
@@ -341,6 +339,11 @@
     var MODELS_NEW = [];
     var MODELS_SEQ = 0;
 
+    // ZH: 🔴 「公開」在畫面上可能是 boolean（剛從後端讀回來）也可能是字串
+    //     （使用者剛在下拉裡選過）。**`!!'0'` 是 true**，所以不能直接用 !!
+    //     ——比對「有沒有改過」與組 payload 都要先經過這裡。
+    function isPub(v) { return v === true || v === 1 || v === '1'; }
+
     // ZH: 可編的欄位。`model_type` 不在裡面 —— 後端在建立時決定，
     //     改它等於換一種模型，不是編輯。
     var MODEL_FIELDS = ['name', 'api_provider', 'api_model_id', 'api_endpoint', 'description'];
@@ -389,7 +392,7 @@
             + '<td>' + esc(m.api_provider || '—') + '</td>'
             + '<td class="mono">' + esc(m.api_model_id || '—') + '</td>'
             + '<td class="mono">' + esc(m.api_endpoint || '—') + '</td>'
-            + '<td>' + esc(m.is_public ? T('pf_yes', '是') : T('pf_no', '否')) + '</td>'
+            + '<td>' + esc(isPub(m.is_public) ? T('pf_yes', '是') : T('pf_no', '否')) + '</td>'
             + '<td>' + esc(m.description || '—') + '</td>'
             + '</tr>';
     }
@@ -404,7 +407,14 @@
             + cellInput('api_provider', m.api_provider, o)
             + cellInput('api_model_id', m.api_model_id, o)
             + cellInput('api_endpoint', m.api_endpoint, o)
-            + cellCheck('is_public', m.is_public, o)
+            // ZH: 用下拉不用勾選框，跟 GPU 節點的「狀態」同一個理由：整排都是
+            //     輸入框時，一個小方塊看起來像漏做的；而且下拉會把兩個狀態
+            //     直接寫出來。選項用的字與唯讀那格**完全一樣**（是／否）——
+            //     不一樣的話，同一個值在看與改之間會長成兩種樣子。
+            + cellSelect('is_public', [{ value: '1', label: T('pf_yes', '是') },
+                                       { value: '0', label: T('pf_no', '否') }],
+                         isPub(m.is_public) ? '1' : '0',
+                         { blank: false, disabled: gone })
             + cellInput('description', m.description, o)
             + delCell(m.id, gone)
             + '</tr>';
@@ -463,8 +473,8 @@
             var was = base[m.id];
             if (was && MODEL_FIELDS.every(function (f) {
                     return (was[f] || '') === (m[f] || '');
-                }) && !!was.is_public === !!m.is_public) continue;   // 沒改就不送
-            var body = { name: name, is_public: !!m.is_public };
+                }) && isPub(was.is_public) === isPub(m.is_public)) continue;   // 沒改就不送
+            var body = { name: name, is_public: isPub(m.is_public) };
             MODEL_FIELDS.forEach(function (f) {
                 if (f !== 'name') body[f] = (m[f] || '').trim() || null;
             });
@@ -504,7 +514,7 @@
         // ZH: 留一份原樣，儲存時用來比對「哪幾列真的被改過」，
         //     取消時也靠它回復（items 會被編輯中的輸入值就地覆寫）。
         list.forEach(function (m) {
-            var b = { is_public: !!m.is_public };
+            var b = { is_public: isPub(m.is_public) };
             MODEL_FIELDS.forEach(function (f) { b[f] = m[f] || ''; });
             MODELS.__base[m.id] = b;
         });
