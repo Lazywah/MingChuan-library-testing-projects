@@ -214,7 +214,7 @@ async def forgot_password(
     if not user or user.email != payload.email:
         # ZH: 安全考量，無論是否找到，都回傳模糊訊息或直接回報錯誤
         # EN: Security consideration, return vague message or standard error
-        raise HTTPException(status_code=400, detail="Invalid username or email")
+        raise HTTPException(status_code=400, detail="ZH: 帳號或 Email 不正確 | EN: Invalid username or email")
 
     # ==========================================================================
     # v3.3 安全修補（2026-08-04）：
@@ -420,7 +420,7 @@ def increment_token_usage(
     # ZH: 驗證目標使用者存在 | EN: Verify target user exists
     target_user = crud.get_user_by_id(db, user_id=request.user_id)
     if not target_user:
-        raise HTTPException(status_code=404, detail="Target user not found")
+        raise HTTPException(status_code=404, detail="ZH: 找不到對象帳號 | EN: Target user not found")
 
     # C-3: ZH: 改用原子扣減，防止超額後仍計入 | EN: Atomic deduct — never over-credits then checks
     success = crud.try_deduct_tokens(db, user_id=request.user_id, tokens=request.tokens)

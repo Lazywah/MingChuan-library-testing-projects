@@ -194,11 +194,11 @@ def lab_authz(
     """
     # 從 nginx 傳入的 X-Original-URI 取出 user_id
     if not x_original_uri or not x_original_uri.startswith("/code/"):
-        raise HTTPException(status_code=403, detail="Invalid path")
+        raise HTTPException(status_code=403, detail="ZH: 路徑不合法 | EN: Invalid path")
 
     parts = x_original_uri.lstrip("/").split("/")
     if len(parts) < 2 or parts[0] != "code":
-        raise HTTPException(status_code=403, detail="Invalid path structure")
+        raise HTTPException(status_code=403, detail="ZH: 路徑格式不正確 | EN: Invalid path structure")
 
     requested_user_id = parts[1]
     # ZH: v3.6 多份存檔 —— 網址是 `/code/<uid>/`（預設那一份）或
@@ -213,7 +213,7 @@ def lab_authz(
     if requested_user_id != current_user.id:
         raise HTTPException(
             status_code=403,
-            detail="JWT does not authorize access to this user's lab"
+            detail="ZH: 你的登入資訊沒有權限存取這個人的實驗室 | EN: JWT does not authorize access to this user's lab"
         )
 
     # ZH: v3.6 —— 問的是「**這一份**在不在跑」，不是「這個人有沒有在跑」。
@@ -222,7 +222,7 @@ def lab_authz(
     if not lab_manager.is_user_session_alive(
             db, current_user.id,
             session=requested_session or lab_manager.DEFAULT_SESSION):
-        raise HTTPException(status_code=404, detail="No active session")
+        raise HTTPException(status_code=404, detail="ZH: 目前沒有執行中的實驗室 | EN: No active session")
 
     # nginx 預期 200 OK + 自訂 header（auth_request_set $auth_user $upstream_http_x_lab_user）
     from fastapi.responses import Response
@@ -268,7 +268,9 @@ def create_my_session(
     try:
         return lab_manager.create_session(db, current_user.id, payload.display_name)
     except ValueError as e:
-        raise HTTPException(status_code=400, detail=f"ZH: {e} | EN: {e}")
+        raise HTTPException(status_code=400, # ZH: `e` 本身已經是「ZH: … | EN: …」的形狀（見 lab_manager 的 ValueError），
+        #     所以直接用，不要再包一層 —— 包了會變成 ZH 半邊裡還有一組 ZH/EN。
+        detail=str(e))
 
 
 @router.delete("/sessions/{session_name}")
@@ -285,7 +287,9 @@ def delete_my_session(
     try:
         ok = lab_manager.delete_session(db, current_user.id, session_name)
     except ValueError as e:
-        raise HTTPException(status_code=409, detail=f"ZH: {e} | EN: {e}")
+        raise HTTPException(status_code=409, # ZH: `e` 本身已經是「ZH: … | EN: …」的形狀（見 lab_manager 的 ValueError），
+        #     所以直接用，不要再包一層 —— 包了會變成 ZH 半邊裡還有一組 ZH/EN。
+        detail=str(e))
     if not ok:
         raise HTTPException(status_code=404,
                             detail="ZH: 找不到這一份存檔 | EN: No such workspace")

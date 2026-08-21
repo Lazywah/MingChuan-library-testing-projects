@@ -125,7 +125,7 @@ def admin_update_announcement(
     """
     a = db.query(models.Announcement).filter(models.Announcement.id == ann_id).first()
     if not a:
-        raise HTTPException(status_code=404, detail="Announcement not found")
+        raise HTTPException(status_code=404, detail="ZH: 找不到這則公告 | EN: Announcement not found")
     a.title = payload.title
     a.body = payload.body
     a.is_pinned = payload.is_pinned
@@ -146,5 +146,5 @@ def admin_delete_announcement(
     """
     a = db.query(models.Announcement).filter(models.Announcement.id == ann_id).first()
     if not a:
-        raise HTTPException(status_code=404, detail="Announcement not found")
+        raise HTTPException(status_code=404, detail="ZH: 找不到這則公告 | EN: Announcement not found")
     db.delete(a); db.commit()

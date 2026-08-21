@@ -503,7 +503,8 @@ def create_session(db: Session, user_id: str, display_name: str) -> dict:
     existing = {r.session_name for r in db.query(models.LabSession)
                 .filter(models.LabSession.user_id == user_id).all()}
     if len(existing) >= MAX_SESSIONS_PER_USER:
-        raise ValueError(f"最多只能有 {MAX_SESSIONS_PER_USER} 份存檔")
+        raise ValueError(f"ZH: 最多只能有 {MAX_SESSIONS_PER_USER} 份存檔 | "
+                         f"EN: You can have at most {MAX_SESSIONS_PER_USER} workspaces")
 
     slug = _slugify(display_name, existing)
     row = models.LabSession(
@@ -534,14 +535,16 @@ def delete_session(db: Session, user_id: str, session: str) -> bool:
     @node job-scheduler/app/services/lab_manager.py::delete_session
     """
     if session == DEFAULT_SESSION:
-        raise ValueError("預設的那一份不能刪除")
+        raise ValueError("ZH: 預設的那一份不能刪除 | "
+                         "EN: The default workspace cannot be deleted")
     row = (db.query(models.LabSession)
            .filter(models.LabSession.user_id == user_id,
                    models.LabSession.session_name == session).first())
     if not row:
         return False
     if row.status in ("running", "starting"):
-        raise ValueError("這一份正在執行中，請先關閉再刪除")
+        raise ValueError("ZH: 這一份正在執行中，請先關閉再刪除 | "
+                         "EN: This workspace is running - close it before deleting")
 
     try:
         get_lifecycle().client.volumes.get(row.volume_name).remove(force=True)

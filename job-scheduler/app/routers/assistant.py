@@ -282,6 +282,6 @@ async def reindex(
     """
     if current_user.role != "admin":
         from fastapi import HTTPException
-        raise HTTPException(status_code=403, detail="Forbidden: Admins only")
+        raise HTTPException(status_code=403, detail="ZH: 這個功能只有管理員能用 | EN: Forbidden: Admins only")
     result = await rag_service.ingest_knowledge_base(db, force=True)
     return result

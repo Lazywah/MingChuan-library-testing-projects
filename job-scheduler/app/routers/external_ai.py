@@ -208,7 +208,7 @@ def require_admin(current_user: models.User = Depends(get_current_user)) -> mode
     @node job-scheduler/app/routers/external_ai.py::require_admin
     """
     if current_user.role != "admin":
-        raise HTTPException(status_code=403, detail="Forbidden: Admins only")
+        raise HTTPException(status_code=403, detail="ZH: 這個功能只有管理員能用 | EN: Forbidden: Admins only")
     return current_user
 
 
@@ -513,7 +513,7 @@ def update_account(
         status=payload.status, note=payload.note,
     )
     if not acc:
-        raise HTTPException(status_code=404, detail="mapping not found")
+        raise HTTPException(status_code=404, detail="ZH: 找不到這筆對應設定 | EN: mapping not found")
     user = db.query(models.User).filter(models.User.id == acc.user_id).first()
     return schemas.ExternalAiAccountResponse(
         id=acc.id, user_id=acc.user_id,
@@ -531,7 +531,7 @@ def delete_account(
 ) -> Any:
     """@node job-scheduler/app/routers/external_ai.py::delete_account"""
     if not crud.delete_external_account(db, account_id):
-        raise HTTPException(status_code=404, detail="mapping not found")
+        raise HTTPException(status_code=404, detail="ZH: 找不到這筆對應設定 | EN: mapping not found")
     return {"ok": True}
 
 

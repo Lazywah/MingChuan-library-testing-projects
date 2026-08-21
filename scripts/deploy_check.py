@@ -16,6 +16,7 @@ ZH: 在 `docker compose up` 之前跑一次，把常見的無聲地雷一次檢�
     9. 每頁 HTML 有沒有載它的 JS 用到的共用檔（呼叫 check_js_globals.py）
     9b. 各 v2 目錄的共用檔是否與正本一致（呼叫 check_shared_ui_files.py）
     9c. 前端 JS 是否為可解析的 JavaScript（呼叫 check_js_syntax.py）
+    9d. 會送到畫面上的錯誤訊息有沒有中文（呼叫 check_error_messages.py）
    10. 主機埠（80/8888/8002/3000/8787/11434）占用狀況
 
     退出碼：有 FAIL → 1（別部署）；只有 WARN 或全過 → 0。
@@ -287,6 +288,29 @@ def check_naive_datetime():
     return PASS, "回應的時間欄位都有明示時區（UTC）"
 
 
+def check_error_messages():
+    """ZH: 會送到畫面上的錯誤訊息有沒有中文。
+
+    ZH: 為什麼列進部署前健檢：使用者是中文為主的師生。
+        一個寫著 `Permission denied` 的錯誤對他們等於沒有訊息 ——
+        不知道發生什麼事、也不知道能做什麼，只會來問管理員。
+        而這種漏掉**不會壞任何功能**，所以除非有人剛好撞到那條路徑，
+        否則永遠不會被發現。
+
+    @node scripts/deploy_check.py::check_error_messages
+    """
+    script = SCRIPTS_DIR / "check_error_messages.py"
+    if not script.exists():
+        return WARN, "找不到 check_error_messages.py，略過錯誤訊息檢查"
+    r = subprocess.run([sys.executable, str(script)], capture_output=True,
+                       text=True, encoding="utf-8", errors="replace")
+    if r.returncode != 0:
+        first = next((l.strip() for l in (r.stdout or "").splitlines()
+                      if l.strip().startswith("-")), "")
+        return FAIL, f"有錯誤訊息只有英文 → python scripts/check_error_messages.py　{first}"
+    return PASS, "錯誤訊息都有中文"
+
+
 def check_js_syntax():
     """ZH: 前端每一支 .js 是否為可解析的 JavaScript。
 
@@ -418,6 +442,7 @@ def main():
         ("共用檔載入",     check_js_globals()),
         ("共用檔一致",     check_shared_ui_files()),
         ("JS 語法",        check_js_syntax()),
+        ("錯誤訊息中文",   check_error_messages()),
         ("主機埠",         check_ports()),
     ]
 

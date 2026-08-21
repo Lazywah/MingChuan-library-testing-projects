@@ -162,7 +162,7 @@ def admin_update_report(
     """
     r = db.query(models.IssueReport).filter(models.IssueReport.id == report_id).first()
     if not r:
-        raise HTTPException(status_code=404, detail="Report not found")
+        raise HTTPException(status_code=404, detail="ZH: 找不到這則回報 | EN: Report not found")
 
     if payload.status is not None:
         r.status = payload.status

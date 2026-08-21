@@ -62,7 +62,7 @@ def require_admin(current_user: models.User = Depends(get_current_user)) -> mode
     @node job-scheduler/app/routers/admin.py::require_admin
     """
     if current_user.role != "admin":
-        raise HTTPException(status_code=403, detail="Forbidden: Admins only")
+        raise HTTPException(status_code=403, detail="ZH: 這個功能只有管理員能用 | EN: Forbidden: Admins only")
     return current_user
 
 
@@ -526,9 +526,9 @@ def batch_update_tokens(
     @node job-scheduler/app/routers/admin.py::batch_update_tokens
     """
     if not payload.user_ids:
-        raise HTTPException(status_code=400, detail="user_ids cannot be empty")
+        raise HTTPException(status_code=400, detail="ZH: 至少要選一個帳號 | EN: user_ids cannot be empty")
     if payload.action not in ("reset_usage", "set_limit"):
-        raise HTTPException(status_code=400, detail="action must be 'reset_usage' or 'set_limit'")
+        raise HTTPException(status_code=400, detail="ZH: action 只能是 reset_usage 或 set_limit | EN: action must be 'reset_usage' or 'set_limit'")
 
     now = datetime.now(timezone.utc)
 
@@ -569,7 +569,7 @@ def admin_update_user(
     """
     db_user = db.query(models.User).filter(models.User.id == user_id).first()
     if not db_user:
-        raise HTTPException(status_code=404, detail="User not found")
+        raise HTTPException(status_code=404, detail="ZH: 找不到這個帳號 | EN: User not found")
 
     if update_data.email is not None:
         db_user.email = update_data.email
@@ -614,13 +614,13 @@ def admin_delete_user(
     @node job-scheduler/app/routers/admin.py::admin_delete_user
     """
     if not crud.verify_password(payload.admin_password, current_user.hashed_password):
-        raise HTTPException(status_code=403, detail="Invalid admin password")
+        raise HTTPException(status_code=403, detail="ZH: 管理員密碼不對 | EN: Invalid admin password")
     if user_id == current_user.id:
-        raise HTTPException(status_code=400, detail="Cannot delete yourself")
+        raise HTTPException(status_code=400, detail="ZH: 不能刪除自己的帳號 | EN: Cannot delete yourself")
 
     db_user = db.query(models.User).filter(models.User.id == user_id).first()
     if not db_user:
-        raise HTTPException(status_code=404, detail="User not found")
+        raise HTTPException(status_code=404, detail="ZH: 找不到這個帳號 | EN: User not found")
 
     username = db_user.username
 
@@ -769,7 +769,7 @@ def admin_verify_action(
     @node job-scheduler/app/routers/admin.py::admin_verify_action
     """
     if not crud.verify_password(payload.admin_password, current_user.hashed_password):
-        raise HTTPException(status_code=403, detail="Invalid admin password")
+        raise HTTPException(status_code=403, detail="ZH: 管理員密碼不對 | EN: Invalid admin password")
     return {"message": "Verification successful"}
 
 
@@ -935,9 +935,9 @@ def provision_user(
     @node job-scheduler/app/routers/admin.py::provision_user
     """
     if crud.get_user_by_username(db, data.username):
-        raise HTTPException(status_code=400, detail="Username already exists")
+        raise HTTPException(status_code=400, detail="ZH: 這個帳號名稱已經有人用了 | EN: Username already exists")
     if crud.get_user_by_email(db, data.email):
-        raise HTTPException(status_code=400, detail="Email already exists")
+        raise HTTPException(status_code=400, detail="ZH: 這個 Email 已經有人用了 | EN: Email already exists")
 
     import secrets
     temp_password = data.password if data.password else secrets.token_urlsafe(12)
@@ -987,7 +987,7 @@ def reset_user_account(
     """
     db_user = db.query(models.User).filter(models.User.id == user_id).first()
     if not db_user:
-        raise HTTPException(status_code=404, detail="User not found")
+        raise HTTPException(status_code=404, detail="ZH: 找不到這個帳號 | EN: User not found")
 
     import secrets
     temp_password = secrets.token_urlsafe(12)
@@ -1071,11 +1071,11 @@ def admin_cancel_job(
     """
     job = db.query(models.TrainingJob).filter(models.TrainingJob.id == job_id).first()
     if not job:
-        raise HTTPException(status_code=404, detail="Job not found")
+        raise HTTPException(status_code=404, detail="ZH: 找不到這張任務 | EN: Job not found")
     if job.status not in ("pending", "queued"):
         raise HTTPException(
             status_code=400,
-            detail=f"Cannot cancel job with status '{job.status}'. Only pending/queued jobs can be cancelled.",
+            detail=f"ZH: 這張任務的狀態是「{job.status}」，只有還在排隊的才能取消 | EN: Cannot cancel job with status '{job.status}'. Only pending/queued jobs can be cancelled.",
         )
 
     job.status = "cancelled"
@@ -1099,11 +1099,11 @@ def admin_update_job_priority(
     """
     job = db.query(models.TrainingJob).filter(models.TrainingJob.id == job_id).first()
     if not job:
-        raise HTTPException(status_code=404, detail="Job not found")
+        raise HTTPException(status_code=404, detail="ZH: 找不到這張任務 | EN: Job not found")
     if job.status not in ("pending", "queued"):
         raise HTTPException(
             status_code=400,
-            detail=f"Cannot reprioritize job with status '{job.status}'.",
+            detail=f"ZH: 這張任務的狀態是「{job.status}」，已經不能調整優先序 | EN: Cannot reprioritize job with status '{job.status}'.",
         )
 
     old_priority = job.priority
@@ -1154,7 +1154,7 @@ def admin_create_model(
     @node job-scheduler/app/routers/admin.py::admin_create_model
     """
     if db.query(models.Model).filter(models.Model.name == data.name).first():
-        raise HTTPException(status_code=400, detail=f"Model '{data.name}' already exists")
+        raise HTTPException(status_code=400, detail=f"ZH: 已經有一個叫「{data.name}」的模型了 | EN: Model '{data.name}' already exists")
 
     new_model = models.Model(
         name=data.name, model_type=data.model_type or "local",
@@ -1185,14 +1185,14 @@ def admin_update_model(
     """
     mdl = db.query(models.Model).filter(models.Model.id == model_id).first()
     if not mdl:
-        raise HTTPException(status_code=404, detail="Model not found")
+        raise HTTPException(status_code=404, detail="ZH: 找不到這個模型 | EN: Model not found")
 
     if data.name is not None:
         dup = db.query(models.Model).filter(
             models.Model.name == data.name, models.Model.id != model_id
         ).first()
         if dup:
-            raise HTTPException(status_code=400, detail=f"Model name '{data.name}' already taken")
+            raise HTTPException(status_code=400, detail=f"ZH: 「{data.name}」這個模型名稱已經有人用了 | EN: Model name '{data.name}' already taken")
         mdl.name = data.name
 
     for field in ("description", "model_type", "framework", "storage_path",
@@ -1220,7 +1220,7 @@ def admin_delete_model(
     """
     mdl = db.query(models.Model).filter(models.Model.id == model_id).first()
     if not mdl:
-        raise HTTPException(status_code=404, detail="Model not found")
+        raise HTTPException(status_code=404, detail="ZH: 找不到這個模型 | EN: Model not found")
 
     model_name = mdl.name
     db.delete(mdl)
@@ -1300,7 +1300,7 @@ def get_user_analytics(
     """
     user = db.query(models.User).filter(models.User.id == user_id).first()
     if not user:
-        raise HTTPException(status_code=404, detail="User not found")
+        raise HTTPException(status_code=404, detail="ZH: 找不到這個帳號 | EN: User not found")
 
     usage = crud.get_token_usage(db, user_id)
 

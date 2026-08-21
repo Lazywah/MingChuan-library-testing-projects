@@ -447,10 +447,10 @@ async def stream_job_logs(
     """
     job = crud.get_job(db, job_id)
     if not job:
-        raise HTTPException(status_code=404, detail="Job not found")
+        raise HTTPException(status_code=404, detail="ZH: 找不到這張任務 | EN: Job not found")
         
     if current_user.role == "student" and job.user_id != current_user.id:
-        raise HTTPException(status_code=403, detail="Permission denied")
+        raise HTTPException(status_code=403, detail="ZH: 你沒有權限做這件事 | EN: Permission denied")
 
     async def event_generator():
         # First yield the full history

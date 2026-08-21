@@ -44,7 +44,7 @@ async def upload_dataset(
     @node job-scheduler/app/routers/datasets.py::upload_dataset
     """
     if not file.filename:
-        raise HTTPException(status_code=400, detail="No filename provided")
+        raise HTTPException(status_code=400, detail="ZH: 沒有收到檔名 | EN: No filename provided")
 
     # H-4: ZH: 檢查副檔名白名單 | EN: Check extension whitelist
     ext = pathlib.Path(file.filename).suffix.lower()
@@ -99,14 +99,14 @@ async def upload_dataset(
     resolved = os.path.realpath(file_path)
     allowed_root = os.path.realpath(user_dataset_dir)
     if not resolved.startswith(allowed_root + os.sep) and resolved != allowed_root:
-        raise HTTPException(status_code=400, detail="Invalid filename")
+        raise HTTPException(status_code=400, detail="ZH: 檔名不合法 | EN: Invalid filename")
 
     # 儲存檔案
     try:
         with open(file_path, "wb") as buffer:
             shutil.copyfileobj(file.file, buffer)
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to save file: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"ZH: 檔案存不起來：{str(e)} | EN: Failed to save file: {str(e)}")
 
     # 自動解析邏輯 (簡易版)
     suggested_config = {

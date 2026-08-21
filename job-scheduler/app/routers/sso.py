@@ -187,7 +187,7 @@ def sso_callback(
     #     Without it, a silent PENDING→mock fallback turns /callback into a
     #     password-less login backdoor using the well-known yaml test ids.
     if not mock_mode and SSO_POLICY.get("provider") not in ("mock", "cas"):
-        raise HTTPException(status_code=404, detail="Not Found")
+        raise HTTPException(status_code=404, detail="ZH: 找不到這個位址 | EN: Not Found")
     try:
         user_info = sso_client.validate_ticket(ticket)
         return _finalize_sso_login(db, user_info, request=request)
@@ -205,7 +205,7 @@ def mock_sso_login_page():
     @node job-scheduler/app/routers/sso.py::mock_sso_login_page
     """
     if not mock_mode and SSO_POLICY.get("provider") != "mock":
-        raise HTTPException(status_code=404, detail="Mock SSO is disabled")
+        raise HTTPException(status_code=404, detail="ZH: 測試用的 SSO 已停用 | EN: Mock SSO is disabled")
 
     users = SSO_POLICY.get("mock", {}).get("users", [])
     options = "".join(
@@ -245,7 +245,7 @@ def mock_sso_login_page():
 def mock_sso_submit(ticket: str = Form(...)):
     """@node job-scheduler/app/routers/sso.py::mock_sso_submit"""
     if not mock_mode and SSO_POLICY.get("provider") != "mock":
-        raise HTTPException(status_code=404, detail="Mock SSO is disabled")
+        raise HTTPException(status_code=404, detail="ZH: 測試用的 SSO 已停用 | EN: Mock SSO is disabled")
     return RedirectResponse(url=f"/api/v1/sso/callback?ticket={ticket}", status_code=303)
 
 
@@ -263,7 +263,7 @@ def oidc_login():
     if not OIDC_ENABLED or oidc_client is None:
         raise HTTPException(
             status_code=503,
-            detail="OIDC is not configured. Please contact system administrator.",
+            detail="ZH: 學校單一登入尚未設定完成，請聯絡管理員 | EN: OIDC is not configured. Please contact system administrator.",
         )
     # v3.1: 端點來自 discovery（auth.mcu.edu.tw）；IdP 連不上時回 503 而非 500
     try:
@@ -291,11 +291,11 @@ def oidc_callback(
     @node job-scheduler/app/routers/sso.py::oidc_callback
     """
     if not OIDC_ENABLED or oidc_client is None:
-        raise HTTPException(status_code=503, detail="OIDC is not configured")
+        raise HTTPException(status_code=503, detail="ZH: 學校單一登入尚未設定完成 | EN: OIDC is not configured")
 
     if not oidc_client.verify_state(state):
         logger.warning(f"OIDC callback state invalid (state={state[:20]}...)")
-        raise HTTPException(status_code=400, detail="Invalid or expired state")
+        raise HTTPException(status_code=400, detail="ZH: 登入驗證碼不正確或已過期，請重新登入一次 | EN: Invalid or expired state")
 
     try:
         user_info = oidc_client.validate_ticket(code)
@@ -313,7 +313,7 @@ def oidc_callback(
         raise                       # ZH: 停權 403 等已明確的錯誤原樣拋出，別被下面吞掉
     except Exception:
         logger.exception("OIDC callback failed")
-        raise HTTPException(status_code=500, detail="OIDC login failed")
+        raise HTTPException(status_code=500, detail="ZH: 學校單一登入失敗，請再試一次或聯絡管理員 | EN: OIDC login failed")
 
 
 async def _provision_myai_bg(username: str) -> None:

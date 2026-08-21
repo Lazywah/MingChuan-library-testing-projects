@@ -98,5 +98,5 @@ def delete_secret(
     """
     deleted = secrets_service.delete_secret(db, current_user.id, name)
     if not deleted:
-        raise HTTPException(status_code=404, detail="Secret not found")
+        raise HTTPException(status_code=404, detail="ZH: 找不到這個密鑰 | EN: Secret not found")
     return {"status": "deleted", "name": name}
