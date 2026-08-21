@@ -9,9 +9,9 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Open+Sans:wght@400;600;700&display=swap" rel="stylesheet">
 
-    <link rel="stylesheet" href="tokens.css?v=dd946cc2">
+    <link rel="stylesheet" href="tokens.css?v=34ea2d6d">
     <link rel="stylesheet" href="styles.css?v=e917e7df">
-    <link rel="stylesheet" href="admin.css?v=d774186f">
+    <link rel="stylesheet" href="admin.css?v=f894e58a">
 </head>
 <body>
 
@@ -52,14 +52,46 @@
              處理一個人要跳來跳去、而且兩邊各有一份搜尋。 -->
     <section class="adm-sec" id="detail" aria-live="polite"></section>
 
+    <!-- ZH: 廠商帳號的維運工作。**數字與動作常駐** —— 有幾個人對不上、
+             有幾個等著開通，正是你該注意到的事；收起來就等於沒有人會看到。
+             很少用的 CSV 匯入才收進 fold。 -->
+    <section class="adm-sec" aria-labelledby="h-batch">
+        <div class="adm-sec__head">
+            <h2 id="h-batch" data-i18n="pp_bx">廠商帳號對應</h2>
+            <span class="topbar__spacer"></span>
+            <span class="footnote" id="bx-sum"></span>
+            <button class="btn btn--minor" type="button" id="bx-sync" data-i18n="pp_bx_sync">同步廠商帳號</button>
+            <button class="btn btn--minor" type="button" id="bx-match" data-i18n="pp_bx_match">自動配對</button>
+        </div>
+        <p class="footnote" data-i18n="pp_bx_why">同步只是把廠商那邊的帳號與點數抓回來看；配對只寫平台這邊的對應表。兩者都不會改到廠商的資料。</p>
+        <div class="inline-error" id="bx-msg" hidden></div>
+        <div id="bx-body" aria-live="polite"><span class="skeleton skeleton--line"></span></div>
+
+        <details class="fold">
+            <summary class="fold__summary" data-i18n="pp_bx_csv">用 CSV 批次建立對應</summary>
+            <div class="fold__body">
+                <p class="footnote" data-i18n="pp_bx_csv_why">每行兩欄：平台帳號,廠商帳號。第一行如果是欄位名會自動略過。已存在的會更新，不會重複建立。</p>
+                <label class="field">
+                    <span class="field__label" for="bx-csv" data-i18n="pp_bx_csv_label">貼上 CSV</span>
+                    <textarea class="field__input" id="bx-csv" rows="6"
+                              placeholder="platform_username,vendor_username"></textarea>
+                </label>
+                <div class="ds__actions">
+                    <button class="btn btn--minor" type="button" id="bx-import" data-i18n="pp_bx_import">匯入</button>
+                </div>
+                <div class="inline-error" id="bx-csv-msg" hidden></div>
+            </div>
+        </details>
+    </section>
+
 </main>
 
 <script src="tz.js?v=3608fea5"></script>
 <!-- ⚠ ZH: 順序不能動 —— i18n-admin 在 i18n 之後、prefs 之前。 -->
 <script src="i18n.js?v=adcdce5a"></script>
-<script src="i18n-admin.js?v=3a6c18e1"></script>
+<script src="i18n-admin.js?v=6cbc843f"></script>
 <script src="prefs.js?v=8b7b4277"></script>
 <script src="admin-chrome.js?v=3c57b044"></script>
-<script src="people.js?v=07ce1450"></script>
+<script src="people.js?v=c8ae0106"></script>
 </body>
 </html>

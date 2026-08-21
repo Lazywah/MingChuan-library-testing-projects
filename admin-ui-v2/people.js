@@ -951,12 +951,226 @@
     // ── 啟動 ──────────────────────────────────────────────────────────────
     $('new-temp').addEventListener('click', openTempForm);
 
+    // ── 廠商帳號對應（維運）───────────────────────────────────────────────
+    //
+    // ZH: 四件事放同一區，因為它們是同一條動線：
+    //       同步廠商帳號 → 自動配對 → 看還有誰對不上 → 看還有誰要開通
+    //
+    // ZH: 🔴 「同步」與「配對」是**兩件不同的事**，介面上不能混：
+    //       同步  = headless 登入廠商網站把帳號與點數抓回來（讀廠商）
+    //       配對  = 用 email 把廠商帳號對到平台使用者（只寫我們自己的表）
+    //     兩者都不寫廠商的資料，這點要講出來 —— 不然沒有人敢按。
+    var BX = null;
+
+    async function loadBatch() {
+        try {
+            // ZH: 三份資料各自獨立，一起抓。任何一份失敗就整區顯示錯誤 ——
+            //     這一區的數字要一起看才有意義，缺一份就會誤導。
+            var out = await Promise.all([
+                api('/external-ai/admin/myai-accounts'),
+                api('/external-ai/admin/unmatched'),
+                api('/external-ai/admin/provision-candidates'),
+            ]);
+            BX = { myai: out[0], un: out[1], prov: out[2] };
+        } catch (e) {
+            $('bx-body').innerHTML = '<p class="footnote">'
+                + esc(T('ov_fail_part', '這一段暫時讀不到（{w}）').replace('{w}', e.message)) + '</p>';
+            return;
+        }
+        renderBatch();
+    }
+
+    function renderBatch() {
+        if (!BX) return;
+        var m = BX.myai, un = BX.un, pv = BX.prov;
+
+        // ZH: 同步時間一定要講 —— 一份三天前的帳號清單看起來跟今天的一模一樣。
+        $('bx-sum').textContent = m.synced_at
+            ? T('pp_bx_sum', '廠商帳號 {n} 筆，同步到 {t}')
+                .replace('{n}', num(m.count)).replace('{t}', TW.dateTime(m.synced_at))
+            : T('pp_bx_never', '還沒有同步過廠商帳號。');
+
+        var total = (un.unmatched_users || []).length + (un.unmatched_myai || []).length
+            + (pv.ready || []).length + (pv.no_email || []).length
+            + (pv.staff_pending || []).length;
+
+        var C_ACC = ['pp_bx_c_acc', '帳號'];
+        // ZH: 中英一樣，不需要 key。（給了 key 反而會被 check_i18n 報成
+        //     「沒有人用」—— 它的判準是 key 後面緊接一個**含中文**的 fallback。）
+        var C_MAIL = ['', 'Email'];
+        var C_TAG = ['pp_bx_c_tag', '狀況'];
+
+        $('bx-body').innerHTML =
+            blockTable('pp_bx_un_users', '平台使用者還沒綁定',
+                'pp_bx_un_users_why', '這些人在平台上有帳號，但沒有對應到任何廠商帳號。標「找得到同 email」的按「自動配對」就會接上。',
+                [C_ACC, C_MAIL, C_TAG],
+                (un.unmatched_users || []).map(function (u) {
+                    return [{ t: u.username }, { t: u.email || '—' },
+                            { t: u.has_myai_match ? T('pp_bx_hasmatch', '找得到同 email') : '',
+                              pill: true }];
+                }))
+
+            + blockTable('pp_bx_un_myai', '廠商帳號沒有對到人',
+                'pp_bx_un_myai_why', '廠商那邊有這些帳號，但平台上沒有人對應。多半是老師，或用了與平台不同的信箱。',
+                [C_ACC, C_MAIL, C_TAG, ['pp_bx_c_points', '點數', 'num']],
+                (un.unmatched_myai || []).map(function (r) {
+                    return [{ t: r.name || r.vendor_sn }, { t: r.email || '—' },
+                            { t: r.has_platform_user ? T('pp_bx_hasuser', '找得到同 email 的使用者') : '',
+                              pill: true },
+                            { t: num(r.points), cls: 'num' }];
+                }))
+
+            // ZH: 待開通依**事實**分三類（有沒有信箱、網域屬不屬教職員），
+            //     不做「這個信箱大概是真的」這種預測 —— 寄出去看退件才是事實。
+            + blockTable('pp_bx_ready', '可以開通',
+                'pp_bx_ready_why', '有信箱、還沒綁定廠商帳號的人。信箱真假不預判，寄出後看退件紀錄。',
+                [C_ACC, C_MAIL, ['pp_bx_c_domain', '網域']],
+                (pv.ready || []).map(function (r) {
+                    return [{ t: r.username }, { t: r.email }, { t: r.label || r.domain || '—' }];
+                }))
+
+            + blockTable('pp_bx_noemail', '沒有信箱，無法開通',
+                'pp_bx_noemail_why', '完全沒有信箱，沒辦法建廠商帳號，要人工補。',
+                [C_ACC, C_MAIL],
+                (pv.no_email || []).map(function (r) {
+                    return [{ t: r.username }, { t: r.platform_email || '—' }];
+                }))
+
+            + blockTable('pp_bx_staff', '信箱看起來是教職員，角色還是學生',
+                'pp_bx_staff_why', '只是提示，不會自動改角色——網域不等於身分，改權限要人決定。',
+                [C_ACC, C_MAIL, ['pp_bx_c_domain', '網域']],
+                (pv.staff_pending || []).map(function (r) {
+                    return [{ t: r.username }, { t: r.email || '—' }, { t: r.domain || '—' }];
+                }))
+
+            + (total === 0
+                ? '<p class="footnote">' + esc(T('pp_bx_allgood', '兩邊都對上了，也沒有人在等開通。')) + '</p>'
+                : '');
+    }
+
+    // ZH: 每一塊：標題（含筆數）+ 一句說明 + 表格。**空的就整塊不畫** ——
+    //     五個「沒有」疊在一起會把真正有東西的那一塊淹掉。
+    //
+    // ZH: 🔴 用表格不用清單。原本是 flex 的 space-between，於是名字在最左、
+    //     點數在最右，中間空了 1138px（實測）—— 要把一列讀完得橫掃整個螢幕。
+    //     表格的欄位會對齊，而且**有欄位標題**告訴你右邊那個數字是什麼。
+    var BX_MAX = 20;
+    function blockTable(key, zh, whyKey, whyZh, cols, rows) {
+        if (!rows.length) return '';
+        var shown = rows.slice(0, BX_MAX);
+        return '<section class="adm-block">'
+            + '<div class="adm-block__head">'
+            + '<h3 class="adm-block__title">' + esc(T(key, zh)) + '</h3>'
+            // ZH: 筆數緊跟著標題。原本靠 space-between 推到最右邊，
+            //     離標題 1246px —— 那個數字是在講誰，完全看不出來。
+            + '<span class="adm-block__n">' + esc(rows.length) + '</span>'
+            + '<span class="topbar__spacer"></span>'
+            + '</div>'
+            + '<p class="footnote">' + esc(T(whyKey, whyZh)) + '</p>'
+            + '<div class="adm-tablewrap adm-tablewrap--narrow">'
+            + '<table class="adm-table"><thead><tr>'
+            + cols.map(function (c) {
+                return '<th' + (c[2] ? ' class="' + esc(c[2]) + '"' : '') + '>'
+                    + esc(T(c[0], c[1])) + '</th>';
+            }).join('')
+            + '</tr></thead><tbody>'
+            + shown.map(function (r) {
+                return '<tr>' + r.map(function (cell) {
+                    if (cell.pill) {
+                        return '<td>' + (cell.t
+                            ? '<span class="adm-pill adm-pill--temp">' + esc(cell.t) + '</span>'
+                            : '<span class="footnote">—</span>') + '</td>';
+                    }
+                    return '<td' + (cell.cls ? ' class="' + esc(cell.cls) + '"' : '') + '>'
+                        + esc(cell.t) + '</td>';
+                }).join('') + '</tr>';
+            }).join('')
+            + '</tbody></table></div>'
+            + (rows.length > shown.length
+                ? '<p class="footnote">' + esc(T('pp_bx_more', '還有 {n} 筆。')
+                    .replace('{n}', rows.length - shown.length)) + '</p>'
+                : '')
+            + '</section>';
+    }
+
+    // ZH: 兩個動作都慢（同步是 headless 登入廠商）。按下去就停用並改字，
+    //     不然使用者會以為沒反應而一直按。
+    var BX_BUSY = false;
+    async function runBatch(btnId, path, okKey, okZh, fmt) {
+        if (BX_BUSY) return;
+        BX_BUSY = true;
+        var b = $(btnId), was = b.textContent;
+        b.disabled = true;
+        b.textContent = T('pp_bx_running', '執行中…');
+        say('bx-msg', '');
+        try {
+            var r = await api(path, { method: 'POST' });
+            flash('bx-msg', fmt(T(okKey, okZh), r), 8000);
+            await loadBatch();
+        } catch (e) {
+            say('bx-msg', e.message);
+        } finally {
+            BX_BUSY = false;
+            b.disabled = false;
+            b.textContent = was;
+        }
+    }
+
+    async function importCsv() {
+        var text = $('bx-csv').value;
+        if (!text.trim()) { say('bx-csv-msg', T('pp_bx_csv_empty', '先貼上內容。')); return; }
+        try {
+            var r = await api('/external-ai/admin/import', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ csv: text }),
+            });
+            // ZH: 逐行的錯誤要**全部列出來**，不要只說「有 N 行失敗」——
+            //     使用者得知道是哪幾行才改得動。
+            var msg = T('pp_bx_csv_done', '新增 {c}、更新 {u}、略過 {s}。')
+                .replace('{c}', r.created).replace('{u}', r.updated).replace('{s}', r.skipped);
+            if ((r.errors || []).length) {
+                say('bx-csv-msg', msg + '　' + r.errors.join('；'));
+            } else {
+                flash('bx-csv-msg', msg, 8000);
+                $('bx-csv').value = '';
+            }
+            await loadBatch();
+        } catch (e) { say('bx-csv-msg', e.message); }
+    }
+
     var typing = null;
     $('q').addEventListener('input', function () {
         // ZH: 節流 —— 幾千人的清單每敲一個字就重畫會頓。
         clearTimeout(typing);
         typing = setTimeout(renderList, 120);
     });
+
+    // ZH: 訊息裡的欄位名是**照後端實際回傳**寫的，不要用 `a || b || 0` 猜 ——
+    //     猜錯的話畫面永遠顯示 0，而且看起來像「真的沒抓到」。
+    //       sync()       → {status, total, created, updated}
+    //       auto_match() → {matched_created, backfilled}
+    $('bx-sync').addEventListener('click', function () {
+        runBatch('bx-sync', '/external-ai/admin/sync-myai',
+                 'pp_bx_synced', '抓到 {t} 個廠商帳號（新增 {c}、更新 {u}）。',
+                 function (t, r) {
+                     return t.replace('{t}', num(r.total)).replace('{c}', num(r.created))
+                            .replace('{u}', num(r.updated));
+                 });
+    });
+    $('bx-match').addEventListener('click', function () {
+        // ZH: 「回填序號」是指綁定早就在、只是缺廠商的穩定鍵。
+        //     跟「新配對」分開講 —— 兩者的意義完全不同。
+        runBatch('bx-match', '/external-ai/admin/auto-match',
+                 'pp_bx_matched', '新配對 {c} 筆，回填序號 {b} 筆。',
+                 function (t, r) {
+                     return t.replace('{c}', num(r.matched_created))
+                            .replace('{b}', num(r.backfilled));
+                 });
+    });
+    $('bx-import').addEventListener('click', importCsv);
+
+    loadBatch();
 
     (async function () {
         try {
@@ -972,5 +1186,6 @@
     document.addEventListener('prefs:langchanged', function () {
         renderList();
         renderDetail();
+        renderBatch();
     });
 })();

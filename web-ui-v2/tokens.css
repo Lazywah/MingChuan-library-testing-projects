@@ -32,7 +32,9 @@
     --mcu-white:     #ffffff;
     --mcu-grey-050:  #f3f5f9;    /* 實測自 Moodle 的次底 */
     --mcu-grey-200:  #e9e9e9;    /* 實測自 Moodle 的分隔線 */
-    --mcu-grey-400:  #9aa3ad;
+    --mcu-grey-400:  #696f76;    /* 次要文字，對白 5.08、對次底 4.65 —— 通過 AA。
+                                    原為 #9aa3ad，只有 2.34：說明文字與次要數值
+                                    幾乎看不見（實測後調暗）。 */
     --mcu-grey-600:  #555555;    /* 實測自 Moodle 的內文色，對白 7.46 */
     --mcu-ink:       #1f2328;    /* 標題與 accent 上的深字，對黃底 9.44 */
 

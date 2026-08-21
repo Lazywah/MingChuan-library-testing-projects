@@ -1096,3 +1096,17 @@ textarea.field__input {
     opacity: 1;
     text-decoration: none;
 }
+
+/* ZH: 滿版。原本收在 900px，但這一頁其他區塊（使用者清單）都是滿版，
+       只有這裡縮一半看起來像沒做完。欄位靠表格自己對齊，寬一點不影響。 */
+.adm-tablewrap--narrow {
+    max-width: 100%;
+}
+/* ZH: 筆數緊跟著標題。用 space-between 推到最右邊的話，
+       它離標題 1246px（實測）—— 那個數字在講誰完全看不出來。 */
+.adm-block__n {
+    font-size: 1.125rem;
+    font-weight: 600;
+    color: var(--text-strong);
+    font-variant-numeric: tabular-nums;
+}
