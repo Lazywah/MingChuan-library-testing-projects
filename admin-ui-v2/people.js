@@ -34,6 +34,9 @@
         return sessionStorage.getItem('ai_hud_token') || localStorage.getItem('ai_hud_token');
     }
 
+    // ZH: 大數字要有千分位 —— 12340 與 1234 在沒有分隔時一眼分不出來。
+    function num(n) { return Number(n || 0).toLocaleString('en-US'); }
+
     function esc(s) {
         return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
             return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
@@ -295,6 +298,9 @@
 
     // ── 一個人的全部 ──────────────────────────────────────────────────────
     function pick(id) {
+        // ZH: 換人時把外部 AI 卡的編輯狀態收掉 —— 不收的話，
+        //     點下一個人會直接看到編輯中的表單，而且填的是別人的值。
+        EXT_EDIT = false;
         // ZH: 換一個人就回到唯讀 —— 不然在 A 身上解鎖之後點到 B，
         //     B 的欄位是直接可以改的，而你並沒有為 B 確認過。
         EDIT_BASIC = false;
@@ -476,6 +482,12 @@
             + '<section class="adm-card" id="lab-box">'
             + '<div class="adm-card__title">' + esc(T('pp_lab', '程式實驗室')) + '</div>'
             + '<span class="skeleton skeleton--line"></span></section>'
+
+            // ZH: 外部 AI 的綁定與消耗。放在這裡而不是「數據」那一頁 ——
+            //     那一頁是看趨勢的，要查某一個人就該在人這一頁查完。
+            + '<section class="adm-card" id="ext-box">'
+            + '<div class="adm-card__title">' + esc(T('pp_ext', '外部 AI（MYAI）')) + '</div>'
+            + '<span class="skeleton skeleton--line"></span></section>'
             // ZH: 只有臨時帳號才出現這張卡。一般帳號看到一個「延期」欄位
             //     只會困惑（他沒有到期日可以延）。
             + (u.expires_at ? tempCard(u) : '')
@@ -499,6 +511,7 @@
         if (u.expires_at) wireExtend(u);
         loadQuota(u);
         loadLab(u);
+        loadExtAi(u);
     }
 
     function say(id, text) {
@@ -643,6 +656,167 @@
     }
 
     // ── 額度 ──────────────────────────────────────────────────────────────
+    // ── 外部 AI（MYAI）綁定與消耗 ─────────────────────────────────────────
+    //
+    // ZH: 兩件事放同一張卡：這個人綁到哪個廠商帳號、以及他用掉多少。
+    //     ⚠ 後端沒有「單一使用者的綁定」端點，只有整份清單 ——
+    //       所以這裡抓全部再挑出這一個人。人數上千時要回頭補一個端點。
+    var EXT_EDIT = false;
+
+    function extRo(b, c) {
+        var kv = function (k, v) {
+            return '<div class="kv"><span class="kv__k">' + esc(k) + '</span>'
+                + '<span class="kv__v">' + esc(v) + '</span></div>';
+        };
+        var out = kv(T('pp_ext_vendor', '廠商帳號'), b.myai_email || '—')
+            + kv(T('pp_ext_sn', '序號'), b.myai_vendor_sn || '—');
+
+        // ZH: 點數只有對得上同步快取時才有值。對不上就明講「同步不到」——
+        //     顯示「—」會被當成「他沒有點數」，那是完全不同的一件事。
+        out += kv(T('pp_ext_points', '點數'),
+                  b.synced ? num(b.points) : T('pp_ext_nosync', '同步不到這個帳號'));
+        // ZH: ⚠ 唯讀這行也要翻譯。只在下拉裡翻的話，看的時候是 "active"、
+        //     一按編輯變成「正常」—— 同一個值兩種樣子。
+        out += kv(T('pp_ext_status', '狀態'),
+                  b.status ? T('st_' + b.status, b.status) : '—');
+
+        if (c && c.summary && c.summary.tx_count) {
+            var s2 = c.summary, p = c.peer || {};
+            out += '<div class="adm-card__title" style="margin-top:1rem">'
+                + esc(T('pp_ext_used', '用了多少（全部期間）')) + '</div>'
+                + kv(T('pp_ext_consumed', '總消耗'), num(s2.consumed) + ' ' + T('an_points', '點'))
+                + kv(T('pp_ext_uses', 'AI 使用次數'), num(s2.uses))
+                + kv(T('pp_ext_logins', '登入次數'), num(s2.logins))
+                // ZH: 一個人的數字單看沒有意義 —— 給同期間的全體人均當基準，
+                //     才知道「1000 點」是多還是少。
+                + kv(T('pp_ext_peer', '全體人均'),
+                     p.avg_consumed != null ? num(p.avg_consumed) + ' ' + T('an_points', '點') : '—');
+        } else if (c) {
+            out += '<p class="footnote">' + esc(T('pp_ext_notx', '交易日誌裡還沒有這個人的紀錄。')) + '</p>';
+        }
+        return out;
+    }
+
+    function extForm(b) {
+        return field('e-email', T('pp_ext_vendor', '廠商帳號'), (b && b.myai_email) || '')
+            + '<label class="field"><span class="field__label" for="e-status">'
+            + esc(T('pp_ext_status', '狀態')) + '</span>'
+            + '<select class="field__input" id="e-status">'
+            + ['active', 'disabled'].map(function (r) {
+                return '<option value="' + r + '"'
+                    + ((b && b.status) === r ? ' selected' : '') + '>'
+                    + esc(T('st_' + r, r)) + '</option>';
+            }).join('')
+            + '</select></label>'
+            + field('e-note', T('pp_ext_note', '備註'), (b && b.note) || '');
+    }
+
+    async function loadExtAi(u) {
+        var box = $('ext-box');
+        var title = '<div class="adm-card__title">' + esc(T('pp_ext', '外部 AI（MYAI）')) + '</div>';
+        var b = null, c = null;
+        try {
+            var all = await api('/external-ai/admin/bindings');
+            b = (all.bindings || []).filter(function (x) { return x.user_id === u.id; })[0] || null;
+        } catch (e) {
+            box.innerHTML = title + '<p class="footnote">'
+                + esc(T('ov_fail_part', '這一段暫時讀不到（{w}）').replace('{w}', e.message)) + '</p>';
+            return;
+        }
+
+        // ZH: 有綁定才查消耗 —— 查詢的鍵是廠商那邊的 email，沒綁就沒得查。
+        if (b && b.myai_email) {
+            try {
+                c = await api('/external-ai/admin/user-consumption?days=0&q='
+                              + encodeURIComponent(b.myai_email));
+            } catch (e) { c = null; }
+        }
+
+        if (!b) {
+            box.innerHTML = title
+                + '<p class="footnote">' + esc(T('pp_ext_unbound', '還沒有綁定廠商帳號。')) + '</p>'
+                + field('e-email', T('pp_ext_vendor', '廠商帳號'), u.email || '')
+                + '<div class="ds__actions">'
+                + '<button class="btn btn--minor" type="button" id="e-bind">'
+                + esc(T('pp_ext_bind', '綁定')) + '</button></div>'
+                + '<div class="inline-error" id="e-msg" hidden></div>';
+            $('e-bind').addEventListener('click', function () { bindExt(u); });
+            return;
+        }
+
+        box.innerHTML = title
+            + (EXT_EDIT ? extForm(b) : extRo(b, c))
+            + '<div class="ds__actions">'
+            + (EXT_EDIT
+                ? '<button class="btn btn--primary" type="button" id="e-save">'
+                    + esc(T('pp_save', '儲存')) + '</button>'
+                    + '<button class="btn btn--minor" type="button" id="e-cancel">'
+                    + esc(T('pp_cancel', '取消變更')) + '</button>'
+                : '<button class="btn btn--minor" type="button" id="e-edit">'
+                    + esc(T('pp_edit', '編輯')) + '</button>'
+                    + '<button class="btn btn--minor" type="button" id="e-unbind">'
+                    + esc(T('pp_ext_unbind', '解除綁定')) + '</button>')
+            + '</div>'
+            + '<div class="inline-error" id="e-msg" hidden></div>';
+
+        if (EXT_EDIT) {
+            $('e-save').addEventListener('click', function () { saveExtAi(u, b); });
+            $('e-cancel').addEventListener('click', function () {
+                EXT_EDIT = false;
+                loadExtAi(u);
+            });
+        } else {
+            $('e-edit').addEventListener('click', function () {
+                EXT_EDIT = true;
+                loadExtAi(u);
+            });
+            $('e-unbind').addEventListener('click', function () { unbindExt(u, b); });
+        }
+    }
+
+    async function bindExt(u) {
+        var email = $('e-email').value.trim();
+        if (!email) { say('e-msg', T('pp_ext_need_email', '要填廠商那邊的帳號。')); return; }
+        try {
+            await api('/external-ai/admin/accounts', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    platform_username: u.username, vendor_username: email, status: 'active',
+                }),
+            });
+            loadExtAi(u);
+        } catch (e) { say('e-msg', e.message); }
+    }
+
+    async function saveExtAi(u, b) {
+        try {
+            await api('/external-ai/admin/accounts/' + encodeURIComponent(b.id), {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    vendor_username: $('e-email').value.trim(),
+                    status: $('e-status').value,
+                    note: $('e-note').value.trim(),
+                }),
+            });
+            EXT_EDIT = false;
+            loadExtAi(u);
+        } catch (e) { say('e-msg', e.message); }
+    }
+
+    async function unbindExt(u, b) {
+        // ZH: 明講解除之後會怎樣 —— 不講的話沒有人敢按，
+        //     而且要說清楚**廠商那邊不受影響**（我們從來不寫廠商的資料）。
+        if (!confirm(T('pp_ext_unbind_confirm',
+                '要解除 {n} 的綁定嗎？只是拿掉平台這邊的對應，廠商那邊的帳號與點數不受影響。')
+                .replace('{n}', b.myai_email || b.myai_vendor_sn || ''))) return;
+        try {
+            await api('/external-ai/admin/accounts/' + encodeURIComponent(b.id), { method: 'DELETE' });
+            loadExtAi(u);
+        } catch (e) { say('e-msg', e.message); }
+    }
+
     async function loadQuota(u) {
         var box = $('quota-box');
         try {
