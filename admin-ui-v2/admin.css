@@ -149,3 +149,175 @@
 .page--admin {
     max-width: 1440px;
 }
+
+/* ==============================================================================
+   總覽（階段 2）
+   ============================================================================== */
+
+/* ── 區塊 ────────────────────────────────────────────────────────────────── */
+.adm-sec { margin-top: var(--space-6); }
+
+.adm-sec__head {
+    display: flex;
+    align-items: baseline;
+    gap: var(--space-3);
+    margin-bottom: var(--space-3);
+}
+
+.adm-sec__head h2 {
+    margin: 0;
+    font-size: 1.0625rem;
+    color: var(--text-strong);
+}
+
+/* ── 需要你處理的 ──────────────────────────────────────────────────────────
+   ZH: 沒事的時候**要明確說沒事**（.adm-clear），不要留白。
+       留白與「還在載入」在畫面上長得一模一樣，人會多等、重新整理、再懷疑壞了。 */
+.adm-clear {
+    margin: 0;
+    padding: var(--space-4);
+    border-radius: var(--radius-sm);
+    background-color: var(--surface);
+    border: 1px solid var(--hairline);
+    color: var(--text-muted);
+}
+
+.adm-alert {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    padding: var(--space-3) var(--space-4);
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--hairline);
+    background-color: var(--surface);
+    margin-bottom: var(--space-2);
+}
+
+.adm-alert > span { flex: 1; }
+
+/* ZH: 用**左側粗邊**而不是整塊染色：整塊染色在有三四條時會讓整頁變成警報牆，
+       反而看不出哪一條比較嚴重。 */
+.adm-alert--error { border-left: 4px solid var(--error); }
+.adm-alert--warn  { border-left: 4px solid var(--warn); }
+.adm-alert--info  { border-left: 4px solid var(--accent); }
+
+/* ── GPU 卡片 ─────────────────────────────────────────────────────────────
+   ZH: auto-fill + minmax —— 一張卡與八張卡都排得好看，不必為張數寫斷點。 */
+.adm-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+    gap: var(--space-4);
+}
+
+.adm-card {
+    padding: var(--space-4);
+    border: 1px solid var(--hairline);
+    border-radius: var(--radius-sm);
+    background-color: var(--surface);
+}
+
+/* ZH: 掉線的卡片**降透明度而不是隱藏** —— 它消失的話，
+       「這張卡掉線了」與「這台機器被拆掉了」就分不出來。 */
+.adm-card.is-offline { opacity: 0.5; }
+
+.adm-card__title {
+    font-weight: 600;
+    color: var(--text-strong);
+    margin-bottom: var(--space-3);
+}
+
+/* ── 量表 ─────────────────────────────────────────────────────────────────── */
+.adm-meter {
+    display: grid;
+    grid-template-columns: 4.5em 1fr auto;
+    align-items: center;
+    gap: var(--space-2);
+    margin-top: var(--space-2);
+    font-size: 0.8125rem;
+}
+
+.adm-meter__label { color: var(--text-muted); }
+
+.adm-meter__bar {
+    height: 6px;
+    border-radius: 3px;
+    background-color: var(--surface-2);
+    overflow: hidden;
+}
+
+.adm-meter__bar > i {
+    display: block;
+    height: 100%;
+    background-color: var(--chart-me);   /* ZH: 用圖表色不是 --accent —— 黃色對白底只有 1.67，
+                                                細長條幾乎看不見（理由見 tokens.css） */
+}
+
+.adm-meter__val {
+    color: var(--text);
+    font-variant-numeric: tabular-nums;   /* ZH: 每 10 秒更新一次，不等寬會左右跳 */
+}
+
+/* ── 表格 ─────────────────────────────────────────────────────────────────── */
+/* ZH: 管理端的表格會比視窗寬（九欄）。讓**表格自己捲**，
+       不要讓整個 body 出現橫向捲軸——那會連頂部列一起被推走。 */
+.adm-tablewrap {
+    overflow-x: auto;
+    border: 1px solid var(--hairline);
+    border-radius: var(--radius-sm);
+    background-color: var(--surface);
+}
+
+.adm-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.875rem;
+}
+
+.adm-table th,
+.adm-table td {
+    padding: var(--space-2) var(--space-3);
+    text-align: left;
+    white-space: nowrap;
+    border-bottom: 1px solid var(--hairline);
+}
+
+.adm-table thead th {
+    background-color: var(--surface-2);
+    color: var(--text-muted);
+    font-weight: 600;
+    font-size: 0.8125rem;
+    position: sticky;
+    top: 0;
+}
+
+.adm-table tbody tr:last-child td { border-bottom: none; }
+.adm-table tbody tr:hover { background-color: var(--surface-2); }
+
+.adm-table .num { text-align: right; font-variant-numeric: tabular-nums; }
+.adm-table .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.8125rem; }
+
+/* ── 狀態標籤 ─────────────────────────────────────────────────────────────
+   ZH: 預設是中性的。**只有需要注意的狀態才上色** ——
+       每個狀態都給一個顏色等於沒有任何狀態被凸顯。 */
+.adm-pill {
+    display: inline-block;
+    padding: 0 var(--space-2);
+    border-radius: 999px;
+    font-size: 0.75rem;
+    line-height: 1.6;
+    background-color: var(--surface-2);
+    color: var(--text-muted);
+    border: 1px solid var(--hairline);
+}
+
+.adm-pill--working,
+.adm-pill--running { background-color: var(--accent-soft); color: var(--text-strong); }
+
+.adm-pill--offline,
+.adm-pill--failed,
+.adm-pill--error { background-color: var(--error-soft); color: var(--error); }
+
+.adm-pill--disabled,
+.adm-pill--out_of_window,
+.adm-pill--out_of_window_draining,
+.adm-pill--pending { background-color: var(--warn-soft); color: var(--warn); }

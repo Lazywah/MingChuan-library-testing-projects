@@ -51,7 +51,14 @@ TARGETS = [
 #           「字串後面接含中文的字串」這個形狀。**這是形狀判準的已知代價**，
 #           寫死排除比把判準改窄好（改窄會重新漏掉以參數傳 key 的呼叫）。
 IGNORE_USED = {"key", "zh", "en"}
-DYNAMIC_PREFIXES = ("role_",)
+# ZH: key 是**在執行時組出來的**，掃描器看不到字面值，所以不算「沒人用」。
+#   role_ — `T('role_' + user.role, …)`
+#   st_   — `T('st_' + node.state, …)`（管理端的節點六態、任務狀態）
+#
+# ⚠ 代價：這兩個前綴底下**真的沒人用的 key 也不會被抓到**。
+#   這是知情的取捨 —— 另一個方向（把它們報成沒人用）會讓人去刪掉
+#   實際還在用的翻譯，那個錯誤嚴重得多。
+DYNAMIC_PREFIXES = ("role_", "st_")
 
 
 def used_keys(ui: Path, dict_files: list) -> dict:
@@ -166,6 +173,16 @@ def check_one(dirname: str, dict_files: list) -> list:
         for lang, table in (("zh", zh), ("en", en)):
             if k not in table:
                 problems.append(f"{lang} 缺 key `{k}`（用在 {', '.join(sorted(where))}）")
+
+    # ZH: 🔴 兩種語言要**對稱** —— 一邊有、另一邊沒有就是漏翻。
+    #     這一條與「有沒有人用」無關，所以動態前綴也逃不掉。
+    #
+    # ZH: 為什麼要獨立寫一條：上面那個迴圈對 DYNAMIC_PREFIXES 是 `continue`，
+    #     於是 `st_working` 只有中文、沒有英文時**完全不會被抓到**，
+    #     英文模式下就會靜默退回中文。這是陽性對照抓到的（我原本以為有守住）。
+    for k in sorted(set(zh) ^ set(en)):
+        miss = "en" if k in zh else "zh"
+        problems.append(f"{miss} 缺 key `{k}`（另一種語言有，這是漏翻）")
 
     dynamic_ok = {k for k in list(zh) + list(en) if k.startswith(DYNAMIC_PREFIXES)}
     unused = (set(zh) | set(en)) - set(used) - dynamic_ok
