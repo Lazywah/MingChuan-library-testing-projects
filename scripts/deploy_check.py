@@ -15,6 +15,7 @@ ZH: 在 `docker compose up` 之前跑一次，把常見的無聲地雷一次檢�
     8. 回應的時間欄位有沒有明示時區（呼叫 check_naive_datetime.py）
     9. 每頁 HTML 有沒有載它的 JS 用到的共用檔（呼叫 check_js_globals.py）
     9b. 各 v2 目錄的共用檔是否與正本一致（呼叫 check_shared_ui_files.py）
+    9c. 前端 JS 是否為可解析的 JavaScript（呼叫 check_js_syntax.py）
    10. 主機埠（80/8888/8002/3000/8787/11434）占用狀況
 
     退出碼：有 FAIL → 1（別部署）；只有 WARN 或全過 → 0。
@@ -286,6 +287,33 @@ def check_naive_datetime():
     return PASS, "回應的時間欄位都有明示時區（UTC）"
 
 
+def check_js_syntax():
+    """ZH: 前端每一支 .js 是否為可解析的 JavaScript。
+
+    ZH: 為什麼列進部署前健檢：實際發生過而且已經 commit ——
+        `i18n-admin.js` 裡一個沒跳脫的撇號（`user's`）讓整個檔案無法解析，
+        `Object.assign` 從來沒執行，**英文模式下管理端的翻譯全部失效**。
+
+    ZH: 它沒被發現的原因值得記著：中文模式因為有 fallback 看起來完全正常、
+        check_i18n 用正規表示式讀字典不驗語法、而每個 <script> 各自獨立
+        所以頁面不會整個壞掉。三件事加起來就是一個看不出來的靜默失效。
+
+    @node scripts/deploy_check.py::check_js_syntax
+    """
+    script = SCRIPTS_DIR / "check_js_syntax.py"
+    if not script.exists():
+        return WARN, "找不到 check_js_syntax.py，略過 JS 語法檢查"
+    r = subprocess.run([sys.executable, str(script)], capture_output=True,
+                       text=True, encoding="utf-8", errors="replace")
+    out = r.stdout or ""
+    if r.returncode != 0:
+        first = next((l.strip() for l in out.splitlines() if l.strip().startswith("-")), "")
+        return FAIL, f"有 JS 無法解析 → python scripts/check_js_syntax.py　{first}"
+    if "[WARN]" in out:
+        return WARN, "找不到 node，略過 JS 語法檢查"
+    return PASS, "前端 JS 都能解析"
+
+
 def check_shared_ui_files():
     """ZH: 各 v2 目錄的共用檔（tokens/styles/i18n/prefs）是否與正本逐位元組相同。
 
@@ -389,6 +417,7 @@ def main():
         ("時間帶時區",     check_naive_datetime()),
         ("共用檔載入",     check_js_globals()),
         ("共用檔一致",     check_shared_ui_files()),
+        ("JS 語法",        check_js_syntax()),
         ("主機埠",         check_ports()),
     ]
 

@@ -295,6 +295,9 @@
 
     // ── 一個人的全部 ──────────────────────────────────────────────────────
     function pick(id) {
+        // ZH: 換一個人就回到唯讀 —— 不然在 A 身上解鎖之後點到 B，
+        //     B 的欄位是直接可以改的，而你並沒有為 B 確認過。
+        EDIT_BASIC = false;
         CURRENT = ALL.filter(function (u) { return u.id === id; })[0] || null;
         renderList();
         renderDetail();
@@ -359,6 +362,97 @@
         });
     }
 
+
+    // ── 基本資料：唯讀 → 解鎖 → 編輯 ────────────────────────────────────────
+    //
+    // ZH: 預設唯讀。按「編輯」要先輸入一次密碼，按「儲存」再輸入一次。
+    //
+    // ZH: 🔴 **這兩道確認擋的是誤觸與離開座位時被人動到，不是安全機制。**
+    //     後端的 `PUT /admin/users/{id}` 本身不要求密碼（改它會弄壞舊版管理介面），
+    //     所以拿到 token 的人仍然可以直接打 API。
+    //     但密碼是真的向後端驗的（`POST /admin/verify`，它不發 token、
+    //     也不會污染登入紀錄），不是畫面上比對一下而已。
+    var EDIT_BASIC = false;
+
+    function roText(u) {
+        return '<div class="kv"><span class="kv__k">Email</span>'
+            + '<span class="kv__v">' + esc(shownEmail(u)) + '</span></div>'
+            + '<div class="kv"><span class="kv__k">' + esc(T('pp_c_dept', '學系')) + '</span>'
+            + '<span class="kv__v">' + esc(u.department || '—') + '</span></div>'
+            + '<div class="kv"><span class="kv__k">' + esc(T('pp_c_role', '角色')) + '</span>'
+            + '<span class="kv__v">' + esc(T('role_' + u.role, u.role)) + '</span></div>';
+    }
+
+    function basicCard(u) {
+        var head = '<section class="adm-card">'
+            + '<div class="adm-card__title">' + esc(T('pp_basic', '基本資料')) + '</div>';
+
+        if (!EDIT_BASIC) {
+            return head
+                + roText(u)
+                + '<p class="footnote">' + esc(T('pp_ro_hint', '唯讀。要修改請按「編輯」。')) + '</p>'
+                + '<div class="ds__actions">'
+                + '<button class="btn btn--minor" type="button" id="b-edit">'
+                + esc(T('pp_edit', '編輯')) + '</button>'
+                + '</div>'
+                // ZH: 解鎖用的密碼欄位。預設收著 —— 平常看資料的人不需要看到它。
+                + '<div id="b-unlock" hidden>'
+                + '<p class="footnote">' + esc(T('pp_unlock_why',
+                    '確認是本人在操作，避免誤改或離開座位時被人動到。')) + '</p>'
+                + field('b-pw', T('pp_unlock_title', '請再輸入一次你的密碼'), '', 'password')
+                + '<div class="ds__actions">'
+                + '<button class="btn btn--primary" type="button" id="b-unlock-go">'
+                + esc(T('pp_unlock_go', '確認')) + '</button>'
+                + '<button class="btn btn--minor" type="button" id="b-unlock-cancel">'
+                + esc(T('pp_cancel', '取消變更')) + '</button>'
+                + '</div>'
+                + '</div>'
+                + '<div class="inline-error" id="save-msg" hidden></div>'
+                + '</section>';
+        }
+
+        return head
+            + field('f-email', 'Email', u.email, 'email')
+            + field('f-dept', T('pp_c_dept', '學系'), u.department)
+            + '<label class="field"><span class="field__label" for="f-role">'
+            + esc(T('pp_c_role', '角色')) + '</span>'
+            + '<select class="field__input" id="f-role">'
+            + ['student', 'teacher', 'admin'].map(function (r) {
+                return '<option value="' + r + '"' + (u.role === r ? ' selected' : '') + '>'
+                    + esc(T('role_' + r, r)) + '</option>';
+            }).join('')
+            + '</select></label>'
+            + field('f-pw', T('pp_new_pw', '新密碼'), '', 'password')
+            + '<p class="footnote">' + esc(T('pp_pw_hint', '留空就不改密碼')) + '</p>'
+            // ZH: 儲存前的第二次確認。與解鎖那次是**分開的兩個欄位**——
+            //     共用一個的話，第一次輸入的密碼會一直留在 DOM 裡。
+            + field('f-confirm', T('pp_confirm_save', '儲存前請再輸入一次密碼'), '', 'password')
+            + '<div class="ds__actions">'
+            + '<button class="btn btn--primary" type="button" id="save">'
+            + esc(T('pp_save', '儲存')) + '</button>'
+            + '<button class="btn btn--minor" type="button" id="b-cancel">'
+            + esc(T('pp_cancel', '取消變更')) + '</button>'
+            + '</div>'
+            + '<div class="inline-error" id="save-msg" hidden></div>'
+            + '</section>';
+    }
+
+    // ZH: 向後端驗證管理員密碼。用 /admin/verify —— 它專為此而存在，
+    //     而且**不發 token、不更新 last_login**（用 /auth/login 驗的話，
+    //     每次按編輯都會在稽核裡留下一次「登入」）。
+    async function verifyPassword(pw) {
+        try {
+            await api('/admin/verify', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ admin_password: pw }),
+            });
+            return true;
+        } catch (e) {
+            return false;
+        }
+    }
+
     function renderDetail() {
         var box = $('detail');
         if (!CURRENT) {
@@ -372,25 +466,7 @@
             + '<span class="footnote mono">' + esc(u.id) + '</span></div>'
 
             + '<div class="adm-cols">'
-            // 基本資料
-            + '<section class="adm-card">'
-            + '<div class="adm-card__title">' + esc(T('pp_basic', '基本資料')) + '</div>'
-            + field('f-email', 'Email', u.email, 'email')
-            + field('f-dept', T('pp_c_dept', '學系'), u.department)
-            + '<label class="field"><span class="field__label" for="f-role">'
-            + esc(T('pp_c_role', '角色')) + '</span>'
-            + '<select class="field__input" id="f-role">'
-            + ['student', 'teacher', 'admin'].map(function (r) {
-                return '<option value="' + r + '"' + (u.role === r ? ' selected' : '') + '>'
-                    + esc(T('role_' + r, r)) + '</option>';
-            }).join('')
-            + '</select></label>'
-            + field('f-pw', T('pp_new_pw', '新密碼'), '', 'password')
-            + '<p class="footnote">' + esc(T('pp_pw_hint', '留空就不改密碼')) + '</p>'
-            + '<button class="btn btn--primary" type="button" id="save">'
-            + esc(T('pp_save', '儲存')) + '</button>'
-            + '<div class="inline-error" id="save-msg" hidden></div>'
-            + '</section>'
+            + basicCard(u)
 
             // 額度 / 實驗室（非同步填）
             + '<section class="adm-card" id="quota-box">'
@@ -452,7 +528,54 @@
 
 
     function wireDetail(u) {
+        // ── 唯讀時：只有「編輯」與解鎖表單 ──────────────────────────────
+        if (!EDIT_BASIC) {
+            $('b-edit').addEventListener('click', function () {
+                $('b-unlock').hidden = false;
+                $('b-edit').disabled = true;
+                $('b-pw').focus();
+            });
+            $('b-unlock-cancel').addEventListener('click', function () {
+                $('b-unlock').hidden = true;
+                $('b-edit').disabled = false;
+                $('b-pw').value = '';          // ZH: 密碼不留在 DOM 裡
+                say('save-msg', '');
+            });
+            $('b-unlock-go').addEventListener('click', async function () {
+                var pw = $('b-pw').value;
+                if (!pw) { say('save-msg', T('pp_need_pw', '請先輸入你的管理員密碼。')); return; }
+                if (!await verifyPassword(pw)) {
+                    say('save-msg', T('pp_unlock_bad', '密碼不對。'));
+                    return;
+                }
+                // ZH: 驗過就把它清掉。**不要留著等儲存時再用** ——
+                //     那等於把密碼放在記憶體裡直到他關掉頁面，
+                //     而且使用者的期待是「儲存時會再問一次」（他明講的）。
+                $('b-pw').value = '';
+                EDIT_BASIC = true;
+                renderDetail();
+            });
+            wireCommon(u);
+            return;
+        }
+
+        // ── 編輯時 ──────────────────────────────────────────────────────
+        $('b-cancel').addEventListener('click', function () {
+            // ZH: 丟掉改動 —— 從 CURRENT 重畫即可，那份沒有被編輯過。
+            EDIT_BASIC = false;
+            renderDetail();
+        });
+
         $('save').addEventListener('click', async function () {
+            // ZH: 儲存前的第二次確認（使用者明確要求）。
+            var pw2 = $('f-confirm').value;
+            if (!pw2) { say('save-msg', T('pp_need_pw', '請先輸入你的管理員密碼。')); return; }
+            if (!await verifyPassword(pw2)) {
+                say('save-msg', T('pp_unlock_bad', '密碼不對。'));
+                return;
+            }
+            $('f-confirm').value = '';
+
             var patch = {
                 email: $('f-email').value.trim() || null,
                 department: $('f-dept').value.trim() || null,
@@ -470,13 +593,20 @@
                 });
                 Object.assign(u, { email: patch.email, department: patch.department, role: patch.role });
                 $('f-pw').value = '';
-                flash('save-msg', T('pp_saved', '已儲存'));
+                EDIT_BASIC = false;            // ZH: 存完收回唯讀
                 renderList();
+                renderDetail();
+                flash('save-msg', T('pp_saved', '已儲存'));
             } catch (e) {
                 say('save-msg', T('pp_save_fail', '存不起來（{w}）').replace('{w}', e.message));
             }
         });
 
+        wireCommon(u);
+    }
+
+    // ZH: 兩種模式都有的部分（危險操作那一區不受唯讀／編輯影響）。
+    function wireCommon(u) {
         $('toggle-active').addEventListener('click', async function () {
             try {
                 await api('/admin/users/' + encodeURIComponent(u.id), {

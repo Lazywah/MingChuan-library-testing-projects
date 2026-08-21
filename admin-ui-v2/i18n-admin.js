@@ -116,6 +116,14 @@
         pp_pw_hint: '留空就不改密碼',
         pp_new_pw: '新密碼',
 
+        pp_edit: '編輯',
+        pp_cancel: '取消變更',
+        pp_ro_hint: '唯讀。要修改請按「編輯」。',
+        pp_unlock_title: '請再輸入一次你的密碼',
+        pp_unlock_why: '確認是本人在操作，避免誤改或離開座位時被人動到。',
+        pp_unlock_go: '確認',
+        pp_unlock_bad: '密碼不對。',
+        pp_confirm_save: '儲存前請再輸入一次密碼',
         pp_quota: '磁碟配額',
         pp_q_base: '基本',
         pp_q_effective: '實際可用',
@@ -319,6 +327,14 @@
         pp_pw_hint: 'Leave blank to keep the current password',
         pp_new_pw: 'New password',
 
+        pp_edit: 'Edit',
+        pp_cancel: 'Discard changes',
+        pp_ro_hint: 'Read-only. Press "Edit" to change anything.',
+        pp_unlock_title: 'Enter your password again',
+        pp_unlock_why: 'Confirms it is really you — guards against slips and against someone using an unattended screen.',
+        pp_unlock_go: 'Confirm',
+        pp_unlock_bad: 'Wrong password.',
+        pp_confirm_save: 'Enter your password again to save',
         pp_quota: 'Disk quota',
         pp_q_base: 'Base',
         pp_q_effective: 'Effective',
@@ -376,7 +392,11 @@
 
         pf_settings: 'Operational settings',
         pf_settings_why: 'Takes effect immediately, no restart. Leave blank to fall back to the .env default.',
-        pf_external_warn: 'Choosing an external provider (Claude / Gemini) sends what users ask the assistant to that vendor, and its code-tutor mode reads the user's own files. Local models connect directly; an external one adds a gateway dependency that takes the assistant down with it.',
+        // ⚠ ZH: 這一行曾經因為 `user's` 的撇號**讓整個檔案無法解析** ——
+        //   於是 Object.assign 從來沒執行、英文模式下管理端的翻譯全部失效，
+        //   而中文因為有 fallback 所以看起來一切正常（這就是它沒被發現的原因）。
+        //   這裡改用不需要跳脫的寫法；`scripts/check_js_syntax.py` 現在會擋這種錯。
+        pf_external_warn: 'Choosing an external provider (Claude / Gemini) sends what users ask the assistant to that vendor, and its code-tutor mode reads files belonging to the user. Local models connect directly; an external one adds a gateway dependency that takes the assistant down with it.',
         pf_default: 'default {v}',
         pf_range: '{min}-{max}',
         pf_overridden: 'overridden',
