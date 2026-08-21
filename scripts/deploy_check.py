@@ -18,6 +18,7 @@ ZH: 在 `docker compose up` 之前跑一次，把常見的無聲地雷一次檢�
     9c. 前端 JS 是否為可解析的 JavaScript（呼叫 check_js_syntax.py）
     9d. 會送到畫面上的錯誤訊息有沒有中文（呼叫 check_error_messages.py）
     9e. HTML 裡看得見的中文有沒有掛 data-i18n（呼叫 check_untranslated_html.py）
+    9f. 有沒有把 <select> 的值當成布林用（呼叫 check_select_bool.py）
    10. 主機埠（80/8888/8002/3000/8787/11434）占用狀況
 
     退出碼：有 FAIL → 1（別部署）；只有 WARN 或全過 → 0。
@@ -336,6 +337,31 @@ def check_error_messages():
     return PASS, "錯誤訊息都有中文"
 
 
+def check_select_bool():
+    """ZH: 有沒有把 <select> 的值當成布林用。
+
+    ZH: 為什麼列進部署前健檢：`<select>` 的 .value 永遠是字串，而 '0' 在 JS
+        裡是 truthy。實測過一次——管理端「模型」的「公開」欄寫成
+        `is_public: !!m.is_public`，結果是**光按下編輯再按儲存，所有非公開的
+        模型都被改成公開**，畫面還顯示「存好了：改了 2 列」。
+
+    ZH: 後端測試抓不到：它收到的是一個合法的 true，無從知道那個 true 是
+        從字串 '0' 變出來的。
+
+    @node scripts/deploy_check.py::check_select_bool
+    """
+    script = SCRIPTS_DIR / "check_select_bool.py"
+    if not script.exists():
+        return WARN, "找不到 check_select_bool.py，略過"
+    r = subprocess.run([sys.executable, str(script)], capture_output=True,
+                       text=True, encoding="utf-8", errors="replace")
+    out = r.stdout or ""
+    if r.returncode != 0:
+        first = next((l.strip() for l in out.splitlines() if l.strip().startswith("-")), "")
+        return FAIL, f"下拉的值被當成布林 → python scripts/check_select_bool.py　{first}"
+    return PASS, "沒有把下拉的值當成布林用"
+
+
 def check_js_syntax():
     """ZH: 前端每一支 .js 是否為可解析的 JavaScript。
 
@@ -467,6 +493,7 @@ def main():
         ("共用檔載入",     check_js_globals()),
         ("共用檔一致",     check_shared_ui_files()),
         ("JS 語法",        check_js_syntax()),
+        ("下拉當布林",     check_select_bool()),
         ("錯誤訊息中文",   check_error_messages()),
         ("HTML 中文標記",  check_untranslated_html()),
         ("主機埠",         check_ports()),
