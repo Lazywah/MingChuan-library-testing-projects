@@ -27,6 +27,15 @@
     "    \"url\": \"https://example.mcu.edu.tw/works/1\"",
     "  }"
   ],
-  "updated": "2026-08-19",
-  "items": []
+  "updated": "2026-08-21",
+  "items": [
+    {
+      "type": "video",
+      "title": "「好好用 AI」素養計劃：計劃與教材介紹",
+      "desc": "台灣人工智慧學校與 Meta 合辦的 AI 素養課程總覽：AI 會在哪些地方出錯、為什麼會出錯，以及怎麼判斷它給你的東西能不能用。約 39 分鐘，不需要程式基礎。",
+      "author": "台灣人工智慧學校",
+      "date": "2025-11-20",
+      "url": "https://www.youtube.com/watch?v=VvycRW4YrTw"
+    }
+  ]
 }
