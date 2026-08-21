@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title data-i18n="adm_t_reports">回報 · MCU AI Base 管理端</title>
+    <title data-i18n="adm_t_msg">訊息 · MCU AI Base 管理端</title>
 
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -20,12 +20,28 @@
 <main class="page page--admin">
 
     <div class="adm-sec__head">
-        <h1 class="hero__title" data-i18n="adm_nav_reports">回報</h1>
+        <h1 class="hero__title" data-i18n="adm_nav_msg">訊息</h1>
     </div>
 
     <!-- ZH: 這一頁的三段都是為了同一件事：**有人問了問題，你要回答他**。
              寄信紀錄與稽核單獨看沒什麼意思，是回答問題時才有用 ——
              舊版把它們放在別的地方，於是回答一個問題要跳三個分頁。 -->
+
+    <!-- ZH: 公告放在最前面。這一頁是「跟使用者之間的訊息」——
+             公告是往外廣播、回報是往內收，往外的那半要先看到，
+             因為它是你主動要做的事，不是等著被觸發的。 -->
+    <section class="adm-sec" aria-labelledby="h-news">
+        <div class="adm-sec__head">
+            <h2 id="h-news" data-i18n="rp_news">公告</h2>
+            <span class="topbar__spacer"></span>
+            <span class="footnote" id="news-sum"></span>
+            <button class="btn btn--minor" type="button" id="news-new" data-i18n="rp_news_new">寫一則公告</button>
+        </div>
+        <p class="footnote" data-i18n="rp_news_why">公告會出現在使用者的首頁與「最新消息」。置頂的排在最前面；沒有勾公開的只有你看得到，可以當草稿用。</p>
+        <section class="adm-card adm-sec" id="news-form" hidden></section>
+        <div id="news" aria-live="polite"><span class="skeleton skeleton--line"></span></div>
+        <div class="inline-error" id="news-msg" hidden></div>
+    </section>
 
     <section class="adm-sec" aria-labelledby="h-reports">
         <div class="adm-sec__head"><h2 id="h-reports" data-i18n="adm_nav_reports">回報</h2></div>
@@ -49,9 +65,9 @@
 <script src="tz.js?v=3608fea5"></script>
 <!-- ⚠ ZH: 順序不能動 —— i18n-admin 在 i18n 之後、prefs 之前。 -->
 <script src="i18n.js?v=adcdce5a"></script>
-<script src="i18n-admin.js?v=57e4a8bd"></script>
+<script src="i18n-admin.js?v=b2077831"></script>
 <script src="prefs.js?v=8b7b4277"></script>
-<script src="admin-chrome.js?v=3c57b044"></script>
-<script src="reports.js?v=b339d37a"></script>
+<script src="admin-chrome.js?v=d0aad4f7"></script>
+<script src="reports.js?v=0c483807"></script>
 </body>
 </html>

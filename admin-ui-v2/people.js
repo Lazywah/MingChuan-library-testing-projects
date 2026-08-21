@@ -843,9 +843,13 @@
                     : '<p class="footnote">' + esc(T('pp_q_none', '沒有額外授與。')) + '</p>')
 
                 + '<div class="adm-inline">'
-                + '<input class="field__input" id="g-gb" type="number" min="1" placeholder="GB">'
+                // ZH: placeholder 不算可及的名稱 —— 一填字就消失了，
+                //     而讀螢幕的人本來就聽不到它。要另外給 aria-label。
+                + '<input class="field__input" id="g-gb" type="number" min="1" placeholder="GB"'
+                + ' aria-label="' + esc(T('pp_q_add_gb', '要加幾 GB')) + '">'
                 + '<input class="field__input" id="g-why" type="text" placeholder="'
-                + esc(T('pp_q_reason', '原因（必填）')) + '">'
+                + esc(T('pp_q_reason', '原因（必填）')) + '"'
+                + ' aria-label="' + esc(T('pp_q_reason', '原因（必填）')) + '">'
                 // ZH: 日期欄位一定要有標示 —— 一個空的 date 框看不出是「到期日」
                 //     還是「起始日」，而填錯的後果是額度提早消失。
                 + '<input class="field__input" id="g-exp" type="date" title="'

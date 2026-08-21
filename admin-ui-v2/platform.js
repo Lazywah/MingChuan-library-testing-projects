@@ -115,9 +115,14 @@
             + '</tr></thead><tbody>' + body + '</tbody></table></div>';
     }
 
+    // ZH: 🔴 `o.label` 是**必要的**，不是裝飾。表格裡的欄位沒有 <label>，
+    //     欄位名在 <th> 裡，而 <th> 不會自動關聯到 <td> 裡的控制項 ——
+    //     沒有 aria-label 的話，讀螢幕的人聽到的是一連串沒有名字的「編輯方塊」。
+    //     （實測過：表格化之後這一頁編輯模式有 136 個控制項沒有可及的名稱。）
     function cellInput(f, value, o) {
         o = o || {};
         return '<td><input class="field__input" data-f="' + esc(f) + '"'
+            + (o.label ? ' aria-label="' + esc(o.label) + '"' : '')
             + ' type="' + esc(o.type || 'text') + '"'
             + (o.min != null ? ' min="' + esc(o.min) + '"' : '')
             + (o.max != null ? ' max="' + esc(o.max) + '"' : '')
@@ -131,6 +136,7 @@
     function cellSelect(f, list, value, o) {
         o = o || {};
         return '<td><select class="field__input" data-f="' + esc(f) + '"'
+            + (o.label ? ' aria-label="' + esc(o.label) + '"' : '')
             + (o.disabled ? ' disabled' : '') + '>'
             + (o.blank === false ? ''
                 : '<option value="">' + esc(o.blankText
@@ -232,11 +238,12 @@
                 //     選項由後端給 —— 前端不維護一份模型清單，
                 //     不然管理者新增模型之後這裡還是舊的。
                 ? cellSelect('v', s2.choices || [], s2.overridden ? s2.value : '',
-                             { blankText: T('pf_use_default', '（用預設）') })
+                             { blankText: T('pf_use_default', '（用預設）'), label: s2.label })
                 : cellInput('v', s2.overridden ? s2.value : '', {
                     type: (s2.type === 'int' || s2.type === 'float') ? 'number' : 'text',
                     step: s2.type === 'float' ? '0.01' : null,
                     min: s2.min, max: s2.max, placeholder: s2.default,
+                    label: s2.label,
                 });
             return '<tr data-key="' + esc(s2.key) + '">' + name + field
                 + '<td class="footnote">' + esc(s2.default) + '</td>'
@@ -399,14 +406,17 @@
 
     function modelRowEdit(m) {
         var gone = !!MODELS_DEL[m.id];
-        var o = { disabled: gone };
+        // ZH: aria-label 用「欄位名：這一列是誰」。新增的空白列還沒有名字，
+        //     就用「新的一列」——總比三個一樣的「供應者」好分辨。
+        var who = m.name || T('pf_m_new_row', '新的一列');
+        var lab = function (key, zh) { return { disabled: gone, label: T(key, zh) + '：' + who }; };
         return '<tr class="' + (gone ? 'is-gone' : '') + '" data-row="' + esc(m.id) + '">'
-            + cellInput('name', m.name, o)
+            + cellInput('name', m.name, { disabled: gone, label: T('pf_m_name', '名稱') })
             // ZH: 類型由後端在建立時決定，這裡只顯示不給改。
             + '<td>' + esc(m.model_type || '—') + '</td>'
-            + cellInput('api_provider', m.api_provider, o)
-            + cellInput('api_model_id', m.api_model_id, o)
-            + cellInput('api_endpoint', m.api_endpoint, o)
+            + cellInput('api_provider', m.api_provider, lab('pf_m_provider', '供應者'))
+            + cellInput('api_model_id', m.api_model_id, lab('pf_m_id', '模型 ID'))
+            + cellInput('api_endpoint', m.api_endpoint, lab('pf_m_endpoint', 'API 位址'))
             // ZH: 用下拉不用勾選框，跟 GPU 節點的「狀態」同一個理由：整排都是
             //     輸入框時，一個小方塊看起來像漏做的；而且下拉會把兩個狀態
             //     直接寫出來。選項用的字與唯讀那格**完全一樣**（是／否）——
@@ -414,8 +424,9 @@
             + cellSelect('is_public', [{ value: '1', label: T('pf_yes', '是') },
                                        { value: '0', label: T('pf_no', '否') }],
                          isPub(m.is_public) ? '1' : '0',
-                         { blank: false, disabled: gone })
-            + cellInput('description', m.description, o)
+                         { blank: false, disabled: gone,
+                           label: T('pf_m_public', '公開') + '：' + who })
+            + cellInput('description', m.description, lab('pf_m_desc', '說明'))
             + delCell(m.id, gone)
             + '</tr>';
     }
@@ -964,7 +975,8 @@
             return '<td>' + esc(v === '' || v == null
                 ? T('pf_ext_unset', '（沒有設定）') : v) + '</td>';
         }
-        return cellInput('v', v, { type: f[3], min: f[3] === 'number' ? 0 : null });
+        return cellInput('v', v, { type: f[3], min: f[3] === 'number' ? 0 : null,
+                                   label: T(f[1], f[2]) });
     }
 
     async function loadExt() {
@@ -1126,15 +1138,24 @@
         return '<tr class="' + (gone ? 'is-gone' : '') + '" data-row="' + esc(id) + '">'
             // ZH: 代碼是這張表的鍵，改了等於換一列。已存在的就不給改，
             //     只有編輯中新增的空白列可以填。
+            // ZH: aria-label 用「欄位名：這一列是誰」。只寫欄位名的話，
+            //     三十幾列會有三十幾個一模一樣的「顯示名稱」，分不出是哪一列。
             + '<td>' + (r.__new
                 ? '<input class="field__input" data-f="code" value="' + esc(r.code || '') + '"'
+                    + ' aria-label="' + esc(T('pf_mm_code', '廠商原始代碼')) + '"'
                     + ' placeholder="' + esc(T('pf_mm_code', '廠商原始代碼')) + '">'
                 : '<code>' + esc(r.code) + '</code>') + '</td>'
             + '<td><input class="field__input" data-f="display_name" value="'
-            + esc(r.display_name || '') + '"' + (gone ? ' disabled' : '') + '></td>'
-            + '<td><select class="field__input" data-f="provider"' + (gone ? ' disabled' : '') + '>'
+            + esc(r.display_name || '') + '"'
+            + ' aria-label="' + esc(T('pf_mm_name', '顯示名稱') + '：' + (r.code || '')) + '"'
+            + (gone ? ' disabled' : '') + '></td>'
+            + '<td><select class="field__input" data-f="provider"'
+            + ' aria-label="' + esc(T('pf_m_provider', '供應者') + '：' + (r.code || '')) + '"'
+            + (gone ? ' disabled' : '') + '>'
             + opt(MAP.providers, r.provider) + '</select></td>'
-            + '<td><select class="field__input" data-f="category"' + (gone ? ' disabled' : '') + '>'
+            + '<td><select class="field__input" data-f="category"'
+            + ' aria-label="' + esc(T('pf_mm_cat', '類別') + '：' + (r.code || '')) + '"'
+            + (gone ? ' disabled' : '') + '>'
             + opt(MAP.categories, r.category) + '</select></td>'
             + '<td class="num">' + (r.__new ? '—' : (r.seen ? esc(num(r.tx_count))
                 : '<span class="footnote">' + esc(T('pf_mm_unseen', '沒出現過')) + '</span>')) + '</td>'

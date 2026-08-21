@@ -25,7 +25,7 @@
         { file: 'index.html',     key: 'adm_nav_overview',  zh: '總覽' },
         { file: 'people.html',    key: 'adm_nav_people',    zh: '人' },
         { file: 'platform.html',  key: 'adm_nav_platform',  zh: '平台設定' },
-        { file: 'reports.html',   key: 'adm_nav_reports',   zh: '回報' },
+        { file: 'reports.html',   key: 'adm_nav_msg',       zh: '訊息' },
         { file: 'analytics.html', key: 'adm_nav_analytics', zh: '數據' },
     ];
 
