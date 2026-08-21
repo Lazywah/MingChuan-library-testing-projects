@@ -879,6 +879,8 @@ textarea.field__input { resize: vertical; min-height: 6rem; }
 .drop--over { border-color: var(--accent); background-color: var(--surface); }
 .drop--has { border-style: solid; border-color: var(--accent); }
 .drop__icon { font-size: 1.5rem; color: var(--text-muted); line-height: 1; }
+/* ZH: 摺疊區裡的選檔區。矮一點——它是次要路徑，不該和主要的上傳區搶視覺重量。 */
+.drop--small { min-height: 4.5rem; padding: var(--space-4); margin-bottom: 0; }
 .drop__main { color: var(--text-strong); font-weight: 600; word-break: break-all; }
 .drop__sub { font-size: 0.85rem; color: var(--text-muted); }
 

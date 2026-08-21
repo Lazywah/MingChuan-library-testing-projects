@@ -434,6 +434,24 @@ def reap_host_storage() -> dict:
                 stats["freed_bytes"] += _remove(d, f"output kept {OUTPUT_TTL_DAYS:.0f} days")
                 stats["outputs_removed"] += 1
 
+    # ── 2b) 使用者自帶的訓練程式（一張單一份，跟著產出的保留期走）──────
+    # ZH: 不清的話這裡會跟 outputs 一樣無限長大 —— 每張自帶程式的單留一個目錄。
+    #     用與產出相同的 TTL：兩者是同一張單的東西，分開設只會讓人記錯。
+    js_root = root / "jobscripts"
+    if js_root.is_dir():
+        for d in js_root.iterdir():
+            if not d.is_dir():
+                continue
+            try:
+                age = now - d.stat().st_mtime
+            except OSError:
+                continue
+            if age < min_age:
+                continue
+            if age > OUTPUT_TTL_DAYS * 86400:
+                stats["freed_bytes"] += _remove(d, f"job script kept {OUTPUT_TTL_DAYS:.0f} days")
+                stats["outputs_removed"] += 1
+
     # ── 3) 暫存檔（正常會自己清；被 kill 才會留下）────────────────────
     tmp_root = root / "tmp"
     if tmp_root.is_dir():
@@ -454,6 +472,19 @@ def reap_host_storage() -> dict:
                     stats["freed_bytes"] / 1024 ** 2, stats["datasets_removed"],
                     stats["outputs_removed"], stats["tmp_removed"])
     return stats
+
+
+def materialize_user_script(job_id: str, source: str) -> str:
+    """ZH: 把使用者自帶的訓練程式寫進**這張單專屬**的目錄，回傳容器內路徑。
+
+    ZH: 為什麼不放進共用的 scripts/：那裡是平台自己的內建腳本（唯讀、共用）。
+        使用者的程式一人一份，混在一起就是另一種「看得到別人的東西」。
+
+    @node gpu-worker/worker.py::materialize_user_script
+    """
+    d = _host_dir("jobscripts", job_id)
+    (d / "train.py").write_text(source, encoding="utf-8")
+    return f"{TRAIN_WORKSPACE}/code/train.py"
 
 
 def reap_safely() -> None:
@@ -829,6 +860,8 @@ def execute_job(job):
     # ZH: v3.6 上傳資料集訓練 | EN: v3.6 upload-a-dataset training
     has_dataset  = bool(job.get("has_dataset"))
     builtin_task = job.get("builtin_task")
+    # ZH: v3.6 使用者自帶的訓練程式（單一 .py 的原始碼）
+    script_source = job.get("script_source")
     config: dict = job.get("config") or {}
 
     logger.info(f"Starting job {job_id} on GPU {gpu_id} | image={image}")
@@ -883,6 +916,21 @@ def execute_job(job):
         #     is cross-platform and avoids the shared-path problem entirely.
         entry = ["bash", "-euc", inline_code]
         logger.info("Notebook mode: running compiled script via bash -c")
+    elif script_source:
+        # ZH: v3.6 自帶程式模式 —— 使用者提供 .py，平台只負責把資料與環境準備好。
+        # EN: v3.6 user-supplied script mode.
+        try:
+            user_script = materialize_user_script(job_id, script_source)
+        except Exception as e:
+            logger.error("Job %s: could not write the user script: %s", job_id, e)
+            report_update(job_id, {
+                "status": "failed",
+                "error_message": f"ZH: 寫入訓練程式失敗 | EN: Could not write the script: {e}",
+            })
+            _mark_gpu_free(gpu_id)
+            return
+        entry = ["python", "-u", user_script]
+        logger.info("User script mode: %s", user_script)
     elif builtin_task:
         # ZH: v3.6 內建腳本模式 —— 使用者只上傳資料，程式由平台提供。
         # EN: v3.6 built-in script mode — the user uploads data; the platform supplies the code.
@@ -914,10 +962,12 @@ def execute_job(job):
     #     用 env 而不是命令列參數：內建腳本與使用者自己的腳本用同一組約定，
     #     而且不必處理引號跳脫（路徑裡有空白時最容易在這裡出事）。
     # EN: v3.6 — pass dataset location and hyper-parameters via env, not argv.
+    # ZH: v3.6 —— 收窄掛載之後路徑固定成這三個，與掛載一一對應（見下方 storage_mounts）。
+    #     使用者自己的程式也用同一組約定，文件寫的就是這三個。
     if dataset_dir:
-        extra_env.setdefault("DATASET_DIR", dataset_dir)
-    if builtin_task:
-        extra_env.setdefault("OUTPUT_DIR", f"{TRAIN_WORKSPACE}/outputs/{job_id}")
+        extra_env.setdefault("DATASET_DIR", f"{TRAIN_WORKSPACE}/dataset")
+    if builtin_task or script_source:
+        extra_env.setdefault("OUTPUT_DIR", f"{TRAIN_WORKSPACE}/output")
         for key, env_name in (("epochs", "EPOCHS"),
                               ("batch_size", "BATCH_SIZE"),
                               ("learning_rate", "LEARNING_RATE")):
@@ -940,12 +990,57 @@ def execute_job(job):
         if name and target:
             lab_mount_args.extend(["-v", f"{name}:{target}:{mode}"])
 
+    # ZH: 🔴 v3.6 —— 掛載範圍。
+    #
+    #     舊做法是 `-v {STORAGE}:/workspace`，也就是把**共享儲存的整個根目錄**
+    #     掛給訓練容器 —— 裡面有 `datasets/<hash>/`（每一位使用者解壓後的資料）
+    #     與 `outputs/<job>/`（每一張單的模型）。實測確認：
+    #     容器裡 `cat /workspace/datasets/<別人的>/secret.txt` 讀得到。
+    #
+    #     只跑平台自己的腳本時這是無害的（它只讀被告知的路徑）。但一旦開放
+    #     自帶 .py，任何學生用三行 Python 就能把別人的資料與模型撈走。
+    #
+    #     所以**資料集這條路**（內建腳本 / 自帶 .py）改成只掛這張單自己的東西：
+    #         /workspace/dataset  這張單的資料（唯讀）
+    #         /workspace/output   這張單的產出（可寫）
+    #         /workspace/code     這張單的程式（唯讀，只有自帶模式）
+    #         /workspace/.torch   預訓練權重快取（共用，裡面沒有使用者資料）
+    #
+    #     ⚠ 其餘路徑（實驗室的 inline_code、自訂 entry_args）**維持原本的寬掛載**：
+    #       那些是既有行為，改動的風險與本次收益不成比例。實驗室那條同樣有這個
+    #       曝露，已列為待辦——但它與服務層同機，且本來就是使用者自己的容器。
+    # EN: The old broad mount exposed every user's datasets and models to any
+    #     training container. Narrow it for the dataset path now that user code runs there.
+    narrow = bool(dataset_dir or builtin_task or script_source)
+    if narrow:
+        # ZH: 掛載點的**主機端目錄要先存在**。交給 docker 自己建的話擁有者會是 root，
+        #     之後 worker（非 root）想清理或讀產出就會踩到權限。
+        _host_dir("outputs", job_id)
+        _host_dir(".torch")
+        storage_mounts = [
+            "-v", f"{STORAGE_MOUNT_PATH}/outputs/{job_id}:/workspace/output:rw",
+            "-v", f"{STORAGE_MOUNT_PATH}/.torch:/workspace/.torch:rw",
+        ]
+        if dataset_dir:
+            # ZH: dataset_dir 是**容器內**的舊路徑，末段就是內容雜湊；取回主機側的位置。
+            digest = dataset_dir.rsplit("/", 1)[-1]
+            storage_mounts += ["-v",
+                               f"{STORAGE_MOUNT_PATH}/datasets/{digest}:/workspace/dataset:ro"]
+        if script_source:
+            storage_mounts += ["-v",
+                               f"{STORAGE_MOUNT_PATH}/jobscripts/{job_id}:/workspace/code:ro"]
+        else:
+            # ZH: 內建腳本放在共用的 scripts/（平台自己的東西，唯讀，沒有使用者資料）
+            storage_mounts += ["-v", f"{STORAGE_MOUNT_PATH}/scripts:/workspace/scripts:ro"]
+    else:
+        storage_mounts = ["-v", f"{STORAGE_MOUNT_PATH}:/workspace"]
+
     # ZH: 組裝 docker run 指令（兄弟容器模式）
     # EN: Build docker run command (sibling container pattern)
     cmd = [
         "docker", "run", "--rm",
         "--gpus", f"device={gpu_id}",
-        "-v", f"{STORAGE_MOUNT_PATH}:/workspace",
+        *storage_mounts,
         *extra_mounts,
         *lab_mount_args,
         *env_args,

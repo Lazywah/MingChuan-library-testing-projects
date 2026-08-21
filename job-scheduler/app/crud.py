@@ -410,6 +410,7 @@ def create_job(db: Session, job: schemas.JobCreate, user_id: str) -> models.Trai
         script_path=job.script_path,
         dataset_path=job.dataset_path,
         dataset_id=getattr(job, "dataset_id", None),
+        script_source=getattr(job, "script_source", None),
         # ZH: Notebook 欄位 | EN: Notebook fields
         docker_image=job.docker_image,
         inline_code=job.inline_code,
@@ -491,10 +492,34 @@ BUILTIN_TASKS = {
         #     而使用者根本不知道自己選過映像。這裡用平台既有的學期鎖定映像。
         # EN: Pin the image. The built-in script hard-depends on torchvision; relying on
         #     whatever the worker's default happens to be is a silent-failure bet.
+        # ZH: 與 PLATFORM_TRAINING_IMAGE 同一個值——但這裡明確寫出來，
+        #     因為日後不同任務**可能**需要不同映像（那時這裡就會分岔）。
         "image": "aibase/pytorch:2026-spring",
     },
 }
 DEFAULT_BUILTIN_TASK = "image_classification"
+
+
+# ZH: v3.6 平台的標準訓練環境。**自帶程式的單也用它**——
+#     自己寫訓練程式的人幾乎一定需要 torchvision / sklearn / pandas 這些，
+#     而 worker 的 DEFAULT_IMAGE 是精簡的公版映像（本機還沒有，要拉 4 GB）。
+#     實測踩過：第一張自帶程式的單花了好幾分鐘在拉那個映像。
+PLATFORM_TRAINING_IMAGE = "aibase/pytorch:2026-spring"
+
+
+def default_training_image(job) -> Optional[str]:
+    """ZH: 這張單該用哪個映像（使用者沒自己選時）。
+
+    ZH: 內建腳本與自帶程式都走平台的標準環境。其餘（實驗室、自訂入口）回 None，
+        交給 worker 的預設 —— 那些路徑本來就有自己的映像選擇。
+
+    @node job-scheduler/app/crud.py::default_training_image
+    """
+    if getattr(job, "docker_image", None):
+        return job.docker_image
+    if getattr(job, "script_source", None) or builtin_task_for(job):
+        return PLATFORM_TRAINING_IMAGE
+    return None
 
 
 def builtin_task_image(task: str) -> Optional[str]:
@@ -518,7 +543,10 @@ def builtin_task_for(job) -> Optional[str]:
     """
     if not getattr(job, "dataset_path", None):
         return None
-    if getattr(job, "inline_code", None) or getattr(job, "entry_args", None):
+    # ZH: 自己帶程式的人（inline_code / entry_args / script_source）一定是想跑自己的東西，
+    #     不該被換成內建腳本。
+    if (getattr(job, "inline_code", None) or getattr(job, "entry_args", None)
+            or getattr(job, "script_source", None)):
         return None
     cfg = getattr(job, "config", None)
     if isinstance(cfg, str):

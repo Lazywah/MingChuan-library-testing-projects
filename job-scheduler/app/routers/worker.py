@@ -243,8 +243,10 @@ def take_job(
         # ZH: v3.6 —— 內建任務指名映像（使用者沒自己選的話）。內建腳本需要 torchvision，
         #     不能落到 worker 的 DEFAULT_IMAGE 去賭它剛好有。
         builtin_task = crud.builtin_task_for(job)
-        docker_image = job.docker_image or (crud.builtin_task_image(builtin_task)
-                                            if builtin_task else None)
+        # ZH: v3.6 —— 使用者指定 > 內建任務指名 > 自帶程式用平台標準環境 > worker 預設。
+        docker_image = (job.docker_image
+                        or (crud.builtin_task_image(builtin_task) if builtin_task else None)
+                        or crud.default_training_image(job))
 
         logger.info(
             f"Worker {req.node_id} claimed job {job.id[:8]} on GPU {gpu_id_str} "
@@ -270,6 +272,8 @@ def take_job(
                 # ZH: Notebook 欄位 | EN: Notebook fields
                 "docker_image": docker_image,      # ZH: 使用者指定 > 內建任務指名 > None(worker 預設) | EN: user > task-pinned > worker default
                 "inline_code":  job.inline_code,   # ZH: 前端合併的 shell script | EN: Compiled shell script from frontend
+                # ZH: v3.6 使用者自帶的訓練程式。worker 會把它寫進共享儲存再執行。
+                "script_source": job.script_source,
                 "entry_args":   entry_args,        # ZH: 非 Python 工具的入口指令 | EN: Entry command for non-Python tools
                 # ZH: v2.0 Lab 欄位 | EN: v2.0 Lab fields
                 "extra_env":     extra_env,        # ZH: 注入容器的環境變數 (含 secrets) | EN: Env vars to inject (with secrets)

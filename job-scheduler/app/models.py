@@ -144,6 +144,11 @@ class TrainingJob(Base):
     # ZH: Notebook 執行欄位 | EN: Notebook execution fields
     docker_image = Column(String, nullable=True)                              # ZH: 覆寫預設 Docker Image | EN: Override default Docker image
     inline_code  = Column(Text,   nullable=True)                              # ZH: 前端合併的完整 shell script | EN: Compiled shell script from notebook cells
+    # ZH: v3.6 —— 使用者自己帶的訓練程式（單一 .py 的原始碼）。
+    #     ⚠ 與 `inline_code` **刻意分開**：那個欄位是「程式實驗室模式」的判準，
+    #       會觸發同機閘門（要讀 home_<uid>）。自帶 .py 不需要實驗室的檔案，
+    #       混用會讓它被錯誤地擋在遠端節點外。
+    script_source = Column(Text, nullable=True)                               # ZH: 使用者自帶的 .py 原始碼 | EN: User-supplied training script
     entry_args   = Column(Text,   nullable=True)                              # ZH: 容器入口指令 JSON 陣列 | EN: Container entry command (JSON array)
     preferred_node = Column(String, nullable=True)                            # ZH: 偏好的 GPU Worker 節點 | EN: Preferred GPU worker node
 

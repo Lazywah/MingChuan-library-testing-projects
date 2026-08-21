@@ -31,6 +31,8 @@ const viewJobId = QS.get('job');
 let reuseId = QS.get('dataset');
 let reuseName = null;
 let picked = null;        // ZH: 使用者選的檔案（尚未上傳）
+// ZH: v3.6 使用者自帶的訓練程式（原始碼字串，不是檔案 —— 隨送單一起走）
+let scriptSource = null;
 let jobId = null;
 let polling = null;
 let lastLogLen = 0;
@@ -72,6 +74,33 @@ function choose(file) {
     $('drop').classList.add('drop--has');
     setGo({ label: T('tr_go', '開始訓練'), enabled: true });
 }
+
+// ── 自帶程式 ─────────────────────────────────────────────────────────
+$('code-drop').addEventListener('click', () => $('codefile').click());
+$('code-drop').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); $('codefile').click(); }
+});
+$('codefile').addEventListener('change', async (e) => {
+    const f = e.target.files[0];
+    if (!f) return;
+    if (!/\.py$/i.test(f.name)) {
+        setNote(T('tr_own_not_py', '請選一支 .py 檔。'));
+        return;
+    }
+    // ZH: 原始碼隨送單一起走（不另外上傳）——沒有「先上傳、後送單」之間的競態，
+    //     也不會留下孤兒檔案。
+    scriptSource = await f.text();
+    if (scriptSource.length > 262144) {
+        // ZH: 後端也擋（422），但在這裡先說比較有用：他還沒等 GPU 排隊。
+        setNote(T('tr_own_too_big', '這支程式太大了（上限 256 KB）。'));
+        scriptSource = null;
+        return;
+    }
+    setNote('');
+    $('code-main').textContent = f.name;
+    $('code-sub').textContent = `${Math.max(1, Math.round(scriptSource.length / 1024))} KB`;
+    $('code-drop').classList.add('drop--has');
+});
 
 $('drop').addEventListener('click', () => $('file').click());
 $('drop').addEventListener('keydown', (e) => {
@@ -143,6 +172,8 @@ async function submitJob(datasetRef, jobName) {
             body: JSON.stringify(Object.assign({
                 job_name: jobName,
                 model_name: 'resnet18',
+                // ZH: 有自帶程式就送出去；後端據此**不會**套用內建腳本。
+                ...(scriptSource ? { script_source: scriptSource } : {}),
                 // ZH: 種類寫明。不寫也會落到預設，但寫出來的話**日後多一種任務時
                 //     這張舊單仍然指向同一支腳本**，不會跟著預設值漂走。
                 config: { epochs: epochs, task: 'image_classification' },

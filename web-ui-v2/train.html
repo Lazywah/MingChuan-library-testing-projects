@@ -10,7 +10,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Open+Sans:wght@400;600;700&display=swap" rel="stylesheet">
 
     <link rel="stylesheet" href="tokens.css?v=dd946cc2">
-    <link rel="stylesheet" href="styles.css?v=fc3dae27">
+    <link rel="stylesheet" href="styles.css?v=e917e7df">
 </head>
 <body>
 
@@ -76,6 +76,31 @@
             <span class="field__label" data-i18n="tr_epochs_hint">練越多輪越久，也不一定越準。不確定就用預設的 10。</span>
         </label>
 
+        <!-- ZH: 自帶程式。摺疊起來——這一頁是給不會寫程式的人看的，
+                 會寫的人點一下就找得到，不會寫的人完全不受打擾。 -->
+        <div class="fold">
+            <details id="own-code">
+                <summary class="fold__summary" data-i18n="tr_own_title">我要用自己的訓練程式</summary>
+                <div class="fold__body">
+                    <p data-i18n="tr_own_p">選一支 .py。平台會把資料準備好、把它跑起來，其餘由你的程式決定。</p>
+                    <!-- ZH: 契約寫在選檔**之前**。等他跑失敗才知道路徑不對，
+                             是把可以避免的失敗留到最貴的時候（GPU 已經排隊跑過一輪）。 -->
+                    <pre class="diag">/workspace/dataset   你的資料（唯讀）
+/workspace/output    把模型存到這裡
+環境變數：DATASET_DIR、OUTPUT_DIR、EPOCHS
+
+# 進度：印出 Epoch 3/10 就會顯示進度條
+# 失敗：印出 [錯誤] 開頭的那一行會成為錯誤訊息</pre>
+                    <div class="drop drop--small" id="code-drop" tabindex="0" role="button"
+                         data-i18n-aria="tr_own_pick">
+                        <span class="drop__main" id="code-main" data-i18n="tr_own_pick">點一下選 .py</span>
+                        <span class="drop__sub" id="code-sub"></span>
+                    </div>
+                    <input type="file" id="codefile" accept=".py" hidden>
+                </div>
+            </details>
+        </div>
+
         <button class="btn btn--primary" id="go" type="button" disabled data-i18n="tr_go">開始訓練</button>
         <div class="handoff" id="note" hidden></div>
     </section>
@@ -117,9 +142,9 @@
 </main>
 
 <script src="tz.js?v=3608fea5"></script>
-<script src="i18n.js?v=85b7fa1a"></script>
+<script src="i18n.js?v=985a1775"></script>
 <script src="prefs.js?v=8b7b4277"></script>
 <script src="chrome.js?v=40c86ceb"></script>
-<script src="train.js?v=e8f13bed"></script>
+<script src="train.js?v=58fb3732"></script>
 </body>
 </html>

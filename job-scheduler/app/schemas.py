@@ -285,6 +285,9 @@ class JobCreate(BaseModel):
     # ZH: Notebook 執行欄位 | EN: Notebook execution fields
     docker_image:   Optional[str]       = None        # ZH: 覆寫預設 Docker Image，空則使用 DEFAULT_IMAGE | EN: Override default image
     inline_code:    Optional[str]       = None        # ZH: 前端 compileNotebook() 產出的 shell script | EN: Compiled shell script from notebook
+    # ZH: v3.6 使用者自帶的訓練程式（單一 .py 的原始碼，不是檔名）。
+    #     上限 256 KB —— 單一訓練腳本遠低於此；再大就不該用這條路。
+    script_source:  Optional[str]       = Field(default=None, max_length=262144)
     entry_args:     Optional[List[str]] = None        # ZH: 容器入口指令陣列（非 Python 工具用）| EN: Container entry command array
     preferred_node: Optional[str]       = None        # ZH: 偏好的 GPU Worker 節點 ID，"auto" 或空值代表自動 | EN: Preferred worker node, "auto"/null = auto
 
