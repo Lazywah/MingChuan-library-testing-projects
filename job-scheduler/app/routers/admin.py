@@ -1707,6 +1707,19 @@ def get_audit_log(
         q = q.filter(models.AdminAction.action == action)
     total = q.count()
     rows = q.order_by(models.AdminAction.timestamp.desc()).offset(offset).limit(limit).all()
+
+    # ZH: 🔴 一起回**名字**，不要只回 UUID。
+    #     稽核紀錄的用途就是「誰、對誰、做了什麼」——
+    #     只顯示 `3ad36141` 的話，看的人得再去查一次那是誰，
+    #     而那正是他打開這一頁想省下的動作。
+    #
+    # ZH: 一次撈完再對照，不要在迴圈裡逐筆查（100 筆就是 200 次查詢）。
+    ids = {r.admin_id for r in rows} | {r.target_user for r in rows if r.target_user}
+    names = {}
+    if ids:
+        names = {u.id: u.username for u in
+                 db.query(models.User).filter(models.User.id.in_(ids)).all()}
+
     return {
         "total": total,
         "limit": limit,
@@ -1715,7 +1728,11 @@ def get_audit_log(
             {
                 "id": r.id,
                 "admin_id": r.admin_id,
+                # ZH: 查不到就是 None —— 帳號被刪掉了。**不要回 UUID 當名字**，
+                #     那會讓畫面顯示一串亂碼而看起來像正常的使用者名稱。
+                "admin_username": names.get(r.admin_id),
                 "target_user": r.target_user,
+                "target_username": names.get(r.target_user) if r.target_user else None,
                 "action": r.action,
                 "payload": r.payload,
                 "timestamp": r.timestamp,

@@ -11,29 +11,47 @@
 
     <link rel="stylesheet" href="tokens.css?v=dd946cc2">
     <link rel="stylesheet" href="styles.css?v=e917e7df">
-    <link rel="stylesheet" href="admin.css?v=59712822">
+    <link rel="stylesheet" href="admin.css?v=18cad489">
 </head>
 <body>
 
-<!-- ZH: 頂部列由 admin-chrome.js 產生（唯一真相來源）。
-         各頁**不要**自己寫導覽——使用者端就是因為九頁各寫一份色系切換
-         而只有一頁會存設定，那個 bug 花了實地測試才發現。 -->
+<!-- ZH: 頂部列由 admin-chrome.js 產生（唯一真相來源）。 -->
 
 <main class="page page--admin">
-    <h1 class="hero__title" data-i18n="adm_nav_reports">回報</h1>
 
-    <div class="adm-wip">
-        <h2 data-i18n="adm_wip_title">這一頁還沒做</h2>
-        <p data-i18n="adm_wip_body">階段 1 只做骨架（登入、外框、顯示設定）。這一頁會在後面的階段補上。</p>
+    <div class="adm-sec__head">
+        <h1 class="hero__title" data-i18n="adm_nav_reports">回報</h1>
     </div>
+
+    <!-- ZH: 這一頁的三段都是為了同一件事：**有人問了問題，你要回答他**。
+             寄信紀錄與稽核單獨看沒什麼意思，是回答問題時才有用 ——
+             舊版把它們放在別的地方，於是回答一個問題要跳三個分頁。 -->
+
+    <section class="adm-sec" aria-labelledby="h-reports">
+        <div class="adm-sec__head"><h2 id="h-reports" data-i18n="adm_nav_reports">回報</h2></div>
+        <!-- ZH: 每個篩選都帶數量 —— 不帶的話你得逐一點過才知道哪裡有事。 -->
+        <div class="adm-inline" id="filters"></div>
+        <div id="list" aria-live="polite"><span class="skeleton skeleton--line"></span></div>
+    </section>
+
+    <section class="adm-sec" aria-labelledby="h-mail">
+        <div class="adm-sec__head"><h2 id="h-mail" data-i18n="rp_mail">寄信紀錄</h2></div>
+        <div id="mail" aria-live="polite"><span class="skeleton skeleton--line"></span></div>
+    </section>
+
+    <section class="adm-sec" aria-labelledby="h-audit">
+        <div class="adm-sec__head"><h2 id="h-audit" data-i18n="rp_audit">管理動作紀錄</h2></div>
+        <div id="audit" aria-live="polite"><span class="skeleton skeleton--line"></span></div>
+    </section>
+
 </main>
 
 <script src="tz.js?v=3608fea5"></script>
-<!-- ⚠ ZH: 順序不能動 —— i18n-admin 要在 i18n 之後（它 assign 到 I18N 上）、
-         prefs 之前（不然字典還沒併好就先套用一次，畫面會閃一下原文）。 -->
+<!-- ⚠ ZH: 順序不能動 —— i18n-admin 在 i18n 之後、prefs 之前。 -->
 <script src="i18n.js?v=adcdce5a"></script>
-<script src="i18n-admin.js?v=5c8bbd32"></script>
+<script src="i18n-admin.js?v=e7b304af"></script>
 <script src="prefs.js?v=8b7b4277"></script>
 <script src="admin-chrome.js?v=3c57b044"></script>
+<script src="reports.js?v=b339d37a"></script>
 </body>
 </html>

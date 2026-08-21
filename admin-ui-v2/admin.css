@@ -548,3 +548,39 @@
 #node-card {
     scroll-margin-top: calc(var(--tap-min) + var(--space-4));
 }
+
+/* ==============================================================================
+   回報（階段 5）
+   ============================================================================== */
+
+/* ZH: 回報內容是使用者打的字 —— 換行要保留，不然多行的描述會擠成一團。
+       `pre-wrap` 而不是 `pre`：長行還是要自己折，不要逼出橫向捲軸。 */
+.adm-report__body {
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    margin: var(--space-3) 0;
+}
+
+/* ZH: 篩選鈕 —— 只有目前選中的給底色。 */
+#filters .btn.is-current {
+    background-color: var(--accent-soft);
+    color: var(--text-strong);
+    font-weight: 600;
+}
+
+/* ── 狀態標籤：回報與寄信 ────────────────────────────────────────────────
+   ZH: 只有「需要注意」的才上色。全部上色等於沒有任何一個被凸顯。 */
+.adm-pill--open        { background-color: var(--warn-soft);   color: var(--warn); }
+.adm-pill--in_progress { background-color: var(--accent-soft); color: var(--text-strong); }
+/* 已結案＝中性（維持 .adm-pill 的預設灰） */
+
+.adm-pill--sent    { background-color: var(--accent-soft); color: var(--text-strong); }
+.adm-pill--bounced,
+.adm-pill--refused { background-color: var(--error-soft);  color: var(--error); }
+.adm-pill--blocked { background-color: var(--warn-soft);   color: var(--warn); }
+
+/* ZH: textarea 也要吃 .field__input 的樣式，但高度由 rows 決定。 */
+textarea.field__input {
+    resize: vertical;
+    min-height: 4em;
+}
