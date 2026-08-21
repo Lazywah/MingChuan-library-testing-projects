@@ -15,8 +15,20 @@ services:
     image: nginx:alpine
     container_name: ai-platform-nginx
     ports:
+      # ZH: 使用者端 —— 學生要從自己的電腦連進來，必須對外。
       - "80:80"
-      - "8888:8888"
+      # ZH: 🔴 管理端**只綁本機**。擁有者裁定 2026-08-21。
+      #
+      # ZH: 為什麼：管理端是唯一**不走 SSO、只靠帳號密碼**的入口，
+      #     而它能刪帳號、改所有人的額度、看到全部使用者的 Email 與最後登入 IP。
+      #     綁 0.0.0.0 等於把那扇門開在整個網段上。
+      #
+      # ZH: 代價是零 —— 沒有任何服務靠這個埠（GPU worker 走 8002、學生走 80），
+      #     只有管理者的瀏覽器會連它，而管理者就在這台機器上（localhost）。
+      #
+      # ⚠ 要從別台電腦開管理端時，把 `127.0.0.1:` 拿掉再 `docker compose up -d nginx`。
+      #   拿掉之前請先確認密碼不是預設值。
+      - "127.0.0.1:8888:8888"
     volumes:
       - ./infrastructure/nginx.conf:/etc/nginx/nginx.conf:ro
       - ./web-ui:/usr/share/nginx/html/train:ro
