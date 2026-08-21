@@ -596,26 +596,89 @@
     }
 
     // ZH: 只重畫 #node-body —— 卡片外殼與下拉留在原地，換節點時焦點不會掉。
+    // ZH: 跟這一頁其他區一樣：預設唯讀。這一區尤其需要 —— 七天的時段輸入框
+    //     常駐的話，捲頁時滑鼠停在上面就可能改到，而改錯的後果是那台機器
+    //     整天不派任務，而且不會有人來通報。
+    var NODE_EDIT = false;
+
+    function paintNodeButtons() {
+        $('n-edit').hidden = NODE_EDIT;
+        $('n-cancel').hidden = !NODE_EDIT;
+        $('n-ro-hint').hidden = NODE_EDIT;
+    }
+
+    // ZH: 唯讀時把設定用「名稱 / 值」列出來，跟營運設定那區同一個長相。
+    function nodeRo(n, mode) {
+        var kv = function (k, v) {
+            return '<div class="adm-setting adm-setting--ro">'
+                + '<span class="adm-setting__label">' + esc(k) + '</span>'
+                + '<span class="adm-setting__ro">' + esc(v) + '</span></div>';
+        };
+        var modeText = { all: T('pf_n_mode_all', '全天可用'),
+                         win: T('pf_n_mode_win', '依時段'),
+                         never: T('pf_n_mode_never', '永不可用') }[mode] || mode;
+        var out = kv(T('pf_n_name', '顯示名稱'), n.display_name || '—')
+            + kv(T('pf_n_note', '備註'), n.note || '—')
+            + kv(T('pf_n_state', '狀態'),
+                 n.enabled ? T('pf_n_enabled', '啟用') : T('pf_n_disabled', '停用'))
+            + kv(T('pf_n_pool', '池別覆寫'),
+                 n.pool_override || T('pf_n_pool_auto', '（跟著節點回報）'))
+            + kv(T('pf_n_buffer', '收工緩衝（分）'),
+                 n.dispatch_buffer_min == null ? '0' : n.dispatch_buffer_min)
+            + kv(T('pf_n_mode', '開放方式'), modeText);
+
+        // ZH: 只有「依時段」才列七天 —— 其他兩種模式下那七行是誤導。
+        if (mode === 'win') {
+            out += DAYS.map(function (d) {
+                return kv(T('d_' + d, d), schedToText(n.schedule, d)
+                    || T('pf_n_day_off', '不開放'));
+            }).join('');
+        }
+        return out;
+    }
+
     function renderNodeForm(nodeId) {
         var n = NODES.filter(function (x) { return x.node_id === nodeId; })[0];
         if (!n) { $('node-body').innerHTML = ''; return; }
         var mode = schedMode(n.schedule);
+        paintNodeButtons();
+
+        // ZH: 撞名在兩種模式下都要顯示 —— 它是「現在有問題」，
+        //     不是只有在編輯時才成立的事。
+        var conflict = n.ip_conflict
+            ? '<div class="adm-alert adm-alert--error"><span>'
+                + esc(T('pf_n_conflict', '🔴 這個 NODE_ID 有兩台機器在用。')) + '</span></div>'
+            : '';
+
+        if (!NODE_EDIT) {
+            $('node-body').innerHTML = conflict + nodeRo(n, mode)
+                + '<div class="inline-error" id="n-msg" hidden></div>';
+            return;
+        }
 
         $('node-body').innerHTML = ''
 
-            // ZH: 撞名**留在這裡**（不是重複的狀態）—— 它是設定問題，
-            //     而且要在這一頁修（改其中一台的 NODE_ID）。
-            + (n.ip_conflict ? '<div class="adm-alert adm-alert--error"><span>'
-                + esc(T('pf_n_conflict', '🔴 這個 NODE_ID 有兩台機器在用。')) + '</span></div>' : '')
+            // ZH: 撞名是設定問題，而且要在這一頁修（改其中一台的 NODE_ID），
+            //     所以留在這一區；上面的 conflict 變數兩種模式共用。
+            + conflict
 
             + '<div class="adm-cols">'
             + '<div>'
             + fieldRow('n-name', T('pf_n_name', '顯示名稱'), n.display_name || '')
             + fieldRow('n-note', T('pf_n_note', '備註'), n.note || '')
-            + '<label class="field"><span class="field__label">'
-            + esc(T('pf_n_enabled', '啟用')) + '</span>'
-            + '<input type="checkbox" id="n-on"' + (n.enabled ? ' checked' : '') + '>'
-            + '</label>'
+            // ZH: 用下拉不用勾選框。這張卡其他欄位都是整行寬的輸入框與下拉，
+            //     只有它是一個小方塊，看起來像漏做的；而且勾選框的「勾／沒勾」
+            //     要靠讀標籤才知道是哪一邊，下拉直接把兩個狀態寫出來。
+            + '<label class="field"><span class="field__label" for="n-on">'
+            + esc(T('pf_n_state', '狀態')) + '</span>'
+            + '<select class="field__input" id="n-on">'
+            + [['1', T('pf_n_enabled', '啟用')], ['0', T('pf_n_disabled', '停用')]]
+                .map(function (o) {
+                    return '<option value="' + o[0] + '"'
+                        + ((n.enabled ? '1' : '0') === o[0] ? ' selected' : '') + '>'
+                        + esc(o[1]) + '</option>';
+                }).join('')
+            + '</select></label>'
             + '<label class="field"><span class="field__label" for="n-pool">'
             + esc(T('pf_n_pool', '池別覆寫')) + '</span>'
             + '<select class="field__input" id="n-pool">'
@@ -708,7 +771,8 @@
         var payload = {
             display_name: $('n-name').value.trim(),
             note: $('n-note').value.trim(),
-            enabled: $('n-on').checked,
+            // ZH: 下拉的值是字串，不是 boolean —— 直接送 '0' 過去會被當成真。
+            enabled: $('n-on').value === '1',
             pool_override: $('n-pool').value || null,
             schedule: schedule,
         };
@@ -723,7 +787,12 @@
             // ZH: 重讀 —— 後端會回算 state 與 next_change。
             //     ⚠ 帶著 node_id 重讀，**停在同一台**：跳回第一台的話，
             //       連續調同一台的兩個設定會變成每次都要重選。
+            // ⚠ ZH: 順序不能反。loadNodes 會重畫表單，所以旗標要先放掉 ——
+            //     放在後面的話，重畫時 NODE_EDIT 還是 true，畫面停在編輯模式，
+            //     那一行等於沒有作用。
+            NODE_EDIT = false;
             await loadNodes(n.node_id);
+            // ZH: #n-msg 在 node-body 裡、剛被重畫過，所以要在重讀之後才 flash。
             flash('n-msg', T('pf_saved', '已儲存'));
         } catch (e) {
             say('n-msg', e.message);
@@ -805,7 +874,21 @@
     // ZH: 換一台就重畫那張卡。不重讀後端 —— NODES 是剛拿的，
     //     再打一次 API 只會讓切換變慢。
     $('node-pick').addEventListener('change', function (ev) {
+        // ZH: 換一台就退出編輯。不退的話，畫面會用**新節點的值**重畫成編輯中，
+        //     剛才在前一台改到一半的東西無聲消失；更糟的是你會以為自己還在
+        //     編輯原來那一台。
+        NODE_EDIT = false;
         renderNodeForm(ev.target.value);
+    });
+
+    $('n-edit').addEventListener('click', function () {
+        NODE_EDIT = true;
+        renderNodeForm($('node-pick').value);
+    });
+    $('n-cancel').addEventListener('click', function () {
+        // ZH: 取消要丟掉改動。NODES 是上次從後端讀回來的，重畫即可。
+        NODE_EDIT = false;
+        renderNodeForm($('node-pick').value);
     });
 
     // ZH: 🔴 從總覽的 GPU 卡片連過來時要**捲到 GPU 節點那一區**。

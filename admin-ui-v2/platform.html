@@ -72,7 +72,13 @@
             <span class="topbar__spacer"></span>
             <!-- ZH: 一台機器一塊（不是一張 GPU 一塊）。這裡數的是機器。 -->
             <span class="footnote" id="n-count"></span>
+            <!-- ZH: 跟這一頁其他區一樣：預設唯讀，按「編輯設定」才變成可填。
+                     這一區尤其需要——七天的時段輸入框常駐，捲頁時滑鼠停在上面
+                     打字或滾輪都可能改到，而改錯的後果是機器整天不派任務。 -->
+            <button class="btn btn--minor" type="button" id="n-edit" data-i18n="pf_edit">編輯設定</button>
+            <button class="btn btn--minor" type="button" id="n-cancel" data-i18n="pf_cancel" hidden>取消</button>
         </div>
+        <p class="footnote" id="n-ro-hint" data-i18n="pf_readonly_hint">目前是唯讀。要改請按「編輯設定」。</p>
         <!-- ZH: 選一台來調。**不列出全部** —— 總覽已經是「一眼看完所有節點狀態」的地方，
                  在這裡重複只會讓人不確定該信哪一邊，而且會讓這一區隨機器數變長。
 
@@ -132,9 +138,9 @@
 <script src="tz.js?v=3608fea5"></script>
 <!-- ⚠ ZH: 順序不能動 —— i18n-admin 在 i18n 之後、prefs 之前。 -->
 <script src="i18n.js?v=adcdce5a"></script>
-<script src="i18n-admin.js?v=6cbc843f"></script>
+<script src="i18n-admin.js?v=57e4a8bd"></script>
 <script src="prefs.js?v=8b7b4277"></script>
 <script src="admin-chrome.js?v=3c57b044"></script>
-<script src="platform.js?v=7905bb31"></script>
+<script src="platform.js?v=039b4fb0"></script>
 </body>
 </html>
