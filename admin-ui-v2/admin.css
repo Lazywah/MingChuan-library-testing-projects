@@ -980,3 +980,15 @@ textarea.field__input {
     font-variant-numeric: tabular-nums;
     white-space: nowrap;
 }
+
+/* ZH: 網址欄要寬 —— 標籤收窄、輸入框吃掉剩下的，說明另起一行對齊輸入框。 */
+.adm-setting--wide {
+    grid-template-columns: minmax(10em, 16em) 1fr;
+}
+.adm-setting__sub {
+    grid-column: 2;
+}
+@media (max-width: 900px) {
+    .adm-setting--wide { grid-template-columns: 1fr; }
+    .adm-setting__sub { grid-column: 1; }
+}

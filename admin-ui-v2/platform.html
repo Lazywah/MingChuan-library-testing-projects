@@ -11,7 +11,7 @@
 
     <link rel="stylesheet" href="tokens.css?v=dd946cc2">
     <link rel="stylesheet" href="styles.css?v=e917e7df">
-    <link rel="stylesheet" href="admin.css?v=dc70cea4">
+    <link rel="stylesheet" href="admin.css?v=1995440f">
 </head>
 <body>
 
@@ -23,9 +23,9 @@
         <h1 class="hero__title" data-i18n="adm_nav_platform">平台設定</h1>
     </div>
 
-    <!-- ZH: 三塊都是「調完就走」的東西。
-             ⚠ 外部 AI（MYAI）刻意**不在這裡** —— 它 18 個端點裡大多是營運動作
-               （同步、匯入、未配對處理）不是設定，塞進來會讓這一頁又長又雜。 -->
+    <!-- ZH: 都是「調完就走」的東西。
+             ZH: 外部 AI 的 23 個端點只有這裡收下的 8 個是**設定**；
+                 帳號對應與同步那 12 個是營運動作，在「人」那一頁。 -->
 
     <section class="adm-sec" aria-labelledby="h-settings">
         <div class="adm-sec__head">
@@ -83,14 +83,46 @@
         <div id="nodes" aria-live="polite"><span class="skeleton skeleton--line"></span></div>
     </section>
 
+    <!-- ZH: 廠商相關的東西集中在最後一區。
+             ⚠ 「模型」（上面那區）是平台自己的模型註冊表，
+               這裡的「廠商模型代碼對應」是把廠商的原始代碼翻成看得懂的名字，
+               兩者不同 —— 刻意隔開放，名稱也刻意不同。 -->
+    <section class="adm-sec" aria-labelledby="h-ext">
+        <div class="adm-sec__head">
+            <h2 id="h-ext" data-i18n="pf_ext">外部 AI（MYAI）</h2>
+        </div>
+
+        <div class="adm-sec__head">
+            <h3 id="h-ext-conn" data-i18n="pf_ext_conn">連線設定</h3>
+            <span class="topbar__spacer"></span>
+            <button class="btn btn--minor" type="button" id="x-edit" data-i18n="pf_edit">編輯設定</button>
+            <button class="btn btn--minor" type="button" id="x-cancel" data-i18n="pf_cancel" hidden>取消</button>
+            <button class="btn btn--primary" type="button" id="x-save" data-i18n="pf_save" hidden>儲存設定</button>
+        </div>
+        <p class="footnote" id="x-ro-hint" data-i18n="pf_readonly_hint">目前是唯讀。要改請按「編輯設定」。</p>
+        <div id="ext-conn" aria-live="polite"><span class="skeleton skeleton--line"></span></div>
+        <div class="inline-error" id="x-msg" hidden></div>
+
+        <div class="adm-sec__head">
+            <h3 id="h-ext-map" data-i18n="pf_mm">廠商模型代碼對應</h3>
+            <span class="topbar__spacer"></span>
+            <button class="btn btn--minor" type="button" id="mm-add" data-i18n="pf_mm_add">新增對應</button>
+        </div>
+        <p class="footnote" data-i18n="pf_mm_why">廠商的備註欄給的是原始代碼（如 gpt_5_6_sol）。這張表只影響「數據」那一頁的顯示與分群，不會改寫原始交易紀錄，改錯了隨時改回。</p>
+        <section class="adm-card adm-sec" id="mm-form" hidden></section>
+        <div id="mm-unmapped" aria-live="polite"></div>
+        <div id="mm-list" aria-live="polite"><span class="skeleton skeleton--line"></span></div>
+        <div class="inline-error" id="mm-msg" hidden></div>
+    </section>
+
 </main>
 
 <script src="tz.js?v=3608fea5"></script>
 <!-- ⚠ ZH: 順序不能動 —— i18n-admin 在 i18n 之後、prefs 之前。 -->
 <script src="i18n.js?v=adcdce5a"></script>
-<script src="i18n-admin.js?v=acbdc890"></script>
+<script src="i18n-admin.js?v=29d7259b"></script>
 <script src="prefs.js?v=8b7b4277"></script>
 <script src="admin-chrome.js?v=3c57b044"></script>
-<script src="platform.js?v=7a3bf1dd"></script>
+<script src="platform.js?v=695d71f6"></script>
 </body>
 </html>

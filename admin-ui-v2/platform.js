@@ -7,9 +7,11 @@
  *       模型      GET/POST /admin/models、PUT/DELETE /admin/models/{id}
  *       GPU 節點  GET /admin/gpu-nodes、PUT /admin/gpu-nodes/{id}
  *
- * ZH: 🔴 外部 AI（MYAI）**沒有放進來**。它有 18 個端點，而且大部分是
- *     營運動作（同步、匯入、未配對處理）不是設定 ——
- *     全塞進來會重演這次要解決的「一頁又長又雜」。另外處理。
+ * ZH: 外部 AI（MYAI）只收下**設定**的部分（8 / 23 個端點）：
+ *       連線設定  GET/PUT /external-ai/admin/url、/admin/alert-config
+ *       代碼對應  GET/POST /external-ai/admin/model-map、DELETE .../{id}、POST .../seed
+ *     其餘 15 個是營運動作或報表：帳號對應與同步在「人」、
+ *     即時使用狀態在「總覽」、消耗分析在「數據」。
  *
  * ZH: 營運設定是**資料驅動**的：後端每個旋鈕都回 label/type/value/default/
  *     min/max/overridden，所以這裡不寫死欄位清單。加旋鈕時前端不用改。
@@ -65,6 +67,9 @@
         }
         return r.status === 204 ? null : r.json();
     }
+
+    // ZH: 大數字要有千分位 —— 1234 與 12340 在沒有分隔時一眼分不出來。
+    function num(n) { return Number(n || 0).toLocaleString('en-US'); }
 
     function say(id, text) {
         var el = $(id);
@@ -630,6 +635,21 @@
     //     addEventListener 會把 **Event 物件**當成 `m`，於是永遠走「編輯」那條路。
     $('m-add').addEventListener('click', function () { openModelForm(null); });
 
+    $('x-edit').addEventListener('click', function () {
+        EXT_EDIT = true;
+        say('x-msg', '');
+        renderExt();
+    });
+    $('x-cancel').addEventListener('click', function () {
+        // ZH: 取消要丟掉改動。EXT 是上次從後端讀回來的，重畫即可。
+        EXT_EDIT = false;
+        say('x-msg', '');
+        renderExt();
+    });
+    $('x-save').addEventListener('click', saveExt);
+    // ZH: 同樣要包一層，否則 Event 物件會被當成要編輯的那一列。
+    $('mm-add').addEventListener('click', function () { openMapForm(null); });
+
     // ZH: 換一台就重畫那張卡。不重讀後端 —— NODES 是剛拿的，
     //     再打一次 API 只會讓切換變慢。
     $('node-pick').addEventListener('change', function (ev) {
@@ -648,6 +668,265 @@
     //     每次都把人拉到 GPU 節點會很煩。
     var scrolled = false;
 
+
+    // ── 外部 AI：連線設定 ─────────────────────────────────────────────────
+    //
+    // ZH: 跟營運設定一樣預設唯讀 —— 這四個值一年也改不了幾次，
+    //     常駐輸入框只會招來誤觸。
+    //
+    // ZH: ⚠ 這四個值走的是**兩個端點**（url 與 alert-config），
+    //     所以儲存要送兩次。任一失敗就把哪一段失敗講出來，
+    //     不要只說「存不起來」——另一半可能已經存進去了。
+    var EXT = null;
+    var EXT_EDIT = false;
+
+    var EXT_FIELDS = [
+        ['url', 'pf_ext_url', '平台網址', 'text', 'pf_ext_url_why',
+         '留空＝平台上不顯示外部 AI 的入口。'],
+        ['logout_url', 'pf_ext_logout', '廠商登出網址', 'text', 'pf_ext_logout_why',
+         '共用機台換手時用它殺掉廠商那邊的登入狀態。'],
+        ['low_balance_threshold', 'pf_ext_thr', '低點數提醒門檻', 'number', 'pf_ext_thr_why',
+         '學生點數低於這個數字就在平台內提醒，每次登入只提醒一次。'],
+        ['apply_guide_url', 'pf_ext_guide', '申請教學連結', 'text', 'pf_ext_guide_why',
+         '顯示在低點數提醒裡。可以留空。'],
+    ];
+
+    function paintExtButtons() {
+        $('x-edit').hidden = EXT_EDIT;
+        $('x-save').hidden = !EXT_EDIT;
+        $('x-cancel').hidden = !EXT_EDIT;
+        $('x-ro-hint').hidden = EXT_EDIT;
+    }
+
+    function renderExt() {
+        paintExtButtons();
+        if (!EXT) return;
+
+        if (!EXT_EDIT) {
+            $('ext-conn').innerHTML = EXT_FIELDS.map(function (f) {
+                var v = EXT[f[0]];
+                return '<div class="adm-setting adm-setting--ro">'
+                    + '<span class="adm-setting__label">' + esc(T(f[1], f[2])) + '</span>'
+                    // ZH: 空值要明講「沒有設定」—— 一片空白看起來像沒載到。
+                    + '<span class="adm-setting__ro">'
+                    + esc(v === '' || v == null ? T('pf_ext_unset', '（沒有設定）') : v)
+                    + '</span></div>';
+            }).join('');
+            return;
+        }
+
+        $('ext-conn').innerHTML = EXT_FIELDS.map(function (f) {
+            return '<div class="adm-setting adm-setting--wide">'
+                + '<label class="adm-setting__label" for="x-' + f[0] + '">'
+                + esc(T(f[1], f[2])) + '</label>'
+                + '<input class="field__input" id="x-' + f[0] + '" type="' + f[3] + '"'
+                + (f[3] === 'number' ? ' min="0"' : '')
+                + ' value="' + esc(EXT[f[0]] == null ? '' : EXT[f[0]]) + '">'
+                + '<span class="adm-setting__sub footnote">' + esc(T(f[4], f[5])) + '</span>'
+                + '</div>';
+        }).join('');
+    }
+
+    async function loadExt() {
+        try {
+            var two = await Promise.all([
+                api('/external-ai/admin/url'),
+                api('/external-ai/admin/alert-config'),
+            ]);
+            EXT = Object.assign({}, two[0], two[1]);
+            renderExt();
+        } catch (e) {
+            say('x-msg', T('pf_ext_fail', '讀不到外部 AI 的設定（{w}）').replace('{w}', e.message));
+        }
+    }
+
+    async function saveExt() {
+        var get = function (k) { var el = $('x-' + k); return el ? el.value.trim() : ''; };
+        var failed = [];
+        try {
+            await api('/external-ai/admin/url', {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ url: get('url'), logout_url: get('logout_url') }),
+            });
+        } catch (e) { failed.push(T('pf_ext_conn', '連線設定') + '：' + e.message); }
+        try {
+            var thr = get('low_balance_threshold');
+            await api('/external-ai/admin/alert-config', {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    // ZH: 空字串送過去會變成 0（等於關掉提醒）。留空就不動這個值。
+                    low_balance_threshold: thr === '' ? null : Number(thr),
+                    apply_guide_url: get('apply_guide_url'),
+                }),
+            });
+        } catch (e) { failed.push(T('pf_ext_thr', '低點數提醒門檻') + '：' + e.message); }
+
+        if (failed.length) {
+            say('x-msg', T('pf_save_fail', '存不起來（{w}）').replace('{w}', failed.join('；')));
+        } else {
+            flash('x-msg', T('pf_saved', '已儲存'));
+            EXT_EDIT = false;
+        }
+        await loadExt();       // ZH: 不論成敗都重讀 —— 畫面要顯示真正存進去的值
+    }
+
+    // ── 外部 AI：廠商模型代碼對應 ─────────────────────────────────────────
+    var MAP = null;
+
+    function renderMap() {
+        if (!MAP) return;
+
+        // ZH: 沒對應到的先講 —— 數據那一頁會用原始代碼顯示，
+        //     那看起來像壞掉，其實是這裡少一列。
+        var un = MAP.unmapped || [];
+        $('mm-unmapped').innerHTML = !un.length
+            ? '<p class="footnote">' + esc(T('pf_mm_none', '交易裡出現過的代碼都對應好了。')) + '</p>'
+            : '<div class="adm-alert adm-alert--warn">'
+                + '<span>' + esc(T('pf_mm_unmapped', '有 {n} 個代碼還沒對應，「數據」那一頁會直接顯示原始代碼。')
+                    .replace('{n}', un.length)) + '</span>'
+                + '<button class="btn btn--minor" type="button" id="mm-seed">'
+                + esc(T('pf_mm_seed', '全部帶入建議值')) + '</button>'
+                + '</div>'
+                + '<ul class="adm-pie__legend">' + un.map(function (u) {
+                    return '<li class="adm-pie__row">'
+                        + '<span class="adm-pie__name"><code>' + esc(u.code) + '</code></span>'
+                        + '<span class="adm-pie__val">' + esc(u.display_name || '') + '</span>'
+                        + '<span class="adm-pie__pct">'
+                        + esc(T('pf_mm_tx_n', '{n} 筆').replace('{n}', num(u.tx_count))) + '</span>'
+                        + '</li>';
+                }).join('') + '</ul>';
+
+        var rows = MAP.items || [];
+        $('mm-list').innerHTML = !rows.length
+            ? '<p class="footnote">' + esc(T('pf_mm_empty', '還沒有任何對應。')) + '</p>'
+            : '<div class="adm-tablewrap"><table class="adm-table"><thead><tr>'
+                + [['pf_mm_code', '廠商原始代碼'], ['pf_mm_name', '顯示名稱'],
+                   ['pf_m_provider', '供應者'], ['pf_mm_cat', '類別'],
+                   ['pf_mm_tx', '交易筆數'], ['', '']].map(function (h) {
+                    return '<th>' + esc(h[0] ? T(h[0], h[1]) : '') + '</th>';
+                }).join('')
+                + '</tr></thead><tbody>' + rows.map(function (r) {
+                    return '<tr>'
+                        + '<td><code>' + esc(r.code) + '</code></td>'
+                        + '<td>' + esc(r.display_name || '—') + '</td>'
+                        + '<td>' + esc(r.provider || '—') + '</td>'
+                        + '<td>' + esc(r.category || '—') + '</td>'
+                        // ZH: 沒出現過的列標出來 —— 那多半是打錯字或廠商改了代碼，
+                        //     留著不會有害，但知道它沒在用比較好判斷要不要刪。
+                        + '<td class="num">' + (r.seen ? esc(num(r.tx_count))
+                            : '<span class="footnote">' + esc(T('pf_mm_unseen', '沒出現過')) + '</span>') + '</td>'
+                        + '<td class="num">'
+                        + '<button class="btn btn--minor" type="button" data-mm-edit="' + esc(r.id) + '">'
+                        + esc(T('pf_m_edit', '編輯')) + '</button> '
+                        + '<button class="btn btn--minor" type="button" data-mm-del="' + esc(r.id) + '">'
+                        + esc(T('pf_m_del', '刪除')) + '</button>'
+                        + '</td></tr>';
+                }).join('') + '</tbody></table></div>';
+
+        var seed = $('mm-seed');
+        if (seed) seed.addEventListener('click', seedMap);
+        $('mm-list').querySelectorAll('[data-mm-edit]').forEach(function (b) {
+            b.addEventListener('click', function () {
+                openMapForm(rows.filter(function (x) { return x.id === b.dataset.mmEdit; })[0]);
+            });
+        });
+        $('mm-list').querySelectorAll('[data-mm-del]').forEach(function (b) {
+            b.addEventListener('click', function () { delMap(b.dataset.mmDel, rows); });
+        });
+    }
+
+    function openMapForm(m) {
+        var e = m || {};
+        var pick = function (id, label, zh, val, opts) {
+            return '<label class="field"><span class="field__label" for="' + id + '">'
+                + esc(T(label, zh)) + '</span>'
+                + '<select class="field__input" id="' + id + '">'
+                + '<option value="">' + esc(T('pf_mm_blank', '（不指定）')) + '</option>'
+                + opts.map(function (o) {
+                    return '<option value="' + esc(o) + '"'
+                        + (String(val || '') === String(o) ? ' selected' : '') + '>'
+                        + esc(o) + '</option>';
+                }).join('') + '</select></label>';
+        };
+        $('mm-form').innerHTML =
+            '<label class="field"><span class="field__label" for="mm-code">'
+            + esc(T('pf_mm_code', '廠商原始代碼')) + '</span>'
+            // ZH: 代碼是這張表的鍵，改了等於換一列。已存在的就不給改。
+            + '<input class="field__input" id="mm-code" type="text" value="' + esc(e.code || '') + '"'
+            + (e.id ? ' readonly' : '') + '></label>'
+            + '<label class="field"><span class="field__label" for="mm-name">'
+            + esc(T('pf_mm_name', '顯示名稱')) + '</span>'
+            + '<input class="field__input" id="mm-name" type="text" value="' + esc(e.display_name || '') + '"></label>'
+            + pick('mm-prov', 'pf_m_provider', '供應者', e.provider, MAP.providers || [])
+            + pick('mm-cat', 'pf_mm_cat', '類別', e.category, MAP.categories || [])
+            + '<div class="adm-sec__head">'
+            + '<button class="btn btn--primary" type="button" id="mm-ok">'
+            + esc(T('pf_save', '儲存設定')) + '</button>'
+            + '<button class="btn btn--minor" type="button" id="mm-x">'
+            + esc(T('pf_cancel', '取消')) + '</button></div>';
+        $('mm-form').hidden = false;
+        $('mm-ok').addEventListener('click', saveMap);
+        $('mm-x').addEventListener('click', function () { $('mm-form').hidden = true; });
+        $('mm-code').focus();
+    }
+
+    async function saveMap() {
+        var code = $('mm-code').value.trim();
+        if (!code) { say('mm-msg', T('pf_mm_need_code', '代碼不可空白。')); return; }
+        try {
+            await api('/external-ai/admin/model-map', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    code: code,
+                    display_name: $('mm-name').value.trim(),
+                    provider: $('mm-prov').value,
+                    category: $('mm-cat').value,
+                }),
+            });
+            $('mm-form').hidden = true;
+            flash('mm-msg', T('pf_saved', '已儲存'));
+            await loadMap();
+        } catch (e) {
+            say('mm-msg', T('pf_save_fail', '存不起來（{w}）').replace('{w}', e.message));
+        }
+    }
+
+    async function delMap(id, rows) {
+        var r = rows.filter(function (x) { return x.id === id; })[0] || {};
+        // ZH: 明講原始交易不受影響 —— 不講的話沒人敢按。
+        if (!confirm(T('pf_mm_del_confirm', '要刪掉「{n}」的對應嗎？原始交易紀錄不受影響。')
+                .replace('{n}', r.code || id))) return;
+        try {
+            await api('/external-ai/admin/model-map/' + encodeURIComponent(id), { method: 'DELETE' });
+            await loadMap();
+        } catch (e) {
+            say('mm-msg', T('pf_save_fail', '存不起來（{w}）').replace('{w}', e.message));
+        }
+    }
+
+    async function seedMap() {
+        try {
+            var r = await api('/external-ai/admin/model-map/seed', { method: 'POST' });
+            flash('mm-msg', T('pf_mm_seeded', '帶入了 {n} 筆，記得檢查一下名字。')
+                .replace('{n}', r && r.created));
+            await loadMap();
+        } catch (e) {
+            say('mm-msg', T('pf_save_fail', '存不起來（{w}）').replace('{w}', e.message));
+        }
+    }
+
+    async function loadMap() {
+        try {
+            MAP = await api('/external-ai/admin/model-map');
+            renderMap();
+        } catch (e) {
+            say('mm-msg', T('pf_mm_fail', '讀不到對應表（{w}）').replace('{w}', e.message));
+        }
+    }
+
     function scrollToHash() {
         if (scrolled) return;
         // ZH: ⚠ 這行原本寫成 `!(...).indexOf('#node-') === 0` ——
@@ -662,7 +941,7 @@
     }
 
     async function loadAll() {
-        await Promise.all([loadSettings(), loadModels(), loadNodes()]);
+        await Promise.all([loadSettings(), loadModels(), loadNodes(), loadExt(), loadMap()]);
         scrollToHash();
     }
 
