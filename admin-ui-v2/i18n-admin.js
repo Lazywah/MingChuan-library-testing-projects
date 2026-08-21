@@ -281,9 +281,50 @@
         rp_a_target: '對象',
         rp_a_when: '時間',
 
+
+        // ── 數據 ─────────────────────────────────────────────
+        an_period: '期間',
+        an_d7: '近 7 天',
+        an_d30: '近 30 天',
+        an_d90: '近 90 天',
+        an_all: '全部',
+
+        an_myai: 'MYAI 點數消耗',
+        an_myai_src: '資料來自廠商的交易日誌（逐筆、含模型）。點數是廠商計費的單位，不是平台自己的 Token。',
+        an_consumed: '期間總消耗',
+        an_tx: '交易筆數',
+        an_uses: 'AI 使用次數',
+        an_logins: '登入次數',
+        an_accounts: '有資料的帳號',
+        an_none: '這段期間沒有任何交易紀錄。',
+    an_no_spend: '這段期間沒有任何點數消耗（上面的交易是登入之類不計費的紀錄）。',
+
+        an_trend: '每日消耗',
+        an_top: '消耗最多的帳號',
+        an_models: '用了哪些模型',
+        an_by_category: '依類別',
+        an_by_provider: '依供應者',
+        an_by_role: '依身分',
+        an_by_dept: '依學系',
+        an_unbound: '未綁定',
+        an_unmapped: '有 {n} 個模型代碼還沒對應 —— 它們會以原始代碼顯示。',
+
+        an_jobs: '訓練任務',
+        an_jobs_none: '還沒有任何訓練任務。',
+        an_j_total: '總數',
+        an_j_done: '已完成',
+        an_j_failed: '失敗',
+        an_j_running: '執行中',
+
+        an_platform: '平台使用',
+        an_dept: '學系',
+        an_users: '人數',
+        an_dept_logins: '登入次數',
+        an_platform_none: '還沒有足夠的資料。',
+
+        an_points: '點',
+
         // ── 階段 1 佔位 ──────────────────────────────────────
-        adm_wip_title: '這一頁還沒做',
-        adm_wip_body: '階段 1 只做骨架（登入、外框、顯示設定）。這一頁會在後面的階段補上。',
     });
 
     Object.assign(global.I18N.en, {
@@ -538,8 +579,47 @@
         rp_a_target: 'Target',
         rp_a_when: 'When',
 
-        adm_wip_title: 'This page is not built yet',
-        adm_wip_body: 'Stage 1 covers the shell only (sign-in, chrome, display settings). '
-            + 'This page arrives in a later stage.',
+
+        an_period: 'Period',
+        an_d7: 'Last 7 days',
+        an_d30: 'Last 30 days',
+        an_d90: 'Last 90 days',
+        an_all: 'All',
+
+        an_myai: 'MYAI credit usage',
+        an_myai_src: 'From the vendor transaction log (per transaction, with model). Credits are the vendor’s billing unit, not the platform’s own tokens.',
+        an_consumed: 'Credits used',
+        an_tx: 'Transactions',
+        an_uses: 'AI calls',
+        an_logins: 'Sign-ins',
+        an_accounts: 'Accounts with data',
+        an_none: 'No transactions in this period.',
+    an_no_spend: 'No credits were spent in this period (the transactions above are non-billable, such as sign-ins).',
+
+        an_trend: 'Daily usage',
+        an_top: 'Heaviest accounts',
+        an_models: 'Models used',
+        an_by_category: 'By category',
+        an_by_provider: 'By provider',
+        an_by_role: 'By role',
+        an_by_dept: 'By department',
+        an_unbound: 'Unbound',
+        an_unmapped: '{n} model code(s) are not mapped yet - they show as raw codes.',
+
+        an_jobs: 'Training jobs',
+        an_jobs_none: 'No training jobs yet.',
+        an_j_total: 'Total',
+        an_j_done: 'Completed',
+        an_j_failed: 'Failed',
+        an_j_running: 'Running',
+
+        an_platform: 'Platform usage',
+        an_dept: 'Department',
+        an_users: 'People',
+        an_dept_logins: 'Sign-ins',
+        an_platform_none: 'Not enough data yet.',
+
+        an_points: 'credits',
+
     });
 })(window);

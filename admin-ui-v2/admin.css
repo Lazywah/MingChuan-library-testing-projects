@@ -584,3 +584,105 @@ textarea.field__input {
     resize: vertical;
     min-height: 4em;
 }
+
+/* ==============================================================================
+   數據（階段 5）
+   ============================================================================== */
+
+/* ── 摘要數字 ─────────────────────────────────────────────────────────────
+   ZH: 自動排 —— 五個數字與三個數字都排得好看，不必為數量寫斷點。 */
+.adm-stats {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));
+    gap: var(--space-3);
+    margin: var(--space-3) 0;
+}
+
+.adm-stat {
+    padding: var(--space-3) var(--space-4);
+    border: 1px solid var(--hairline);
+    border-radius: var(--radius-sm);
+    background-color: var(--surface);
+}
+
+.adm-stat__label {
+    font-size: 0.8125rem;
+    color: var(--text-muted);
+}
+
+.adm-stat__value {
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: var(--text-strong);
+    /* ZH: 等寬數字 —— 一整排數字要能上下對齊掃視 */
+    font-variant-numeric: tabular-nums;
+}
+
+/* ── 橫條圖 ───────────────────────────────────────────────────────────────
+   ZH: 用 HTML + CSS 而不是 <svg>：這是「長度成比例的長條」，
+       div 的寬度百分比就做得到，而且**字會跟著字級設定縮放、可以被選取**
+       （SVG 裡的文字兩者都做不到）。 */
+.adm-block { margin-top: var(--space-5); }
+
+.adm-block__title {
+    margin: 0 0 var(--space-2);
+    font-size: 0.9375rem;
+    color: var(--text-strong);
+}
+
+.adm-bar {
+    display: grid;
+    grid-template-columns: minmax(6em, 12em) 1fr auto;
+    align-items: center;
+    gap: var(--space-3);
+    margin-bottom: var(--space-2);
+    font-size: 0.875rem;
+}
+
+.adm-bar__label {
+    color: var(--text);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.adm-bar__track {
+    height: 10px;
+    border-radius: 5px;
+    background-color: var(--surface-2);
+    overflow: hidden;
+}
+
+.adm-bar__track > i {
+    display: block;
+    height: 100%;
+    /* ZH: 用圖表色不是 --accent —— 黃色對白底只有 1.67，細長條幾乎看不見
+           （理由見 tokens.css 第 1 層的註解）。 */
+    background-color: var(--chart-me);
+}
+
+.adm-bar__val {
+    color: var(--text-strong);
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+}
+
+/* ZH: 期間選擇：只有目前選中的給底色。 */
+#periods .btn.is-current {
+    background-color: var(--accent-soft);
+    color: var(--text-strong);
+    font-weight: 600;
+}
+
+@media (max-width: 700px) {
+    .adm-bar { grid-template-columns: 1fr auto; }
+    .adm-bar__track { grid-column: 1 / -1; }
+}
+
+/* ZH: 四欄並排時，標籤欄要讓出空間給長條 ——
+       外層 .adm-cols 每欄約 300px，標籤若吃到 12em 就只剩一小截給長條，
+       而長條的長度正是這張圖唯一要傳達的東西。 */
+.adm-cols .adm-bar {
+    grid-template-columns: minmax(4em, 7em) 1fr auto;
+    gap: var(--space-2);
+}
