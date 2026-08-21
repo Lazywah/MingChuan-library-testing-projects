@@ -11,7 +11,7 @@
 
     <link rel="stylesheet" href="tokens.css?v=dd946cc2">
     <link rel="stylesheet" href="styles.css?v=e917e7df">
-    <link rel="stylesheet" href="admin.css?v=1995440f">
+    <link rel="stylesheet" href="admin.css?v=d774186f">
 </head>
 <body>
 
@@ -54,10 +54,16 @@
         <div class="adm-sec__head">
             <h2 id="h-models" data-i18n="pf_models">模型</h2>
             <span class="topbar__spacer"></span>
-            <button class="btn btn--minor" type="button" id="m-add" data-i18n="pf_m_add">新增模型</button>
+            <!-- ZH: 跟這一頁其他區同一套：唯讀 → 編輯 → 表格內直接改 → 一次儲存。 -->
+            <button class="btn btn--minor" type="button" id="m-add" data-i18n="pf_m_add" hidden>新增一列</button>
+            <button class="btn btn--minor" type="button" id="m-edit" data-i18n="pf_edit">編輯設定</button>
+            <button class="btn btn--minor" type="button" id="m-cancel" data-i18n="pf_cancel" hidden>取消</button>
+            <button class="btn btn--primary" type="button" id="m-save" data-i18n="pf_save" hidden>儲存設定</button>
         </div>
-        <section class="adm-card adm-sec" id="model-form" hidden></section>
+        <p class="footnote" id="m-ro-hint" data-i18n="pf_readonly_hint">目前是唯讀。要改請按「編輯設定」。</p>
+        <p class="footnote" id="m-edit-hint" data-i18n="pf_mm_edit_hint" hidden>改完按「儲存設定」才會送出。只有真的改過的列會被寫入。</p>
         <div id="models" aria-live="polite"><span class="skeleton skeleton--line"></span></div>
+        <div class="inline-error" id="m-msg" hidden></div>
     </section>
 
     <section class="adm-sec" aria-labelledby="h-nodes">
@@ -106,10 +112,16 @@
         <div class="adm-sec__head">
             <h3 id="h-ext-map" data-i18n="pf_mm">廠商模型代碼對應</h3>
             <span class="topbar__spacer"></span>
-            <button class="btn btn--minor" type="button" id="mm-add" data-i18n="pf_mm_add">新增對應</button>
+            <!-- ZH: 跟營運設定同一套：預設唯讀，按「編輯設定」才變成可填的欄位。
+                     這裡的理由更強 —— 三十幾列各有三個欄位，常駐等於上百個輸入框。 -->
+            <button class="btn btn--minor" type="button" id="mm-add" data-i18n="pf_mm_add" hidden>新增一列</button>
+            <button class="btn btn--minor" type="button" id="mm-edit" data-i18n="pf_edit">編輯設定</button>
+            <button class="btn btn--minor" type="button" id="mm-cancel" data-i18n="pf_cancel" hidden>取消</button>
+            <button class="btn btn--primary" type="button" id="mm-save" data-i18n="pf_save" hidden>儲存設定</button>
         </div>
         <p class="footnote" data-i18n="pf_mm_why">廠商的備註欄給的是原始代碼（如 gpt_5_6_sol）。這張表只影響「數據」那一頁的顯示與分群，不會改寫原始交易紀錄，改錯了隨時改回。</p>
-        <section class="adm-card adm-sec" id="mm-form" hidden></section>
+        <p class="footnote" id="mm-ro-hint" data-i18n="pf_readonly_hint">目前是唯讀。要改請按「編輯設定」。</p>
+        <p class="footnote" id="mm-edit-hint" data-i18n="pf_mm_edit_hint" hidden>改完按「儲存設定」才會送出。只有真的改過的列會被寫入。</p>
         <div id="mm-unmapped" aria-live="polite"></div>
         <div id="mm-list" aria-live="polite"><span class="skeleton skeleton--line"></span></div>
         <div class="inline-error" id="mm-msg" hidden></div>
@@ -120,9 +132,9 @@
 <script src="tz.js?v=3608fea5"></script>
 <!-- ⚠ ZH: 順序不能動 —— i18n-admin 在 i18n 之後、prefs 之前。 -->
 <script src="i18n.js?v=adcdce5a"></script>
-<script src="i18n-admin.js?v=29d7259b"></script>
+<script src="i18n-admin.js?v=57977653"></script>
 <script src="prefs.js?v=8b7b4277"></script>
 <script src="admin-chrome.js?v=3c57b044"></script>
-<script src="platform.js?v=695d71f6"></script>
+<script src="platform.js?v=7905bb31"></script>
 </body>
 </html>

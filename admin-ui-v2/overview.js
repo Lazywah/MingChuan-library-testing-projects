@@ -5,11 +5,12 @@
  *     所以第一區是「需要你處理的」，而且**沒事的時候要明確說沒事**——
  *     空白會讓人以為還沒載入完，然後多等、重新整理、再懷疑是不是壞了。
  *
- * ZH: 四個資料來源各自獨立抓、獨立失敗：
- *       GET /admin/gpu-nodes        節點六態 + 撞名 + 執行中
- *       GET /admin/cluster/stats    每張 GPU 的溫度／使用率／記憶體
- *       GET /admin/jobs             最近的任務
- *       GET /admin/reports/summary  未處理的回報數
+ * ZH: 五個資料來源各自獨立抓、獨立失敗：
+ *       GET /admin/gpu-nodes             節點六態 + 撞名 + 執行中
+ *       GET /admin/cluster/stats         每張 GPU 的溫度／使用率／記憶體
+ *       GET /admin/jobs                  最近的任務
+ *       GET /admin/reports/summary       未處理的回報數
+ *       GET /external-ai/admin/live-usage 誰在用外部 AI（廠商用量 × 平台在線）
  *     ⚠ **一段讀不到不可以讓整頁空白** —— 那會把「回報服務掛了」
  *       表現成「GPU 也不見了」，人就會去查錯的東西。
  *
@@ -229,6 +230,116 @@
     }
 
     // ── 載入 ──────────────────────────────────────────────────────────────
+    // ── 外部 AI 使用狀況 ──────────────────────────────────────────────────
+    //
+    // ZH: 後端把兩個獨立的問題交叉起來：
+    //       廠商那邊近期有沒有扣點？  ×  這個人近期有沒有在平台上活動？
+    //     所以畫成四格 —— 格子的**位置本身**就說明了它是哪兩個條件的組合，
+    //     不必靠讀標題去推。四格裡最值得看的是右上角（有用量、人卻不在平台）。
+    //
+    // ZH: 左下的 ❌❌（沒用量也不在線）**故意不列人**：那是絕大多數人的常態，
+    //     列出來會把這一區撐成一份沒有用的通訊錄。格子留著是為了讓四象限完整，
+    //     裡面寫一句話說明為什麼空著。
+    //
+    // ZH: 🔴 兩個軸的新鮮度**不一樣**：平台在線是即時的，廠商用量是定期同步來的，
+    //     最舊可能是幾小時前。後端的 docstring 特別要求前端把 last_tx_sync
+    //     顯示出來，不然這一區會被當成「現在的事實」。
+    var QUAD_NAMES = 6;        // ZH: 每格最多列幾個人，其餘用「還有 N 人」帶過
+
+    function renderExt(d) {
+        if (failed(d)) { $('ext').innerHTML = failBox(d); return; }
+
+        // ZH: 同步時間一定要講。沒有它的話，一份幾小時前的名單看起來像現在的名單。
+        var when = d.last_tx_sync
+            ? T('ov_ext_synced', '用量資料同步到 {t}；平台在線是即時的。')
+                .replace('{t}', TW.dateTime(d.last_tx_sync))
+            : T('ov_ext_nosync', '還沒有同步過廠商的交易日誌。');
+
+        var head = '<p class="footnote">' + esc(when)
+            + '　' + esc(T('ov_ext_window', '用量看最近 {n} 分鐘。')
+                .replace('{n}', d.usage_window_minutes)) + '</p>';
+
+        $('ext').innerHTML = head
+            + '<div class="adm-quad">'
+            // ZH: 欄標題（平台在線 / 不在平台）。左上角那格是空的 ——
+            //     它是兩個軸的交會點，寫任何字都會被誤讀成某一軸的標籤。
+            + '<span class="adm-quad__corner" aria-hidden="true"></span>'
+            + '<span class="adm-quad__col">' + esc(T('ov_ext_ax_on', '平台在線')) + '</span>'
+            + '<span class="adm-quad__col">' + esc(T('ov_ext_ax_off', '不在平台')) + '</span>'
+
+            + '<span class="adm-quad__row">' + esc(T('ov_ext_ax_used', '有用量')) + '</span>'
+            + cell('ok', 'ov_ext_active', '使用中', d.using_active, 'last_used_at')
+            // ZH: 右上角是這張圖唯一需要動作的格子 —— 廠商那邊在扣點，
+            //     人卻不在平台上。帳號被別人拿去用的樣子就長這樣。
+            + cell('warn', 'ov_ext_offplat', '不在平台', d.using_offplat, 'last_used_at')
+
+            + '<span class="adm-quad__row">' + esc(T('ov_ext_ax_idle', '沒用量')) + '</span>'
+            + cell('', 'ov_ext_online', '在平台沒動 AI', d.online_idle, 'last_activity')
+            + '<div class="adm-quad__cell adm-quad__cell--void">'
+            + '<p class="footnote">' + esc(T('ov_ext_void', '沒用量也不在線的人不列出——那是常態，不是待辦事項。')) + '</p>'
+            + '</div>'
+            + '</div>'
+
+            // ZH: 未綁定的人**不屬於這四格** —— 他們在廠商那邊有用量，
+            //     但對不到任何平台帳號，所以「平台在線」這個軸對他們沒有意義。
+            //     硬塞進某一格會讓那一格的定義變得不老實。
+            + unlinkedBlock(d.unlinked || []);
+    }
+
+    function cell(pill, key, zh, list, timeKey) {
+        var rows = list || [];
+        var shown = rows.slice(0, QUAD_NAMES);
+        return '<div class="adm-quad__cell">'
+            + '<div class="adm-quad__head">'
+            + '<span class="adm-pill' + (pill ? ' adm-pill--' + pill : '') + '">'
+            + esc(T(key, zh)) + '</span>'
+            + '<span class="adm-quad__n">' + esc(rows.length) + '</span>'
+            + '</div>'
+            + (!rows.length
+                ? '<p class="footnote">' + esc(T('ov_ext_zero', '沒有人。')) + '</p>'
+                : '<ul class="adm-quad__list">' + shown.map(function (r) {
+                    return '<li' + (r.email ? ' title="' + esc(r.email) + '"' : '') + '>'
+                        + '<span class="adm-quad__who">'
+                        + esc(r.username || r.vendor_name || r.vendor_sn || '—') + '</span>'
+                        + '<span class="adm-quad__meta">'
+                        + esc(r[timeKey] ? TW.time(r[timeKey]) : '—')
+                        // ZH: 點數只有「有用量」那一列才有意義。
+                        + (r.points_used != null ? '　' + esc(r.points_used)
+                            + esc(T('an_points', '點')) : '')
+                        + '</span></li>';
+                }).join('') + '</ul>'
+                + (rows.length > shown.length
+                    ? '<p class="footnote">' + esc(T('ov_ext_more', '還有 {n} 人。')
+                        .replace('{n}', rows.length - shown.length)) + '</p>'
+                    : ''))
+            + '</div>';
+    }
+
+    function unlinkedBlock(list) {
+        if (!list.length) return '';
+        return '<div class="adm-quad__aside">'
+            + '<div class="adm-quad__head">'
+            + '<span class="adm-pill adm-pill--temp">' + esc(T('ov_ext_unlinked', '未綁定')) + '</span>'
+            + '<span class="adm-quad__n">' + esc(list.length) + '</span>'
+            + '</div>'
+            + '<p class="footnote">' + esc(T('ov_ext_unlinked_why',
+                '廠商那邊有用量，但對不到平台帳號——多半是老師，或還沒綁定的學生。')) + '</p>'
+            + '<ul class="adm-quad__list">' + list.slice(0, QUAD_NAMES).map(function (r) {
+                return '<li' + (r.email ? ' title="' + esc(r.email) + '"' : '') + '>'
+                    + '<span class="adm-quad__who">'
+                    + esc(r.vendor_name || r.vendor_sn || '—') + '</span>'
+                    + '<span class="adm-quad__meta">'
+                    + esc(r.last_used_at ? TW.time(r.last_used_at) : '—')
+                    + '　' + esc(r.points_used) + esc(T('an_points', '點'))
+                    + '</span></li>';
+            }).join('') + '</ul>'
+            + (list.length > QUAD_NAMES
+                ? '<p class="footnote">' + esc(T('ov_ext_more', '還有 {n} 人。')
+                    .replace('{n}', list.length - QUAD_NAMES)) + '</p>'
+                : '')
+            + '</div>';
+    }
+
     var timer = null;
 
     async function load() {
@@ -237,13 +348,15 @@
             safe(get('/admin/cluster/stats'), 'cluster'),
             safe(get('/admin/jobs?limit=100'), 'jobs'),
             safe(get('/admin/reports/summary'), 'reports'),
+            safe(get('/external-ai/admin/live-usage'), 'live-usage'),
         ]);
-        var nodes = out[0], stats = out[1], jobs = out[2], reports = out[3];
+        var nodes = out[0], stats = out[1], jobs = out[2], reports = out[3], ext = out[4];
 
         renderAlerts(nodes, jobs, reports);
         renderGpus(stats);
         renderNodes(nodes);
         renderJobs(jobs);
+        renderExt(ext);
 
         // ZH: 時間戳一定要更新 —— 它是「這一頁還活著」的唯一證據。
         $('updated').textContent =

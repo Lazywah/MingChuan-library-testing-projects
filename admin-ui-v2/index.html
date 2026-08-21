@@ -11,7 +11,7 @@
 
     <link rel="stylesheet" href="tokens.css?v=dd946cc2">
     <link rel="stylesheet" href="styles.css?v=e917e7df">
-    <link rel="stylesheet" href="admin.css?v=1995440f">
+    <link rel="stylesheet" href="admin.css?v=d774186f">
 </head>
 <body>
 
@@ -51,6 +51,16 @@
         </div>
     </section>
 
+    <!-- ZH: 刻意**不叫「即時」** —— 用量那半是定期向廠商同步來的，
+             最舊可能是幾小時前。標題若寫「即時」，看到的人會拿它當現在的事實。
+             真正的資料時間寫在下面那句話裡。 -->
+    <section class="adm-sec" aria-labelledby="h-ext">
+        <div class="adm-sec__head"><h2 id="h-ext" data-i18n="ov_ext">外部 AI 使用狀況</h2></div>
+        <div id="ext" aria-live="polite">
+            <span class="skeleton skeleton--line"></span>
+        </div>
+    </section>
+
     <section class="adm-sec" aria-labelledby="h-jobs">
         <div class="adm-sec__head"><h2 id="h-jobs" data-i18n="ov_jobs">最近的任務</h2></div>
         <div id="jobs">
@@ -64,9 +74,9 @@
 <!-- ⚠ ZH: 順序不能動 —— i18n-admin 要在 i18n 之後（它 assign 到 I18N 上）、
          prefs 之前（不然字典還沒併好就先套用一次，畫面會閃一下原文）。 -->
 <script src="i18n.js?v=adcdce5a"></script>
-<script src="i18n-admin.js?v=29d7259b"></script>
+<script src="i18n-admin.js?v=57977653"></script>
 <script src="prefs.js?v=8b7b4277"></script>
 <script src="admin-chrome.js?v=3c57b044"></script>
-<script src="overview.js?v=65873f24"></script>
+<script src="overview.js?v=07b49d57"></script>
 </body>
 </html>

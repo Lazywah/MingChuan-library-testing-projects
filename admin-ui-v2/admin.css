@@ -317,6 +317,7 @@
 .adm-pill--failed,
 .adm-pill--error { background-color: var(--error-soft); color: var(--error); }
 
+.adm-pill--warn,
 .adm-pill--disabled,
 .adm-pill--out_of_window,
 .adm-pill--out_of_window_draining,
@@ -991,4 +992,107 @@ textarea.field__input {
 @media (max-width: 900px) {
     .adm-setting--wide { grid-template-columns: 1fr; }
     .adm-setting__sub { grid-column: 1; }
+}
+
+/* ── 四象限 ───────────────────────────────────────────────────────────
+   ZH: 三欄：列標題 + 兩個格子。格子的**位置本身**說明它是哪兩個條件的
+       組合，所以軸標題不能省 —— 省了就只剩四個名字，讀者得自己推。 */
+.adm-quad {
+    display: grid;
+    grid-template-columns: auto 1fr 1fr;
+    gap: var(--space-2) var(--space-3);
+    align-items: stretch;
+}
+.adm-quad__col,
+.adm-quad__row {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    align-self: center;
+}
+.adm-quad__row {
+    /* ZH: 直排會太窄，讓它靠右貼著格子。 */
+    text-align: right;
+    white-space: nowrap;
+}
+.adm-quad__cell,
+.adm-quad__aside {
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background-color: var(--surface);
+    padding: var(--space-3);
+}
+/* ZH: 空著的那一格畫成虛線 —— 一眼看出「這裡本來就沒有內容」，
+       而不是「內容還沒載進來」。 */
+.adm-quad__cell--void {
+    border-style: dashed;
+    background-color: transparent;
+    /* ZH: 這一格會被同列的鄰居拉高。說明文字若貼在最上緣，
+           下面那一大片空白看起來像「還沒載完」——置中才讀得出是刻意留白。 */
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+}
+.adm-quad__cell--void .footnote {
+    margin: 0;
+    max-width: 28em;
+}
+.adm-quad__head {
+    display: flex;
+    align-items: baseline;
+    gap: var(--space-2);
+    margin-bottom: var(--space-2);
+}
+.adm-quad__n {
+    font-size: 1.25rem;
+    font-weight: 600;
+    color: var(--text-strong);
+    font-variant-numeric: tabular-nums;
+}
+.adm-quad__list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    font-size: 0.8125rem;
+}
+.adm-quad__list > li {
+    display: flex;
+    justify-content: space-between;
+    gap: var(--space-3);
+    padding: 1px 0;
+}
+.adm-quad__who {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.adm-quad__meta {
+    color: var(--text-muted);
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+}
+.adm-quad__aside {
+    margin-top: var(--space-3);
+}
+
+/* ZH: 視窗窄的時候軸標題會擠掉格子，改成上下堆疊；
+       堆疊之後位置不再說明組合，所以藥丸上的名字要自己講得清楚
+       （「在平台沒動 AI」而不是「閒置」）。 */
+@media (max-width: 760px) {
+    .adm-quad { grid-template-columns: 1fr; }
+    .adm-quad__corner,
+    .adm-quad__col,
+    .adm-quad__row { display: none; }
+}
+
+/* ZH: 標記為「要刪」的列。**還沒真的刪掉** —— 按儲存才送出，
+       所以要看得出是「等一下會被刪」而不是已經不見了。 */
+.adm-table tr.is-gone > td {
+    opacity: 0.45;
+    text-decoration: line-through;
+}
+/* ZH: 但那一列的按鈕要維持清楚可讀 —— 它是把這列救回來的唯一入口。 */
+.adm-table tr.is-gone > td:last-child {
+    opacity: 1;
+    text-decoration: none;
 }

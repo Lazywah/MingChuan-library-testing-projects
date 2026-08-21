@@ -98,6 +98,73 @@
     }
 
 
+    // ── 可編輯表格（各區共用）─────────────────────────────────────────────
+    //
+    // ZH: 這一頁的每一區都是同一個節奏：**唯讀 → 按編輯 → 欄位變可填 →
+    //     一次儲存**。所以表格的 markup 統一在這裡產生，四個區塊長同一個樣子。
+    //
+    // ZH: 但**儲存契約各自不同**（營運設定是一次 PUT 一個字典、連線設定是兩個
+    //     PUT、模型與代碼對應是逐列 POST/PUT/DELETE），那部分留在各自的函式裡。
+    //     硬要一起抽象只會做出一個誰都看不懂的參數包。
+    function tableHtml(cols, body) {
+        return '<div class="adm-tablewrap"><table class="adm-table"><thead><tr>'
+            + cols.map(function (c) {
+                return '<th' + (c[2] ? ' class="' + esc(c[2]) + '"' : '') + '>'
+                    + esc(c[0] ? T(c[0], c[1]) : '') + '</th>';
+            }).join('')
+            + '</tr></thead><tbody>' + body + '</tbody></table></div>';
+    }
+
+    function cellInput(f, value, o) {
+        o = o || {};
+        return '<td><input class="field__input" data-f="' + esc(f) + '"'
+            + ' type="' + esc(o.type || 'text') + '"'
+            + (o.min != null ? ' min="' + esc(o.min) + '"' : '')
+            + (o.max != null ? ' max="' + esc(o.max) + '"' : '')
+            + (o.step ? ' step="' + esc(o.step) + '"' : '')
+            + (o.placeholder != null ? ' placeholder="' + esc(o.placeholder) + '"' : '')
+            + (o.disabled ? ' disabled' : '')
+            + ' value="' + esc(value == null ? '' : value) + '"></td>';
+    }
+
+    // ZH: list 可以是字串陣列，也可以是 {value,label}。
+    function cellSelect(f, list, value, o) {
+        o = o || {};
+        return '<td><select class="field__input" data-f="' + esc(f) + '"'
+            + (o.disabled ? ' disabled' : '') + '>'
+            + (o.blank === false ? ''
+                : '<option value="">' + esc(o.blankText
+                    || T('pf_mm_blank', '（不指定）')) + '</option>')
+            + (list || []).map(function (x) {
+                var v = (x && x.value != null) ? x.value : x;
+                var l = (x && x.label != null) ? x.label : x;
+                return '<option value="' + esc(v) + '"'
+                    + (String(value == null ? '' : value) === String(v) ? ' selected' : '')
+                    + '>' + esc(l) + '</option>';
+            }).join('')
+            + '</select></td>';
+    }
+
+    function cellCheck(f, on, o) {
+        o = o || {};
+        return '<td><input type="checkbox" data-f="' + esc(f) + '"'
+            + (on ? ' checked' : '') + (o.disabled ? ' disabled' : '') + '></td>';
+    }
+
+    // ZH: 把畫面上的值收回物件。checkbox 要讀 checked 不是 value ——
+    //     讀 value 的話永遠拿到字串 "on"，勾不勾都一樣。
+    function readRow(tr, target) {
+        tr.querySelectorAll('[data-f]').forEach(function (el) {
+            target[el.dataset.f] = (el.type === 'checkbox') ? el.checked : el.value;
+        });
+    }
+
+    // ZH: 標記為「要刪」的那一列（還沒真的刪，按儲存才送出）。
+    function delCell(id, marked) {
+        return '<td class="num"><button class="btn btn--minor" type="button" data-del="' + esc(id) + '">'
+            + esc(marked ? T('pf_mm_undel', '不刪了') : T('pf_m_del', '刪除')) + '</button></td>';
+    }
+
     // ── 營運設定 ──────────────────────────────────────────────────────────
     // ZH: 預設**唯讀**，按「編輯設定」才變成可填的欄位。
     //
@@ -133,71 +200,53 @@
     function renderSettings() {
         paintSettingsButtons();
 
-        if (!EDITING) {
-            // ZH: 唯讀 —— 一列兩欄（名稱 / 值），比可編輯時緊很多。
-            $('settings').innerHTML = SETTINGS.map(function (s) {
-                return '<div class="adm-setting adm-setting--ro">'
-                    + '<span class="adm-setting__label">' + esc(s.label)
-                    + (s.overridden ? ' <span class="adm-pill adm-pill--temp">'
-                        + esc(T('pf_overridden', '已覆寫')) + '</span>' : '')
-                    + '</span>'
-                    + '<span class="adm-setting__ro">' + esc(settingValueLabel(s)) + '</span>'
-                    + '</div>';
-            }).join('');
-            wireExternalWarning();
-            return;
-        }
+        var cols = [['pf_s_name', '設定'], ['pf_s_value', '值'],
+                    ['pf_default_h', '預設'], ['pf_range_h', '範圍']];
+        if (EDITING) cols = cols.concat([['', '']]);
 
-        $('settings').innerHTML = SETTINGS.map(function (s) {
-            var range = (s.min != null && s.max != null)
-                ? T('pf_range', '{min}–{max}').replace('{min}', s.min).replace('{max}', s.max)
-                : '';
-            return '<div class="adm-setting">'
-                + '<label class="adm-setting__label" for="s-' + esc(s.key) + '">'
-                + esc(s.label)
-                // ZH: `overridden` 是後端給的 —— 標出來，管理者才分得出
-                //     「這是我改過的」與「這是 .env 的預設」。
-                + (s.overridden ? ' <span class="adm-pill adm-pill--temp">'
-                    + esc(T('pf_overridden', '已覆寫')) + '</span>' : '')
-                + '</label>'
-                // ZH: 下拉型的旋鈕（目前只有小基的模型）。選項由後端給 ——
-                //     前端不維護一份模型清單，不然管理者新增模型之後這裡還是舊的。
-                // ZH: 🔴 **只有「已覆寫」的才填值**，其餘留空、用 placeholder 顯示預設。
-                //
-                // ZH: 原本一律填入生效值，結果按一次「儲存設定」就把**全部 15 個旋鈕
-                //     都變成明確覆寫**（實測 11 → 15），連沒碰過的也是 ——
-                //     之後改 .env 對它們就再也沒有作用，而且沒有任何提示。
-                //
-                // ZH: 空白＝跟著預設走，正好是後端的契約（值留空＝清除覆寫）。
-                //     所以「回到預設」只要把欄位清空就好，不需要另外記狀態。
-                + (s.type === 'choice'
-                    ? '<select class="field__input" id="s-' + esc(s.key) + '">'
-                        // ZH: 下拉沒辦法「留空」，所以給一個明確的「用預設」選項。
-                        + '<option value=""' + (s.overridden ? '' : ' selected') + '>'
-                        + esc(T('pf_use_default', '（用預設）')) + '</option>'
-                        + (s.choices || []).map(function (c) {
-                            return '<option value="' + esc(c.value) + '"'
-                                + (s.overridden && String(c.value) === String(s.value)
-                                    ? ' selected' : '') + '>'
-                                + esc(c.label) + '</option>';
-                        }).join('')
-                        + '</select>'
-                    : '<input class="field__input" id="s-' + esc(s.key) + '"'
-                        + ' type="' + (s.type === 'int' || s.type === 'float' ? 'number' : 'text') + '"'
-                        + (s.type === 'float' ? ' step="0.01"' : '')
-                        + (s.min != null ? ' min="' + esc(s.min) + '"' : '')
-                        + (s.max != null ? ' max="' + esc(s.max) + '"' : '')
-                        + ' placeholder="' + esc(s.default) + '"'
-                        + ' value="' + esc(s.overridden ? s.value : '') + '">')
-                + '<span class="adm-setting__hint footnote">'
-                + esc(T('pf_default', '預設 {v}').replace('{v}', s.default))
-                + (range ? '　' + esc(range) : '')
-                + '</span>'
-                + '<button class="btn btn--minor" type="button" data-reset="' + esc(s.key) + '"'
-                + (s.overridden ? '' : ' disabled') + '>'
-                + esc(T('pf_reset', '回到預設')) + '</button>'
-                + '</div>';
-        }).join('');
+        $('settings').innerHTML = tableHtml(cols, SETTINGS.map(function (s2) {
+            var range = (s2.min != null && s2.max != null)
+                ? T('pf_range', '{min}–{max}').replace('{min}', s2.min).replace('{max}', s2.max)
+                : '—';
+            // ZH: `overridden` 是後端給的 —— 標出來，管理者才分得出
+            //     「這是我改過的」與「這是 .env 的預設」。
+            var name = '<td>' + esc(s2.label)
+                + (s2.overridden ? ' <span class="adm-pill adm-pill--temp">'
+                    + esc(T('pf_overridden', '已覆寫')) + '</span>' : '') + '</td>';
+
+            if (!EDITING) {
+                return '<tr>' + name
+                    + '<td>' + esc(settingValueLabel(s2)) + '</td>'
+                    + '<td class="footnote">' + esc(s2.default) + '</td>'
+                    + '<td class="footnote">' + esc(range) + '</td></tr>';
+            }
+
+            // ZH: 🔴 **只有「已覆寫」的才填值**，其餘留空、用 placeholder 顯示預設。
+            //
+            // ZH: 原本一律填入生效值，結果按一次「儲存設定」就把**全部 15 個旋鈕
+            //     都變成明確覆寫**（實測 11 → 15），連沒碰過的也是 ——
+            //     之後改 .env 對它們就再也沒有作用，而且沒有任何提示。
+            //
+            // ZH: 空白＝跟著預設走，正好是後端的契約（值留空＝清除覆寫）。
+            //     所以「回到預設」只要把欄位清空就好，不需要另外記狀態。
+            var field = s2.type === 'choice'
+                // ZH: 下拉沒辦法「留空」，所以給一個明確的「用預設」選項。
+                //     選項由後端給 —— 前端不維護一份模型清單，
+                //     不然管理者新增模型之後這裡還是舊的。
+                ? cellSelect('v', s2.choices || [], s2.overridden ? s2.value : '',
+                             { blankText: T('pf_use_default', '（用預設）') })
+                : cellInput('v', s2.overridden ? s2.value : '', {
+                    type: (s2.type === 'int' || s2.type === 'float') ? 'number' : 'text',
+                    step: s2.type === 'float' ? '0.01' : null,
+                    min: s2.min, max: s2.max, placeholder: s2.default,
+                });
+            return '<tr data-key="' + esc(s2.key) + '">' + name + field
+                + '<td class="footnote">' + esc(s2.default) + '</td>'
+                + '<td class="footnote">' + esc(range) + '</td>'
+                + '<td class="num"><button class="btn btn--minor" type="button"'
+                + ' data-reset="' + esc(s2.key) + '"' + (s2.overridden ? '' : ' disabled') + '>'
+                + esc(T('pf_reset', '回到預設')) + '</button></td></tr>';
+        }).join(''));
 
         wireExternalWarning();
 
@@ -206,10 +255,8 @@
                 // ZH: 🔴 **只清空欄位，不存檔。**
                 //     原本是按下去就立刻送出並跳回唯讀 —— 你正在改好幾個欄位，
                 //     其中一個按了「回到預設」就把全部一起存掉並踢出編輯模式。
-                //
-                // ZH: 空白就是「跟著預設走」（後端契約），所以清空即可；
-                //     真正生效是在按「儲存設定」的時候，與其他欄位一起。
-                var el = $('s-' + b.dataset.reset);
+                var tr = b.closest('tr');
+                var el = tr && tr.querySelector('[data-f="v"]');
                 if (el) { el.value = ''; el.focus(); }
                 b.disabled = true;          // 已經是預設了，再按沒有意義
             });
@@ -232,7 +279,11 @@
             $('ext-warn').hidden = !(pick && pick.provider && pick.provider !== 'ollama');
         };
 
-        var sel = $('s-rag_chat_model');
+        // ZH: 表格化之後欄位沒有 id 了，靠列上的 data-key 找。
+        //     ⚠ 這行漏改的話警語會**靜默失效** —— sel 拿到 null，
+        //       就一路走到「唯讀模式」那條分支，編輯中換下拉不再有反應。
+        var row2 = $('settings').querySelector('[data-key="rag_chat_model"]');
+        var sel = row2 && row2.querySelector('[data-f="v"]');
         if (sel) {
             sel.addEventListener('change', function () { paint(sel.value); });
             paint(sel.value);
@@ -256,9 +307,11 @@
         if (single) {
             payload[single.key] = single.value;
         } else {
-            SETTINGS.forEach(function (s) {
-                var el = $('s-' + s.key);
-                if (el) payload[s.key] = el.value;
+            // ZH: 從表格的每一列讀 —— 欄位不再有 `s-<key>` 這種 id，
+            //     列上的 data-key 才是它對應哪一個旋鈕。
+            $('settings').querySelectorAll('[data-key]').forEach(function (tr) {
+                var el = tr.querySelector('[data-f="v"]');
+                if (el) payload[tr.dataset.key] = el.value;
             });
         }
         try {
@@ -276,6 +329,168 @@
     }
 
     // ── 模型 ──────────────────────────────────────────────────────────────
+    //
+    // ZH: 跟其他區同一套：唯讀 → 編輯 → 表格內直接改 → 一次儲存。
+    //     原本是每一列常駐「編輯／刪除」兩顆鈕，按編輯還另開一個表單面板 ——
+    //     同一頁上四個區塊三種改法，使用者每換一區就要重新學一次。
+    //
+    // ZH: 🔴 儲存只送真的改過的列（與代碼對應同一個理由）。
+    var MODELS = null;
+    var MODELS_EDIT = false;
+    var MODELS_DEL = {};
+    var MODELS_NEW = [];
+    var MODELS_SEQ = 0;
+
+    // ZH: 可編的欄位。`model_type` 不在裡面 —— 後端在建立時決定，
+    //     改它等於換一種模型，不是編輯。
+    var MODEL_FIELDS = ['name', 'api_provider', 'api_model_id', 'api_endpoint', 'description'];
+
+    function paintModelButtons() {
+        $('m-edit').hidden = MODELS_EDIT;
+        $('m-save').hidden = !MODELS_EDIT;
+        $('m-cancel').hidden = !MODELS_EDIT;
+        $('m-add').hidden = !MODELS_EDIT;
+        $('m-ro-hint').hidden = MODELS_EDIT;
+        $('m-edit-hint').hidden = !MODELS_EDIT;
+    }
+
+    function modelsExitEdit() {
+        MODELS_EDIT = false;
+        MODELS_DEL = {};
+        MODELS_NEW = [];
+    }
+
+    function renderModels() {
+        if (!MODELS) return;
+        paintModelButtons();
+
+        var rows = (MODELS.items || []).concat(MODELS_NEW);
+        if (!rows.length) {
+            $('models').innerHTML = '<p class="footnote">'
+                + esc(T('pf_m_none', '還沒有任何模型。')) + '</p>';
+            wireModelRows();
+            return;
+        }
+
+        var cols = [['pf_m_name', '名稱'], ['pf_m_type', '類型'], ['pf_m_provider', '供應者'],
+                    ['pf_m_id', '模型 ID'], ['pf_m_endpoint', 'API 位址'],
+                    ['pf_m_public', '公開'], ['pf_m_desc', '說明']];
+        if (MODELS_EDIT) cols = cols.concat([['', '']]);
+
+        $('models').innerHTML = tableHtml(cols,
+            rows.map(MODELS_EDIT ? modelRowEdit : modelRowRo).join(''));
+        wireModelRows();
+    }
+
+    function modelRowRo(m) {
+        return '<tr>'
+            + '<td>' + esc(m.name) + '</td>'
+            + '<td>' + esc(m.model_type || '—') + '</td>'
+            + '<td>' + esc(m.api_provider || '—') + '</td>'
+            + '<td class="mono">' + esc(m.api_model_id || '—') + '</td>'
+            + '<td class="mono">' + esc(m.api_endpoint || '—') + '</td>'
+            + '<td>' + esc(m.is_public ? T('pf_yes', '是') : T('pf_no', '否')) + '</td>'
+            + '<td>' + esc(m.description || '—') + '</td>'
+            + '</tr>';
+    }
+
+    function modelRowEdit(m) {
+        var gone = !!MODELS_DEL[m.id];
+        var o = { disabled: gone };
+        return '<tr class="' + (gone ? 'is-gone' : '') + '" data-row="' + esc(m.id) + '">'
+            + cellInput('name', m.name, o)
+            // ZH: 類型由後端在建立時決定，這裡只顯示不給改。
+            + '<td>' + esc(m.model_type || '—') + '</td>'
+            + cellInput('api_provider', m.api_provider, o)
+            + cellInput('api_model_id', m.api_model_id, o)
+            + cellInput('api_endpoint', m.api_endpoint, o)
+            + cellCheck('is_public', m.is_public, o)
+            + cellInput('description', m.description, o)
+            + delCell(m.id, gone)
+            + '</tr>';
+    }
+
+    function wireModelRows() {
+        $('models').querySelectorAll('[data-del]').forEach(function (b) {
+            b.addEventListener('click', function () {
+                var id = b.dataset.del;
+                // ZH: 新增的空白列直接拿掉，不必標記 —— 它還不存在於後端。
+                if (String(id).indexOf('new-') === 0) {
+                    MODELS_NEW = MODELS_NEW.filter(function (x) { return x.id !== id; });
+                } else if (MODELS_DEL[id]) {
+                    delete MODELS_DEL[id];
+                } else {
+                    MODELS_DEL[id] = true;
+                }
+                modelsKeep();       // ZH: 重畫前先收起畫面上的改動，不然會被洗掉
+                renderModels();
+            });
+        });
+    }
+
+    function modelsKeep() {
+        if (!MODELS_EDIT) return;
+        $('models').querySelectorAll('[data-row]').forEach(function (tr) {
+            var id = tr.dataset.row;
+            var target = (MODELS.items || []).filter(function (x) { return String(x.id) === id; })[0]
+                || MODELS_NEW.filter(function (x) { return x.id === id; })[0];
+            if (target) readRow(tr, target);
+        });
+    }
+
+    async function saveModels() {
+        modelsKeep();
+        var base = MODELS.__base || {};
+        var fails = [], writes = 0, dels = 0;
+
+        // ZH: 先刪再寫 —— 若有人刪掉一列又新增同名的，順序反了會把新的刪掉。
+        for (var id in MODELS_DEL) {
+            try {
+                await api('/admin/models/' + encodeURIComponent(id), { method: 'DELETE' });
+                dels++;
+            } catch (e) {
+                fails.push((base[id] ? base[id].name : id) + '：' + e.message);
+            }
+        }
+
+        var rows = (MODELS.items || []).filter(function (m) { return !MODELS_DEL[m.id]; })
+            .concat(MODELS_NEW);
+        for (var i = 0; i < rows.length; i++) {
+            var m = rows[i];
+            var name = (m.name || '').trim();
+            // ZH: 新增的空白列沒填名字就當作沒新增，不要攔住整批儲存。
+            if (!name) continue;
+            var was = base[m.id];
+            if (was && MODEL_FIELDS.every(function (f) {
+                    return (was[f] || '') === (m[f] || '');
+                }) && !!was.is_public === !!m.is_public) continue;   // 沒改就不送
+            var body = { name: name, is_public: !!m.is_public };
+            MODEL_FIELDS.forEach(function (f) {
+                if (f !== 'name') body[f] = (m[f] || '').trim() || null;
+            });
+            try {
+                await api(m.__new ? '/admin/models'
+                                  : '/admin/models/' + encodeURIComponent(m.id), {
+                    method: m.__new ? 'POST' : 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(body),
+                });
+                writes++;
+            } catch (e) {
+                fails.push(name + '：' + e.message);
+            }
+        }
+
+        if (fails.length) {
+            say('m-msg', T('pf_save_fail', '存不起來（{w}）').replace('{w}', fails.join('；')));
+        } else {
+            flash('m-msg', T('pf_mm_saved', '存好了：改了 {a} 列、刪了 {b} 列。')
+                .replace('{a}', writes).replace('{b}', dels));
+            modelsExitEdit();
+        }
+        await loadModels();
+    }
+
     async function loadModels() {
         var list;
         try {
@@ -285,119 +500,17 @@
                 + esc(T('ov_fail_part', '這一段暫時讀不到（{w}）').replace('{w}', e.message)) + '</p>';
             return;
         }
-        if (!list.length) {
-            $('models').innerHTML = '<p class="footnote">'
-                + esc(T('pf_m_none', '還沒有任何模型。')) + '</p>';
-            return;
-        }
-        var head = [
-            ['pf_m_name', '名稱'], ['pf_m_type', '類型'], ['pf_m_provider', '供應者'],
-            ['pf_m_id', '模型 ID'], ['pf_m_public', '公開'], ['pf_m_desc', '說明'],
-        ];
-        $('models').innerHTML =
-            '<div class="adm-tablewrap"><table class="adm-table"><thead><tr>'
-            + head.map(function (h) { return '<th>' + esc(T(h[0], h[1])) + '</th>'; }).join('')
-            + '<th></th></tr></thead><tbody>'
-            + list.map(function (m) {
-                return '<tr>'
-                    + '<td>' + esc(m.name) + '</td>'
-                    + '<td>' + esc(m.model_type || '—') + '</td>'
-                    + '<td>' + esc(m.api_provider || '—') + '</td>'
-                    + '<td class="mono">' + esc(m.api_model_id || '—') + '</td>'
-                    + '<td>' + esc(m.is_public ? T('pf_yes', '是') : T('pf_no', '否')) + '</td>'
-                    + '<td>' + esc(m.description || '—') + '</td>'
-                    + '<td>'
-                    + '<button class="btn btn--minor" type="button" data-edit-model="'
-                    + esc(m.id) + '">' + esc(T('pf_m_edit', '編輯')) + '</button> '
-                    + '<button class="btn btn--minor" type="button" data-del-model="'
-                    + esc(m.id) + '" data-name="' + esc(m.name) + '">'
-                    + esc(T('pf_m_del', '刪除')) + '</button></td>'
-                    + '</tr>';
-            }).join('')
-            + '</tbody></table></div>'
-            + '<div class="inline-error" id="m-msg" hidden></div>';
-
-        $('models').querySelectorAll('[data-edit-model]').forEach(function (b) {
-            b.addEventListener('click', function () {
-                var m = list.filter(function (x) { return String(x.id) === b.dataset.editModel; })[0];
-                if (m) openModelForm(m);
-            });
+        MODELS = { items: list, __base: {} };
+        // ZH: 留一份原樣，儲存時用來比對「哪幾列真的被改過」，
+        //     取消時也靠它回復（items 會被編輯中的輸入值就地覆寫）。
+        list.forEach(function (m) {
+            var b = { is_public: !!m.is_public };
+            MODEL_FIELDS.forEach(function (f) { b[f] = m[f] || ''; });
+            MODELS.__base[m.id] = b;
         });
-
-        $('models').querySelectorAll('[data-del-model]').forEach(function (b) {
-            b.addEventListener('click', async function () {
-                if (!confirm(T('pf_m_del_confirm', '要刪掉「{n}」嗎？')
-                    .replace('{n}', b.dataset.name))) return;
-                try {
-                    await api('/admin/models/' + encodeURIComponent(b.dataset.delModel),
-                              { method: 'DELETE' });
-                    loadModels();
-                } catch (e) { say('m-msg', e.message); }
-            });
-        });
+        renderModels();
     }
 
-
-    // ZH: 新增／編輯共用同一個表單。
-    //
-    // ZH: 原本這一區只能看與刪 —— 少了新增與編輯，要改一個模型得**先刪再建**，
-    //     那會把它的 id 換掉（其他地方若引用了那個 id 就會斷）。
-    //     `m` 為 null = 新增，否則是編輯。
-    function openModelForm(m) {
-        var box = $('model-form');
-        box.hidden = false;
-        box.innerHTML =
-            '<div class="adm-card__title">'
-            + esc(m ? T('pf_m_edit', '編輯') : T('pf_m_add', '新增模型')) + '</div>'
-            + fieldRow('m-name', T('pf_m_name', '名稱'), m ? m.name : '')
-            + fieldRow('m-provider', T('pf_m_provider', '供應者'), m ? (m.api_provider || '') : '')
-            + fieldRow('m-mid', T('pf_m_id', '模型 ID'), m ? (m.api_model_id || '') : '')
-            + fieldRow('m-endpoint', T('pf_m_endpoint', 'API 位址'), m ? (m.api_endpoint || '') : '')
-            + fieldRow('m-desc', T('pf_m_desc', '說明'), m ? (m.description || '') : '')
-            + '<label class="field"><span class="field__label">'
-            + esc(T('pf_m_public', '公開')) + '</span>'
-            + '<input type="checkbox" id="m-public"'
-            + (m && m.is_public ? ' checked' : '') + '></label>'
-            + '<div class="ds__actions">'
-            + '<button class="btn btn--primary" type="button" id="m-go">'
-            + esc(m ? T('pp_save', '儲存') : T('tmp_create', '建立')) + '</button>'
-            + '<button class="btn btn--minor" type="button" id="m-cancel">'
-            + esc(T('tmp_cancel', '取消')) + '</button>'
-            + '</div>'
-            + '<div class="inline-error" id="m-form-msg" hidden></div>';
-
-        $('m-cancel').addEventListener('click', function () { box.hidden = true; });
-        $('m-go').addEventListener('click', async function () {
-            var body = {
-                name: $('m-name').value.trim(),
-                api_provider: $('m-provider').value.trim() || null,
-                api_model_id: $('m-mid').value.trim() || null,
-                api_endpoint: $('m-endpoint').value.trim() || null,
-                description: $('m-desc').value.trim() || null,
-                is_public: $('m-public').checked,
-            };
-            try {
-                await api(m ? '/admin/models/' + encodeURIComponent(m.id) : '/admin/models', {
-                    method: m ? 'PUT' : 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(body),
-                });
-                box.hidden = true;
-                loadModels();
-            } catch (e) {
-                say('m-form-msg', e.message);
-            }
-        });
-        $('m-name').focus();
-    }
-
-    // ── GPU 節點 ──────────────────────────────────────────────────────────
-    // ZH: schedule 的契約（見 app/gpu_schedule.py 檔頭）有**三種狀態**，
-    //     而且其中兩種容易混淆：
-    //       null / 空字串   → 全天可排
-    //       明確的空 dict {} → **永不**可排（與上面語意相反）
-    //       {"mon": [["18:00","23:00"]], …} → 依時段
-    //     所以介面做成三選一，不讓使用者自己去猜「清空」是什麼意思。
     function schedMode(raw) {
         if (raw == null || raw === '') return 'all';
         var obj = typeof raw === 'string' ? JSON.parse(raw) : raw;
@@ -631,9 +744,28 @@
         renderSettings();
     });
     $('s-save').addEventListener('click', function () { saveSettings(null); });
-    // ZH: 一定要包一層 —— 直接傳 openModelForm 的話，
-    //     addEventListener 會把 **Event 物件**當成 `m`，於是永遠走「編輯」那條路。
-    $('m-add').addEventListener('click', function () { openModelForm(null); });
+    $('m-edit').addEventListener('click', function () {
+        MODELS_EDIT = true;
+        say('m-msg', '');
+        renderModels();
+    });
+    $('m-cancel').addEventListener('click', function () {
+        // ZH: 取消要丟掉改動。MODELS.items 在編輯中被就地覆寫過，
+        //     所以不能只重畫 —— 要重讀後端那一份原樣。
+        modelsExitEdit();
+        say('m-msg', '');
+        loadModels();
+    });
+    $('m-save').addEventListener('click', saveModels);
+    $('m-add').addEventListener('click', function () {
+        modelsKeep();
+        MODELS_NEW.push({ id: 'new-' + (++MODELS_SEQ), __new: true, is_public: false,
+                          name: '', api_provider: '', api_model_id: '',
+                          api_endpoint: '', description: '' });
+        renderModels();
+        var last = $('models').querySelector('tr:last-child [data-f="name"]');
+        if (last) last.focus();
+    });
 
     $('x-edit').addEventListener('click', function () {
         EXT_EDIT = true;
@@ -647,8 +779,28 @@
         renderExt();
     });
     $('x-save').addEventListener('click', saveExt);
-    // ZH: 同樣要包一層，否則 Event 物件會被當成要編輯的那一列。
-    $('mm-add').addEventListener('click', function () { openMapForm(null); });
+    $('mm-edit').addEventListener('click', function () {
+        MAP_EDIT = true;
+        say('mm-msg', '');
+        renderMap();
+    });
+    $('mm-cancel').addEventListener('click', function () {
+        // ZH: 取消要丟掉改動。MAP.items 在編輯中被就地覆寫過，
+        //     所以不能只重畫 —— 要重讀後端那一份原樣。
+        mapExitEdit();
+        say('mm-msg', '');
+        loadMap();
+    });
+    $('mm-save').addEventListener('click', saveMap);
+    $('mm-add').addEventListener('click', function () {
+        mapKeep();
+        MAP_NEW.push({ id: 'new-' + (++MAP_SEQ), __new: true,
+                       code: '', display_name: '', provider: '', category: '' });
+        renderMap();
+        // ZH: 新的一列出現在最後面，焦點直接進去 —— 不然使用者要自己捲下去找。
+        var last = $('mm-list').querySelector('tr:last-child [data-f="code"]');
+        if (last) last.focus();
+    });
 
     // ZH: 換一台就重畫那張卡。不重讀後端 —— NODES 是剛拿的，
     //     再打一次 API 只會讓切換變慢。
@@ -702,29 +854,24 @@
         paintExtButtons();
         if (!EXT) return;
 
-        if (!EXT_EDIT) {
-            $('ext-conn').innerHTML = EXT_FIELDS.map(function (f) {
-                var v = EXT[f[0]];
-                return '<div class="adm-setting adm-setting--ro">'
-                    + '<span class="adm-setting__label">' + esc(T(f[1], f[2])) + '</span>'
-                    // ZH: 空值要明講「沒有設定」—— 一片空白看起來像沒載到。
-                    + '<span class="adm-setting__ro">'
-                    + esc(v === '' || v == null ? T('pf_ext_unset', '（沒有設定）') : v)
-                    + '</span></div>';
-            }).join('');
-            return;
-        }
+        var cols = [['pf_s_name', '設定'], ['pf_s_value', '值'], ['pf_s_note', '說明']];
+        $('ext-conn').innerHTML = tableHtml(cols, EXT_FIELDS.map(function (f) {
+            var v = EXT[f[0]];
+            var name = '<td>' + esc(T(f[1], f[2])) + '</td>';
+            var note = '<td class="footnote">' + esc(T(f[4], f[5])) + '</td>';
+            return '<tr data-key="' + esc(f[0]) + '">' + name
+                + (EDIT_OFF(f, v))
+                + note + '</tr>';
+        }).join(''));
+    }
 
-        $('ext-conn').innerHTML = EXT_FIELDS.map(function (f) {
-            return '<div class="adm-setting adm-setting--wide">'
-                + '<label class="adm-setting__label" for="x-' + f[0] + '">'
-                + esc(T(f[1], f[2])) + '</label>'
-                + '<input class="field__input" id="x-' + f[0] + '" type="' + f[3] + '"'
-                + (f[3] === 'number' ? ' min="0"' : '')
-                + ' value="' + esc(EXT[f[0]] == null ? '' : EXT[f[0]]) + '">'
-                + '<span class="adm-setting__sub footnote">' + esc(T(f[4], f[5])) + '</span>'
-                + '</div>';
-        }).join('');
+    // ZH: 唯讀時空值要明講「沒有設定」—— 一片空白看起來像沒載到。
+    function EDIT_OFF(f, v) {
+        if (!EXT_EDIT) {
+            return '<td>' + esc(v === '' || v == null
+                ? T('pf_ext_unset', '（沒有設定）') : v) + '</td>';
+        }
+        return cellInput('v', v, { type: f[3], min: f[3] === 'number' ? 0 : null });
     }
 
     async function loadExt() {
@@ -741,7 +888,12 @@
     }
 
     async function saveExt() {
-        var get = function (k) { var el = $('x-' + k); return el ? el.value.trim() : ''; };
+        // ZH: 表格化之後欄位沒有 id 了，靠列上的 data-key 找。
+        var get = function (k) {
+            var tr = $('ext-conn').querySelector('[data-key="' + k + '"]');
+            var el = tr && tr.querySelector('[data-f="v"]');
+            return el ? el.value.trim() : '';
+        };
         var failed = [];
         try {
             await api('/external-ai/admin/url', {
@@ -773,21 +925,55 @@
     }
 
     // ── 外部 AI：廠商模型代碼對應 ─────────────────────────────────────────
+    //
+    // ZH: 跟營運設定同一套：**預設唯讀，按「編輯設定」才變成可填的欄位，
+    //     改完一次儲存。** 這裡的理由比營運設定更強 —— 三十幾列各有三個欄位，
+    //     常駐就是上百個輸入框，而且捲頁時滑鼠停在下拉上滾輪就會把值改掉。
+    //
+    // ZH: 🔴 儲存時**只送真的改過的列**。全部重送的話，一次按下去就是三十幾個
+    //     寫入請求，而且每一列的 updated 時間都會被動到 —— 之後想查「誰動過
+    //     哪一列」就再也看不出來。
     var MAP = null;
+    var MAP_EDIT = false;
+    var MAP_DEL = {};        // ZH: 標記要刪的列（id → true），按儲存才真的刪
+    var MAP_NEW = [];        // ZH: 編輯中新增的空白列（尚未寫入後端）
+    var MAP_SEQ = 0;
+
+    function paintMapButtons() {
+        $('mm-edit').hidden = MAP_EDIT;
+        $('mm-save').hidden = !MAP_EDIT;
+        $('mm-cancel').hidden = !MAP_EDIT;
+        $('mm-add').hidden = !MAP_EDIT;
+        $('mm-ro-hint').hidden = MAP_EDIT;
+        $('mm-edit-hint').hidden = !MAP_EDIT;
+    }
+
+    // ZH: ⚠ 這裡**不清訊息**。存檔成功時是先 flash 再呼叫它 ——
+    //     在這裡清掉的話，剛設好的「存好了」會被自己抹掉，
+    //     使用者按了儲存卻什麼都沒看到。要清的地方自己清。
+    function mapExitEdit() {
+        MAP_EDIT = false;
+        MAP_DEL = {};
+        MAP_NEW = [];
+    }
 
     function renderMap() {
         if (!MAP) return;
+        paintMapButtons();
 
         // ZH: 沒對應到的先講 —— 數據那一頁會用原始代碼顯示，
         //     那看起來像壞掉，其實是這裡少一列。
+        //
+        // ZH: 「全部帶入建議值」在編輯中**不顯示**：它會立刻寫入並重讀，
+        //     手上還沒存的改動會被沖掉。
         var un = MAP.unmapped || [];
         $('mm-unmapped').innerHTML = !un.length
             ? '<p class="footnote">' + esc(T('pf_mm_none', '交易裡出現過的代碼都對應好了。')) + '</p>'
             : '<div class="adm-alert adm-alert--warn">'
                 + '<span>' + esc(T('pf_mm_unmapped', '有 {n} 個代碼還沒對應，「數據」那一頁會直接顯示原始代碼。')
                     .replace('{n}', un.length)) + '</span>'
-                + '<button class="btn btn--minor" type="button" id="mm-seed">'
-                + esc(T('pf_mm_seed', '全部帶入建議值')) + '</button>'
+                + (MAP_EDIT ? '' : '<button class="btn btn--minor" type="button" id="mm-seed">'
+                    + esc(T('pf_mm_seed', '全部帶入建議值')) + '</button>')
                 + '</div>'
                 + '<ul class="adm-pie__legend">' + un.map(function (u) {
                     return '<li class="adm-pie__row">'
@@ -798,113 +984,160 @@
                         + '</li>';
                 }).join('') + '</ul>';
 
-        var rows = MAP.items || [];
-        $('mm-list').innerHTML = !rows.length
-            ? '<p class="footnote">' + esc(T('pf_mm_empty', '還沒有任何對應。')) + '</p>'
-            : '<div class="adm-tablewrap"><table class="adm-table"><thead><tr>'
-                + [['pf_mm_code', '廠商原始代碼'], ['pf_mm_name', '顯示名稱'],
-                   ['pf_m_provider', '供應者'], ['pf_mm_cat', '類別'],
-                   ['pf_mm_tx', '交易筆數'], ['', '']].map(function (h) {
-                    return '<th>' + esc(h[0] ? T(h[0], h[1]) : '') + '</th>';
-                }).join('')
-                + '</tr></thead><tbody>' + rows.map(function (r) {
-                    return '<tr>'
-                        + '<td><code>' + esc(r.code) + '</code></td>'
-                        + '<td>' + esc(r.display_name || '—') + '</td>'
-                        + '<td>' + esc(r.provider || '—') + '</td>'
-                        + '<td>' + esc(r.category || '—') + '</td>'
-                        // ZH: 沒出現過的列標出來 —— 那多半是打錯字或廠商改了代碼，
-                        //     留著不會有害，但知道它沒在用比較好判斷要不要刪。
-                        + '<td class="num">' + (r.seen ? esc(num(r.tx_count))
-                            : '<span class="footnote">' + esc(T('pf_mm_unseen', '沒出現過')) + '</span>') + '</td>'
-                        + '<td class="num">'
-                        + '<button class="btn btn--minor" type="button" data-mm-edit="' + esc(r.id) + '">'
-                        + esc(T('pf_m_edit', '編輯')) + '</button> '
-                        + '<button class="btn btn--minor" type="button" data-mm-del="' + esc(r.id) + '">'
-                        + esc(T('pf_m_del', '刪除')) + '</button>'
-                        + '</td></tr>';
-                }).join('') + '</tbody></table></div>';
+        var rows = (MAP.items || []).concat(MAP_NEW);
+        if (!rows.length) {
+            $('mm-list').innerHTML = '<p class="footnote">'
+                + esc(T('pf_mm_empty', '還沒有任何對應。')) + '</p>';
+            wireMapRows();
+            return;
+        }
 
-        var seed = $('mm-seed');
-        if (seed) seed.addEventListener('click', seedMap);
-        $('mm-list').querySelectorAll('[data-mm-edit]').forEach(function (b) {
-            b.addEventListener('click', function () {
-                openMapForm(rows.filter(function (x) { return x.id === b.dataset.mmEdit; })[0]);
-            });
-        });
-        $('mm-list').querySelectorAll('[data-mm-del]').forEach(function (b) {
-            b.addEventListener('click', function () { delMap(b.dataset.mmDel, rows); });
-        });
+        var cols = [['pf_mm_code', '廠商原始代碼'], ['pf_mm_name', '顯示名稱'],
+                    ['pf_m_provider', '供應者'], ['pf_mm_cat', '類別'],
+                    ['pf_mm_tx', '交易筆數']];
+        $('mm-list').innerHTML =
+            '<div class="adm-tablewrap"><table class="adm-table"><thead><tr>'
+            + cols.map(function (h) { return '<th>' + esc(T(h[0], h[1])) + '</th>'; }).join('')
+            + (MAP_EDIT ? '<th></th>' : '')
+            + '</tr></thead><tbody>'
+            + rows.map(MAP_EDIT ? mapRowEdit : mapRowRo).join('')
+            + '</tbody></table></div>';
+
+        wireMapRows();
     }
 
-    function openMapForm(m) {
-        var e = m || {};
-        var pick = function (id, label, zh, val, opts) {
-            return '<label class="field"><span class="field__label" for="' + id + '">'
-                + esc(T(label, zh)) + '</span>'
-                + '<select class="field__input" id="' + id + '">'
-                + '<option value="">' + esc(T('pf_mm_blank', '（不指定）')) + '</option>'
-                + opts.map(function (o) {
+    function mapRowRo(r) {
+        return '<tr>'
+            + '<td><code>' + esc(r.code) + '</code></td>'
+            + '<td>' + esc(r.display_name || '—') + '</td>'
+            + '<td>' + esc(r.provider || '—') + '</td>'
+            + '<td>' + esc(r.category || '—') + '</td>'
+            // ZH: 沒出現過的列標出來 —— 多半是打錯字或廠商改了代碼。留著不會有害，
+            //     但知道它沒在用比較好判斷要不要刪。
+            + '<td class="num">' + (r.seen ? esc(num(r.tx_count))
+                : '<span class="footnote">' + esc(T('pf_mm_unseen', '沒出現過')) + '</span>') + '</td>'
+            + '</tr>';
+    }
+
+    function mapRowEdit(r) {
+        var id = r.id;
+        var gone = !!MAP_DEL[id];
+        var opt = function (list, val) {
+            return '<option value="">' + esc(T('pf_mm_blank', '（不指定）')) + '</option>'
+                + (list || []).map(function (o) {
                     return '<option value="' + esc(o) + '"'
                         + (String(val || '') === String(o) ? ' selected' : '') + '>'
                         + esc(o) + '</option>';
-                }).join('') + '</select></label>';
+                }).join('');
         };
-        $('mm-form').innerHTML =
-            '<label class="field"><span class="field__label" for="mm-code">'
-            + esc(T('pf_mm_code', '廠商原始代碼')) + '</span>'
-            // ZH: 代碼是這張表的鍵，改了等於換一列。已存在的就不給改。
-            + '<input class="field__input" id="mm-code" type="text" value="' + esc(e.code || '') + '"'
-            + (e.id ? ' readonly' : '') + '></label>'
-            + '<label class="field"><span class="field__label" for="mm-name">'
-            + esc(T('pf_mm_name', '顯示名稱')) + '</span>'
-            + '<input class="field__input" id="mm-name" type="text" value="' + esc(e.display_name || '') + '"></label>'
-            + pick('mm-prov', 'pf_m_provider', '供應者', e.provider, MAP.providers || [])
-            + pick('mm-cat', 'pf_mm_cat', '類別', e.category, MAP.categories || [])
-            + '<div class="adm-sec__head">'
-            + '<button class="btn btn--primary" type="button" id="mm-ok">'
-            + esc(T('pf_save', '儲存設定')) + '</button>'
-            + '<button class="btn btn--minor" type="button" id="mm-x">'
-            + esc(T('pf_cancel', '取消')) + '</button></div>';
-        $('mm-form').hidden = false;
-        $('mm-ok').addEventListener('click', saveMap);
-        $('mm-x').addEventListener('click', function () { $('mm-form').hidden = true; });
-        $('mm-code').focus();
+        return '<tr class="' + (gone ? 'is-gone' : '') + '" data-row="' + esc(id) + '">'
+            // ZH: 代碼是這張表的鍵，改了等於換一列。已存在的就不給改，
+            //     只有編輯中新增的空白列可以填。
+            + '<td>' + (r.__new
+                ? '<input class="field__input" data-f="code" value="' + esc(r.code || '') + '"'
+                    + ' placeholder="' + esc(T('pf_mm_code', '廠商原始代碼')) + '">'
+                : '<code>' + esc(r.code) + '</code>') + '</td>'
+            + '<td><input class="field__input" data-f="display_name" value="'
+            + esc(r.display_name || '') + '"' + (gone ? ' disabled' : '') + '></td>'
+            + '<td><select class="field__input" data-f="provider"' + (gone ? ' disabled' : '') + '>'
+            + opt(MAP.providers, r.provider) + '</select></td>'
+            + '<td><select class="field__input" data-f="category"' + (gone ? ' disabled' : '') + '>'
+            + opt(MAP.categories, r.category) + '</select></td>'
+            + '<td class="num">' + (r.__new ? '—' : (r.seen ? esc(num(r.tx_count))
+                : '<span class="footnote">' + esc(T('pf_mm_unseen', '沒出現過')) + '</span>')) + '</td>'
+            + '<td class="num"><button class="btn btn--minor" type="button" data-mm-del="' + esc(id) + '">'
+            // ZH: 刪除在編輯中只是**標記**，按「儲存設定」才真的送出 ——
+            //     跟其他欄位同一個節奏，按錯了「取消」就全部回復。
+            + esc(gone ? T('pf_mm_undel', '不刪了') : T('pf_m_del', '刪除')) + '</button></td>'
+            + '</tr>';
+    }
+
+    function wireMapRows() {
+        var seed = $('mm-seed');
+        if (seed) seed.addEventListener('click', seedMap);
+        $('mm-list').querySelectorAll('[data-mm-del]').forEach(function (b) {
+            b.addEventListener('click', function () {
+                var id = b.dataset.mmDel;
+                // ZH: 新增的空白列直接拿掉，不必標記 —— 它還不存在於後端。
+                if (id.indexOf('new-') === 0) {
+                    MAP_NEW = MAP_NEW.filter(function (x) { return x.id !== id; });
+                } else if (MAP_DEL[id]) {
+                    delete MAP_DEL[id];
+                } else {
+                    MAP_DEL[id] = true;
+                }
+                mapKeep();          // ZH: 重畫前先把畫面上的改動收起來，不然會被洗掉
+                renderMap();
+            });
+        });
+    }
+
+    // ZH: 把畫面上的輸入值寫回 MAP / MAP_NEW。
+    //     重畫（例如按了刪除）之前一定要先做，否則使用者剛打的字會不見。
+    function mapKeep() {
+        if (!MAP_EDIT) return;
+        $('mm-list').querySelectorAll('[data-row]').forEach(function (tr) {
+            var id = tr.dataset.row;
+            var target = (MAP.items || []).filter(function (x) { return x.id === id; })[0]
+                || MAP_NEW.filter(function (x) { return x.id === id; })[0];
+            if (!target) return;
+            tr.querySelectorAll('[data-f]').forEach(function (el) {
+                target[el.dataset.f] = el.value;
+            });
+        });
     }
 
     async function saveMap() {
-        var code = $('mm-code').value.trim();
-        if (!code) { say('mm-msg', T('pf_mm_need_code', '代碼不可空白。')); return; }
-        try {
-            await api('/external-ai/admin/model-map', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    code: code,
-                    display_name: $('mm-name').value.trim(),
-                    provider: $('mm-prov').value,
-                    category: $('mm-cat').value,
-                }),
-            });
-            $('mm-form').hidden = true;
-            flash('mm-msg', T('pf_saved', '已儲存'));
-            await loadMap();
-        } catch (e) {
-            say('mm-msg', T('pf_save_fail', '存不起來（{w}）').replace('{w}', e.message));
-        }
-    }
+        mapKeep();
+        var base = MAP.__base || {};
+        var fails = [], writes = 0, dels = 0;
 
-    async function delMap(id, rows) {
-        var r = rows.filter(function (x) { return x.id === id; })[0] || {};
-        // ZH: 明講原始交易不受影響 —— 不講的話沒人敢按。
-        if (!confirm(T('pf_mm_del_confirm', '要刪掉「{n}」的對應嗎？原始交易紀錄不受影響。')
-                .replace('{n}', r.code || id))) return;
-        try {
-            await api('/external-ai/admin/model-map/' + encodeURIComponent(id), { method: 'DELETE' });
-            await loadMap();
-        } catch (e) {
-            say('mm-msg', T('pf_save_fail', '存不起來（{w}）').replace('{w}', e.message));
+        // ZH: 先刪再寫 —— 若有人刪掉某列又新增同一個代碼，順序反了會把新的刪掉。
+        for (var id in MAP_DEL) {
+            try {
+                await api('/external-ai/admin/model-map/' + encodeURIComponent(id), { method: 'DELETE' });
+                dels++;
+            } catch (e) {
+                fails.push((base[id] ? base[id].code : id) + '：' + e.message);
+            }
         }
+
+        var rows = (MAP.items || []).filter(function (r) { return !MAP_DEL[r.id]; })
+            .concat(MAP_NEW);
+        for (var i = 0; i < rows.length; i++) {
+            var r = rows[i];
+            var code = (r.code || '').trim();
+            // ZH: 新增的空白列沒填代碼就當作沒新增，不要跳錯誤攔住整批儲存。
+            if (!code) continue;
+            var was = base[r.id];
+            if (was && was.display_name === (r.display_name || '')
+                && was.provider === (r.provider || '')
+                && was.category === (r.category || '')) continue;   // 沒改就不送
+            try {
+                await api('/external-ai/admin/model-map', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        code: code,
+                        display_name: r.display_name || '',
+                        provider: r.provider || '',
+                        category: r.category || '',
+                    }),
+                });
+                writes++;
+            } catch (e) {
+                fails.push(code + '：' + e.message);
+            }
+        }
+
+        if (fails.length) {
+            say('mm-msg', T('pf_save_fail', '存不起來（{w}）').replace('{w}', fails.join('；')));
+        } else {
+            flash('mm-msg', T('pf_mm_saved', '存好了：改了 {a} 列、刪了 {b} 列。')
+                .replace('{a}', writes).replace('{b}', dels));
+            mapExitEdit();
+        }
+        await loadMap();       // ZH: 不論成敗都重讀 —— 畫面要顯示真正存進去的樣子
     }
 
     async function seedMap() {
@@ -921,6 +1154,17 @@
     async function loadMap() {
         try {
             MAP = await api('/external-ai/admin/model-map');
+            // ZH: 留一份原樣，儲存時用來比對「哪幾列真的被改過」，
+            //     取消時也靠它回復（items 會被編輯中的輸入值就地覆寫）。
+            MAP.__base = {};
+            (MAP.items || []).forEach(function (r) {
+                MAP.__base[r.id] = {
+                    code: r.code,
+                    display_name: r.display_name || '',
+                    provider: r.provider || '',
+                    category: r.category || '',
+                };
+            });
             renderMap();
         } catch (e) {
             say('mm-msg', T('pf_mm_fail', '讀不到對應表（{w}）').replace('{w}', e.message));
