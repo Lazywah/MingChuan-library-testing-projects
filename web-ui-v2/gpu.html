@@ -38,7 +38,7 @@
         <!-- 主要動作（唯一）。刻意不是「上傳你的資料」：
              第一次來的人沒有資料，要求他先準備等於在入口就流失。 -->
         <button class="btn btn--primary" id="go-example" type="button" disabled>
-            檢查算力中…
+            <span data-i18n="gpu_checking">檢查算力中…</span>
         </button>
         <!-- ZH: 第二顆按鈕（擁有者裁定 2026-08-20）。給「已經有資料、而且不想寫程式」的人。
                  用 btn--ghost 而不是第二顆 primary：兩顆同權重會讓第一次來的人不知道該按哪個。
@@ -73,7 +73,7 @@
     </nav>
 
     <!-- 層級 3 · 次要 -->
-    <div class="footnote" id="quota">磁碟配額：讀取中…</div>
+    <div class="footnote" id="quota" data-i18n="gpu_quota_loading">磁碟配額：讀取中…</div>
 
     <!-- ZH: 「看別人做過什麼」僅在文件庫有內容時出現（V3 修正）。
              由 docs-entry.js 統一處理，本頁不做判斷。 -->
@@ -85,7 +85,7 @@
 
 <script src="docs-entry.js?v=4fa954e4"></script>
 <script src="tz.js?v=3608fea5"></script>
-<script src="i18n.js?v=0d8098dc"></script>
+<script src="i18n.js?v=adcdce5a"></script>
 <script src="prefs.js?v=8b7b4277"></script>
 <script src="chrome.js?v=40c86ceb"></script>
 <script src="gpu.js?v=5391952b"></script>

@@ -34,12 +34,12 @@
 
         <div class="kv">
             <span class="kv__k" data-i18n="lab_state">狀態</span>
-            <span class="kv__v" id="state">讀取中…</span>
+            <span class="kv__v" id="state" data-i18n="loading">讀取中…</span>
         </div>
 
         <!-- ZH: D3 —— 容器要 5–10 秒。**同頁顯示啟動進度，就緒後才開新分頁**；
                  直接開新分頁會看到空白，那比等待更糟（使用者不知道是壞了還是還沒好）。 -->
-        <button class="btn btn--primary" id="go" type="button" disabled>讀取中…</button>
+        <button class="btn btn--primary" id="go" type="button" disabled data-i18n="loading">讀取中…</button>
         <div class="handoff" id="note" hidden></div>
     </section>
 
@@ -86,7 +86,7 @@
 </main>
 
 <script src="tz.js?v=3608fea5"></script>
-<script src="i18n.js?v=0d8098dc"></script>
+<script src="i18n.js?v=adcdce5a"></script>
 <script src="prefs.js?v=8b7b4277"></script>
 <script src="chrome.js?v=40c86ceb"></script>
 <script src="lab.js?v=d5cf3560"></script>

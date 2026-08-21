@@ -37,6 +37,11 @@
         adm_login_offline: '連不上伺服器，請確認服務是否啟動。',
 
         // ── 外框 ─────────────────────────────────────────────
+        adm_t_overview: '總覽 · MCU AI Base 管理端',
+        adm_t_people: '人 · MCU AI Base 管理端',
+        adm_t_platform: '平台設定 · MCU AI Base 管理端',
+        adm_t_reports: '回報 · MCU AI Base 管理端',
+        adm_t_analytics: '數據 · MCU AI Base 管理端',
         adm_brand: 'MCU AI Base 管理端',
         adm_nav_overview: '總覽',
         adm_nav_people: '人',
@@ -250,6 +255,11 @@
         adm_login_not_admin: 'That account is not an administrator.',
         adm_login_offline: 'Cannot reach the server. Check that the service is running.',
 
+        adm_t_overview: 'Overview · MCU AI Base Admin',
+        adm_t_people: 'People · MCU AI Base Admin',
+        adm_t_platform: 'Platform · MCU AI Base Admin',
+        adm_t_reports: 'Reports · MCU AI Base Admin',
+        adm_t_analytics: 'Analytics · MCU AI Base Admin',
         adm_brand: 'MCU AI Base Admin',
         adm_nav_overview: 'Overview',
         adm_nav_people: 'People',

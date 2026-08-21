@@ -17,6 +17,7 @@ ZH: 在 `docker compose up` 之前跑一次，把常見的無聲地雷一次檢�
     9b. 各 v2 目錄的共用檔是否與正本一致（呼叫 check_shared_ui_files.py）
     9c. 前端 JS 是否為可解析的 JavaScript（呼叫 check_js_syntax.py）
     9d. 會送到畫面上的錯誤訊息有沒有中文（呼叫 check_error_messages.py）
+    9e. HTML 裡看得見的中文有沒有掛 data-i18n（呼叫 check_untranslated_html.py）
    10. 主機埠（80/8888/8002/3000/8787/11434）占用狀況
 
     退出碼：有 FAIL → 1（別部署）；只有 WARN 或全過 → 0。
@@ -288,6 +289,30 @@ def check_naive_datetime():
     return PASS, "回應的時間欄位都有明示時區（UTC）"
 
 
+def check_untranslated_html():
+    """ZH: HTML 裡看得見的中文有沒有掛 data-i18n。
+
+    ZH: 為什麼與 check_i18n 分開：那一支檢查的是「**已經掛上** data-i18n 的
+        key 有沒有翻譯」。一段**完全沒掛**的中文它看不到 ——
+        於是那段文字在英文模式下永遠是中文，而且沒有任何提示。
+
+    ZH: 實際找到六處：四個載入佔位字、train.html 常駐的路徑約定、
+        以及管理端五頁的 <title>（我自己漏的）。
+
+    @node scripts/deploy_check.py::check_untranslated_html
+    """
+    script = SCRIPTS_DIR / "check_untranslated_html.py"
+    if not script.exists():
+        return WARN, "找不到 check_untranslated_html.py，略過"
+    r = subprocess.run([sys.executable, str(script)], capture_output=True,
+                       text=True, encoding="utf-8", errors="replace")
+    if r.returncode != 0:
+        first = next((l.strip() for l in (r.stdout or "").splitlines()
+                      if l.strip().startswith("-")), "")
+        return FAIL, f"有中文沒掛 data-i18n → python scripts/check_untranslated_html.py　{first}"
+    return PASS, "HTML 裡的中文都掛了 data-i18n"
+
+
 def check_error_messages():
     """ZH: 會送到畫面上的錯誤訊息有沒有中文。
 
@@ -443,6 +468,7 @@ def main():
         ("共用檔一致",     check_shared_ui_files()),
         ("JS 語法",        check_js_syntax()),
         ("錯誤訊息中文",   check_error_messages()),
+        ("HTML 中文標記",  check_untranslated_html()),
         ("主機埠",         check_ports()),
     ]
 
