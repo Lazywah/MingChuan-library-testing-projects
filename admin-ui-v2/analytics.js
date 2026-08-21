@@ -11,8 +11,12 @@
  *     與頁面完全沒有整合；而且它是外部 CDN —— 圖書館對外連線受限或 CDN 掛掉時，
  *     這一頁會整片壞掉。
  *
- * ZH: 🔴 **不畫圓餅。** 舊版那張「帳號狀態分佈」是一整片單色的圓（只有一個分類），
- *     完全不傳達資訊。橫條圖在任何筆數下都讀得出來，而且長度可以直接比。
+ * ZH: 圓餅只用在**完整切分**的四塊（依類別／依供應者／依身分／依學系）——
+ *     那裡「加起來是全部」正是要傳達的事。趨勢與排名仍然是折線與橫條：
+ *     圓餅比不出接近的大小，也排不出名次。
+ *
+ * ZH: ⚠ 舊版那張「帳號狀態分佈」是一整片單色的圓（只有一個分類），完全不傳達
+ *     資訊。所以只剩一類時這裡直接不畫圓，改印一句話。
  *
  * ⚠ `top` 裡有**真實姓名與 email**。這一頁是看趨勢的，不是查人的 ——
  *   只顯示名字，email 收在 title 裡（要查某個人請去「人」那一頁）。
@@ -26,7 +30,17 @@
     // ZH: ⚠ 0 = 全部。後端註解特別提過「不能用 `days or 30`」——
     //     0 在 Python 是 falsy，會被當成沒給值。
     var DAYS = 30;
-    var PCT = { pct: true };
+
+    // ZH: 「用量」有兩種量法，看的是不同的事：
+    //       次數 = 被叫了幾次（便宜的模型可能次數很高）
+    //       點數 = 花掉多少廠商計費單位（貴的模型叫兩次就很可觀）
+    //     ⚠ 這裡沒有「Token」——廠商的交易日誌只回報點數，沒有 token 欄位。
+    //       把點數叫成 Token 會跟本頁開頭那句註記自相矛盾。
+    var METRICS = [['count', 'an_m_count', '次數', 'an_times', '次'],
+                   ['points', 'an_m_points', '點數', 'an_points', '點']];
+    var METRIC = 'count';
+    // ZH: 切換指標時不重打 API —— 同一份資料換個欄位看而已。
+    var LAST = null;
 
     function $(id) { return document.getElementById(id); }
 
@@ -130,25 +144,39 @@
         var path = d.join(' ');
         var area = path + ' L' + xOf(n - 1).toFixed(3) + ',100 L' + xOf(0).toFixed(3) + ',100 Z';
 
-        // ZH: 每個資料點一塊透明的感應區，滑鼠停著看確切數字。位置對齊折線的
-        //     節點（i/(n-1)），不是等分格子的中心 —— 差半格，圓點就會浮在線外。
+        // ZH: 每個資料點一塊透明的感應區。位置對齊折線的節點（i/(n-1)），
+        //     不是等分格子的中心 —— 差半格，圓點就會浮在線外。
+        //
+        // ZH: 資料放在 data-*，提示框由 wireLine() 用 textContent 組 ——
+        //     不走 innerHTML，帳號名稱之類的內容就不必擔心跳脫。
+        var sum = rows.reduce(function (a, r) { return a + r.consumed; }, 0);
         var w = n > 1 ? 100 / (n - 1) : 100;
         var hits = rows.map(function (r, k) {
+            var share = sum ? Math.round(r.consumed / sum * 100) : 0;
             return '<span class="adm-line__hit" style="left:' + xOf(k).toFixed(3) + '%;'
                 + 'width:' + w.toFixed(3) + '%;--y:' + (100 - yOf(k)).toFixed(3) + '%"'
-                + ' title="' + esc(r.date + ' · ' + num(r.consumed) + ' ' + unit) + '"></span>';
+                + ' data-date="' + esc(r.date) + '"'
+                + ' data-val="' + esc(num(r.consumed) + ' ' + unit) + '"'
+                + ' data-share="' + esc(T('an_tip_share', '佔期間 {p}%').replace('{p}', share)) + '"'
+                + '></span>';
         }).join('');
 
         // ZH: 點多的時候不畫圓點，會糊成一條粗線。
         var dots = n <= 31 ? ' adm-line--dots' : '';
+        // ZH: 整張圖一個 tabindex，用左右鍵在點之間移動 —— 90 個點各自可聚焦的話，
+        //     用鍵盤的人要按 90 次 Tab 才過得去。
+        var label = T('an_chart_a11y', '每日消耗折線圖，{a} 到 {b}')
+            .replace('{a}', rows[0].date).replace('{b}', rows[n - 1].date);
         return '<div class="adm-line">'
             + '<div class="adm-line__max">' + esc(num(max) + ' ' + unit) + '</div>'
-            + '<div class="adm-line__plot' + dots + '">'
+            + '<div class="adm-line__plot' + dots + '" tabindex="0" role="img"'
+            + ' aria-label="' + esc(label) + '">'
             + '<svg viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true" focusable="false">'
             + '<path class="adm-line__area" d="' + area + '"/>'
             + '<path class="adm-line__path" d="' + path + '" vector-effect="non-scaling-stroke"/>'
             + '</svg>'
             + hits
+            + '<div class="adm-tip" hidden></div>'
             + '</div>'
             + '<div class="adm-line__ends"><span>' + esc(rows[0].date) + '</span>'
             + '<span>' + esc(rows[n - 1].date) + '</span></div>'
@@ -165,33 +193,226 @@
     // ZH: 用 HTML + CSS 而不是 <svg>：這是「長度成比例的長條」，
     //     div 的寬度百分比就做得到，而且字會跟著字級設定縮放、可以被選取。
     //
-    // ZH: opts.pct —— 在數值後面補上佔比。**只有「完整切分」的圖能開**
-    //     （依類別／依供應者／依身分／依學系：每一筆都屬於其中一類，加起來
-     //     就是全部）。像「消耗最多的帳號」那種 top-N 不能開 —— 清單被截掉了，
-    //     百分比會讓人以為那就是全部。
-    function bars(rows, labelKey, valueKey, unit, opts) {
+    // ZH: 這裡**不放佔比**。橫條圖只用在 top-N（消耗 Top 10、用量 Top 10），
+    //     那是截斷過的清單 —— 加百分比會讓人以為那就是全部。
+    //     真正「加起來是全部」的四塊改用圓餅，佔比寫在圖例裡。
+    function bars(rows, labelKey, valueKey, unit) {
         if (!rows || !rows.length) return '';
         var max = rows.reduce(function (m, r) { return Math.max(m, Number(r[valueKey]) || 0); }, 0) || 1;
-        var total = (opts && opts.pct)
-            ? rows.reduce(function (s, r) { return s + (Number(r[valueKey]) || 0); }, 0) : 0;
         return '<div class="adm-bars">' + rows.map(function (r) {
             var v = Number(r[valueKey]) || 0;
             var label = r.__label != null ? r.__label : r[labelKey];
-            // ZH: 四捨五入到整數，但非零的小數不寫成 0% —— 那看起來像沒有用。
-            var pct = '';
-            if (total) {
-                var p = v / total * 100;
-                pct = ' · ' + (v && p < 0.5 ? T('an_lt1', '<1%') : Math.round(p) + '%');
-            }
             return '<div class="adm-bar">'
                 + '<span class="adm-bar__label"' + (r.__title ? ' title="' + esc(r.__title) + '"' : '') + '>'
                 + esc(label || '—') + '</span>'
                 + '<span class="adm-bar__track">'
                 + '<i style="width:' + (v / max * 100) + '%"></i></span>'
                 + '<span class="adm-bar__val">' + esc(num(v)) + (unit ? ' ' + esc(unit) : '')
-                + '<span class="adm-bar__pct">' + esc(pct) + '</span></span>'
+                + '</span>'
                 + '</div>';
         }).join('') + '</div>';
+    }
+
+    // ZH: 提示框的內容 —— 折線與圓餅共用。用 textContent 一個一個塞，
+    //     不走 innerHTML，帳號名稱之類的內容就不必擔心跳脫。
+    function fillTip(tip, parts) {
+        tip.textContent = '';
+        [['b', parts[0]], ['span', parts[1]], ['i', parts[2]]].forEach(function (p) {
+            if (p[1] == null || p[1] === '') return;
+            var el = document.createElement(p[0]);
+            el.textContent = p[1];
+            tip.appendChild(el);
+        });
+    }
+
+    // ZH: 把提示框夾在容器內 —— 貼邊時會被切掉。
+    function placeTip(tip, box, x, y) {
+        var tw = tip.offsetWidth, th = tip.offsetHeight;
+        tip.style.left = Math.max(tw / 2, Math.min(box.clientWidth - tw / 2, x)) + 'px';
+        // ZH: 預設放在上方；頂出去就翻到下方。
+        var top = y - th - 10;
+        tip.style.top = (top < 0 ? y + 10 : top) + 'px';
+    }
+
+    // ZH: 折線圖的互動 —— 滑鼠移過或鍵盤聚焦時，在該點旁邊顯示日期與數值。
+    function wireLine(root) {
+        var plot = root.querySelector('.adm-line__plot');
+        if (!plot) return;
+        var hits = [].slice.call(plot.querySelectorAll('.adm-line__hit'));
+        var tip = plot.querySelector('.adm-tip');
+        var at = -1;
+
+        function show(i) {
+            if (i < 0 || i >= hits.length) return;
+            at = i;
+            hits.forEach(function (h, k) { h.classList.toggle('is-active', k === i); });
+            var h = hits[i];
+            fillTip(tip, [h.dataset.date, h.dataset.val, h.dataset.share]);
+            // ZH: 先取消 hidden 才量得到尺寸 —— 隱藏的元素量出來是 0。
+            tip.hidden = false;
+            var ph = plot.clientHeight;
+            var x = parseFloat(h.style.left) / 100 * plot.clientWidth;
+            var yPx = parseFloat(h.style.getPropertyValue('--y')) / 100 * ph;
+            placeTip(tip, plot, x, ph - yPx);
+        }
+
+        function hide() {
+            tip.hidden = true;
+            hits.forEach(function (h) { h.classList.remove('is-active'); });
+        }
+
+        hits.forEach(function (h, i) {
+            h.addEventListener('mouseenter', function () { show(i); });
+        });
+        plot.addEventListener('mouseleave', hide);
+        plot.addEventListener('focus', function () { show(at < 0 ? 0 : at); });
+        plot.addEventListener('blur', hide);
+        plot.addEventListener('keydown', function (e) {
+            if (e.key === 'Escape') { hide(); return; }
+            var d = e.key === 'ArrowRight' ? 1 : e.key === 'ArrowLeft' ? -1 : 0;
+            if (!d) return;
+            e.preventDefault();
+            show(Math.max(0, Math.min(hits.length - 1, (at < 0 ? 0 : at) + d)));
+        });
+    }
+
+    // ── 圓餅圖（完整切分專用）─────────────────────────────────────────────
+    //
+    // ZH: 只用在「每一筆都屬於其中一類、加起來就是全部」的資料。
+    //     排名用橫條、趨勢用折線 —— 圓餅比不出接近的大小，也排不出名次。
+    //
+    // ZH: 顏色用**同一個資料色的深淺**，不引入一組新色相：兩個主題（黃／藍）
+    //     與深淺色都自動跟著走。相鄰的深淺可能接近，所以每片之間再描一道
+    //     底色的邊 —— 不靠顏色也分得出片與片的界線。
+    function pie(rows, labelKey, valueKey, unit) {
+        if (!rows || !rows.length) return '';
+        var data = rows.filter(function (r) { return (Number(r[valueKey]) || 0) > 0; });
+        if (!data.length) return '';
+        var total = data.reduce(function (a, r) { return a + Number(r[valueKey]); }, 0);
+
+        // ZH: 只有一類時整個圓是單一顏色，那就是舊版那張什麼都沒說的圖。
+        //     直接寫一句話，比畫一個沒有資訊的圓誠實。
+        if (data.length === 1) {
+            var only = data[0].__label != null ? data[0].__label : data[0][labelKey];
+            return '<p class="footnote">'
+                + esc(T('an_pie_one', '這段期間全部集中在「{n}」（{v}）。')
+                    .replace('{n}', only)
+                    // ZH: 用這一類自己的值，不用 total —— 只有一類時兩者相等，
+                    //     但寫成 total 的話，日後這個分支若放寬就會對不起來。
+                    .replace('{v}', num(Number(data[0][valueKey])) + ' ' + unit))
+                + '</p>';
+        }
+
+        // ZH: 從 12 點鐘開始順時針 —— 一般人讀圓餅就是從那裡開始。
+        function xy(turn) {
+            var t = (turn - 0.25) * 2 * Math.PI;
+            return Math.cos(t).toFixed(5) + ' ' + Math.sin(t).toFixed(5);
+        }
+        var acc = 0;
+        var slices = data.map(function (r, i) {
+            var v = Number(r[valueKey]);
+            var a0 = acc; acc += v / total; var a1 = acc;
+            var share = Math.round(v / total * 100);
+            return {
+                d: 'M 0 0 L ' + xy(a0) + ' A 1 1 0 ' + ((a1 - a0) > 0.5 ? 1 : 0)
+                    + ' 1 ' + xy(a1) + ' Z',
+                // ZH: 由深到淺，最淺留 0.32 —— 再淡就跟底色分不開了。
+                op: (1 - i * (0.68 / (data.length - 1))).toFixed(3),
+                label: r.__label != null ? r.__label : r[labelKey],
+                val: num(v) + ' ' + unit,
+                share: share + '%',
+                mid: (a0 + a1) / 2,
+            };
+        });
+
+        var paths = slices.map(function (sl, i) {
+            return '<path class="adm-pie__slice" data-i="' + i + '" d="' + sl.d + '"'
+                + ' fill-opacity="' + sl.op + '"></path>';
+        }).join('');
+
+        var legend = slices.map(function (sl, i) {
+            return '<li class="adm-pie__row" data-i="' + i + '">'
+                + '<span class="adm-pie__key" style="opacity:' + sl.op + '"></span>'
+                + '<span class="adm-pie__name">' + esc(sl.label || '—') + '</span>'
+                + '<span class="adm-pie__val">' + esc(sl.val) + '</span>'
+                + '<span class="adm-pie__pct">' + esc(sl.share) + '</span>'
+                + '</li>';
+        }).join('');
+
+        // ZH: 每片的提示框位置：中線方向、半徑 0.62 處（片內，不會蓋到邊）。
+        var pos = slices.map(function (sl) {
+            var t = (sl.mid - 0.25) * 2 * Math.PI;
+            return [(50 + Math.cos(t) * 31).toFixed(2), (50 + Math.sin(t) * 31).toFixed(2)];
+        });
+        var tips = slices.map(function (sl, i) {
+            return '<span class="adm-pie__anchor" data-i="' + i + '"'
+                + ' style="left:' + pos[i][0] + '%;top:' + pos[i][1] + '%"'
+                + ' data-label="' + esc(sl.label || '—') + '"'
+                + ' data-val="' + esc(sl.val) + '"'
+                + ' data-share="' + esc(sl.share) + '"></span>';
+        }).join('');
+
+        return '<div class="adm-pie">'
+            + '<div class="adm-pie__wrap" tabindex="0" role="img"'
+            + ' aria-label="' + esc(T('an_pie_a11y', '圓餅圖，共 {n} 類')
+                .replace('{n}', data.length)) + '">'
+            + '<svg viewBox="-1.05 -1.05 2.1 2.1" aria-hidden="true" focusable="false">'
+            + paths + '</svg>'
+            + tips
+            + '<div class="adm-tip" hidden></div>'
+            + '</div>'
+            + '<ul class="adm-pie__legend">' + legend + '</ul>'
+            + '</div>';
+    }
+
+    // ZH: 圓餅的互動 —— 跟折線圖一樣：滑鼠移過或鍵盤聚焦顯示提示框，
+    //     左右鍵在片之間移動。圖例那一列也連動，指到哪一列就亮哪一片。
+    function wirePie(root) {
+        [].slice.call(root.querySelectorAll('.adm-pie')).forEach(function (box) {
+            var wrap = box.querySelector('.adm-pie__wrap');
+            var tip = box.querySelector('.adm-tip');
+            var anchors = [].slice.call(box.querySelectorAll('.adm-pie__anchor'));
+            var slices = [].slice.call(box.querySelectorAll('.adm-pie__slice'));
+            var rowsEl = [].slice.call(box.querySelectorAll('.adm-pie__row'));
+            var at = -1;
+
+            function show(i) {
+                if (i < 0 || i >= anchors.length) return;
+                at = i;
+                slices.forEach(function (p, k) { p.classList.toggle('is-active', k === i); });
+                rowsEl.forEach(function (r, k) { r.classList.toggle('is-active', k === i); });
+                var a = anchors[i];
+                fillTip(tip, [a.dataset.label, a.dataset.val, a.dataset.share]);
+                tip.hidden = false;
+                placeTip(tip, wrap,
+                    parseFloat(a.style.left) / 100 * wrap.clientWidth,
+                    parseFloat(a.style.top) / 100 * wrap.clientHeight);
+            }
+
+            function hide() {
+                tip.hidden = true;
+                slices.forEach(function (p) { p.classList.remove('is-active'); });
+                rowsEl.forEach(function (r) { r.classList.remove('is-active'); });
+            }
+
+            slices.forEach(function (p, i) {
+                p.addEventListener('mouseenter', function () { show(i); });
+            });
+            rowsEl.forEach(function (r, i) {
+                r.addEventListener('mouseenter', function () { show(i); });
+                r.addEventListener('mouseleave', hide);
+            });
+            wrap.addEventListener('mouseleave', hide);
+            wrap.addEventListener('focus', function () { show(at < 0 ? 0 : at); });
+            wrap.addEventListener('blur', hide);
+            wrap.addEventListener('keydown', function (e) {
+                if (e.key === 'Escape') { hide(); return; }
+                var d = e.key === 'ArrowRight' ? 1 : e.key === 'ArrowLeft' ? -1 : 0;
+                if (!d) return;
+                e.preventDefault();
+                show(((at < 0 ? 0 : at) + d + anchors.length) % anchors.length);
+            });
+        });
     }
 
     function stat(labelKey, zh, value) {
@@ -204,6 +425,7 @@
     // ── MYAI 消耗 ─────────────────────────────────────────────────────────
     function renderMyai(d) {
         if (failed(d)) { $('myai').innerHTML = failBox(d); return; }
+        LAST = d;
 
         if (!d.tx_count) {
             // ZH: 明確說「這段期間沒有」，而不是畫一張空圖 ——
@@ -225,12 +447,7 @@
                 return Object.assign({}, r, { __label: r.name || r.vendor_sn, __title: r.email || '' });
             });
         var trend = fillDays(d.series);
-        // ZH: 用量 Top 10 —— 後端的 models 是按點數排的，這裡要看的是
-        //     **呼叫次數**（左邊那欄已經在講點數了），所以重新排一次。
-        //     便宜的模型被叫一百次、貴的被叫兩次，是兩件不同的事。
-        var models = (d.models || []).slice()
-            .sort(function (a, b) { return (b.count || 0) - (a.count || 0); })
-            .slice(0, 10);
+        var mHtml = modelBars(d);
         var byRole = (d.by_role || []).map(function (r) {
             return Object.assign({}, r, {
                 __label: r.role === 'unbound' ? T('an_unbound', '未綁定') : T('role_' + r.role, r.role),
@@ -267,21 +484,110 @@
             //     擺在一起才看得出「消耗集中在某人」是不是「集中在某個貴模型」。
             + '<div class="adm-duo">'
             + block('an_top', '消耗 Top 10 帳號', bars(top, 'name', 'consumed', pts))
+            // ZH: #an-models 是切換時唯一被替換的部分，外層留著滑塊才動得起來。
             + block('an_models', '用量 Top 10 模型',
-                    bars(models, 'display_name', 'count', T('an_times', '次')))
+                    mHtml && '<div id="an-models">' + mHtml + '</div>',
+                    metricToggle())
             + '</div>'
             + '<div class="adm-cols">'
-            + block('an_by_category', '依類別', bars(d.by_category, 'category', 'consumed', pts, PCT))
-            + block('an_by_provider', '依供應者', bars(d.by_provider, 'provider', 'consumed', pts, PCT))
-            + block('an_by_role', '依身分', bars(byRole, 'role', 'consumed', pts, PCT))
-            + block('an_by_dept', '依學系', bars(d.by_department, 'department', 'consumed', pts, PCT))
+            + block('an_by_category', '依類別', pie(d.by_category, 'category', 'consumed', pts))
+            + block('an_by_provider', '依供應者', pie(d.by_provider, 'provider', 'consumed', pts))
+            + block('an_by_role', '依身分', pie(byRole, 'role', 'consumed', pts))
+            + block('an_by_dept', '依學系', pie(d.by_department, 'department', 'consumed', pts))
+            + '</div>';
+
+        wireLine($('myai'));
+        wireMetric($('myai'));
+        wirePie($('myai'));
+    }
+
+    function block(key, zh, inner, actions) {
+        if (!inner) return '';
+        return '<section class="adm-block">'
+            + '<div class="adm-block__head">'
+            + '<h3 class="adm-block__title">' + esc(T(key, zh)) + '</h3>'
+            + (actions || '')
+            + '</div>' + inner + '</section>';
+    }
+
+    // ZH: 指標切換 —— 左右滑動的分段控制。
+    //
+    // ZH: 這是「同一份資料換個看法」，不是「兩個獨立的動作」，所以用
+    //     radiogroup 而不是兩顆各自獨立的按鈕：讀螢幕的人會聽到
+    //     「二選一，目前選的是次數」，而不是兩個來歷不明的按鈕。
+    //
+    // ZH: 滑塊位置直接寫 inline transform。JS 本來就知道選到第幾格，
+    //     再繞一層 CSS 變數（`translateX(calc(var(--i) * 100%))`）只是多一層
+    //     間接，好處有限。
+    //
+    // ⚠ ZH: 驗這個轉場時，**隱藏分頁的動畫時間軸是凍結的**——
+    //     `getComputedStyle` 會一直讀到起始值，看起來像「滑塊壞了不會動」，
+    //     但 `document.visibilityState === 'hidden'` 才是原因。
+    //     要量就用 `el.getAnimations()[0].finish()` 讓它跳到終點再量。
+    function metricToggle() {
+        var at = 0;
+        METRICS.forEach(function (m, i) { if (m[0] === METRIC) at = i; });
+        return '<div class="adm-seg" role="radiogroup"'
+            + ' aria-label="' + esc(T('an_metric_group', '用量的計算方式')) + '">'
+            + '<span class="adm-seg__thumb" aria-hidden="true"'
+            + ' style="transform:translateX(' + (at * 100) + '%)"></span>'
+            + METRICS.map(function (m) {
+                var on = METRIC === m[0];
+                return '<button type="button" class="adm-seg__opt' + (on ? ' is-current' : '') + '"'
+                    + ' role="radio" aria-checked="' + (on ? 'true' : 'false') + '"'
+                    + ' tabindex="' + (on ? '0' : '-1') + '" data-metric="' + m[0] + '">'
+                    + esc(T(m[1], m[2])) + '</button>';
+            }).join('')
             + '</div>';
     }
 
-    function block(key, zh, inner) {
-        if (!inner) return '';
-        return '<section class="adm-block">'
-            + '<h3 class="adm-block__title">' + esc(T(key, zh)) + '</h3>' + inner + '</section>';
+    // ZH: 依當前指標排出 Top 10。後端的 models 固定按點數排，所以要重排 ——
+    //     否則切到「次數」時，拿到的仍是「點數前十名」再按次數排，
+    //     次數高但點數低的模型會整個看不到。
+    function modelBars(d) {
+        var m = METRICS.filter(function (x) { return x[0] === METRIC; })[0] || METRICS[0];
+        var rows = (d.models || []).slice()
+            .sort(function (a, b) { return (b[m[0]] || 0) - (a[m[0]] || 0); })
+            .slice(0, 10);
+        return bars(rows, 'display_name', m[0], T(m[3], m[4]));
+    }
+
+    // ZH: 🔴 切換時**只換長條，不重繪整塊** —— 重繪會把滑塊也換成新的元素，
+    //     新元素從一開始就在新位置，CSS transition 沒有起點可以動，
+    //     於是「滑動」變成瞬移。
+    function wireMetric(root) {
+        var seg = root.querySelector('.adm-seg');
+        if (!seg) return;
+        var thumb = seg.querySelector('.adm-seg__thumb');
+        var opts = [].slice.call(seg.querySelectorAll('[data-metric]'));
+
+        function pick(i, focus) {
+            if (i < 0 || i >= opts.length || opts[i].dataset.metric === METRIC) return;
+            METRIC = opts[i].dataset.metric;
+            thumb.style.transform = 'translateX(' + (i * 100) + '%)';
+            opts.forEach(function (o, k) {
+                var on = k === i;
+                o.classList.toggle('is-current', on);
+                o.setAttribute('aria-checked', on ? 'true' : 'false');
+                o.setAttribute('tabindex', on ? '0' : '-1');
+            });
+            if (focus) opts[i].focus();
+            var host = root.querySelector('#an-models');
+            if (host) host.innerHTML = modelBars(LAST);
+        }
+
+        opts.forEach(function (o, i) {
+            o.addEventListener('click', function () { pick(i, false); });
+        });
+        // ZH: radiogroup 的慣例是左右鍵換選項（群組本身只佔一個 Tab 位）。
+        seg.addEventListener('keydown', function (e) {
+            var d = e.key === 'ArrowRight' ? 1 : e.key === 'ArrowLeft' ? -1 : 0;
+            if (!d) return;
+            e.preventDefault();
+            var cur = 0;
+            opts.forEach(function (o, k) { if (o.dataset.metric === METRIC) cur = k; });
+            pick((cur + d + opts.length) % opts.length, true);
+        });
     }
 
     // ── 訓練任務 ──────────────────────────────────────────────────────────

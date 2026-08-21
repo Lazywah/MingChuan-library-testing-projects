@@ -622,12 +622,85 @@ textarea.field__input {
    ZH: 用 HTML + CSS 而不是 <svg>：這是「長度成比例的長條」，
        div 的寬度百分比就做得到，而且**字會跟著字級設定縮放、可以被選取**
        （SVG 裡的文字兩者都做不到）。 */
-.adm-block { margin-top: var(--space-5); }
+/* ZH: 圖與圖之間 48px。原本 24px 時，上一張圖的底線與下一張的標題
+       擠在一起，讀起來像同一張圖的兩段。 */
+.adm-block { margin-top: var(--space-7); }
 
+/* ZH: 但格線裡的區塊不加 —— 兩塊並排時各自加 margin 會讓左右不對齊，
+       欄與欄之間交給 grid 的 gap。⚠ 那也表示**間距要移到容器上**：
+       只寫下面這條 reset 而忘了給容器 margin，圖與圖之間會塌成 0。 */
+.adm-duo > .adm-block,
+.adm-cols > .adm-block {
+    margin-top: 0;
+}
+.adm-duo,
+.adm-cols {
+    margin-top: var(--space-7);
+}
+
+.adm-block__head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: var(--space-3);
+    margin-bottom: var(--space-2);
+}
 .adm-block__title {
-    margin: 0 0 var(--space-2);
+    margin: 0;
     font-size: 0.9375rem;
     color: var(--text-strong);
+}
+/* ── 分段控制（左右滑動）────────────────────────────────────────────────
+   ZH: 兩格等寬，滑塊用 translateX(n × 100%) 移動。
+       等寬是滑塊能用 100% 位移的前提 —— 若讓文字決定寬度，
+       中英切換時字長一變，滑塊就會對不準格子。 */
+.adm-seg {
+    position: relative;
+    display: inline-grid;
+    grid-auto-flow: column;
+    grid-auto-columns: 1fr;
+    flex: none;
+    padding: 2px;
+    background-color: var(--surface-2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-pill);
+}
+.adm-seg__thumb {
+    position: absolute;
+    top: 2px;
+    bottom: 2px;
+    left: 2px;
+    width: calc((100% - 4px) / 2);
+    border-radius: var(--radius-pill);
+    background-color: var(--surface);
+    box-shadow: var(--shadow-1);
+    /* ZH: 位置由 JS 寫在 inline style（見 analytics.js metricToggle 的說明）——
+           這裡只負責寬度、外觀與轉場。 */
+    transition: transform 0.18s ease;
+}
+.adm-seg__opt {
+    position: relative;      /* ZH: 疊在滑塊之上，否則文字會被蓋住 */
+    z-index: 1;
+    border: 0;
+    background: none;
+    cursor: pointer;
+    padding: var(--space-1) var(--space-4);
+    border-radius: var(--radius-pill);
+    font: inherit;
+    font-size: 0.8125rem;
+    color: var(--text-muted);
+    white-space: nowrap;
+    transition: color 0.18s ease;
+}
+.adm-seg__opt.is-current {
+    color: var(--text-strong);
+}
+.adm-seg__opt:hover:not(.is-current) {
+    color: var(--text);
+}
+@media (prefers-reduced-motion: reduce) {
+    .adm-seg__thumb,
+    .adm-seg__opt { transition: none; }
 }
 
 .adm-bar {
@@ -692,9 +765,6 @@ textarea.field__input {
        這條在那裡不會有作用。 */
 .adm-bars {
     max-width: 640px;
-}
-.adm-bar__pct {
-    color: var(--text-muted);
 }
 
 /* ── 折線圖（時間序列）────────────────────────────────────────────────
@@ -780,4 +850,133 @@ textarea.field__input {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
     gap: var(--space-5);
+}
+
+/* ── 提示框（折線與圓餅共用）──────────────────────────────────────────
+   ZH: 滑鼠移過或鍵盤聚焦時，在該點旁邊顯示日期與數值。
+       pointer-events:none —— 否則框本身會擋住底下的感應區，
+       滑鼠移到框上就換成別的點，看起來會亂跳。 */
+.adm-tip {
+    position: absolute;
+    transform: translateX(-50%);
+    pointer-events: none;
+    z-index: 2;
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    padding: var(--space-2) var(--space-3);
+    background-color: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    box-shadow: var(--shadow-2);
+    white-space: nowrap;
+    font-size: 0.75rem;
+    line-height: 1.35;
+}
+.adm-tip > b {
+    color: var(--text-strong);
+    font-variant-numeric: tabular-nums;
+}
+.adm-tip > span {
+    color: var(--text);
+    font-variant-numeric: tabular-nums;
+}
+.adm-tip > i {
+    color: var(--text-muted);
+    font-style: normal;
+}
+/* ZH: 被指到的那一點：垂直線常駐 + 放大的圓點（連沒畫圓點的密集圖也有，
+       否則點多的時候完全看不出「現在指的是哪一個」）。 */
+.adm-line__hit.is-active::before {
+    opacity: 1;
+}
+.adm-line__plot .adm-line__hit.is-active::after {
+    content: '';
+    position: absolute;
+    left: 50%;
+    bottom: var(--y);
+    width: 9px;
+    height: 9px;
+    margin: 0 0 -4.5px -4.5px;
+    border-radius: 50%;
+    background-color: var(--chart-me);
+    box-shadow: 0 0 0 2px var(--surface);
+}
+/* ZH: 聚焦樣式**不在這裡寫** —— 共用的 styles.css 有一條全域
+       `:focus-visible { box-shadow: 0 0 0 3px var(--focus-ring) }` 涵蓋了，
+       上面「焦點」那段註解記著這件事。 */
+
+/* ── 圓餅圖 ───────────────────────────────────────────────────────────
+   ZH: 圓在上、圖例在下。四塊並排時每欄只有約 300px，
+       擺成左右會把圖例擠到換行。 */
+.adm-pie__wrap {
+    position: relative;
+    width: 132px;
+    margin: 0 auto var(--space-3);
+}
+.adm-pie__wrap > svg {
+    display: block;
+    width: 100%;
+    height: auto;
+    overflow: visible;
+}
+.adm-pie__slice {
+    fill: var(--chart-me);
+    /* ZH: 用底色描邊分隔每一片 —— 相鄰的深淺可能很接近，
+           有這道邊就不必只靠顏色分辨界線。 */
+    stroke: var(--surface);
+    stroke-width: 0.02;
+    cursor: default;
+}
+.adm-pie__slice.is-active {
+    stroke: var(--text-strong);
+    stroke-width: 0.03;
+}
+/* ZH: 提示框的定位錨點，本身不可見也不吃滑鼠 —— 感應交給 <path>，
+       那才是使用者真正指到的形狀。 */
+.adm-pie__anchor {
+    position: absolute;
+    width: 0;
+    height: 0;
+    pointer-events: none;
+}
+.adm-pie__legend {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    font-size: 0.8125rem;
+}
+.adm-pie__row {
+    display: grid;
+    grid-template-columns: auto 1fr auto auto;
+    align-items: baseline;
+    gap: var(--space-2);
+    padding: 2px var(--space-1);
+    border-radius: var(--radius-sm);
+}
+.adm-pie__row.is-active {
+    background-color: var(--surface-2);
+}
+.adm-pie__key {
+    width: 10px;
+    height: 10px;
+    border-radius: 2px;
+    background-color: var(--chart-me);
+    align-self: center;
+}
+.adm-pie__name {
+    color: var(--text);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.adm-pie__val {
+    color: var(--text-strong);
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+}
+.adm-pie__pct {
+    color: var(--text-muted);
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
 }
