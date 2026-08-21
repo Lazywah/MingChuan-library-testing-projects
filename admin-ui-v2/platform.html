@@ -11,29 +11,86 @@
 
     <link rel="stylesheet" href="tokens.css?v=dd946cc2">
     <link rel="stylesheet" href="styles.css?v=e917e7df">
-    <link rel="stylesheet" href="admin.css?v=74597151">
+    <link rel="stylesheet" href="admin.css?v=59712822">
 </head>
 <body>
 
-<!-- ZH: 頂部列由 admin-chrome.js 產生（唯一真相來源）。
-         各頁**不要**自己寫導覽——使用者端就是因為九頁各寫一份色系切換
-         而只有一頁會存設定，那個 bug 花了實地測試才發現。 -->
+<!-- ZH: 頂部列由 admin-chrome.js 產生（唯一真相來源）。 -->
 
 <main class="page page--admin">
-    <h1 class="hero__title" data-i18n="adm_nav_platform">平台設定</h1>
 
-    <div class="adm-wip">
-        <h2 data-i18n="adm_wip_title">這一頁還沒做</h2>
-        <p data-i18n="adm_wip_body">階段 1 只做骨架（登入、外框、顯示設定）。這一頁會在後面的階段補上。</p>
+    <div class="adm-sec__head">
+        <h1 class="hero__title" data-i18n="adm_nav_platform">平台設定</h1>
     </div>
+
+    <!-- ZH: 三塊都是「調完就走」的東西。
+             ⚠ 外部 AI（MYAI）刻意**不在這裡** —— 它 18 個端點裡大多是營運動作
+               （同步、匯入、未配對處理）不是設定，塞進來會讓這一頁又長又雜。 -->
+
+    <section class="adm-sec" aria-labelledby="h-settings">
+        <div class="adm-sec__head">
+            <h2 id="h-settings" data-i18n="pf_settings">營運設定</h2>
+            <span class="topbar__spacer"></span>
+            <!-- ZH: 預設唯讀。要改才按「編輯設定」——
+                     15 個輸入框常駐會把這一區撐得很長，而且捲頁時滑鼠停在數字欄位上
+                     滾輪就會把值改掉，**完全沒有痕跡**。 -->
+            <button class="btn btn--minor" type="button" id="s-edit" data-i18n="pf_edit">編輯設定</button>
+            <button class="btn btn--minor" type="button" id="s-cancel" data-i18n="pf_cancel" hidden>取消</button>
+            <button class="btn btn--primary" type="button" id="s-save" data-i18n="pf_save" hidden>儲存設定</button>
+        </div>
+        <p class="footnote" data-i18n="pf_settings_why">改完立刻生效，不用重啟。留空就回到 .env 的預設值。</p>
+        <p class="footnote" id="s-ro-hint" data-i18n="pf_readonly_hint">目前是唯讀。要改請按「編輯設定」。</p>
+        <!-- ZH: 編輯時才出現。空欄位在沒有這句話的時候看起來像「資料沒載到」。 -->
+        <p class="footnote" id="s-edit-hint" data-i18n="pf_edit_hint" hidden>空白＝跟著 .env 的預設走。填了值才會變成覆寫。</p>
+        <!-- ZH: 只在選到校外供應商時才出現。常駐一條警語會被當成背景而看不見。 -->
+        <div class="adm-alert adm-alert--warn" id="ext-warn" hidden>
+            <span data-i18n="pf_external_warn">⚠ 選了校外供應商（Claude / Gemini）之後，使用者問小基的內容會送到那家廠商；小基的程式家教模式還會讀使用者自己的檔案。而且本機模型是直連的，選外部就會多依賴一層 gateway——它掛掉小基也會跟著不能用。</span>
+        </div>
+        <div id="settings" aria-live="polite"><span class="skeleton skeleton--line"></span></div>
+        <div class="inline-error" id="s-msg" hidden></div>
+    </section>
+
+    <section class="adm-sec" aria-labelledby="h-models">
+        <div class="adm-sec__head">
+            <h2 id="h-models" data-i18n="pf_models">模型</h2>
+            <span class="topbar__spacer"></span>
+            <button class="btn btn--minor" type="button" id="m-add" data-i18n="pf_m_add">新增模型</button>
+        </div>
+        <section class="adm-card adm-sec" id="model-form" hidden></section>
+        <div id="models" aria-live="polite"><span class="skeleton skeleton--line"></span></div>
+    </section>
+
+    <section class="adm-sec" aria-labelledby="h-nodes">
+        <div class="adm-sec__head">
+            <h2 id="h-nodes" data-i18n="pf_nodes">GPU 節點</h2>
+            <span class="topbar__spacer"></span>
+            <!-- ZH: 一台機器一塊（不是一張 GPU 一塊）。這裡數的是機器。 -->
+            <span class="footnote" id="n-count"></span>
+        </div>
+        <!-- ZH: 選一台來調。**不列出全部** —— 總覽已經是「一眼看完所有節點狀態」的地方，
+                 在這裡重複只會讓人不確定該信哪一邊，而且會讓這一區隨機器數變長。
+
+             ZH: 卡片**外殼固定在 HTML 裡，只有 #node-body 會重畫**。
+                 把下拉也一起重畫的話，每次換節點焦點都會掉 ——
+                 鍵盤使用者選完一台就被丟回頁首，得重新 Tab 回來。 -->
+        <section class="adm-card" id="node-card" hidden>
+            <label class="field">
+                <span class="field__label" for="node-pick" data-i18n="pf_n_pick">要調哪一台</span>
+                <select class="field__input" id="node-pick"></select>
+            </label>
+            <div id="node-body" aria-live="polite"></div>
+        </section>
+        <div id="nodes" aria-live="polite"><span class="skeleton skeleton--line"></span></div>
+    </section>
+
 </main>
 
 <script src="tz.js?v=3608fea5"></script>
-<!-- ⚠ ZH: 順序不能動 —— i18n-admin 要在 i18n 之後（它 assign 到 I18N 上）、
-         prefs 之前（不然字典還沒併好就先套用一次，畫面會閃一下原文）。 -->
+<!-- ⚠ ZH: 順序不能動 —— i18n-admin 在 i18n 之後、prefs 之前。 -->
 <script src="i18n.js?v=0d8098dc"></script>
-<script src="i18n-admin.js?v=33d2bcee"></script>
+<script src="i18n-admin.js?v=7a5f598c"></script>
 <script src="prefs.js?v=8b7b4277"></script>
 <script src="admin-chrome.js?v=3c57b044"></script>
+<script src="platform.js?v=7a3bf1dd"></script>
 </body>
 </html>

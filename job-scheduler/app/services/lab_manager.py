@@ -607,7 +607,11 @@ def start_session(db: Session, user_id: str, base_image: Optional[str] = None,
         models.LabSession.session_name == session,
     ).first()
     if existing and existing.status == "running":
-        return _build_url(user_id, existing)
+        # ZH: 🔴 先確認那個容器**真的還在**。不確認的話，
+        #     一筆卡住的紀錄會讓這裡回傳一個已死容器的網址 ——
+        #     使用者點下去是一片空白，而畫面上一切看起來都正常。
+        if not reconcile_session(db, existing):
+            return _build_url(user_id, existing)
 
     lc = get_lifecycle()
 
@@ -797,6 +801,53 @@ def touch_activity(db: Session, user_id: str, session: str = DEFAULT_SESSION) ->
         db.commit()
 
 
+def reconcile_session(db: Session, row) -> bool:
+    """ZH: 讓 DB 的狀態與**實際的容器**對齊。回傳有沒有動到它。
+
+    ZH: 🔴 為什麼需要這支 —— 實際發生過：admin 的紀錄從 2026-06-30 一直是
+        `running`，而容器早就在某次重啟／prune 時消失了。
+
+        `scan_and_evict` 只依「閒置多久／跑多久」關閉，而 **admin 的三個時限
+        全都是 None**（刻意的：管理員不該被踢出去）。於是那筆紀錄
+        **永遠不會被任何人改回來**。
+
+        後果不只是畫面難看：`start_session` 看到 status == "running" 會
+        直接回傳那個容器的網址 —— 使用者點下去得到一片空白，
+        而畫面上一切看起來都正常。
+
+    ZH: 這件事與「時限」無關，是**真相維護**：不管什麼角色、有沒有時限，
+        DB 都不該宣稱一個不存在的容器在跑。
+
+    @node job-scheduler/app/services/lab_manager.py::reconcile_session
+    """
+    if row.status not in ("running", "starting"):
+        return False
+    if not row.container_id:
+        # ZH: 連 container_id 都沒有卻說在跑 —— 那一定是壞掉的紀錄。
+        row.status = "stopped"
+        db.commit()
+        logger.info("對帳：%s/%s 沒有 container_id 卻是 running，改為 stopped",
+                    row.user_id[:8], row.session_name)
+        return True
+    try:
+        alive = get_lifecycle().status(row.container_id)
+    except Exception as e:  # noqa: BLE001
+        # ZH: docker 暫時不可用時**什麼都不要做**。
+        #     把「查不到」當成「不存在」會在 docker 重啟的那幾秒
+        #     把所有人的實驗室紀錄一起清掉。
+        logger.warning("對帳時查不到容器狀態（略過）：%s", e)
+        return False
+    if alive == "running":
+        return False
+
+    row.status = "stopped"
+    row.container_id = None
+    db.commit()
+    logger.info("對帳：%s/%s 的容器已不在（%s），紀錄改為 stopped",
+                row.user_id[:8], row.session_name, alive)
+    return True
+
+
 def scan_and_evict(db: Session) -> int:
     """
     ZH: 背景任務 — 掃描所有 running session，依 idle/hard-limit 規則關閉
@@ -815,6 +866,13 @@ def scan_and_evict(db: Session) -> int:
     ).all()
 
     for session in sessions:
+        # ZH: 🔴 先對帳再談時限。時限只對「真的在跑」的東西有意義，
+        #     而且 admin 沒有任何時限 —— 少了這一步，
+        #     一筆卡住的 running 紀錄永遠不會有人改它。
+        if reconcile_session(db, session):
+            closed += 1
+            continue
+
         user = db.query(models.User).filter(models.User.id == session.user_id).first()
         if not user:
             continue
@@ -831,7 +889,11 @@ def scan_and_evict(db: Session) -> int:
         hard_min = limits.get("hard_limit_min")
         if hard_min and started:
             if (now - started).total_seconds() >= hard_min * 60:
-                stop_session(db, session.user_id, reason="hard_limit_reached")
+                # ZH: 🔴 一定要指名存檔。不帶的話預設是 default ——
+                #     非 default 的存檔不但不會被回收，還會把 default 關掉，
+                #     而 closed += 1 照加，日誌會說謊。
+                stop_session(db, session.user_id, reason="hard_limit_reached",
+                             session=session.session_name)
                 closed += 1
                 continue
 
@@ -839,7 +901,8 @@ def scan_and_evict(db: Session) -> int:
         idle_min = limits.get("idle_timeout_min")
         if idle_min and last_act:
             if (now - last_act).total_seconds() >= idle_min * 60:
-                stop_session(db, session.user_id, reason="idle_timeout")
+                stop_session(db, session.user_id, reason="idle_timeout",
+                             session=session.session_name)
                 closed += 1
 
     if closed:

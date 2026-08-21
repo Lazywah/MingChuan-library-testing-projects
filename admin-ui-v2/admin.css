@@ -371,3 +371,180 @@
        那個標示就等於沒有。 */
 .adm-pill--temp    { background-color: var(--accent-soft); color: var(--text-strong); }
 .adm-pill--expired { background-color: var(--error-soft);  color: var(--error); }
+
+/* ==============================================================================
+   平台設定（階段 4）
+   ============================================================================== */
+
+/* ZH: 一列一個旋鈕：標籤 / 輸入 / 提示 / 回到預設。
+       用 grid 而不是四個 div —— 這樣所有列的輸入框會對齊，
+       眼睛掃下來不用左右找。 */
+.adm-setting {
+    display: grid;
+    grid-template-columns: minmax(12em, 22em) 8em 1fr auto;
+    align-items: center;
+    gap: var(--space-3);
+    padding: var(--space-2) 0;
+    border-bottom: 1px solid var(--hairline);
+}
+
+.adm-setting:last-child { border-bottom: none; }
+
+.adm-setting__label { color: var(--text); }
+.adm-setting__hint { white-space: nowrap; }
+
+/* ZH: 視窗窄時疊起來，不要硬擠成四欄。 */
+@media (max-width: 900px) {
+    .adm-setting {
+        grid-template-columns: 1fr;
+        gap: var(--space-1);
+        padding: var(--space-3) 0;
+    }
+    .adm-setting__hint { white-space: normal; }
+}
+
+/* ── 一週時段 ─────────────────────────────────────────────────────────────
+   ZH: 七天各一列。**不做成日曆格子** —— 那要拖曳、要處理跨夜、
+       而管理者實際在做的事是「週一到週五晚上開放」這種簡單規則，
+       打字比拖曳快。 */
+.adm-days { margin-top: var(--space-3); }
+
+.adm-day {
+    display: grid;
+    grid-template-columns: 2.5em 1fr;
+    align-items: center;
+    gap: var(--space-2);
+    margin-bottom: var(--space-2);
+}
+
+.adm-day > span {
+    color: var(--text-muted);
+    font-size: 0.875rem;
+    text-align: center;
+}
+
+/* ── 按鈕寬度：管理端的覆寫 ───────────────────────────────────────────────
+   ZH: 共用的 `.btn--primary` 是 `width: 100%` —— 那是使用者端的刻意設計
+       （一張卡一個主要動作，滿版好按）。管理端的區塊標題列與動作列是**密集**的，
+       一顆撐滿 1300px 的按鈕看起來像出了什麼事。
+
+   ⚠ 只在管理端自己的容器裡覆寫，**不動共用的 styles.css**
+     （那份有 check_shared_ui_files.py 守著逐位元組相同）。 */
+.adm-sec__head .btn,
+.ds__actions .btn,
+.adm-inline .btn {
+    width: auto;
+    margin-top: 0;
+}
+
+/* ZH: 標題不要被右側的按鈕擠到換行。 */
+.adm-sec__head h1,
+.adm-sec__head h2 {
+    flex: none;
+    white-space: nowrap;
+}
+
+/* ── 核取方塊 ─────────────────────────────────────────────────────────────
+   ZH: 共用的 `.field` 是縱向 flex（標籤在上、輸入在下），子元素會被**撐滿寬度**。
+       文字框那樣是對的，但一個 664px 寬的核取方塊看起來像出了什麼事，
+       而且點擊區域大到會誤觸。
+
+   ⚠ 只在管理端的卡片裡覆寫，不動共用的 styles.css。 */
+.adm-card .field > input[type="checkbox"] {
+    width: auto;
+    align-self: start;
+    /* ZH: 稍微放大 —— 預設的 13px 方塊在密集表單裡不好點。
+           `--tap-min` 是給按鈕的（44px），核取方塊用不到那麼大。 */
+    inline-size: 1.15em;
+    block-size: 1.15em;
+}
+
+/* ── 可點的卡片（總覽的 GPU → 平台設定）───────────────────────────────────
+   ZH: 用 <a> 做的卡片。要拿掉連結的底線與顏色，但**保留可點的線索**
+       （游標 + hover 的位移與陰影），否則它看起來像一張普通的卡。 */
+.adm-card--link {
+    display: block;
+    color: inherit;
+    text-decoration: none;
+    transition: box-shadow 0.15s, transform 0.15s;
+}
+
+.adm-card--link:hover {
+    box-shadow: var(--shadow-1);
+    transform: translateY(-1px);
+}
+
+/* ZH: 從別頁跳過來時短暫標記一下 —— 一個節點卡跟其他節點卡長得一樣，
+       捲到定位而沒有標記的話，使用者還是得自己找「是哪一張」。 */
+.adm-card.is-flash {
+    box-shadow: 0 0 0 3px var(--focus-ring);
+}
+
+/* ZH: 願意的話就不要動畫 —— 前庭功能敏感的人會被位移與捲動影響。 */
+@media (prefers-reduced-motion: reduce) {
+    .adm-card--link { transition: none; }
+    .adm-card--link:hover { transform: none; }
+}
+
+/* ── 營運設定的唯讀模式 ───────────────────────────────────────────────────
+   ZH: 唯讀時只有兩欄（名稱 / 值），比可編輯時緊很多 ——
+       這一區有 15 個旋鈕，常駐 15 個輸入框會把整頁撐長，
+       而真正要改的時候一年也沒幾次。 */
+.adm-setting--ro {
+    grid-template-columns: minmax(12em, 28em) 1fr;
+    padding: var(--space-1) 0;
+}
+
+/* ZH: 值用等寬數字並靠左 —— 一整欄數字要能上下對齊掃視。 */
+.adm-setting__ro {
+    color: var(--text-strong);
+    font-variant-numeric: tabular-nums;
+}
+
+@media (max-width: 900px) {
+    .adm-setting--ro { grid-template-columns: 1fr; }
+}
+
+/* ── GPU 節點 ─────────────────────────────────────────────────────────────
+   ZH: 這裡**只畫選中的那一台**（見 platform.js 的說明）——
+       所以不需要收合、不需要清單樣式。
+
+   ⚠ 我先做過「每台一張可收合的卡」，後來整段刪掉：
+     總覽已經是看全部狀態的地方，這裡重複列一次是多餘的。
+     那批 CSS（.adm-node / .adm-node__head）一併移除，不留死碼。 */
+
+/* ZH: 節點卡裡的「要調哪一台」——與底下的欄位之間拉開一點，
+       並用一條分隔線標示「上面是選擇、下面是那一台的設定」。 */
+#node-card > .field {
+    margin-bottom: var(--space-4);
+    padding-bottom: var(--space-4);
+    border-bottom: 1px solid var(--hairline);
+}
+
+/* ── 固定頂部列 ───────────────────────────────────────────────────────────
+   ZH: 管理端的頁面都很長（設定、清單、表格），捲到一半要換頁時
+       還得先捲回最上面找導覽 —— 固定住就不必。
+
+   ⚠ 只在管理端固定，**不動共用的 styles.css**
+     （那份有 check_shared_ui_files.py 守著逐位元組相同，
+       而使用者端的頁面短得多，不見得需要）。
+
+   ZH: 背景是不透明的 `--surface`（共用樣式已經給了），
+       所以內容捲到底下不會透出來；底部那條 hairline 也已經有了，
+       不必再加陰影。 */
+.topbar {
+    position: sticky;
+    top: 0;
+    /* ZH: 20 是共用樣式裡帳號選單用的值。取 30 確保頂部列在內容之上，
+           而選單是頂部列的子元素、在自己的堆疊脈絡裡，不受影響。 */
+    z-index: 30;
+}
+
+/* ZH: 錨點跳轉時要留出頂部列的高度，不然標題會被蓋住。
+       用 `scroll-margin-top` 而不是 padding —— 它只影響捲動位置，不改版面。
+   ⚠ 值要跟著頂部列走：字級放大時它會變高（flex-wrap），
+     所以用 `--tap-min` 加一點餘裕而不是釘死的 56px。 */
+.adm-sec__head,
+#node-card {
+    scroll-margin-top: calc(var(--tap-min) + var(--space-4));
+}

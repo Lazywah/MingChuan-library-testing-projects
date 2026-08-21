@@ -140,14 +140,24 @@
         }
         $('gpus').innerHTML = stats.map(function (g) {
             var offline = g.status !== 'online';
-            return '<div class="adm-card' + (offline ? ' is-offline' : '') + '">'
+            // ZH: 整張卡可點 → 平台設定的那個節點。
+            //     在總覽看到「這張卡溫度不對／掉線了」之後，下一個動作幾乎一定是
+            //     去調它 —— 讓他自己在導覽裡找到平台設定、再捲到對的節點，
+            //     是把一個已知的去處變成一段尋找。
+            //
+            // ZH: 用 <a> 而不是在 div 上綁 click：Ctrl+點開新分頁、鍵盤 Tab 到它、
+            //     滑鼠移上去看得到網址 —— 這些是瀏覽器本來就會做的事，
+            //     自己用 JS 模擬只會做出一個半殘的連結。
+            return '<a class="adm-card adm-card--link' + (offline ? ' is-offline' : '') + '"'
+                + ' href="platform.html#node-' + encodeURIComponent(g.node_id) + '"'
+                + ' title="' + esc(T('ov_gpu_go', '到平台設定調整這個節點')) + '">'
                 + '<div class="adm-card__title">' + esc(g.name)
                 + '<span class="footnote">　' + esc(g.node_id) + ' · GPU ' + esc(g.gpu_id) + '</span></div>'
                 + meter(T('ov_util', '使用率'), g.utilization || 0, 100, ' %')
                 + meter(T('ov_temp', '溫度'), g.temperature || 0, 100, ' °C')
                 + meter(T('ov_mem', '記憶體'), g.memory_used || 0, g.memory_total || 0,
                         ' / ' + (g.memory_total || 0) + ' MB')
-                + '</div>';
+                + '</a>';
         }).join('');
     }
 
@@ -172,7 +182,8 @@
             + '</tr></thead><tbody>'
             + list.map(function (n) {
                 return '<tr>'
-                    + '<td>' + esc(n.display_name || n.node_id)
+                    + '<td><a href="platform.html#node-' + encodeURIComponent(n.node_id) + '">'
+                    + esc(n.display_name || n.node_id) + '</a>'
                     + (n.ip_conflict ? ' <span class="adm-pill adm-pill--error">!</span>' : '')
                     + '</td>'
                     + '<td><span class="adm-pill adm-pill--' + esc(n.state) + '">'

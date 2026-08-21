@@ -191,3 +191,84 @@ def test_admin_list_shows_expiry_and_purpose(client, db, admin_headers):
     me = [r for r in rows if r["username"] == "guest1"][0]
     assert me["expires_at"] is not None, me
     assert me["temp_purpose"] == "教育部訪視", me
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# ZH: 三、延期
+#
+# ZH: 這一節在防的是**兩種「按了沒反應」**：延期之後對方還是登不進來，
+#     而畫面上完全沒有錯誤訊息。兩個原因各自獨立，要各自釘住。
+# ──────────────────────────────────────────────────────────────────────────
+
+def _extend(client, headers, uid, days=7):
+    return client.post(f"/api/v1/admin/users/{uid}/extend",
+                       json={"days": days}, headers=headers)
+
+
+def test_extend_pushes_the_expiry_out(client, db, admin_headers):
+    _create(client, admin_headers)
+    u = db.query(models.User).filter_by(username="guest1").first()
+    before = u.expires_at
+
+    assert _extend(client, admin_headers, u.id).status_code == 200
+    db.refresh(u)
+    assert u.expires_at > before
+
+
+def test_extending_an_expired_account_actually_makes_it_usable(client, db, admin_headers):
+    """ZH: 🔴 已經過期的要**從現在起算**，不是從舊的到期日。
+
+    ZH: 從舊日期起算的話，一個過期一個月的帳號「延長 7 天」之後**仍然是過期的**——
+        管理者按了、沒有錯誤訊息、對方還是登不進來。
+    """
+    pw = _create(client, admin_headers).json()["password"]
+    u = db.query(models.User).filter_by(username="guest1").first()
+    u.expires_at = datetime.now(timezone.utc) - timedelta(days=30)
+    db.commit()
+
+    assert _extend(client, admin_headers, u.id, days=7).status_code == 200
+
+    db.refresh(u)
+    assert u.expires_at > datetime.now(timezone.utc).replace(tzinfo=None) \
+        if u.expires_at.tzinfo is None else u.expires_at > datetime.now(timezone.utc)
+
+    # ZH: 真正的判準不是欄位值，是**他能不能登入**
+    r = client.post("/api/v1/auth/login", data={"username": "guest1", "password": pw})
+    assert r.status_code == 200, r.text
+
+
+def test_extending_reenables_an_account_the_sweep_disabled(client, db, admin_headers):
+    """ZH: 🔴 延期要把 is_active 設回 1。
+
+    ZH: 每日排程會把過期帳號標成停用。只改到期日而不解除停用的話，
+        帳號依舊登不進來 —— 一樣是按了沒反應、沒有任何錯誤訊息。
+    """
+    pw = _create(client, admin_headers).json()["password"]
+    _expire(db)
+    crud.disable_expired_temp_accounts(db)          # 模擬排程跑過
+    u = db.query(models.User).filter_by(username="guest1").first()
+    assert u.is_active == 0
+
+    _extend(client, admin_headers, u.id)
+    db.refresh(u)
+    assert u.is_active == 1
+
+    r = client.post("/api/v1/auth/login", data={"username": "guest1", "password": pw})
+    assert r.status_code == 200, r.text
+
+
+def test_cannot_extend_a_normal_account(client, db, admin_headers):
+    """ZH: 一般帳號沒有到期日，延長它沒有意義 —— 要明確拒絕而不是默默寫一個到期日進去
+       （那會把一個永久帳號變成臨時帳號）。
+    """
+    make_user(db, username="normal", email="n@example.com")
+    uid = db.query(models.User).filter_by(username="normal").first().id
+    r = _extend(client, admin_headers, uid)
+    assert r.status_code == 400, r.text
+
+
+def test_extend_is_audited(client, db, admin_headers):
+    _create(client, admin_headers)
+    uid = db.query(models.User).filter_by(username="guest1").first().id
+    _extend(client, admin_headers, uid)
+    assert db.query(models.AdminAction).filter_by(action="extend_temp_account").first() is not None

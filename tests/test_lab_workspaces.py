@@ -534,3 +534,157 @@ def test_admin_session_list_says_which_workspace(client, db, fake_lc):
     mine = [r for r in rows if r["user_id"] == uid]
     assert mine, rows
     assert mine[0]["session_name"] == "ws2", mine[0]
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# ZH: 七、對帳 —— DB 說在跑，容器其實不在
+#
+# ZH: 🔴 實際發生過：admin 的紀錄從 2026-06-30 一直是 running，
+#     而容器早就在某次重啟／prune 時消失。原因是 `scan_and_evict`
+#     只依時限關閉，而 **admin 的三個時限全都是 None**（刻意的設計）——
+#     於是那筆紀錄永遠不會被任何人改回來。
+# ──────────────────────────────────────────────────────────────────────────
+
+class _DeadLifecycle(_FakeLifecycle):
+    """ZH: 容器全都不在了（模擬服務重啟後 / docker prune 過）。"""
+    def status(self, container_id):
+        return "missing"
+
+
+class _AliveLifecycle(_FakeLifecycle):
+    def status(self, container_id):
+        return "running"
+
+
+def test_running_row_with_no_container_gets_corrected(client, db, fake_lc, monkeypatch):
+    """ZH: 🔴 容器不在了，紀錄就要改回 stopped —— **與時限無關**。"""
+    from app import models
+    make_user(db, username="alice", email="a@example.com")
+    uid = db.query(models.User).filter_by(username="alice").first().id
+    lm.start_session(db, uid)
+
+    dead = _DeadLifecycle()
+    monkeypatch.setattr(lm, "get_lifecycle", lambda: dead)
+
+    lm.scan_and_evict(db)
+    row = db.query(models.LabSession).filter_by(user_id=uid, session_name="default").first()
+    assert row.status == "stopped", row.status
+
+
+def test_admin_session_is_reconciled_even_though_it_has_no_time_limits(client, db, fake_lc, monkeypatch):
+    """ZH: 🔴 這條就是使用者問的那個現象。
+
+    ZH: admin 的 idle_timeout_min / hard_limit_min 都是 None，
+        所以 `scan_and_evict` 的兩個時限分支都不會進去。
+        對帳必須在**時限之前**做，否則 admin 的卡住紀錄永遠不會被清。
+    """
+    from app import models
+    make_user(db, username="root", email="root@example.com", role="admin")
+    uid = db.query(models.User).filter_by(username="root").first().id
+    lm.start_session(db, uid)
+
+    # 先確認前提成立：admin 真的沒有任何時限
+    from app.services import quota_service
+    limits = quota_service.get_session_limits("admin")
+    assert limits.get("idle_timeout_min") is None
+    assert limits.get("hard_limit_min") is None
+
+    dead = _DeadLifecycle()
+    monkeypatch.setattr(lm, "get_lifecycle", lambda: dead)
+
+    lm.scan_and_evict(db)
+    row = db.query(models.LabSession).filter_by(user_id=uid, session_name="default").first()
+    assert row.status == "stopped", "admin 的卡住紀錄沒有被對帳修正"
+
+
+def test_reconcile_leaves_a_live_container_alone(client, db, fake_lc, monkeypatch):
+    """ZH: 陰性對照 —— 容器還活著就**不要動它**。
+
+    ZH: 這條在防的是「把還在跑的實驗室通通關掉」，
+        那比留著一筆卡住的紀錄嚴重得多。
+    """
+    from app import models
+    make_user(db, username="alice", email="a@example.com")
+    uid = db.query(models.User).filter_by(username="alice").first().id
+    lm.start_session(db, uid)
+
+    monkeypatch.setattr(lm, "get_lifecycle", lambda: _AliveLifecycle())
+    lm.scan_and_evict(db)
+    row = db.query(models.LabSession).filter_by(user_id=uid, session_name="default").first()
+    assert row.status == "running", row.status
+
+
+def test_docker_being_unavailable_does_not_wipe_everyone(client, db, fake_lc, monkeypatch):
+    """ZH: 🔴 docker 暫時不可用時**什麼都不要做**。
+
+    ZH: 把「查不到」當成「不存在」的話，docker 重啟的那幾秒
+        會把全部人的實驗室紀錄一起清掉。
+    """
+    from app import models
+    make_user(db, username="alice", email="a@example.com")
+    uid = db.query(models.User).filter_by(username="alice").first().id
+    lm.start_session(db, uid)
+
+    class _Broken(_FakeLifecycle):
+        def status(self, container_id):
+            raise RuntimeError("docker daemon is not responding")
+
+    monkeypatch.setattr(lm, "get_lifecycle", lambda: _Broken())
+    lm.scan_and_evict(db)
+    row = db.query(models.LabSession).filter_by(user_id=uid, session_name="default").first()
+    assert row.status == "running", "docker 掛掉時不該動任何紀錄"
+
+
+def test_evicting_targets_the_right_workspace(client, db, fake_lc, monkeypatch):
+    """ZH: 🔴 閒置回收要關**那一份**存檔，不是永遠關 default。
+
+    ZH: `scan_and_evict` 原本呼叫 `stop_session(db, user_id, reason=...)`
+        而沒有帶 `session=` —— 預設是 default。
+        於是非 default 的存檔不但不會被回收，還會把 default 關掉，
+        而 `closed += 1` 照加，日誌會說謊。（多份存檔那次留下的漏傳。）
+    """
+    from app import models
+    from datetime import datetime, timedelta, timezone
+    make_user(db, username="alice", email="a@example.com")
+    uid = db.query(models.User).filter_by(username="alice").first().id
+    lm.start_session(db, uid, session="ws2")
+
+    # ZH: 跑了 5 小時 → 超過 student 的 hard_limit_min = 90，走**上限**那條分支。
+    row = db.query(models.LabSession).filter_by(user_id=uid, session_name="ws2").first()
+    row.last_activity = datetime.now(timezone.utc) - timedelta(hours=5)
+    row.started_at = datetime.now(timezone.utc) - timedelta(hours=5)
+    db.commit()
+
+    monkeypatch.setattr(lm, "get_lifecycle", lambda: _AliveLifecycle())
+    lm.scan_and_evict(db)
+
+    db.refresh(row)
+    assert row.status == "stopped", "ws2 沒有被回收（很可能是去關了 default）"
+
+
+def test_idle_eviction_also_targets_the_right_workspace(client, db, fake_lc, monkeypatch):
+    """ZH: 上面那條走的是「超過時間上限」，這條走**閒置**那一條分支。
+
+    ZH: 🔴 為什麼要分成兩條：`scan_and_evict` 有兩個各自呼叫 `stop_session`
+        的地方，兩個都要帶 `session=`。我第一次做陽性對照時只改壞了閒置那條，
+        而上限那條（還是好的）先攔下來 —— 測試照樣全綠，
+        我差點就據此宣稱「測試抓得到」。
+    """
+    from app import models
+    from datetime import datetime, timedelta, timezone
+    make_user(db, username="alice", email="a@example.com")
+    uid = db.query(models.User).filter_by(username="alice").first().id
+    lm.start_session(db, uid, session="ws3")
+
+    # ZH: student 的 idle=30 分、上限=90 分。
+    #     開了 40 分（沒超過上限）、閒置 40 分（超過閒置）→ 只會走閒置那條。
+    row = db.query(models.LabSession).filter_by(user_id=uid, session_name="ws3").first()
+    row.started_at = datetime.now(timezone.utc) - timedelta(minutes=40)
+    row.last_activity = datetime.now(timezone.utc) - timedelta(minutes=40)
+    db.commit()
+
+    monkeypatch.setattr(lm, "get_lifecycle", lambda: _AliveLifecycle())
+    lm.scan_and_evict(db)
+
+    db.refresh(row)
+    assert row.status == "stopped", "ws3 沒有被閒置回收（很可能是去關了 default）"

@@ -248,7 +248,7 @@
             var text = out.username + ' / ' + out.password;
             try {
                 await navigator.clipboard.writeText(text);
-                say('t-msg', T('tmp_copied', '已複製'));
+                flash('t-msg', T('tmp_copied', '已複製'));
             } catch (e) {
                 // ZH: 剪貼簿被擋時**不要只說失敗** —— 幫他選起來，他自己按 Ctrl+C。
                 //     （使用者端也是這樣處理的。）
@@ -308,6 +308,57 @@
             + '</label>';
     }
 
+
+    // ZH: 臨時帳號的延期。放在詳細面板裡而不是清單上 ——
+    //     延期是「決定一件事」不是「掃一眼」，需要先看到用途與現在的到期日。
+    //
+    // ZH: 🔴 這個功能存在的理由很具體：使用者送了訓練、帳號在跑完之前到期。
+    //     （任務本身照樣跑完 —— 派工不檢查帳號狀態 —— 但他登不進來拿結果。）
+    function tempCard(u) {
+        var gone = Date.parse(u.expires_at) <= Date.now();
+        return '<section class="adm-card adm-card--temp">'
+            + '<div class="adm-card__title">' + esc(T('tmp_ext_title', '臨時帳號')) + '</div>'
+            + '<div class="kv"><span class="kv__k">' + esc(T('tmp_ext_purpose', '用途')) + '</span>'
+            + '<span class="kv__v">' + esc(u.temp_purpose || '—') + '</span></div>'
+            + '<div class="kv"><span class="kv__k">' + esc(T('tmp_ext_until', '到期')) + '</span>'
+            + '<span class="kv__v">' + esc(TW.dateTime(u.expires_at))
+            + (gone ? '　<span class="adm-pill adm-pill--expired">'
+                + esc(T('tmp_expired', '已到期')) + '</span>' : '')
+            + '</span></div>'
+            + '<div class="adm-inline">'
+            + '<input class="field__input" id="x-days" type="number" min="1" max="90" value="7"'
+            + ' aria-label="' + esc(T('tmp_ext_days', '再延幾天')) + '">'
+            + '<button class="btn btn--minor" type="button" id="x-go">'
+            + esc(T('tmp_ext_go', '延期')) + '</button>'
+            + '</div>'
+            + '<div class="inline-error" id="x-msg" hidden></div>'
+            + '</section>';
+    }
+
+
+    function wireExtend(u) {
+        $('x-go').addEventListener('click', async function () {
+            var days = parseInt($('x-days').value, 10);
+            try {
+                var out = await api('/admin/users/' + encodeURIComponent(u.id) + '/extend', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ days: days }),
+                });
+                // ZH: 後端會順手把 is_active 設回 1（排程可能已經停用它），
+                //     所以本地的兩個欄位都要跟著更新，否則清單還顯示舊狀態。
+                u.expires_at = out.expires_at;
+                u.is_active = 1;
+                renderList();
+                renderDetail();
+                flash('x-msg', T('tmp_ext_done', '已延到 {d}')
+                    .replace('{d}', TW.dateTime(out.expires_at)));
+            } catch (e) {
+                say('x-msg', T('tmp_ext_fail', '延期失敗（{w}）').replace('{w}', e.message));
+            }
+        });
+    }
+
     function renderDetail() {
         var box = $('detail');
         if (!CURRENT) {
@@ -349,6 +400,9 @@
             + '<section class="adm-card" id="lab-box">'
             + '<div class="adm-card__title">' + esc(T('pp_lab', '程式實驗室')) + '</div>'
             + '<span class="skeleton skeleton--line"></span></section>'
+            // ZH: 只有臨時帳號才出現這張卡。一般帳號看到一個「延期」欄位
+            //     只會困惑（他沒有到期日可以延）。
+            + (u.expires_at ? tempCard(u) : '')
             + '</div>'
 
             // 危險操作
@@ -366,6 +420,7 @@
             + '</section>';
 
         wireDetail(u);
+        if (u.expires_at) wireExtend(u);
         loadQuota(u);
         loadLab(u);
     }
@@ -375,6 +430,26 @@
         el.textContent = text;
         el.hidden = !text;
     }
+
+    // ZH: 只給**成功**訊息用的短暫提示（幾秒後自己消失）。
+    //
+    // ZH: 🔴 錯誤訊息**不要**用這個 —— 它還沒被解決，讀者需要時間看清楚，
+    //     而且訊息消失之後畫面看起來就像什麼都沒發生過。
+    //     成功則相反：確認完就沒有用了，留著只會變成雜訊
+    //     （下次再按時你分不出那是新的還是上次留下的）。
+    var _flashTimers = {};
+    function flash(id, text, ms) {
+        say(id, text);
+        // ZH: 舊的計時器一定要取消。不取消的話，上一次的計時器會在幾秒後
+        //     把**新的**訊息清掉——包含錯誤訊息。
+        clearTimeout(_flashTimers[id]);
+        _flashTimers[id] = setTimeout(function () {
+            var el = $(id);
+            // ZH: 只清掉自己那一則。中間若換成別的訊息（例如錯誤），就不要動它。
+            if (el && el.textContent === text) say(id, '');
+        }, ms || 3000);
+    }
+
 
     function wireDetail(u) {
         $('save').addEventListener('click', async function () {
@@ -395,7 +470,7 @@
                 });
                 Object.assign(u, { email: patch.email, department: patch.department, role: patch.role });
                 $('f-pw').value = '';
-                say('save-msg', T('pp_saved', '已儲存'));
+                flash('save-msg', T('pp_saved', '已儲存'));
                 renderList();
             } catch (e) {
                 say('save-msg', T('pp_save_fail', '存不起來（{w}）').replace('{w}', e.message));

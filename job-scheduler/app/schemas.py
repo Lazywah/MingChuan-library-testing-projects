@@ -150,6 +150,26 @@ class AdminTempUserCreate(BaseModel):
         return v
 
 
+class AdminExtendTempAccount(BaseModel):
+    """ZH: 延長臨時帳號的到期日。
+
+    ZH: 為什麼是「再延 N 天」而不是「設定到期日為 X」：
+        管理者腦中的動作是「再給他一個禮拜」，不是「算出 9 月 3 日」。
+        而且直接設日期時，`None` 會同時代表「不改」與「改成永久」兩件事。
+
+    @node job-scheduler/app/schemas.py::AdminExtendTempAccount
+    """
+    days: int
+
+    @field_validator("days")
+    @classmethod
+    def days_in_range(cls, v: int) -> int:
+        """@node job-scheduler/app/schemas.py::AdminExtendTempAccount.days_in_range"""
+        if not (1 <= v <= 90):
+            raise ValueError("ZH: 延長天數必須在 1–90 之間 | EN: days must be 1–90")
+        return v
+
+
 class AdminProvisionUser(BaseModel):
     """ZH: 管理員初始化帳號請求 | EN: Admin provision user request"""
     username: str                                    # ZH: 使用者名稱 | EN: Username

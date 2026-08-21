@@ -1428,6 +1428,13 @@ SYSTEM_SETTINGS = {
     "myai_active_poll_minutes": {"type": "int",   "default": lambda: 3,                                    "min": 1,   "max": 60,   "label": "MYAI 輪詢間隔(分, 僅有人在線時; 無人時自動休息)"},
     "myai_usage_window_min":    {"type": "int",   "default": lambda: 15,                                   "min": 1,   "max": 180,  "label": "判定「正在使用 MYAI」的時間窗(分)"},
     "bounce_scan_minutes":      {"type": "int",   "default": lambda: 30,                                   "min": 0,   "max": 1440, "label": "退信回收掃描間隔(分, 0=停用)"},
+    # ZH: v3.7 小基要用哪個模型回答。值是**模型登錄表裡的 api_model_id**，
+    #     選項由「平台設定 → 模型」那張表決定，所以不必在這裡維護一份清單。
+    #
+    # ZH: ⚠ 選外部模型（Claude / Gemini）代表**把問題送到校外廠商**——
+    #     而小基的程式家教模式會讀使用者自己的檔案。介面上要講清楚，
+    #     這是政策決定不只是設定。
+    "rag_chat_model":           {"type": "choice", "default": lambda: settings.RAG_CHAT_MODEL,             "min": None, "max": None, "label": "小基回應用的模型"},
 }
 
 
@@ -1452,11 +1459,58 @@ def get_setting(db: Session, key: str):
     raw = get_system_config(db, key, "")
     if raw is None or raw == "":
         return default
+    # ZH: 🔴 字串型（choice）不能走數字轉換 —— `float("llama3:latest")` 會丟例外，
+    #     然後**靜默退回預設值**：管理者選了 Claude，小基卻還在用 .env 的 Ollama，
+    #     而畫面上顯示的是他選的那個。這種不一致沒有任何錯誤訊息。
+    if spec["type"] == "choice":
+        return raw
     try:
         v = int(raw) if spec["type"] == "int" else float(raw)
     except (ValueError, TypeError):
         return default
     return _clamp_setting(v, spec["min"], spec["max"])
+
+
+def rag_model_choices(db: Session) -> list:
+    """ZH: 小基可以選的模型 —— 直接來自「平台設定 → 模型」那張登錄表。
+
+    ZH: 不在程式碼裡另外維護一份清單：那樣管理者新增一個模型之後，
+        小基的下拉還是舊的，而且沒有任何提示。
+
+    ZH: `.env` 的預設值也要放進去（就算它沒被登錄）——
+        否則「目前生效的值」在下拉裡找不到，畫面會顯示成別的東西。
+
+    @node job-scheduler/app/crud.py::rag_model_choices
+    """
+    out, seen = [], set()
+    fallback = settings.RAG_CHAT_MODEL
+    if fallback:
+        out.append({"value": fallback, "label": f"{fallback}（.env 預設，本機 Ollama）",
+                    "provider": "ollama"})
+        seen.add(fallback)
+    for m in db.query(models.Model).order_by(models.Model.name).all():
+        mid = (m.api_model_id or "").strip()
+        if not mid or mid in seen:
+            continue
+        seen.add(mid)
+        out.append({"value": mid,
+                    "label": f"{m.name}（{m.api_provider or '?'}）",
+                    "provider": (m.api_provider or "").lower()})
+    return out
+
+
+def rag_model_provider(db: Session, model_id: str) -> str:
+    """ZH: 這個模型該走哪個 provider。查不到就當成 ollama（本機）。
+
+    ZH: 🔴 查不到時**不要當成外部** —— 那會把問題送到校外，
+        而管理者以為它還在本機跑。往「本機」的方向猜是安全的那一邊：
+        最壞情況是 Ollama 沒有這個模型、明確報錯。
+
+    @node job-scheduler/app/crud.py::rag_model_provider
+    """
+    row = (db.query(models.Model)
+           .filter(models.Model.api_model_id == model_id).first())
+    return ((row.api_provider or "ollama").lower() if row else "ollama")
 
 
 def get_all_settings(db: Session) -> list:
@@ -1467,7 +1521,7 @@ def get_all_settings(db: Session) -> list:
     out = []
     for key, spec in SYSTEM_SETTINGS.items():
         raw = get_system_config(db, key, "")
-        out.append({
+        item = {
             "key": key,
             "label": spec["label"],
             "type": spec["type"],
@@ -1476,7 +1530,11 @@ def get_all_settings(db: Session) -> list:
             "min": spec["min"],
             "max": spec["max"],
             "overridden": raw not in (None, ""),
-        })
+        }
+        # ZH: 下拉型的旋鈕要把選項一起送 —— 前端不該自己去猜有哪些值。
+        if spec["type"] == "choice":
+            item["choices"] = rag_model_choices(db)
+        out.append(item)
     return out
 
 
@@ -1498,6 +1556,15 @@ def set_settings(db: Session, updates: dict) -> list:
                 db.commit()
             continue
         spec = SYSTEM_SETTINGS[key]
+        if spec["type"] == "choice":
+            # ZH: 只接受選單裡真的有的值。不驗的話，一個打錯的模型名會被存進去，
+            #     然後小基每次回答都失敗 —— 而設定頁看起來一切正常。
+            allowed = {c["value"] for c in rag_model_choices(db)}
+            v = str(val).strip()
+            if v not in allowed:
+                raise ValueError(f"設定 {key} 的值不在可選清單裡：{v}")
+            set_system_config(db, key, v, description=spec["label"])
+            continue
         try:
             v = int(val) if spec["type"] == "int" else float(val)
         except (ValueError, TypeError):

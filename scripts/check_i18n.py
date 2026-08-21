@@ -54,11 +54,12 @@ IGNORE_USED = {"key", "zh", "en"}
 # ZH: key 是**在執行時組出來的**，掃描器看不到字面值，所以不算「沒人用」。
 #   role_ — `T('role_' + user.role, …)`
 #   st_   — `T('st_' + node.state, …)`（管理端的節點六態、任務狀態）
+#   d_    — `T('d_' + day, …)`（一週七天）
 #
 # ⚠ 代價：這兩個前綴底下**真的沒人用的 key 也不會被抓到**。
 #   這是知情的取捨 —— 另一個方向（把它們報成沒人用）會讓人去刪掉
 #   實際還在用的翻譯，那個錯誤嚴重得多。
-DYNAMIC_PREFIXES = ("role_", "st_")
+DYNAMIC_PREFIXES = ("role_", "st_", "d_")
 
 
 def used_keys(ui: Path, dict_files: list) -> dict:
@@ -79,6 +80,16 @@ def used_keys(ui: Path, dict_files: list) -> dict:
         #     卻把它們報成「字典有但沒人用」——**誤判方向剛好是最會誤導人的那個**
         #     （照著修就會把真的有用的翻譯刪掉）。
         for m in re.finditer(r"'([a-z0-9_]+)'\s*,\s*'[^']*[一-鿿]", s):
+            found.setdefault(m.group(1), set()).add(f.name)
+        # ZH: 🔴 上面那條的盲點：**fallback 不含中文時就看不到**。
+        #     例如 `T('pf_range', '{min}–{max}')`、`T('pp_c_email', 'Email')` ——
+        #     那些 key 明明有在用，卻會被報成「沒有人用」，
+        #     而照著報告修就會刪掉還在用的翻譯。這個坑我連踩三次。
+        #
+        # ZH: 所以再加一條**明確函式名**的規則。`T(` 與 `Prefs.t(` 沒有歧義，
+        #     不必靠 fallback 的形狀去猜；上面那條則繼續負責
+        #     「以參數傳 key」的呼叫（那種看不到函式名）。
+        for m in re.finditer(r"\b(?:T|Prefs\.t)\(\s*'([a-z0-9_]+)'", s):
             found.setdefault(m.group(1), set()).add(f.name)
         for m in re.finditer(r"setAttribute\(\s*'data-i18n[a-z-]*'\s*,\s*'([a-z0-9_]+)'", s):
             found.setdefault(m.group(1), set()).add(f.name)

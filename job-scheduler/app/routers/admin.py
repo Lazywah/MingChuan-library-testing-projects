@@ -773,6 +773,66 @@ def admin_verify_action(
     return {"message": "Verification successful"}
 
 
+@router.post("/users/{user_id}/extend", summary="延長臨時帳號的到期日")
+def extend_temp_user(
+    user_id: str,
+    data: schemas.AdminExtendTempAccount,
+    db: Session = Depends(get_db),
+    admin: models.User = Depends(require_admin),
+) -> Any:
+    """
+    ZH: 把臨時帳號的到期日往後延。
+
+    ZH: 🔴 兩個容易漏掉、漏掉就會**靜默做錯事**的地方：
+
+        1. **已經過期的要從「現在」起算**，不是從舊的到期日。
+           從舊日期起算的話，一個過期一個月的帳號「延長 7 天」之後
+           仍然是過期的 —— 管理者按了、畫面沒報錯、對方還是登不進來。
+
+        2. **要把 is_active 設回 1。** 每日排程會把過期帳號標成停用；
+           只改到期日而不解除停用，帳號依舊登不進來 ——
+           同樣是按了沒反應、而且沒有任何錯誤訊息。
+
+    ZH: 只對臨時帳號有意義（一般帳號沒有 expires_at）。
+
+    @node job-scheduler/app/routers/admin.py::extend_temp_user
+    """
+    user = db.query(models.User).filter(models.User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="ZH: 找不到這個帳號 | EN: User not found")
+    if user.expires_at is None:
+        raise HTTPException(
+            status_code=400,
+            detail="ZH: 這不是臨時帳號，沒有到期日可以延長 | EN: Not a temporary account",
+        )
+
+    now = datetime.now(timezone.utc)
+    base = user.expires_at
+    if base.tzinfo is None:
+        base = base.replace(tzinfo=timezone.utc)
+    # ZH: 見上面第 1 點 —— 已經過期就從現在起算。
+    start = max(base, now)
+    user.expires_at = start + timedelta(days=data.days)
+    # ZH: 見上面第 2 點 —— 排程可能已經把它停用了。
+    user.is_active = 1
+
+    db.add(models.AdminAction(
+        admin_id=admin.id,
+        target_user=user.id,
+        action="extend_temp_account",
+        payload=json.dumps({
+            "days": data.days,
+            "new_expires_at": user.expires_at.isoformat(),
+        }, ensure_ascii=False),
+        timestamp=now,
+    ))
+    db.commit()
+
+    logger.info("延長臨時帳號 %s 至 %s by %s",
+                user.username, user.expires_at.isoformat(), admin.username)
+    return {"username": user.username, "expires_at": user.expires_at.isoformat()}
+
+
 @router.post("/users/temporary", summary="建立臨時帳號")
 def create_temp_user(
     data: schemas.AdminTempUserCreate,

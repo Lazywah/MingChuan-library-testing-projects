@@ -161,17 +161,36 @@ async def ask(
             _turns = crud.get_setting(db, "rag_history_turns")   # v3.1 step 6：runtime 值
             messages = rag_service.build_messages(query, ranked, history, history_turns=_turns)
 
-        ollama_url = f"{settings.OLLAMA_BASE_URL.rstrip('/')}/v1/chat/completions"
-        payload = {"model": settings.RAG_CHAT_MODEL, "messages": messages, "stream": True}
+        # ZH: v3.7 —— 用哪個模型由**後台設定**決定（平台設定 → 小基回應用的模型），
+        #     不再寫死 .env。值是模型登錄表裡的 api_model_id。
+        chat_model = crud.get_setting(db, "rag_chat_model")
+        provider = crud.rag_model_provider(db, chat_model)
+
+        if provider == "ollama":
+            # ZH: 🔴 本機模型**維持直連 Ollama，不經 Portkey**。
+            #     這是本檔原本就有的刻意設計（見檔頭）：Portkey 掛掉時，
+            #     客服助手仍然可用。換成外部模型才會失去這個韌性——
+            #     那是選外部模型的已知代價，不是這裡要順手改掉的東西。
+            chat_url = f"{settings.OLLAMA_BASE_URL.rstrip('/')}/v1/chat/completions"
+            chat_headers = {"Content-Type": "application/json"}
+        else:
+            # ZH: 外部供應商（anthropic / google / openai）只能經 Portkey ——
+            #     金鑰在 gateway 那邊，不在這個服務裡。
+            chat_url = settings.PORTKEY_URL
+            chat_headers = {"Content-Type": "application/json",
+                            "x-portkey-provider": provider}
+
+        payload = {"model": chat_model, "messages": messages, "stream": True}
 
         try:
             async with httpx.AsyncClient(
                 timeout=httpx.Timeout(connect=5.0, read=120.0, write=10.0, pool=5.0)
             ) as client:
-                async with client.stream("POST", ollama_url, json=payload) as upstream:
+                async with client.stream("POST", chat_url, json=payload,
+                                         headers=chat_headers) as upstream:
                     if upstream.status_code != 200:
                         body_txt = (await upstream.aread()).decode("utf-8", errors="replace")[:200]
-                        logger.error("Ollama chat returned %s: %s", upstream.status_code, body_txt)
+                        logger.error("%s chat returned %s: %s", provider, upstream.status_code, body_txt)
                         yield _sse({"error": "AI 服務暫時無法使用，請稍後再試或聯絡管理員。"})
                         return
 
@@ -189,11 +208,13 @@ async def ask(
                         if content:
                             yield _delta(content)
         except httpx.ConnectError:
-            logger.error("Cannot connect to Ollama at %s", settings.OLLAMA_BASE_URL)
+            # ZH: 訊息要說出**是哪一段連不上** —— 選了外部模型時，
+            #     「AI 服務尚未啟動」會把人送去查本機的 Ollama。
+            logger.error("Cannot connect to %s at %s", provider, chat_url)
             yield _sse({"error": "AI 服務尚未啟動，請聯絡管理員。| AI service not available."})
             return
         except httpx.TimeoutException:
-            logger.error("Ollama chat timed out")
+            logger.error("%s chat timed out", provider)
             yield _sse({"error": "回應逾時，請再試一次。"})
             return
         except Exception as e:  # noqa: BLE001
@@ -225,7 +246,9 @@ def status(db: Session = Depends(get_db)):
         "ready": count > 0,
         "chunks": count,
         "embed_model": settings.RAG_EMBED_MODEL,
-        "chat_model": settings.RAG_CHAT_MODEL,
+        # ZH: 回**目前生效**的值，不是 .env 的預設 ——
+        #     不然管理者改了設定，診斷資訊卻還顯示舊的那個。
+        "chat_model": crud.get_setting(db, "rag_chat_model"),
     }
 
 
