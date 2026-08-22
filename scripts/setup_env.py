@@ -948,7 +948,11 @@ def main() -> None:
         if setup_worker:
             print(f"  {bold('③ 啟動 GPU Worker（需 Docker Desktop + WSL2 + NVIDIA Driver）')}")
             print(f"     {cyan('cd gpu-worker')}")
-            print(f"     {cyan('.\\start-worker.bat')}       {dim('# 自動帶 --env-file ..\\.env，勿直接 docker compose up')}")
+            # ZH: 這兩個字串含反斜線，必須先抽成變數 —— f-string 的 {} 裡不能有反斜線
+            #     （Python 3.12 以前是語法錯誤，見 scripts/check_python_compat.py）。
+            worker_bat = cyan(".\\start-worker.bat")
+            worker_note = dim("# 自動帶 --env-file ..\\.env，勿直接 docker compose up")
+            print(f"     {worker_bat}       {worker_note}")
             print(f"     {cyan('docker logs -f mcu-gpu-worker')}")
             print()
     else:

@@ -19,6 +19,7 @@ ZH: 在 `docker compose up` 之前跑一次，把常見的無聲地雷一次檢�
     9d. 會送到畫面上的錯誤訊息有沒有中文（呼叫 check_error_messages.py）
     9e. HTML 裡看得見的中文有沒有掛 data-i18n（呼叫 check_untranslated_html.py）
     9f. 有沒有把 <select> 的值當成布林用（呼叫 check_select_bool.py）
+    9g. 全 repo 的 .py 在最低支援版本下編不編得過（呼叫 check_python_compat.py）
    10. 主機埠（80/8888/8002/3000/8787/11434）占用狀況
 
     退出碼：有 FAIL → 1（別部署）；只有 WARN 或全過 → 0。
@@ -362,6 +363,33 @@ def check_select_bool():
     return PASS, "沒有把下拉的值當成布林用"
 
 
+def check_python_compat():
+    """ZH: 全 repo 的 .py 在最低支援版本（Python 3.9）下還編不編得過。
+
+    ZH: 為什麼列進部署前健檢：實際發生過（2026-08-22，設 5090 節點時）——
+        `setup_env.py` 把反斜線寫進了 f-string 的 `{}`，那是 3.12 才合法的寫法。
+        開發機是 3.13，所以 11 支 check_*.py 與 365 個測試**全綠**，
+        使用者在節點上一跑就是 SyntaxError，而且是**部署的第一步**就卡死。
+
+    ZH: 這類缺陷本機一道關卡都碰不到，因為驗證全部跑在比使用者更新的直譯器上。
+
+    @node scripts/deploy_check.py::check_python_compat
+    """
+    script = SCRIPTS_DIR / "check_python_compat.py"
+    if not script.exists():
+        return WARN, "找不到 check_python_compat.py，略過"
+    r = subprocess.run([sys.executable, str(script)], capture_output=True,
+                       text=True, encoding="utf-8", errors="replace")
+    out = r.stdout or ""
+    if r.returncode != 0:
+        first = next((l.strip() for l in out.splitlines() if l.strip().startswith("-")), "")
+        return FAIL, f"有程式碼在 Python 3.9 下編不過 → python scripts/check_python_compat.py　{first}"
+    # ZH: Docker 沒開時第 2 段（權威）不會跑，這時只能算 WARN，不能報成完全通過。
+    if "沒有跑" in out:
+        return WARN, "只做了 AST 檢查；要完整驗證請開 Docker Desktop 再跑一次"
+    return PASS, "全部 .py 在 Python 3.9 下都編得過"
+
+
 def check_js_syntax():
     """ZH: 前端每一支 .js 是否為可解析的 JavaScript。
 
@@ -493,6 +521,7 @@ def main():
         ("共用檔載入",     check_js_globals()),
         ("共用檔一致",     check_shared_ui_files()),
         ("JS 語法",        check_js_syntax()),
+        ("Python 相容",    check_python_compat()),
         ("下拉當布林",     check_select_bool()),
         ("錯誤訊息中文",   check_error_messages()),
         ("HTML 中文標記",  check_untranslated_html()),
