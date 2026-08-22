@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="zh-Hant" data-theme="yellow">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title data-i18n="rep_title">問題回報 · MCU AI Base</title>
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Open+Sans:wght@400;600;700&display=swap" rel="stylesheet">
+
+    <link rel="stylesheet" href="tokens.css?v=ff9cecda">
+    <link rel="stylesheet" href="styles.css?v=82edaf52">
+</head>
+<body>
+
+<header class="topbar">
+    <span class="topbar__brand">MCU AI Base</span>
+    <span class="topbar__spacer"></span>
+    <!-- ZH: 導覽與帳號選單由 chrome.js 產生（唯一真相來源）。
+             版面：只有 LOGO 在左，其餘全部靠右。 -->
+</header>
+
+<main class="page page--narrow">
+
+    <section class="primary-card" aria-labelledby="rep-title">
+        <h1 class="hero__title" id="rep-title" data-i18n="rep_h1">問題回報</h1>
+
+        <!-- ZH: v3.4 —— 送出鈕接上了真正的後端（POST /api/v1/reports）。
+                 送出之後管理者在管理介面看得到，回覆會出現在下方「我的回報」。
+                 ⚠ 不寄信、不通知：使用者要自己回這一頁看回應。文案必須講清楚，
+                   不然他會以為會有人主動聯絡他。 -->
+        <p class="hero__sub">
+            <span data-i18n="rep_sub1">送出後管理者會在管理介面看到。</span><strong data-i18n="rep_sub2">不會另外寄信通知你</strong><span data-i18n="rep_sub3">—— 回覆會出現在這一頁下方的「我的回報」。</span>
+        </p>
+
+        <label class="field">
+            <span class="field__label" for="what" data-i18n="rep_what">發生了什麼事</span>
+            <textarea class="field__input" id="what" rows="5" maxlength="4000"
+                      data-i18n-placeholder="rep_ph" placeholder="例：按下「前往 MYAI」之後新分頁是空白的，重試三次都一樣。"></textarea>
+        </label>
+
+        <button class="btn btn--primary" id="send" type="button" data-i18n="rep_send">送出回報</button>
+        <!-- ZH: 複製鈕**保留**。後端掛掉、或使用者當下沒登入時，
+                 「複製後自己交出去」仍是唯一走得通的路——把降級路徑砍掉不划算。 -->
+        <button class="btn btn--ghost" id="copy" type="button" data-i18n="rep_copy">改用複製，自己交給管理者</button>
+        <div class="handoff" id="note" hidden></div>
+    </section>
+
+    <h2 class="chart__title" data-i18n="rep_diag_title">會一起送出的診斷資訊</h2>
+    <!-- ZH: 全部攤開來給使用者看。要別人交出診斷資訊，就不能讓他不知道交了什麼。
+             ⚠ 後端**不會**再補上任何這裡沒列出的欄位（含 IP）——
+               見 job-scheduler/app/models.py 的 IssueReport 註解。 -->
+    <pre class="diag" id="diag" data-i18n="rep_preparing">整理中…</pre>
+
+    <h2 class="chart__title" data-i18n="rep_mine">我的回報</h2>
+    <div id="mine">
+        <span class="skeleton skeleton--line"></span>
+        <span class="skeleton skeleton--line"></span>
+    </div>
+
+</main>
+
+<script src="tz.js?v=2e214a8b"></script>
+<script src="i18n.js?v=1bff8dc8"></script>
+<script src="prefs.js?v=8b7b4277"></script>
+<script src="chrome.js?v=f604ad71"></script>
+<script src="report.js?v=74c5b594"></script>
+</body>
+</html>

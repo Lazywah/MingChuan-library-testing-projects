@@ -111,7 +111,7 @@ docker compose -f docker-compose.ai-models.yml up -d
 
 | URL | 用途 | 第一次能做什麼 |
 |---|---|---|
-| http://localhost/train/ | 使用者介面 | 看得到登入頁；展開「沒有學校帳號？」可用本機 admin 登入（v2.2+，做完 §7 後可用）|
+| http://localhost/V0/ | 使用者介面 | 看得到登入頁；展開「沒有學校帳號？」可用本機 admin 登入（v2.2+，做完 §7 後可用）|
 | http://localhost:8888/ | 管理員介面 | 本機 admin 直接 username + password 登入 |
 | http://localhost:8002/docs | API Swagger | OpenAPI 文件、可直接打 API 測試 |
 
@@ -158,7 +158,7 @@ admin UI → 使用者管理 → Provision User → 填 username/email/role → 
 > **v2.2 新增**：admin UI 使用者管理頁加了「📊 匯出 Excel / CSV」按鈕。可勾選欄位 + 範圍批次匯出做開學分發 / 期末檔案備份。
 
 ### B. 學生自助註冊
-http://localhost/train/ → 點「沒有學校帳號？」展開 fallback → 註冊 → 強制 `role=student`（schema 層擋下，無法手動改 admin）
+http://localhost/V0/ → 點「沒有學校帳號？」展開 fallback → 註冊 → 強制 `role=student`（schema 層擋下，無法手動改 admin）
 
 ### C. 批次匯入（Python）
 範例見 `docs/archive/PLAN-v2.1-sso-oidc.md` 或直接：

@@ -57,7 +57,7 @@ _WEAK_VALUES = {
 
 # 各 compose 發佈的主機埠（host:container 的 host 側）
 EXPECTED_PORTS = [
-    (80,    "nginx web (/train, 使用者入口)"),
+    (80,    "nginx web (/ → /V1/，使用者入口)"),
     (8888,  "nginx admin (管理端)"),
     (8002,  "job-scheduler API"),
     (3000,  "open-webui"),
@@ -183,7 +183,7 @@ def check_sso(env: dict):
         return FAIL, "OIDC 憑證已備但 mock_mode=true → 會強制走 mock SSO，請改為 false"
     redirect = env.get("OIDC_REDIRECT_URI", "")
     if redirect and ":8002" in redirect:
-        return FAIL, "OIDC_REDIRECT_URI 指向 :8002（API 直連埠，不服務 /train/）→ 請改走 nginx origin"
+        return FAIL, "OIDC_REDIRECT_URI 指向 :8002（API 直連埠，不服務 /V0/）→ 請改走 nginx origin"
     return PASS, "SSO OIDC 設定完整（provider=oidc、憑證已填、mock_mode=false）"
 
 

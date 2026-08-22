@@ -4,7 +4,7 @@
  *     node tests/tz.test.js
  *
  * ZH: 由 scripts/check_timezone.py 帶跑（也可單獨執行）。
- *     web-ui-v2/tz.js 是**正本**，其餘四個 UI 的副本由該腳本比對雜湊。
+ *     web-ui-V1/tz.js 是**正本**，其餘四個 UI 的副本由該腳本比對雜湊。
  *
  * ⚠ ZH: 為什麼有「指定時區」那一組測試 ——
  *     開發機本來就在 +08:00，於是「釘死 Asia/Taipei」與「跟著系統跑」
@@ -18,7 +18,7 @@
 'use strict';
 
 global.window = global;
-require('../web-ui-v2/tz.js');   // ZH: web-ui-v2 是正本，其餘四份由 check_timezone.py 比對
+require('../web-ui-V1/tz.js');   // ZH: web-ui-V1 是正本，其餘四份由 check_timezone.py 比對
 const TW = global.TW;
 
 let failed = 0;

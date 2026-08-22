@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="zh-Hant" data-theme="yellow">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title data-i18n="adm_t_overview">總覽 · MCU AI Base 管理端</title>
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Open+Sans:wght@400;600;700&display=swap" rel="stylesheet">
+
+    <link rel="stylesheet" href="tokens.css?v=ff9cecda">
+    <link rel="stylesheet" href="styles.css?v=82edaf52">
+    <link rel="stylesheet" href="admin.css?v=f69e7b58">
+</head>
+<body>
+
+<!-- ZH: 頂部列由 admin-chrome.js 產生（唯一真相來源）。 -->
+
+<main class="page page--admin">
+
+    <!-- ZH: 這一頁要回答的問題只有一個：**現在有沒有需要我處理的事？**
+             所以「需要你處理的」在最上面，而且沒事時會明確說沒事。 -->
+    <div class="adm-sec__head">
+        <h1 class="hero__title" data-i18n="adm_nav_overview">總覽</h1>
+        <span class="topbar__spacer"></span>
+        <!-- ZH: 時間戳是「這一頁還活著」的唯一證據 ——
+                 沒有它的話，「資料沒變」與「更新卡住了」長得一模一樣。 -->
+        <span class="footnote" id="updated"></span>
+        <button class="btn btn--minor" type="button" id="refresh" data-i18n="ov_refresh">重新整理</button>
+    </div>
+
+    <section class="adm-sec" aria-labelledby="h-alerts">
+        <div class="adm-sec__head"><h2 id="h-alerts" data-i18n="ov_alerts">需要你處理的</h2></div>
+        <div id="alerts" aria-live="polite">
+            <span class="skeleton skeleton--line"></span>
+        </div>
+    </section>
+
+    <section class="adm-sec" aria-labelledby="h-gpus">
+        <div class="adm-sec__head"><h2 id="h-gpus" data-i18n="ov_gpu">GPU 現況</h2></div>
+        <div class="adm-grid" id="gpus">
+            <span class="skeleton skeleton--line"></span>
+        </div>
+    </section>
+
+    <section class="adm-sec" aria-labelledby="h-nodes">
+        <div class="adm-sec__head"><h2 id="h-nodes" data-i18n="ov_nodes">節點</h2></div>
+        <div id="nodes">
+            <span class="skeleton skeleton--line"></span>
+        </div>
+    </section>
+
+    <!-- ZH: 刻意**不叫「即時」** —— 用量那半是定期向廠商同步來的，
+             最舊可能是幾小時前。標題若寫「即時」，看到的人會拿它當現在的事實。
+             真正的資料時間寫在下面那句話裡。 -->
+    <section class="adm-sec" aria-labelledby="h-ext">
+        <div class="adm-sec__head"><h2 id="h-ext" data-i18n="ov_ext">外部 AI 使用狀況</h2></div>
+        <div id="ext" aria-live="polite">
+            <span class="skeleton skeleton--line"></span>
+        </div>
+    </section>
+
+    <section class="adm-sec" aria-labelledby="h-jobs">
+        <div class="adm-sec__head"><h2 id="h-jobs" data-i18n="ov_jobs">最近的任務</h2></div>
+        <div id="jobs">
+            <span class="skeleton skeleton--line"></span>
+        </div>
+    </section>
+
+</main>
+
+<script src="tz.js?v=2e214a8b"></script>
+<!-- ⚠ ZH: 順序不能動 —— i18n-admin 要在 i18n 之後（它 assign 到 I18N 上）、
+         prefs 之前（不然字典還沒併好就先套用一次，畫面會閃一下原文）。 -->
+<script src="i18n.js?v=1bff8dc8"></script>
+<script src="i18n-admin.js?v=8f78bdc2"></script>
+<script src="prefs.js?v=8b7b4277"></script>
+<script src="admin-chrome.js?v=d344c467"></script>
+<script src="overview.js?v=07b49d57"></script>
+</body>
+</html>

@@ -19,7 +19,7 @@ flowchart TB
     subgraph L2["第二層：服務層 Ubuntu Server"]
         direction TB
         NGX["Nginx :80 / :8888<br/>反向代理 / API Gateway"]
-        WebFE["web-ui SPA · /train/*"]
+        WebFE["web-ui SPA · /V0/*"]
         AdmFE["admin-ui SPA · /admin-ui/*"]
         FA["Job Scheduler<br/>FastAPI :8002"]
         SCH["scheduler.py<br/>背景排程"]
@@ -223,7 +223,7 @@ sequenceDiagram
         SSO-->>API: 回呼 code+state
         API->>API: _finalize_sso_login()
         API->>DB: upsert user (新帳號自動建立)
-        API-->>W: 簽 JWT + 302 /train/
+        API-->>W: 簽 JWT + 302 /V0/
     end
 
     rect rgb(255, 230, 204)

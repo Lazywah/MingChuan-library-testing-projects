@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="zh-Hant" data-theme="yellow">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title data-i18n="ds_title">我的資料集 · MCU AI Base</title>
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Open+Sans:wght@400;600;700&display=swap" rel="stylesheet">
+
+    <link rel="stylesheet" href="tokens.css?v=ff9cecda">
+    <link rel="stylesheet" href="styles.css?v=82edaf52">
+</head>
+<body>
+
+<header class="topbar">
+    <span class="topbar__brand">MCU AI Base</span>
+    <span class="topbar__spacer"></span>
+    <!-- ZH: 導覽與帳號選單由 chrome.js 產生（唯一真相來源）。 -->
+</header>
+
+<main class="page page--narrow">
+
+    <!-- ==================================================================
+         ZH: 這一頁存在的理由**不是方便，是必要**：
+             每人 2 GB 配額，而在這之前沒有任何刪除的方法——
+             使用者一旦傳滿就永遠卡住（上傳 413，而他什麼都做不了）。
+             第二個價值是重用：同一包資料訓練不同輪數不必重傳。
+         ================================================================== -->
+    <section class="primary-card" aria-labelledby="ds-title">
+        <h1 class="hero__title" id="ds-title" data-i18n="ds_h1">我的資料集</h1>
+        <p class="hero__sub" data-i18n="ds_sub">你上傳過的圖片包都在這裡。可以直接拿來再訓練一次，或刪掉騰出空間。</p>
+
+        <!-- ZH: 用量講在最前面。使用者會來這一頁，多半就是因為傳不上去了。 -->
+        <div class="bar" role="progressbar" aria-valuemin="0" aria-valuemax="100"
+             aria-valuenow="0" id="quota-wrap">
+            <div class="bar__fill" id="quota-bar"></div>
+        </div>
+        <p class="footnote" id="quota" data-i18n="ds_loading">讀取中…</p>
+    </section>
+
+    <div id="list" aria-live="polite">
+        <span class="skeleton skeleton--line"></span>
+        <span class="skeleton skeleton--line"></span>
+    </div>
+
+    <nav class="minor">
+        <a href="train.html" data-i18n="ds_to_train">上傳新的一包，開始訓練</a>
+        <a href="gpu.html" data-i18n="tr_back">回到上一頁</a>
+    </nav>
+
+</main>
+
+<script src="tz.js?v=2e214a8b"></script>
+<script src="i18n.js?v=1bff8dc8"></script>
+<script src="prefs.js?v=8b7b4277"></script>
+<script src="chrome.js?v=f604ad71"></script>
+<script src="datasets.js?v=583ad51c"></script>
+</body>
+</html>

@@ -37,8 +37,8 @@ except (AttributeError, ValueError):
     pass
 
 ROOT = Path(__file__).parent.parent.resolve()
-CANONICAL = ROOT / "web-ui-v2" / "tz.js"          # 正本
-# ZH: 測試檔放 tests/ 而非 web-ui-v2/ —— 後者是 nginx 對外提供的靜態目錄，
+CANONICAL = ROOT / "web-ui-V1" / "tz.js"          # 正本
+# ZH: 測試檔放 tests/ 而非 web-ui-V1/ —— 後者是 nginx 對外提供的靜態目錄，
 #     測試檔不該被公開提供。
 TEST_FILE = ROOT / "tests" / "tz.test.js"
 
@@ -121,7 +121,7 @@ def main() -> int:
     errs += berrs
 
     print("時區一致性檢查（全站顯示一律 Asia/Taipei）")
-    print(f"  正本 web-ui-v2/tz.js  sha {_sha(CANONICAL) if CANONICAL.is_file() else '?'}")
+    print(f"  正本 web-ui-V1/tz.js  sha {_sha(CANONICAL) if CANONICAL.is_file() else '?'}")
     print(f"  掃描 {len(UI_DIRS)} 個 UI 目錄：{', '.join(d.name for d in UI_DIRS)}")
     for w in warns:
         print(f"  [WARN] {w}")

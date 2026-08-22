@@ -206,7 +206,7 @@ OIDC_DISCOVERY_URL=            # 留空＝用 sso_policy.yaml 內建的 auth.mcu
 4. 請 IT 在 IdP **加註冊** `https://<主機名>/api/v1/sso/oidc/callback`（dev 那筆可並存）
 
 > **為什麼一定要 HTTPS（不只是 IdP 政策）**：登入成功後平台是以
-> `/train/?sso_token=<JWT>` 把權杖交給前端——**權杖寫在網址列上**。
+> `/V0/?sso_token=<JWT>` 把權杖交給前端——**權杖寫在網址列上**。
 > 走 http 的話，同網段的人側錄封包即可取得該 token 並冒充該使用者（效期 2 小時）。
 > 這與「密碼有沒有加密」無關，token 本身就是通行證。
 >

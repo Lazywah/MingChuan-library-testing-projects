@@ -1,0 +1,119 @@
+/* ==============================================================================
+   tokens.css — v2 設計 token（兩層）
+   ==============================================================================
+   規格：docs/06-ui-V1-design.md 第 7 節。
+
+   ⚠ 這個檔案是**唯一**能出現色碼的地方。
+     元件 CSS 只准用第 2 層的語意 token。理由不是潔癖：
+     色碼散落各處時，「改了沒效果」的問題會非常難查——2026-08-16 在 v1.5
+     就踩過同一類坑（同一個 class 定義兩次，後者勝出，改前面那份完全無效）。
+
+   換色系   → 只改第 2 層的映射
+   微調顏色 → 只改第 1 層一個值，全站跟著變
+   ============================================================================== */
+
+/* ── 第 1 層 · 原始色階（只是顏色，不帶用途）──────────────────────────── */
+:root {
+    /* 黃系 —— 實測自 moodle.mcu.edu.tw 的強調黃 */
+    --mcu-yellow-500: #f9bf3b;
+    --mcu-yellow-600: #e0a41f;   /* hover 用，比 500 深一階 */
+    --mcu-yellow-050: #fdf6e4;   /* 極淡底，用於強調區塊背景 */
+
+    /* 藍系 —— 目視估計自學生資訊系統截圖，600 為調深後可配白字的值 */
+    --mcu-slate-500: #6c7fa6;
+    --mcu-slate-600: #4d5f85;    /* 配白字 6.38，通過 AA */
+    --mcu-slate-700: #425576;    /* hover */
+    --mcu-slate-050: #eef3f7;
+
+    /* Moodle 連結藍（原色 #2980b9 配白字僅 4.30，不足 AA，故用調深值） */
+    --mcu-blue-600: #1d5f8a;     /* 配白字 6.87 */
+
+    /* 中性 —— 白底與灰階，兩個色系共用 */
+    --mcu-white:     #ffffff;
+    --mcu-grey-050:  #f3f5f9;    /* 實測自 Moodle 的次底 */
+    --mcu-grey-200:  #e9e9e9;    /* 實測自 Moodle 的分隔線 */
+    --mcu-grey-400:  #696f76;    /* 次要文字，對白 5.08、對次底 4.65 —— 通過 AA。
+                                    原為 #9aa3ad，只有 2.34：說明文字與次要數值
+                                    幾乎看不見（實測後調暗）。 */
+    --mcu-grey-600:  #555555;    /* 實測自 Moodle 的內文色，對白 7.46 */
+    --mcu-ink:       #1f2328;    /* 標題與 accent 上的深字，對黃底 9.44 */
+
+    /* 圖表色 —— **不能直接用 --accent**：黃色 (#f9bf3b) 對白底只有 1.67，
+       畫成細線幾乎看不見。折線/長條需要的是「可辨識」不是「品牌感」，
+       所以兩個色系各自指定一個夠深的資料色。
+       （WCAG 對非文字的圖形物件要求 3.0；以下皆為實算值，非估計。） */
+    --mcu-chart-yellow: #8a6410;   /* 黃系的資料色，對白 5.37 */
+    --mcu-chart-blue:   #3d5580;   /* 藍系的資料色，對白 7.47 */
+    --mcu-chart-peer:   #9aa3ad;   /* 全體人均，對白 2.56 —— 刻意比自己的線淡，
+                                      主從要分得出來；它是背景參考不是主要資料 */
+    --mcu-chart-grid:   #ececf0;   /* 格線，對白 1.18 —— 只需要看得出有格 */
+
+    /* 語意狀態色（兩色系共用；低飽和，符合 B 調性） */
+    --mcu-warn-600:  #8f620a;    /* 低額度提示與警告狀態。對白 5.36、
+                                    對 --warn-soft 4.87 —— 通過 AA。
+                                    ⚠ 原為 #a8730c，註解只記了「對白 4.10」，
+                                      但它實際多半是放在 warn-soft 上（藥丸、
+                                      低額度卡），那裡只有 3.72。量對比要量
+                                      **它真正被放上去的底色**。 */
+    --mcu-warn-050:  #fdf3e0;
+    --mcu-error-600: #a33a3a;
+    --mcu-error-050: #fbeded;
+}
+
+/* ── 第 2 層 · 語意 token（元件只准用這一層）──────────────────────────── */
+/* 預設 = 黃色系（Decision Log #16） */
+:root,
+:root[data-theme="yellow"] {
+    --accent:          var(--mcu-yellow-500);
+    --accent-hover:    var(--mcu-yellow-600);
+    --accent-soft:     var(--mcu-yellow-050);
+    --on-accent:       var(--mcu-ink);        /* ⚠ 黃底必須配深字：白字對比僅 1.67 */
+    --link:            var(--mcu-blue-600);
+
+    --surface:         var(--mcu-white);
+    --surface-2:       var(--mcu-grey-050);
+    --text:            var(--mcu-grey-600);
+    --text-strong:     var(--mcu-ink);
+    --text-muted:      var(--mcu-grey-400);
+    --hairline:        var(--mcu-grey-200);
+
+    --warn:            var(--mcu-warn-600);
+    --warn-soft:       var(--mcu-warn-050);
+    --error:           var(--mcu-error-600);
+    --error-soft:      var(--mcu-error-050);
+
+    --focus-ring:      color-mix(in srgb, var(--accent) 55%, transparent);
+
+    /* 圖表（JS 會用 getComputedStyle 讀這幾個，切換色系時重繪）*/
+    --chart-me:        var(--mcu-chart-yellow);
+    --chart-peer:      var(--mcu-chart-peer);
+    --chart-grid:      var(--mcu-chart-grid);
+}
+
+:root[data-theme="blue"] {
+    --accent:          var(--mcu-slate-600);
+    --accent-hover:    var(--mcu-slate-700);
+    --accent-soft:     var(--mcu-slate-050);
+    --on-accent:       var(--mcu-white);      /* 藍底配白字 6.38，通過 AA */
+    --link:            var(--mcu-slate-600);
+    --chart-me:        var(--mcu-chart-blue);
+    --chart-peer:      var(--mcu-chart-peer);
+    --chart-grid:      var(--mcu-chart-grid);
+}
+
+/* ── 尺寸／間距／字體（8pt 網格）───────────────────────────────────── */
+:root {
+    --font: 'Open Sans', 'Microsoft JhengHei', 'PingFang TC', 'Noto Sans TC', sans-serif;
+
+    --space-1: 4px;   --space-2: 8px;   --space-3: 12px;  --space-4: 16px;
+    --space-5: 24px;  --space-6: 32px;  --space-7: 48px;  --space-8: 64px;
+
+    --radius-sm: 6px; --radius-md: 10px; --radius-lg: 14px; --radius-pill: 999px;
+
+    /* B 調性：克制。陰影只用最輕的一階，不做多層發光 */
+    --shadow-1: 0 1px 2px rgba(31, 35, 40, 0.06);
+    --shadow-2: 0 4px 12px rgba(31, 35, 40, 0.10);
+
+    --tap-min: 44px;                /* 可點目標下限 */
+    --content-max: 720px;           /* 主線內容寬度——首頁東西不多，不需要通欄 */
+}

@@ -4,7 +4,7 @@
 ==============================================================================
 翻譯完整性檢查 / i18n completeness check
 ==============================================================================
-ZH: `web-ui-v2` 的介面文案走 `i18n.js` 的字典。這支比對三件事：
+ZH: `web-ui-V1` 的介面文案走 `i18n.js` 的字典。這支比對三件事：
 
       1. **程式碼用到的 key，字典兩種語言都要有。**
          少一個 key 的症狀是「那一句永遠是中文」——不會報錯、版面也正常，
@@ -41,8 +41,8 @@ ROOT = Path(__file__).parent.parent.resolve()
 #     不是可以從檔名猜的。猜錯的方向會是「少算一個字典檔 → 把有翻譯的 key
 #     報成缺翻譯」，那會讓人去補一個已經存在的東西。
 TARGETS = [
-    ("web-ui-v2", ["i18n.js"]),
-    ("admin-ui-v2", ["i18n.js", "i18n-admin.js"]),
+    ("web-ui-V1", ["i18n.js"]),
+    ("admin-ui-V1", ["i18n.js", "i18n-admin.js"]),
 ]
 
 # ZH: 不是 key 的東西：
@@ -202,7 +202,7 @@ def check_one(dirname: str, dict_files: list) -> list:
     #     定義的 key 拿來算多餘。
     own = set()
     for name in dict_files:
-        if name == "i18n.js" and dirname != "web-ui-v2":
+        if name == "i18n.js" and dirname != "web-ui-V1":
             continue        # 共用正本，歸使用者端管
         own |= set(dict_keys(ui, [name]).get("zh", {}))
         own |= set(dict_keys(ui, [name]).get("en", {}))

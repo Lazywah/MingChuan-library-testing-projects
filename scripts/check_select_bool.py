@@ -30,7 +30,7 @@ import re
 import sys
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
-UI_DIRS = ["admin-ui-v2", "web-ui-v2"]
+UI_DIRS = ["admin-ui-V1", "web-ui-V1"]
 
 # ZH: 行內若有 `check_select_bool: ok` 就跳過該行。留給**真的**有理由的例外，
 #     而且逼寫的人把理由寫在旁邊。

@@ -12,7 +12,7 @@
    ↓ HTTP                         Microsoft Entra ID
    ▼                                    ↑ OIDC
 Nginx (:80, :8888)                       │
-   ├── /train/   → web-ui (學生 / 老師)  │
+   ├── /V0/   → web-ui (學生 / 老師)  │
    ├── /code/<uid>/ → cs-<uid> (VS Code) │
    ├── /api/v1/  → job-scheduler (FastAPI)
    │               ├─ sso / lab / secrets / jobs / chat
@@ -42,7 +42,7 @@ docker compose up -d --build
 docker compose exec job-scheduler python -c "..."
 
 # 4. 開瀏覽器
-#    http://localhost/train/       → 使用者介面
+#    http://localhost/V0/       → 使用者介面
 #    http://localhost:8888/         → admin 介面
 #    http://localhost:8002/docs     → API Swagger
 ```

@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="zh-Hant" data-theme="yellow">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title data-i18n="docs_title">文件庫 · MCU AI Base</title>
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Open+Sans:wght@400;600;700&display=swap" rel="stylesheet">
+
+    <link rel="stylesheet" href="tokens.css?v=ff9cecda">
+    <link rel="stylesheet" href="styles.css?v=82edaf52">
+</head>
+<body>
+
+<header class="topbar">
+    <span class="topbar__brand">MCU AI Base</span>
+    <span class="topbar__spacer"></span>
+    <!-- ZH: 導覽與帳號選單由 chrome.js 產生（唯一真相來源）。
+             版面：只有 LOGO 在左，其餘全部靠右。 -->
+</header>
+
+<main class="page">
+
+    <h1 class="hero__title" data-i18n="docs_h1">文件庫</h1>
+    <p class="hero__sub" id="lead" data-i18n="docs_lead">別人用這個平台做出了什麼，以及怎麼做。</p>
+
+    <!-- 分類篩選：只在項目夠多時才由 docs.js 插入（少量項目時篩選只是雜訊） -->
+    <div class="seg" id="filters" role="group" aria-label="分類" data-i18n-aria="docs_cat_aria" hidden></div>
+
+    <div class="inline-error" id="msg" hidden></div>
+
+    <div class="cards" id="list" aria-live="polite"></div>
+
+    <p class="hint" id="more" hidden></p>
+
+</main>
+
+<script src="i18n.js?v=1bff8dc8"></script>
+<script src="prefs.js?v=8b7b4277"></script>
+<script src="chrome.js?v=f604ad71"></script>
+<script src="docs.js?v=a2afb895"></script>
+</body>
+</html>

@@ -10,9 +10,9 @@
 
 | | 對外路徑 | 檔案 | 程式行數 | 近三個月 commit |
 |---|---|---|---|---|
-| **v1** | `/train/` | `web-ui/` | 5 個檔（單頁式）| 6,459 | 49 |
-| **v1.5** | `/v1.5/` | `web-ui-v1.5/` | 5 個檔（單頁式）| 6,447 | 6 |
-| **v2** | `/v2/` | `web-ui-v2/` | 30 個檔（11 個頁面）| 4,638 | 17 |
+| **v1** | `/V0/` | `web-ui/` | 5 個檔（單頁式）| 6,459 | 49 |
+| **v1.5** | `/V0.5/` | `web-ui-V0.5/` | 5 個檔（單頁式）| 6,447 | 6 |
+| **v2** | `/V1/` | `web-ui-V1/` | 30 個檔（11 個頁面）| 4,638 | 17 |
 
 三版**共用同一個後端、同一份資料**。使用者在哪一版做的事，另外兩版都看得到。
 
@@ -190,20 +190,20 @@
 
 ```bash
 # v2 沒有站內 AI 對話（無輸出＝確實沒有）
-grep -l "chat/completions" web-ui-v2/*.js
+grep -l "chat/completions" web-ui-V1/*.js
 
 # v1 沒有資料集刪除（只會看到 datasets/upload）
 grep -oE "datasets/[a-z]*" web-ui/app.js | sort -u
 
 # v2 沒有 Token 配額顯示（無輸出＝確實沒有）
-grep -oE "tokens_(used|limit)|auth/usage" web-ui-v2/*.js
+grep -oE "tokens_(used|limit)|auth/usage" web-ui-V1/*.js
 
 # v1 的文件庫是寫死的佔位
 grep -A 30 'id="docs-page"' web-ui/index.html | grep "內容建置中"
 
 # v1 與 v1.5 的差異範圍
 for f in app.js index.html styles.css tz.js assistant-widget.js; do
-  echo "$f: $(diff web-ui/$f web-ui-v1.5/$f | grep -c '^[<>]') 行"
+  echo "$f: $(diff web-ui/$f web-ui-V0.5/$f | grep -c '^[<>]') 行"
 done
 ```
 
@@ -214,7 +214,7 @@ done
 | | 對外路徑 | 目錄 | 近三個月 commit |
 |---|---|---|---|
 | admin v1 | `:8888/` | `admin-ui/` | 45 |
-| admin v1.5 | `:8888/v1.5/` | `admin-ui-v1.5/` | 9 |
+| admin v1.5 | `:8888/V0.5/` | `admin-ui-V0.5/` | 9 |
 
 同樣是「新舊對照」的產物，且同樣在漂開（45 vs 9）。本文沒有逐項比對管理端，
 但**「該不該留兩份」的問題是一樣的**。

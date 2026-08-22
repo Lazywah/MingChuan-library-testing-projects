@@ -12,7 +12,7 @@ ZH: 為什麼需要這支 —— nginx 的每個 UI 版本是各自的 alias 根
 ZH: `tz.js` 已經有 `check_timezone.py` 在守（它另外還跑行為測試），
     這支負責其餘幾支，判準單純：**與正本的 sha256 相同**。
 
-ZH: 正本一律是 `web-ui-v2/`。改共用檔時改那一份，然後跑 `--fix` 同步出去。
+ZH: 正本一律是 `web-ui-V1/`。改共用檔時改那一份，然後跑 `--fix` 同步出去。
 
 用法：
     python scripts/check_shared_ui_files.py          # 檢查，不同就 exit 1
@@ -26,7 +26,7 @@ import shutil
 import sys
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
-CANON_DIR = ROOT / "web-ui-v2"
+CANON_DIR = ROOT / "web-ui-V1"
 
 # ZH: 要保持一致的共用檔。tz.js 交給 check_timezone.py，這裡不重複管。
 # ZH: `styles.css` 也在裡面 —— 管理端**沿用同一份基礎樣式**，
@@ -60,7 +60,7 @@ def main() -> int:
     for name in SHARED:
         canon = CANON_DIR / name
         if not canon.exists():
-            problems.append(f"正本不存在：web-ui-v2/{name}")
+            problems.append(f"正本不存在：web-ui-V1/{name}")
             continue
         want = _sha(canon)
 
@@ -92,11 +92,11 @@ def main() -> int:
         for p in problems:
             print(f"  - {p}")
         print()
-        print("  修法：共用檔一律改 web-ui-v2/ 那一份（正本），再跑")
+        print("  修法：共用檔一律改 web-ui-V1/ 那一份（正本），再跑")
         print("        python scripts/check_shared_ui_files.py --fix")
         return 1
 
-    print(f"[OK] {checked} 份共用檔與 web-ui-v2 的正本逐位元組相同")
+    print(f"[OK] {checked} 份共用檔與 web-ui-V1 的正本逐位元組相同")
     return 0
 
 
