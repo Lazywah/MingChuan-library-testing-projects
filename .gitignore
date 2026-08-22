@@ -5,6 +5,11 @@
 
 # ZH: 環境變數 (含敏感資訊) | EN: Environment variables (contains secrets)
 .env
+# ZH: 遠端 GPU 節點的 env 檔（docs/03-deployment.md 叫人建 gpu-worker/worker.env，
+#     裡面是真的 WORKER_API_TOKEN）。`*.env` 不會擋到 worker.env.example，
+#     因為那份是 .example 結尾。
+# EN: Remote worker env files hold the real token; the .example template is not matched.
+*.env
 
 # ZH: SQLite 資料庫檔案 | EN: SQLite database files
 **/data/*.db

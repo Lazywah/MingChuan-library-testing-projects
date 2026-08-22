@@ -32,21 +32,57 @@ docker run --rm --gpus all nvidia/cuda:12.3.0-base-ubuntu22.04 nvidia-smi
 
 ### 1.2 設定 worker
 
-複製 `gpu-worker/` 整個資料夾到 GPU 節點，然後：
+複製 `gpu-worker/` 整個資料夾到 GPU 節點。
+
+> ⚠ **複製前先確認裡面沒有別人的 env 檔**：
+> `ls -a gpu-worker/ | grep env` 應該只看到 `worker.env.example`。
+> 資料夾複製不看 `.gitignore`，舊的 `.env.bak_*` / 別台的 `worker.env`
+> 都會跟著跑到新機器上（裡面是真的 token）。
+
+**先建好儲存目錄**（不建的話 docker 會自己建、擁有者是 root，
+worker 之後會踩到權限）：
 
 ```bash
+# Windows（包括工作站）
+mkdir C:\storage
+# Linux
+sudo mkdir -p /srv/aibase-storage && sudo chown "$USER" /srv/aibase-storage
+```
+
+**再建 env 檔**。本目錄有現成的範本，不要手打、也不要複製根 `.env.example`：
+
+```bash
+# Linux / macOS
 cd gpu-worker
-# 遠端 GPU 節點：建一份本地 env 檔（用「根 .env.example」的 key 名 —— 注意是 WORKER_API_TOKEN，不是 API_TOKEN）
-cat > worker.env << 'EOF'
+cp worker.env.example worker.env
+$EDITOR worker.env                       # 填好標了「← 改我」的幾行
+WORKER_ENV_FILE=./worker.env ./start-worker.sh
+```
+
+```bat
+rem Windows（cmd）—— 上面那段的 heredoc 在 cmd 不能用
+cd gpu-worker
+copy worker.env.example worker.env
+notepad worker.env
+set WORKER_ENV_FILE=worker.env
+start-worker.bat
+```
+
+範本裡需要改的就這幾行（完整說明在 `worker.env.example` 裡）：
+
+```bash
 SERVICE_LAYER_URL=http://<服務層真實 IP>:8002    # 例 http://192.168.1.50:8002
 WORKER_API_TOKEN=<與服務層「根 .env」的 WORKER_API_TOKEN 完全一致>
-NODE_ID=gpu-node-01                                # 多節點請各自命名
+NODE_ID=taipei-ws-07                               # ⚠ 每台各自命名；留著 gpu-node-01 會被開機檢查擋下
 POOL_TYPE=batch                                    # 服務層 5090 那台設 interactive
 SHARES_SERVICE_STORAGE=false                       # 與服務層不同機 → false（單機部署才是 true）
 DATASET_CACHE_MAX_GB=100                           # 依這台機器的磁碟調；GPU 主機這側沒有其他配額
 IMAGE_REGISTRY_PREFIX=registry.mcu.edu.tw          # aibase/* 映像在服務層才有，這台要從 registry 拉
 REGISTRY_USERNAME=aibase                           # 與服務層一致
 REGISTRY_PASSWORD=<與服務層一致>
+STORAGE_MOUNT_PATH=C:\storage                      # Windows；Linux 用 /srv/aibase-storage
+GPU_IDLE_UTIL_THRESHOLD=90                         # 有人在用的桌機用 90；專用 GPU 伺服器可調回 10
+```
 
 ### 🔴 改過 gpu-worker 的程式碼 → 一定要 `build`
 
@@ -96,24 +132,35 @@ GPU 主機那側：填 `IMAGE_REGISTRY_PREFIX` 與同一組帳密即可，worker
 ⚠️ **沒有帳密的 registry 是一條遠端執行路徑** —— 任何人都能推一個映像進來，
 而它之後會在你的 GPU 主機上以 `--gpus` 執行。缺 htpasswd 檔時 registry 容器會直接起不來。
 
-STORAGE_MOUNT_PATH=/mnt/storage                    # Linux 路徑；Windows 用 C:\storage
-GPU_IDLE_UTIL_THRESHOLD=90
-POLL_INTERVAL=5
-HEARTBEAT_INTERVAL=30
-EOF
+### 1.2b 確認它真的起來了
 
-# 用包裝腳本啟動（自動帶 --env-file，避免忘記；Windows 用 start-worker.bat）
-WORKER_ENV_FILE=worker.env ./start-worker.sh up -d --build
+`start-worker.sh` / `.bat` 啟動後會自己看一次日誌並告訴你結果，
+但手動再看一次比較踏實：
+
+```bash
 docker logs -f mcu-gpu-worker
 ```
 
-正常會看到：
+設定正確時，開頭會看到這幾句（節點名與位址換成你自己的）：
+
 ```
-[heartbeat] node=gpu-node-01 GPU=... → 200 OK
-[poll] no pending jobs
+[INFO] Config check passed - service layer at 192.168.1.101 (remote host)
+[INFO] Service layer reachable (HTTP 200)
+[INFO] Worker node taipei-ws-07 started. Polling http://192.168.1.101:8002 every 5s, heartbeat every 30s.
+[INFO] Private registry: registry.mcu.edu.tw (platform images will be pulled from there)
+[INFO] Co-located with the service layer (Code Lab volumes visible): False  -> this node will NOT be given Code Lab (notebook) jobs
 ```
 
-> ⚠️ `API_TOKEN` 必須與服務層 `.env` 的 `WORKER_API_TOKEN` **逐字相同**，否則所有請求 401。
+> ⚠ **看不到心跳的訊息是正常的**。成功的 heartbeat 是 DEBUG 層級，
+> 預設的 INFO 不會印。反過來，**失敗**的 heartbeat 每 30 秒會印一次 WARNING。
+> 所以「安靜」就是好消息；想看到每一次心跳可以自己把層級調成 DEBUG。
+
+設定有問題時，會看到一整塊 `設定有問題，worker 不啟動`，
+裡面逐條寫明是哪一項、為什麼、怎麼改。這種情況下 worker
+**不會**帶著錯的設定跑起來（見 `worker.py::validate_config`）。
+
+> ⚠️ `WORKER_API_TOKEN` 必須與服務層根 `.env` 的同名鍵**逐字相同**，
+> 否則所有請求 401。還是佔位值的話開機檢查就會擋下來。
 
 ### 1.3 單機（all-in-one）特殊設定
 

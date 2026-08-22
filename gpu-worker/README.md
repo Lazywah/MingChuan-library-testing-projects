@@ -54,7 +54,27 @@ Windows 用 `start-worker.bat`（用法相同）。Linux 首次可能要先給�
 
 ## 遠端 GPU 主機（worker 與服務層不同機）
 
-本機沒有根 `../.env`。做法：複製**根** `.env.example` 成一份本地 env 檔，至少填：
+本機沒有根 `../.env`。用**本目錄的** `worker.env.example`：
+
+```bash
+cp worker.env.example worker.env     # Windows：copy worker.env.example worker.env
+# 把裡面標了「← 改我」的幾行填好
+WORKER_ENV_FILE=./worker.env ./start-worker.sh
+```
+
+> 🔴 **不要複製根 `.env.example`。** 那份 266 行、是整個平台的設定，
+> 而且它的預設值是給「與服務層同機」用的。三個鍵的正確值是**相反**的：
+>
+> | 鍵 | 根 `.env.example` | 遠端節點正確值 | 照抄的後果 |
+> |---|---|---|---|
+> | `SERVICE_LAYER_URL` | `http://ai-platform-scheduler:8000` | 真實 IP:8002 | 容器內部名，遠端解析不到 |
+> | `SHARES_SERVICE_STORAGE` | `true` | `false` | 🔴 **不報錯**，訓練結果沒有意義 |
+> | `NODE_ID` | `gpu-node-01` | 每台各自命名 | 多台互相蓋寫心跳 |
+>
+> 這三項填錯的話，worker 開機時會**拒絕啟動**並說明原因
+> （`worker.py::validate_config`），不會帶著錯的設定跑起來。
+
+還是想知道每一個鍵的意思的話：
 
 - `SERVICE_LAYER_URL`＝服務層主機的真實位址（例 `http://192.168.1.50:8002`）
 - `WORKER_API_TOKEN`＝**與服務層根 .env 完全一致**（key 名就叫 `WORKER_API_TOKEN`，不是 `API_TOKEN`）
@@ -64,8 +84,12 @@ Windows 用 `start-worker.bat`（用法相同）。Linux 首次可能要先給�
   症狀是每張任務都失敗在 `docker run`，訊息是 `manifest unknown` 或 `pull access denied`。
   留空＝用本機映像（那是單機部署的情形）。
 - `REGISTRY_USERNAME` / `REGISTRY_PASSWORD` ← 與服務層一致。worker 開機會自己 `docker login`。
-- ⚠ **明文 HTTP 的 registry**：這台的 docker daemon 要在 `/etc/docker/daemon.json` 加
-  `{"insecure-registries": ["registry.mcu.edu.tw:5000"]}` 再 `systemctl restart docker`。
+- ⚠ **明文 HTTP 的 registry**：這台的 docker daemon 要加
+  `{"insecure-registries": ["registry.mcu.edu.tw:5000"]}`。兩個平台位置不同：
+  - **Linux**：改 `/etc/docker/daemon.json` 再 `systemctl restart docker`
+  - **Windows（Docker Desktop）**：Settings → Docker Engine 的 JSON 編輯器，
+    改完按 Apply & restart。**沒有 `/etc/docker/daemon.json` 這個檔**，
+    在 WSL 裡建一個也不會生效。
   正式環境**建議改走 nginx 的 TLS**，不要用明文——帳密會送在網路上。
 - `DATASET_CACHE_MAX_GB` ← **依這台機器的磁碟大小調**（預設 100 GB）。
   這台機器上**沒有任何配額擋著**（服務層那側有每人 2 GB，這裡沒有）：

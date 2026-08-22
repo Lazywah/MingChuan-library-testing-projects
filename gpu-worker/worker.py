@@ -11,6 +11,7 @@ import hashlib
 import pathlib
 import tempfile
 import zipfile
+import sys
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger(__name__)
@@ -592,14 +593,30 @@ def get_available_gpus():
         busy = _busy_gpu_snapshot()
         available = []
         for line in result.stdout.strip().split('\n'):
-            if line:
-                idx, util = line.split(',')
-                idx = idx.strip()
-                util = int(util.strip())
-                if util < GPU_IDLE_UTIL_THRESHOLD and idx not in busy:
-                    # ZH: 使用率低於門檻且未在本機 busy-set，才視為空閒
-                    # EN: Idle only if util < threshold AND not in local busy-set
-                    available.append(idx)
+            if not line.strip():
+                continue
+            parts = [p.strip() for p in line.split(',')]
+            if len(parts) < 2:
+                continue
+            idx, util = parts[0], parts[1]
+            # ZH: ⚠ **不要直接 int(util)**。utilization.gpu 在某些驅動 / 虛擬化組合下
+            #     會回 `[N/A]` 之類的非數字（實測 WSL2 + 目前的 NVIDIA 驅動是回真值，
+            #     但 30 台機器的驅動版本不會一致）。一旦拋例外，下面那個
+            #     `except Exception` 會把它吃掉並 `return []` ——
+            #     **整台機器回報 0 顆 GPU，永遠不領工作**，而它在 admin 面板上
+            #     看起來是 online 的（只是 0 顆卡）。沒有人會回報這種故障。
+            #
+            # ZH: 所以改成「一張卡讀不到就跳過那一張」。get_gpu_details() 對**同一個
+            #     欄位**早就是這樣寫的（.isdigit() 檢查後才轉），這裡是補上一致。
+            if not util.replace('.', '', 1).isdigit():
+                logger.warning(
+                    "GPU %s: utilization unreadable (%r) - skipping this card, "
+                    "not the whole node", idx, util)
+                continue
+            if float(util) < GPU_IDLE_UTIL_THRESHOLD and idx not in busy:
+                # ZH: 使用率低於門檻且未在本機 busy-set，才視為空閒
+                # EN: Idle only if util < threshold AND not in local busy-set
+                available.append(idx)
         return available
     except Exception as e:
         logger.error(f"Failed to query GPUs: {e}")
@@ -1145,6 +1162,145 @@ def execute_job(job):
         # EN: M3 fix — always free the GPU flag when the job finishes, no matter how
         _mark_gpu_free(gpu_id)
 
+# ==============================================================================
+# ZH: 開機設定檢查 | EN: Startup configuration validation
+# ------------------------------------------------------------------------------
+# ZH: 為什麼要有這一段 —— 多台遠端節點各自填一份 env，而填錯的代價**不對稱**：
+#       有些錯很大聲（連不上 → heartbeat 每 30 秒 WARNING 一次）；
+#       有些錯**完全安靜，而且結果是錯的**。這段只擋後者。
+#
+# ZH: 為什麼寫在 worker.py 而不是 start-worker.sh / .bat ——
+#     容器裡拿到的 `os.environ` 已經是 compose **解析完**的值，
+#     不必自己處理行內註解、CRLF、batch 的字串展開。寫在 launcher 等於
+#     再維護一份 env 解析邏輯（而且要維護兩份：sh 一份、bat 一份）。
+#     放在這裡還有一個好處：**繞過 launcher 直接 `docker compose up` 也一樣會被擋**。
+# ==============================================================================
+
+# ZH: 「與服務層同機」時，SERVICE_LAYER_URL 會指向這幾個名字之一
+#     （ai-platform-scheduler 是 compose 網路裡的容器名）。
+#     遠端節點填的必定是真實 IP 或對外主機名。
+_COLOCATED_HOSTS = ("ai-platform-scheduler", "localhost", "127.0.0.1",
+                    "host.docker.internal", "::1")
+
+
+def _service_host() -> str:
+    """ZH: 取出 SERVICE_LAYER_URL 的主機名（去掉 scheme、路徑與埠）。
+
+    @node gpu-worker/worker.py::_service_host
+    """
+    host = SERVICE_LAYER_URL.split("://", 1)[-1].split("/", 1)[0]
+    # ZH: IPv6 寫成 [::1]:8002，方括號要先剝掉再切埠，否則會把 :: 當成埠分隔
+    if host.startswith("["):
+        return host[1:host.index("]")] if "]" in host else host
+    return host.rsplit(":", 1)[0] if ":" in host else host
+
+
+def is_remote_node() -> bool:
+    """ZH: 這台是不是「與服務層不同機」。判準＝服務層位址不是本機也不是容器內部名。
+
+    @node gpu-worker/worker.py::is_remote_node
+    """
+    return _service_host().lower() not in _COLOCATED_HOSTS
+
+
+def validate_config() -> list:
+    """ZH: 回傳致命設定問題的清單（空清單＝通過）。
+
+    ZH: 判準刻意保守，只擋「幾乎不可能是故意的」組合。寧可漏擋，也不要擋到
+        一台設定正確的機器 —— 一個會誤擋的開機檢查，最後會被人用
+        `docker compose up` 繞過去，那就等於沒有。
+
+    @node gpu-worker/worker.py::validate_config
+    """
+    problems = []
+    remote = is_remote_node()
+
+    # ── 1. token 還是佔位值 ────────────────────────────────────────────────
+    # ZH: "mcu-secret-token" 是本檔上方的 fallback ＝ 根本沒傳進來。
+    if API_TOKEN.strip() in ("", "CHANGE_ME", "mcu-secret-token"):
+        problems.append(
+            "WORKER_API_TOKEN 還是佔位值。它必須與服務層根 .env 的 WORKER_API_TOKEN "
+            "逐字元相同（服務層那邊的鍵名是 WORKER_API_TOKEN，不是 API_TOKEN）。"
+            "不改的話每一次 heartbeat / take 都會 401。")
+
+    # ── 2. 🔴 遠端節點卻宣稱與服務層同機 ───────────────────────────────────
+    # ZH: 這是整段檢查存在的**主要理由**，因為錯了不會有任何錯誤訊息：
+    #     服務層會把「程式實驗室」的任務派過來，那些任務要讀使用者的
+    #     home_<uid> Docker volume，而那個 volume 在服務層那台。
+    #     docker 會在**這台**自動建一個同名的**空 volume** ——
+    #     訓練照跑、照回報成功，只是讀到空目錄，使用者拿到沒有意義的模型。
+    # ZH: 為什麼會有人填錯：根 `.env.example` 的預設值是 true（那是同機部署用的），
+    #     照抄到遠端節點就會中。compose 的預設雖然是安全的 false，
+    #     但**明確寫了 true 就會蓋過它**。
+    if remote and SHARES_SERVICE_STORAGE:
+        problems.append(
+            "SHARES_SERVICE_STORAGE=true，但服務層在 %s（不是本機）。"
+            "遠端節點必須設 false：否則會被派到「程式實驗室」的任務，"
+            "而那些任務要讀的 volume 不在這台 —— docker 會自動建一個空的，"
+            "不報錯、資料不在、訓練出沒有意義的結果。" % _service_host())
+
+    # ── 3. 遠端節點還用著範本的 NODE_ID ────────────────────────────────────
+    # ZH: 多台抄同一份範本的實務地雷。撞名的兩台會互相蓋寫心跳，
+    #     admin 看到的是一台忽快忽慢的節點。v3.2 有撞名偵測，但那是**事後**告警。
+    if remote and NODE_ID.strip() in ("", "CHANGE_ME", "gpu-node-01"):
+        problems.append(
+            "NODE_ID 還是範本預設值 '%s'。每一台節點都要有自己的名字，"
+            "否則多台會用同一個 ID 互相蓋寫心跳。" % NODE_ID)
+
+    return problems
+
+
+def run_startup_checks() -> None:
+    """ZH: 開機跑一次設定檢查。致命問題 → 大聲失敗；其餘只是把事實講清楚。
+
+    @node gpu-worker/worker.py::run_startup_checks
+    """
+    problems = validate_config()
+    if problems:
+        bar = "=" * 78
+        logger.error(bar)
+        logger.error("設定有問題，worker 不啟動 / Worker refuses to start")
+        logger.error(bar)
+        for i, p in enumerate(problems, 1):
+            logger.error("  %d. %s", i, p)
+        logger.error(bar)
+        logger.error("範本： gpu-worker/worker.env.example")
+        logger.error("改好後重新啟動： ./start-worker.sh   （Windows： start-worker.bat）")
+        logger.error(bar)
+        sys.exit(1)
+
+    # ── 以下**不擋啟動**，只是讓開機當下的事實看得見 ──────────────────────
+    remote = is_remote_node()
+    logger.info("Config check passed - service layer at %s (%s)",
+                _service_host(),
+                "remote host" if remote else "co-located with this node")
+
+    # ZH: 連不上服務層本來就會由 heartbeat 每 30 秒 WARNING 一次，所以這裡**不擋**；
+    #     但開機這一次可以講得比 "service unreachable" 具體很多。
+    try:
+        r = requests.get("%s/health" % SERVICE_LAYER_URL, timeout=5)
+        logger.info("Service layer reachable (HTTP %d)", r.status_code)
+    except Exception as e:
+        logger.error("=" * 78)
+        logger.error("開機時連不上服務層 %s：%s", SERVICE_LAYER_URL, e)
+        logger.error("worker 仍會繼續重試（heartbeat 每 %d 秒會再報一次）。常見原因：",
+                     HEARTBEAT_INTERVAL)
+        logger.error("  - SERVICE_LAYER_URL 填成 ai-platform-scheduler："
+                     "那是**容器內部名**，只有與服務層同一台 docker 才解析得到，"
+                     "遠端節點要填真實 IP 或主機名（例 http://192.168.1.101:8002）")
+        logger.error("  - 服務層那台的防火牆沒放行 8002")
+        logger.error("  - 服務層還沒起來（同機部署時，compose 同時啟動就會這樣，稍後會自己好）")
+        logger.error("=" * 78)
+
+    # ZH: 遠端節點沒設 registry 前綴 → 每一張任務都會失敗在 docker run。
+    #     這只是警告不是錯誤：機器上也可能已經手動 docker load 過映像。
+    if remote and not IMAGE_REGISTRY_PREFIX:
+        logger.warning(
+            "遠端節點但沒有設 IMAGE_REGISTRY_PREFIX。aibase/* 映像只在服務層那台建出來，"
+            "這台若沒有預先載入，每一張任務都會失敗在 docker run "
+            "（訊息是 manifest unknown 或 pull access denied）。")
+
+
 def poll_loop():
     """@node gpu-worker/worker.py::poll_loop"""
     logger.info("Worker node %s started. Polling %s every %ds, heartbeat every %ds.",
@@ -1213,4 +1369,7 @@ def poll_loop():
         time.sleep(POLL_INTERVAL)
 
 if __name__ == "__main__":
+    # ZH: 先驗設定再進輪詢。帶著錯的設定跑起來，最壞的情況不是「不會動」，
+    #     而是「會動、而且結果是錯的」（見 validate_config 第 2 項）。
+    run_startup_checks()
     poll_loop()
