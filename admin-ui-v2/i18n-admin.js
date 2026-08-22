@@ -69,6 +69,8 @@
         adm_nav_reports: '回報',
         adm_nav_analytics: '數據',
         adm_logout: '登出',
+        adm_back_user: '回到使用者介面',
+        adm_nav_aria: '管理端導覽',
         adm_to_user_site: '回使用者端',
         adm_old_ui: '舊版管理介面',
 
@@ -506,6 +508,8 @@
         adm_nav_reports: 'Reports',
         adm_nav_analytics: 'Analytics',
         adm_logout: 'Sign out',
+        adm_back_user: 'Back to the user site',
+        adm_nav_aria: 'Admin navigation',
         adm_to_user_site: 'Back to the user site',
         adm_old_ui: 'Old admin console',
 

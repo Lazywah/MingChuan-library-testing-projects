@@ -40,77 +40,13 @@
     font-weight: 600;
 }
 
-/* ── 常駐的顯示設定 ────────────────────────────────────────────────────────
-   ZH: 字級 / 語言 / 色系。舊版把這三個放在側邊欄常駐，
-       這裡保留那個習慣（使用者端則是收在帳號選單裡——那邊版面窄）。 */
-.adm-prefs {
-    display: flex;
-    align-items: center;
-    gap: var(--space-3);
-}
+/* ── 顯示設定與帳號 ────────────────────────────────────────────────────────
+   ZH: **這裡刻意什麼都不寫。** 字級／語言／顏色與帳號選單都收進了下拉，
+       用的是共用 styles.css 的 `.account*` —— 與使用者端同一份樣式。
 
-.adm-font {
-    display: inline-flex;
-    align-items: center;
-    gap: var(--space-1);
-}
-
-.adm-font > span {
-    min-width: 3.5em;                 /* ZH: 用 em 不用 px —— 字級放大時這格要跟著長，
-                                             釘 px 會在 150% 時把 "100%" 擠掉 */
-    text-align: center;
-    font-size: 0.8125rem;
-    color: var(--text-muted);
-    font-variant-numeric: tabular-nums;   /* ZH: 等寬數字，數值變動時不會左右跳動 */
-}
-
-.adm-font > button,
-.adm-lang {
-    min-height: var(--tap-min);
-    min-width: var(--tap-min);
-    padding: 0 var(--space-2);
-    border: 1px solid var(--hairline);
-    border-radius: var(--radius-sm);
-    background-color: var(--surface);
-    color: var(--text);
-    font: inherit;
-    font-size: 0.8125rem;
-    cursor: pointer;
-}
-
-.adm-font > button:hover:not(:disabled),
-.adm-lang:hover { background-color: var(--surface-2); }
-
-/* ZH: 到頂／到底就停用，而且**看得出來被停用了**。
-       沒有這個視覺差異的話，使用者會一直按而畫面毫無反應——那看起來像壞了。 */
-.adm-font > button:disabled {
-    opacity: 0.4;
-    cursor: default;
-}
-
-/* ── 帳號與登出 ───────────────────────────────────────────────────────────── */
-.adm-who {
-    font-size: 0.875rem;
-    color: var(--text-muted);
-    max-width: 12em;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-}
-
-.adm-logout {
-    min-height: var(--tap-min);
-    padding: 0 var(--space-3);
-    border: 1px solid var(--hairline);
-    border-radius: var(--radius-sm);
-    background-color: var(--surface);
-    color: var(--text);
-    font: inherit;
-    font-size: 0.875rem;
-    cursor: pointer;
-}
-
-.adm-logout:hover { background-color: var(--surface-2); }
+   ⚠ 原本這裡有 .adm-prefs / .adm-font / .adm-lang / .adm-who / .adm-logout
+     五組（常駐在頂部列的那個版本）。改成下拉之後它們一個呼叫端都沒有，
+     所以整組移除 —— 留著的話，下一個人會以為那才是現行的樣式。 */
 
 /* ── 焦點 ──────────────────────────────────────────────────────────────────
    ZH: **這裡刻意什麼都不寫。** 共用的 styles.css 有一條全域

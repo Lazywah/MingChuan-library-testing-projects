@@ -640,6 +640,13 @@ details[open] > .fold__summary::before { transform: rotate(90deg); }
     font-size: 0.875rem;
     color: var(--text);
 }
+/* ZH: 標籤不折行。字級那一列的控制項比較多（A−／值／A+），
+       會把標籤擠到只剩一個字寬，於是「字級」變成上下兩個字
+       —— 實測 46px 高，而同組的「語言」「顏色」是 23px。 */
+.account__prefs-row > span:first-child {
+    white-space: nowrap;
+    flex: none;
+}
 .account__seg { display: flex; gap: var(--space-1); }
 /* ZH: 這幾顆比 44px 小是**知情的例外**：三顆並排在 13rem 寬的選單裡放不下 44px，
  *     而 WCAG 2.5.8 的 AA 門檻是 24×24（AAA 才是 44）。這裡取 32×32，

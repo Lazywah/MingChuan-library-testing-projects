@@ -170,8 +170,17 @@
             menu.hidden = !open;
             toggle.setAttribute('aria-expanded', String(open));
         });
+        // ZH: 🔴 「這一下點在選單裡嗎」必須在**捕獲階段**先記下來。
+        //     顏色那幾顆按鈕靠 prefs.js 的 document 委派，所以不能 stopPropagation；
+        //     等它冒泡到這裡時，prefs:applied 已經把整個選單重畫過了，
+        //     ev.target 早就脫離 DOM —— contains() 回 false，選單就被誤關。
+        //     （實測：點字級不會關、點顏色會關，差別就在這裡。）
+        var inside = false;
         document.addEventListener('click', function (ev) {
-            if (!menu.hidden && !menu.contains(ev.target)) close();
+            inside = menu.contains(ev.target) || toggle.contains(ev.target);
+        }, true);
+        document.addEventListener('click', function () {
+            if (!menu.hidden && !inside) close();
         });
         // ZH: Esc 關閉——只能用滑鼠關的選單對鍵盤使用者是陷阱。
         document.addEventListener('keydown', function (ev) {
@@ -272,6 +281,44 @@
         });
         langRow.appendChild(langGroup);
         box.appendChild(langRow);
+
+        // 顏色
+        //
+        // ZH: 原本常駐在每一頁的頂部列上。搬進來的理由跟字級／語言一樣：
+        //     它是「跟這個帳號有關的顯示設定」，三個放在一起才找得到。
+        //
+        // ZH: ⚠ 登入頁**不載 chrome.js**，所以它那顆色系切換要留在原地 ——
+        //     那一頁沒有這個選單，拿掉就沒有地方可以改了。
+        //
+        // ZH: 按鈕不用自己接事件：prefs.js 有一個 document 層的委派監聽
+        //     （closest('[data-set-theme]')），搬到哪裡都會生效；
+        //     aria-pressed 也由它在 prefs:applied 時統一重畫。
+        var themeRow = document.createElement('div');
+        themeRow.className = 'account__prefs-row';
+        var themeLabel = document.createElement('span');
+        themeLabel.setAttribute('data-i18n', 'prefs_theme');
+        themeLabel.textContent = T('prefs_theme', '顏色');
+        themeRow.appendChild(themeLabel);
+        var themeGroup = document.createElement('div');
+        themeGroup.className = 'account__seg';
+        themeGroup.setAttribute('role', 'group');
+        themeGroup.setAttribute('data-i18n-aria', 'theme_aria');
+        themeGroup.setAttribute('aria-label', T('theme_aria', '色系'));
+        [['yellow', 'theme_yellow', '\u9ec3'],
+         ['blue', 'theme_blue', '\u85cd']].forEach(function (t) {
+            var b = document.createElement('button');
+            b.type = 'button';
+            b.dataset.setTheme = t[0];
+            b.setAttribute('data-i18n', t[1]);
+            b.textContent = T(t[1], t[2]);
+            // ZH: ⚠ 初始值要自己設。prefs.js 只在 prefs:applied 時重畫所有
+            //     [data-set-theme]，而這幾顆是**在那之後**才產生的 ——
+            //     不設的話 aria-pressed 是 null，讀螢幕的人聽不出哪一個是選中的。
+            b.setAttribute('aria-pressed', String(t[0] === window.Prefs.get().ui_theme));
+            themeGroup.appendChild(b);
+        });
+        themeRow.appendChild(themeGroup);
+        box.appendChild(themeRow);
 
         var warn = document.createElement('div');
         warn.className = 'account__prefs-warn';
