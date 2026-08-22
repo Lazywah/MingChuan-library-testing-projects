@@ -20,6 +20,7 @@ ZH: 在 `docker compose up` 之前跑一次，把常見的無聲地雷一次檢�
     9e. HTML 裡看得見的中文有沒有掛 data-i18n（呼叫 check_untranslated_html.py）
     9f. 有沒有把 <select> 的值當成布林用（呼叫 check_select_bool.py）
     9g. 全 repo 的 .py 在最低支援版本下編不編得過（呼叫 check_python_compat.py）
+    9h. 後端挂的 API 前綴 nginx 有沒有跟著開路（呼叫 check_nginx_routes.py）
    10. 主機埠（80/8888/8002/3000/8787/11434）占用狀況
 
     退出碼：有 FAIL → 1（別部署）；只有 WARN 或全過 → 0。
@@ -390,6 +391,35 @@ def check_python_compat():
     return PASS, "全部 .py 在 Python 3.9 下都編得過"
 
 
+def check_nginx_routes():
+    """ZH: main.py 挂的 API 前綴，nginx :80 有沒有對應的 location。
+
+    ZH: 為什麼列進部署前健檢 —— **同一類已經發生兩次**：
+        2026-07 `/api/v1/models` 回 502、2026-08 `/api/v1/reports` 回 405
+        （問題回報送不出去）。兩次都是加了 include_router 卻沒回
+        nginx.conf 補 location，請求落到 catch-all 被送去 Open WebUI。
+
+    ZH: 後端測試拓不到這類缺陷 —— 它根本沒被呼叫到；
+        而且症狀是 405/502 而不是 404，Server 標頭還是 nginx，
+        看起來像後端壞了。
+
+    @node scripts/deploy_check.py::check_nginx_routes
+    """
+    script = SCRIPTS_DIR / "check_nginx_routes.py"
+    if not script.exists():
+        return WARN, "找不到 check_nginx_routes.py，略過"
+    r = subprocess.run([sys.executable, str(script)], capture_output=True,
+                       text=True, encoding="utf-8", errors="replace")
+    out = r.stdout or ""
+    if r.returncode != 0:
+        first = next((l.strip() for l in out.splitlines() if l.strip().startswith("-")), "")
+        return FAIL, f"有 API 前綴 nginx 沒開路 → python scripts/check_nginx_routes.py　{first}"
+    # ZH: 白名單長灰塵不擋部署，但要看得到。
+    if "可以清掉" in out:
+        return WARN, "前綴都有開路，但 ALLOW_NOT_ON_80 有過期項目可以清"
+    return PASS, "後端 API 前綴在 nginx :80 都有對應的 location"
+
+
 def check_js_syntax():
     """ZH: 前端每一支 .js 是否為可解析的 JavaScript。
 
@@ -521,6 +551,7 @@ def main():
         ("共用檔載入",     check_js_globals()),
         ("共用檔一致",     check_shared_ui_files()),
         ("JS 語法",        check_js_syntax()),
+        ("nginx 路由",     check_nginx_routes()),
         ("Python 相容",    check_python_compat()),
         ("下拉當布林",     check_select_bool()),
         ("錯誤訊息中文",   check_error_messages()),
