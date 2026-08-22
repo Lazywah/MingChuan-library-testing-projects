@@ -77,6 +77,33 @@ python scripts/setup_env.py
 
 ## 5. 啟動服務
 
+> 🔴 **兩層有先後：AI 推理層要先起，否則第一次 `up` 一定失敗。**
+> `job-scheduler` 開機時會連 Ollama 匯入知識庫，而這段在服務開始聽埠**之前**。
+> Ollama 不在時每個片段要等 DNS 逾時（實測 ~2.3 秒 × 40 片段 ≈ 93 秒），
+> 但 healthcheck 是 `start_period=10s` + `interval=30s` + `retries=3`（約 70 秒判死），
+> 於是 nginx 的 `depends_on: service_healthy` 直接放棄：
+>
+> ```
+> dependency failed to start: container ai-platform-scheduler is unhealthy
+> ```
+>
+> 先起 Ollama 後同樣 40 次失敗變成秒回的 404，啟動降到 2 秒、冷啟動一次過（2026-08-22 實測）。
+
+### 5.1 先起 AI 推理層（Portkey + Open WebUI + Ollama）
+
+```bash
+docker compose -f docker-compose.ai-models.yml up -d
+```
+
+這一步只需要 Ollama「連得上」，還沒 pull 模型也沒關係（會快速回 404，不會拖慢啟動）。
+要真的用「AI 助手」對話，另外還要：
+- 在 `docker-compose.ai-models.yml` 的 `portkey` 區塊填入真實 API key（`ANTHROPIC_API_KEY` / `OPENAI_API_KEY` / `GOOGLE_API_KEY`）
+- pull 本機模型（見 [`00-本機完整部署指南.md`](00-本機完整部署指南.md) 步驟 (3)）
+
+兩者沒做都**不影響平台啟動**，只是「AI 助手」對話功能失效。
+
+### 5.2 再起核心層（nginx + job-scheduler）
+
 ```bash
 # Linux 主機若 SELinux 嚴格建議先建 data 目錄
 mkdir -p data
@@ -94,16 +121,9 @@ docker compose ps
 curl http://localhost/health      # → "OK"
 ```
 
-### 5.1 （選用）啟動 AI 推理層
-
-想用「AI 助手」對話功能必須**額外**啟動 Portkey + Open WebUI + Ollama：
-
-```bash
-docker compose -f docker-compose.ai-models.yml up -d
-```
-
-不啟動的話 user UI 仍可登入、Notebook / 任務都能跑，**只有「AI 助手」對話功能會回 503**。
-記得在 `docker-compose.ai-models.yml` 的 `portkey` 區塊填入真實 API key（`ANTHROPIC_API_KEY` / `OPENAI_API_KEY` / `GOOGLE_API_KEY`）才能真的串到 LLM。
+> **已經先跑了核心層才看到這段？** 再跑一次 `docker compose up -d` 就會把 nginx 補起來
+> （scheduler 那時已經 healthy）。知識庫則是空的，補跑 `docker compose restart job-scheduler`，
+> 或用 admin token 打 `POST /api/v1/assistant/reindex`。
 
 ---
 
