@@ -1,0 +1,24 @@
+# ==============================================================================
+# ZH: AI 訓練平台 - Git 屬性規則
+# EN: AI Training Platform - Git Attributes
+# ==============================================================================
+
+# ZH: Shell 腳本一律 LF。core.autocrlf=true 會在 Windows checkout 時轉成 CRLF，
+#     shebang 就變成 `#!/usr/bin/env bash\r`，在 Linux 上報
+#     `bad interpreter: No such file or directory`。
+#     docs/03-deployment.md §1.2 要求把整個 gpu-worker/ 從 Windows 服務層
+#     複製到 GPU 節點，並以 ./start-worker.sh 啟動；
+#     infrastructure/base-images/*.sh 也會被 Docker 映像當進入點執行。
+# EN: Shell scripts must stay LF -- CRLF breaks the shebang on Linux nodes and
+#     inside Docker images.
+*.sh text eol=lf
+
+# ZH: 刻意不寫 `* text=auto` —— 那會在下次 checkout 重新正規化整個 repo，
+#     影響範圍遠超過這個問題。
+# EN: Deliberately NOT `* text=auto`: it would renormalize the entire repo.
+
+# ZH: .bat / .cmd 刻意不釘 CRLF。已實測 cmd.exe (Windows 11 build 26200)
+#     可正確執行純 LF 的批次檔，含 goto/標籤、巢狀 if/for 區塊、call :sub、
+#     以及結尾標籤無換行的情況；釘了反而會動到目前是 LF 的兩個檔案。
+# EN: .bat/.cmd left unpinned -- cmd.exe runs LF-only batch files correctly
+#     (measured), so pinning would only widen the blast radius.
