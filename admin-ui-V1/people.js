@@ -185,8 +185,10 @@
             + field('t-why', T('tmp_purpose', '用途（必填）'), '')
             + '<p class="footnote">' + esc(T('tmp_purpose_hint',
                 '例如「教育部訪視 2026-09-03」。半年後看到一個沒有用途的帳號，沒有人敢刪它。')) + '</p>'
-            + field('t-days', T('tmp_days', '有效天數'), '1', 'number')
-            + '<p class="footnote">' + esc(T('tmp_days_hint', '1–90 天')) + '</p>'
+            + field('t-expires', T('tmp_expires_on', '到期日'), twDay(1), 'date',
+                    ' min="' + twDay(0) + '" max="' + twDay(TEMP_MAX_DAYS) + '"')
+            + '<p class="footnote">' + esc(T('tmp_expires_hint',
+                '選到哪一天，帳號就用到那天結束（台灣時間）。最多 90 天。')) + '</p>'
             + field('t-email', T('tmp_email', 'Email（可留空，平台不會寄信）'), '', 'email')
             + '<div class="ds__actions">'
             + '<button class="btn btn--primary" type="button" id="t-go">'
@@ -205,7 +207,9 @@
         var body = {
             username: $('t-user').value.trim(),
             purpose: $('t-why').value.trim(),
-            days: parseInt($('t-days').value, 10) || 1,
+            // ZH: 送日期字串本身，**不在前端換算成天數**。
+            //     換算會因為時區與一天中的時刻而差一天，而且差了不會報錯。
+            expires_on: $('t-expires').value,
         };
         var em = $('t-email').value.trim();
         if (em) body.email = em;
@@ -309,13 +313,30 @@
         renderDetail();
     }
 
-    function field(id, label, value, type) {
+    function field(id, label, value, type, attrs) {
         return '<label class="field">'
             + '<span class="field__label" for="' + id + '">' + esc(label) + '</span>'
             + '<input class="field__input" id="' + id + '" type="' + (type || 'text') + '"'
-            + ' value="' + esc(value == null ? '' : value) + '">'
+            + ' value="' + esc(value == null ? '' : value) + '"'
+            + (attrs || '')
+            + '>'
             + '</label>';
     }
+
+    // ==================================================================
+    // ZH: 台灣時間的日曆日（YYYY-MM-DD），給 <input type="date"> 用。
+    //
+    // ZH: 🔴 **不能用瀏覽器本地的今天**。這個平台的顯示時間釘死
+    //     Asia/Taipei（tz.js），而到期判定也是台灣時間。管理者人在
+    //     別的時區時，兩者會差一天 —— 而差一天的到期日沒有人看得出來。
+    //
+    // ZH: 台灣沒有夏令時間，所以「加 86400000 毫秒」在這裡精確等於加一天。
+    // ==================================================================
+    function twDay(offsetDays) {
+        return TW.date(new Date(Date.now() + (offsetDays || 0) * 86400000));
+    }
+
+    var TEMP_MAX_DAYS = 90;   // ZH: 與後端 schemas.TEMP_ACCOUNT_MAX_DAYS 一致
 
 
     // ZH: 臨時帳號的延期。放在詳細面板裡而不是清單上 ——
@@ -335,8 +356,12 @@
                 + esc(T('tmp_expired', '已到期')) + '</span>' : '')
             + '</span></div>'
             + '<div class="adm-inline">'
-            + '<input class="field__input" id="x-days" type="number" min="1" max="90" value="7"'
-            + ' aria-label="' + esc(T('tmp_ext_days', '再延幾天')) + '">'
+            + '<input class="field__input" id="x-expires" type="date"'
+            + ' min="' + twDay(0) + '" max="' + twDay(TEMP_MAX_DAYS) + '"'
+            // ZH: 預填現在的到期日（已過期就拉到今天）——
+            //     管理者看到的是「現在到哪天」，然後把它往後拉。
+            + ' value="' + esc(extendDefault(u)) + '"'
+            + ' aria-label="' + esc(T('tmp_ext_until_new', '新的到期日')) + '">'
             + '<button class="btn btn--minor" type="button" id="x-go">'
             + esc(T('tmp_ext_go', '延期')) + '</button>'
             + '</div>'
@@ -345,14 +370,22 @@
     }
 
 
+    // ZH: 延期欄位的預設值。字串比大小對 ISO 日期是正確的（等寬、大小端序）。
+    function extendDefault(u) {
+        var today = twDay(0);
+        var cur = u.expires_at ? TW.date(u.expires_at) : '';
+        return (!cur || cur < today) ? today : cur;
+    }
+
+
     function wireExtend(u) {
         $('x-go').addEventListener('click', async function () {
-            var days = parseInt($('x-days').value, 10);
+            var expiresOn = $('x-expires').value;
             try {
                 var out = await api('/admin/users/' + encodeURIComponent(u.id) + '/extend', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ days: days }),
+                    body: JSON.stringify({ expires_on: expiresOn }),
                 });
                 // ZH: 後端會順手把 is_active 設回 1（排程可能已經停用它），
                 //     所以本地的兩個欄位都要跟著更新，否則清單還顯示舊狀態。

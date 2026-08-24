@@ -783,15 +783,17 @@ def extend_temp_user(
     """
     ZH: 把臨時帳號的到期日往後延。
 
-    ZH: 🔴 兩個容易漏掉、漏掉就會**靜默做錯事**的地方：
+    ZH: 這支現在收的是**絕對到期日**（expires_on），不是「再加幾天」。
+        擁有者 2026-08-24 裁定：建立與延期都在日曆上挑一天。
 
-        1. **已經過期的要從「現在」起算**，不是從舊的到期日。
-           從舊日期起算的話，一個過期一個月的帳號「延長 7 天」之後
-           仍然是過期的 —— 管理者按了、畫面沒報錯、對方還是登不進來。
+    ZH: 舊版有一個「已過期就從現在起算」的阱阱（防止「過期一個月的帳號
+        延長 7 天之後仍然是過期的」）。**絕對日期讓這個問題消失了** ——
+        選了一個未來的日子，結果就是那一天，跟舊值無關。
 
-        2. **要把 is_active 設回 1。** 每日排程會把過期帳號標成停用；
-           只改到期日而不解除停用，帳號依舊登不進來 ——
-           同樣是按了沒反應、而且沒有任何錯誤訊息。
+    ZH: 🔴 但這一個仍然成立，漏了就是**靜默做錯事**：
+        **要把 is_active 設回 1。** 每日排程會把過期帳號標成停用；
+        只改到期日而不解除停用，帳號依舊登不進來 ——
+        按了沒反應、而且沒有任何錯誤訊息。
 
     ZH: 只對臨時帳號有意義（一般帳號沒有 expires_at）。
 
@@ -807,13 +809,8 @@ def extend_temp_user(
         )
 
     now = datetime.now(timezone.utc)
-    base = user.expires_at
-    if base.tzinfo is None:
-        base = base.replace(tzinfo=timezone.utc)
-    # ZH: 見上面第 1 點 —— 已經過期就從現在起算。
-    start = max(base, now)
-    user.expires_at = start + timedelta(days=data.days)
-    # ZH: 見上面第 2 點 —— 排程可能已經把它停用了。
+    user.expires_at = data.expires_at_utc
+    # ZH: 見上面 🔴 那段 —— 排程可能已經把它停用了。
     user.is_active = 1
 
     db.add(models.AdminAction(
@@ -821,7 +818,9 @@ def extend_temp_user(
         target_user=user.id,
         action="extend_temp_account",
         payload=json.dumps({
-            "days": data.days,
+            # ZH: 稽核記錄要看得出管理者**選了哪一天**，
+            #     而不是只留一個換算後的 UTC 時間戳。
+            "expires_on": data.expires_on.isoformat(),
             "new_expires_at": user.expires_at.isoformat(),
         }, ensure_ascii=False),
         timestamp=now,
@@ -872,7 +871,8 @@ def create_temp_user(
     #     `.invalid` 是 RFC 2606 保留、永遠不會存在的網域。
     email = data.email or f"temp-{_uuid.uuid4().hex[:12]}@invalid"
 
-    expires_at = datetime.now(timezone.utc) + timedelta(days=data.days)
+    # ZH: 轉換在 schemas.expires_on_to_utc 裡只做一次（台灣時間當天 23:59:59）。
+    expires_at = data.expires_at_utc
 
     user = models.User(
         id=str(_uuid.uuid4()),
@@ -898,7 +898,7 @@ def create_temp_user(
         payload=json.dumps({
             "username": data.username,
             "purpose": data.purpose,
-            "days": data.days,
+            "expires_on": data.expires_on.isoformat(),
             "role": user.role,
             "expires_at": expires_at.isoformat(),
         }, ensure_ascii=False),
@@ -907,8 +907,8 @@ def create_temp_user(
     ))
     db.commit()
 
-    logger.info("建立臨時帳號 %s（%d 天，用途：%s）by %s",
-                data.username, data.days, data.purpose, admin.username)
+    logger.info("建立臨時帳號 %s（到期 %s，用途：%s）by %s",
+                data.username, data.expires_on.isoformat(), data.purpose, admin.username)
 
     return {
         "id": user.id,

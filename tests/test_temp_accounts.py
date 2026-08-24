@@ -22,6 +22,7 @@ from conftest import make_user, auth_headers
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent / "job-scheduler"))
 from app import crud, models   # noqa: E402
+from app.schemas import tw_today, expires_on_to_utc, TEMP_ACCOUNT_MAX_DAYS   # noqa: E402
 
 
 @pytest.fixture
@@ -30,8 +31,17 @@ def admin_headers(client, db):
     return auth_headers(client, "root")
 
 
+def _day(offset):
+    """ZH: 台灣時間的今天 + offset 天，回 ISO 字串。
+
+    ZH: 用後端同一支 `tw_today()`，不在測試裡自己算一份 ——
+        自己算的話，測試在非台灣時區的機器上會差一天而隨機紅。
+    """
+    return (tw_today() + timedelta(days=offset)).isoformat()
+
+
 def _create(client, headers, **kw):
-    body = {"username": "guest1", "purpose": "教育部訪視", "days": 1}
+    body = {"username": "guest1", "purpose": "教育部訪視", "expires_on": _day(1)}
     body.update(kw)
     return client.post("/api/v1/admin/users/temporary", json=body, headers=headers)
 
@@ -84,10 +94,46 @@ def test_purpose_is_required(client, db, admin_headers):
     assert _create(client, admin_headers, purpose="   ").status_code == 422
 
 
-def test_days_has_an_upper_bound(client, db, admin_headers):
-    """ZH: 超過 90 天就不叫臨時了，應該走正式開帳號的流程。"""
-    assert _create(client, admin_headers, days=91).status_code == 422
-    assert _create(client, admin_headers, days=0).status_code == 422
+def test_expiry_date_has_an_upper_bound(client, db, admin_headers):
+    """ZH: 超過 90 天就不叫臨時了，應該走正式開帳號的流程。
+
+    ZH: 兩個邊界都釘：第 90 天要過、第 91 天要擋。
+        只釘一邊的話，一個差一的錯誤只會被拓到一半。
+    """
+    assert _create(client, admin_headers, expires_on=_day(TEMP_ACCOUNT_MAX_DAYS)).status_code == 200
+    assert _create(client, admin_headers, username="guest2",
+                   expires_on=_day(TEMP_ACCOUNT_MAX_DAYS + 1)).status_code == 422
+
+
+def test_expiry_date_cannot_be_in_the_past(client, db, admin_headers):
+    """ZH: 選一個過去的日期等於建一個一出生就死的帳號。
+
+    ZH: 今天要**可以**（臨時帳號常常就是當天用完）。
+    """
+    assert _create(client, admin_headers, expires_on=_day(-1)).status_code == 422
+    assert _create(client, admin_headers, username="guest3",
+                   expires_on=_day(0)).status_code == 200
+
+
+def test_expiry_is_the_end_of_the_chosen_day_in_taiwan(client, db, admin_headers):
+    """ZH: 🔴 「到 9/3」的意思是**那一天結束**，不是那天零點。
+
+    ZH: 選了 9/3 却在 9/3 當天就登不進來，會被當成 bug 回報。
+        這一支釘的是轉換結果，不是轉換函式自己 ——
+        端點有沒有真的用到它也要一起釘住。
+    """
+    target = tw_today() + timedelta(days=3)
+    _create(client, admin_headers, expires_on=target.isoformat())
+
+    u = db.query(models.User).filter_by(username="guest1").first()
+    exp = u.expires_at
+    if exp.tzinfo is None:
+        exp = exp.replace(tzinfo=timezone.utc)
+    assert exp == expires_on_to_utc(target)
+
+    # ZH: 換算回台灣時間應該是那一天的 23:59:59
+    tw = exp.astimezone(timezone(timedelta(hours=8)))
+    assert (tw.date(), tw.hour, tw.minute, tw.second) == (target, 23, 59, 59)
 
 
 def test_creating_is_audited(client, db, admin_headers):
@@ -200,9 +246,9 @@ def test_admin_list_shows_expiry_and_purpose(client, db, admin_headers):
 #     而畫面上完全沒有錯誤訊息。兩個原因各自獨立，要各自釘住。
 # ──────────────────────────────────────────────────────────────────────────
 
-def _extend(client, headers, uid, days=7):
+def _extend(client, headers, uid, expires_on=None):
     return client.post(f"/api/v1/admin/users/{uid}/extend",
-                       json={"days": days}, headers=headers)
+                       json={"expires_on": expires_on or _day(7)}, headers=headers)
 
 
 def test_extend_pushes_the_expiry_out(client, db, admin_headers):
@@ -216,17 +262,20 @@ def test_extend_pushes_the_expiry_out(client, db, admin_headers):
 
 
 def test_extending_an_expired_account_actually_makes_it_usable(client, db, admin_headers):
-    """ZH: 🔴 已經過期的要**從現在起算**，不是從舊的到期日。
+    """ZH: 過期的帳號重新設一個未來的日期之後，要**真的能登入**。
 
-    ZH: 從舊日期起算的話，一個過期一個月的帳號「延長 7 天」之後**仍然是過期的**——
-        管理者按了、沒有錯誤訊息、對方還是登不進來。
+    ZH: 舊契約（再延 N 天）在這裡有一個阱：從舊日期起算的話，
+        過期一個月的帳號「延長 7 天」之後仍然是過期的。
+        改成絕對日期之後那個阱消失了，但**這一支仍然要留著** ——
+        它真正釘的是另一件事：is_active 有沒有被設回 1。
+        只改到期日而不解除停用，帳號依舊登不進來、而且沒有錯誤訊息。
     """
     pw = _create(client, admin_headers).json()["password"]
     u = db.query(models.User).filter_by(username="guest1").first()
     u.expires_at = datetime.now(timezone.utc) - timedelta(days=30)
     db.commit()
 
-    assert _extend(client, admin_headers, u.id, days=7).status_code == 200
+    assert _extend(client, admin_headers, u.id, expires_on=_day(7)).status_code == 200
 
     db.refresh(u)
     assert u.expires_at > datetime.now(timezone.utc).replace(tzinfo=None) \

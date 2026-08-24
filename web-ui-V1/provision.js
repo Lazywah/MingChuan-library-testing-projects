@@ -55,7 +55,7 @@ async function load() {
     }
 
     if (!d.provisioned) {
-        // ZH: 首頁的「問 AI」在未開通時會把人帶到這裡（擁有者裁定 2026-08-22）。
+        // ZH: 首頁的「問 AI」在未開通時會把人帶到這裡（擁有者裁定 2026-08-24）。
         //     所以這一支不只是「沒密碼可看」，而是他**本來想問 AI 卻問不了**。
         return showMsg(T('prov_pending', '你的 MYAI 帳號還在開通中，目前還沒有初始密碼。')
             + T('prov_after', '開通完成後回到首頁就會看到提示。'), true);

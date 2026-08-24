@@ -26,7 +26,9 @@ EN: Modular design:
 from pydantic import (BaseModel, EmailStr, Field, ConfigDict, field_validator,
                       field_serializer, PlainSerializer)
 from typing_extensions import Annotated
-from datetime import datetime, timezone
+from datetime import datetime, timezone, date, time, timedelta
+# ZH: 台灣時區只定義一次。gpu_schedule 只依賴標準庫，沒有循環匯入風險。
+from .gpu_schedule import TZ_TAIPEI
 import json
 from typing import Optional, Dict, Any, List
 
@@ -108,6 +110,62 @@ class AdminUserUpdate(BaseModel):
     department: Optional[str] = None                 # ZH: 學系資訊 | EN: Department
 
 
+# ==============================================================================
+# ZH: 臨時帳號的到期日
+# ------------------------------------------------------------------------------
+# ZH: 契約是**台灣時間的一個日曆日**（`expires_on`），不是天數。
+#     擁有者裁定 2026-08-24：管理者是在日曆上挑一天；要延期就挑一個更後面的日子，
+#     所以「建立」與「延長」用同一種輸入。
+#
+# ZH: 這推翻了本檔原本「再延 N 天」的設計。舊理由是「管理者腦中的動作是
+#     『再給他一個禮拜』」與「直接設日期時 None 會同時代表『不改』與『改成永久』」。
+#     後者在新契約下不成立 —— `expires_on` 是**必填**，None 根本不會出現。
+#
+# ZH: 🔴 「到 9/3」的意思是**那一天結束**（台灣時間 23:59:59），不是那天零點。
+#     選了 9/3 卻在 9/3 當天就登不進來，會被當成 bug 回報。
+#
+# ZH: 存進 DB 的仍然是 UTC。轉換**只有這一個地方做** —— 兩支端點共用同一個函式，
+#     不要各自算（各自算的兩份遲早會差一天，而那種差異沒有人看得出來）。
+# ==============================================================================
+TEMP_ACCOUNT_MAX_DAYS = 90
+
+
+def tw_today() -> date:
+    """ZH: 今天（台灣時間）。伺服器在哪個時區都得到同一個答案。
+
+    @node job-scheduler/app/schemas.py::tw_today
+    """
+    return datetime.now(TZ_TAIPEI).date()
+
+
+def expires_on_to_utc(d: date) -> datetime:
+    """ZH: 台灣時間那一天的 23:59:59 → UTC 的 aware datetime。
+
+    @node job-scheduler/app/schemas.py::expires_on_to_utc
+    """
+    return datetime.combine(d, time(23, 59, 59), tzinfo=TZ_TAIPEI).astimezone(timezone.utc)
+
+
+def _check_expires_on(v: date) -> date:
+    """ZH: 到期日必須在「今天」到「今天 +90 天」之間。
+
+    ZH: 上限沿用原本 days 的 90 天 —— 再長就不叫臨時了，該走正式開帳號的流程。
+    ZH: 下限是**今天**而不是明天：選今天＝「今天結束就失效」，那是合理的用法
+        （臨時帳號常常就是當天用完）。
+
+    @node job-scheduler/app/schemas.py::_check_expires_on
+    """
+    today = tw_today()
+    if v < today:
+        raise ValueError(
+            "ZH: 到期日不能早於今天 | EN: expiry date cannot be in the past")
+    if v > today + timedelta(days=TEMP_ACCOUNT_MAX_DAYS):
+        raise ValueError(
+            "ZH: 到期日最多只能設到 %d 天後 | "
+            "EN: expiry date can be at most %d days out" % (TEMP_ACCOUNT_MAX_DAYS, TEMP_ACCOUNT_MAX_DAYS))
+    return v
+
+
 class AdminTempUserCreate(BaseModel):
     """ZH: 建立臨時帳號（校外人士、長官視察、例外用途）。
 
@@ -119,7 +177,7 @@ class AdminTempUserCreate(BaseModel):
     """
     username: str
     purpose: str                                     # ZH: 為什麼開這個帳號 —— **必填**
-    days: int = 1                                    # ZH: 幾天後到期
+    expires_on: date                                 # ZH: 台灣時間的到期「日」（當天結束才失效）
     role: Optional[str] = "student"
     department: Optional[str] = None
     email: Optional[EmailStr] = None                 # ZH: 有就填，沒有就留空（不寄信）
@@ -138,36 +196,45 @@ class AdminTempUserCreate(BaseModel):
             raise ValueError("ZH: 請說明這個臨時帳號的用途 | EN: Purpose is required")
         return v.strip()
 
-    @field_validator("days")
+    @field_validator("expires_on")
     @classmethod
-    def days_in_range(cls, v: int) -> int:
-        """ZH: 上限 90 天 —— 再長就不叫臨時了，該走正式開帳號的流程。
+    def expires_on_in_range(cls, v: date) -> date:
+        """@node job-scheduler/app/schemas.py::AdminTempUserCreate.expires_on_in_range"""
+        return _check_expires_on(v)
 
-        @node job-scheduler/app/schemas.py::AdminTempUserCreate.days_in_range
+    @property
+    def expires_at_utc(self) -> datetime:
+        """ZH: 給端點直接寫進 DB 的值。
+
+        @node job-scheduler/app/schemas.py::AdminTempUserCreate.expires_at_utc
         """
-        if not (1 <= v <= 90):
-            raise ValueError("ZH: 有效天數必須在 1–90 之間 | EN: days must be 1–90")
-        return v
+        return expires_on_to_utc(self.expires_on)
 
 
 class AdminExtendTempAccount(BaseModel):
-    """ZH: 延長臨時帳號的到期日。
+    """ZH: 重新設定臨時帳號的到期日（**絕對日期**，不是再加幾天）。
 
-    ZH: 為什麼是「再延 N 天」而不是「設定到期日為 X」：
-        管理者腦中的動作是「再給他一個禮拜」，不是「算出 9 月 3 日」。
-        而且直接設日期時，`None` 會同時代表「不改」與「改成永久」兩件事。
+    ZH: 它曾經是「再延 N 天」，理由是「管理者腦中的動作是再給他一個禮拜」。
+        擁有者 2026-08-24 改成日曆：建立與延期用**同一種輸入**，
+        延期就是在日曆上改成一個更後面的日子。
+
+    ZH: 舊註解擔心的「`None` 同時代表不改與永久」在新契約下不成立：
+        `expires_on` 是必填的，None 根本不會出現。
 
     @node job-scheduler/app/schemas.py::AdminExtendTempAccount
     """
-    days: int
+    expires_on: date
 
-    @field_validator("days")
+    @field_validator("expires_on")
     @classmethod
-    def days_in_range(cls, v: int) -> int:
-        """@node job-scheduler/app/schemas.py::AdminExtendTempAccount.days_in_range"""
-        if not (1 <= v <= 90):
-            raise ValueError("ZH: 延長天數必須在 1–90 之間 | EN: days must be 1–90")
-        return v
+    def expires_on_in_range(cls, v: date) -> date:
+        """@node job-scheduler/app/schemas.py::AdminExtendTempAccount.expires_on_in_range"""
+        return _check_expires_on(v)
+
+    @property
+    def expires_at_utc(self) -> datetime:
+        """@node job-scheduler/app/schemas.py::AdminExtendTempAccount.expires_at_utc"""
+        return expires_on_to_utc(self.expires_on)
 
 
 class AdminProvisionUser(BaseModel):
