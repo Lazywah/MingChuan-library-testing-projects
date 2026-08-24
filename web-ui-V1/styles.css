@@ -97,20 +97,64 @@ body {
  */
 [hidden] { display: none !important; }
 
-/* ── 層級 0 · 公告橫幅（條件式，沒有公告時整條不存在）──────────────── */
-.notice {
+/* ── 層級 0 · 公告清單（條件式，沒有公告時整塊不存在）────────────────
+ * ZH: 至多 7 則。排序由後端決定（置頂在前），這裡只負責把置頂**看得出來**。
+ * ZH: ⚠ 置頂用「底色 + 文字徽章」兩個訊號。只給底色的話，高對比模式或
+ *     色覺障礙的使用者就完全拿不到這個資訊 —— 而畫面看起來仍然「有標示」。
+ * ──────────────────────────────────────────────────────────────── */
+.news {
+    margin-bottom: var(--space-5);
+    background-color: var(--surface);
+    border: 1px solid var(--hairline);
+    border-radius: var(--radius-md);
+    overflow: hidden;                 /* ZH: 讓子項的底色被圓角切齊 */
+}
+.news__h {
+    margin: 0;
+    padding: var(--space-3) var(--space-4) var(--space-2);
+    font-size: 0.8125rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    color: var(--text-muted);
+}
+.news__list { list-style: none; margin: 0; padding: 0; }
+.news__item {
     display: flex;
     align-items: baseline;
     gap: var(--space-3);
     padding: var(--space-3) var(--space-4);
-    margin-bottom: var(--space-5);
-    background-color: var(--accent-soft);
-    border: 1px solid var(--hairline);
-    border-radius: var(--radius-md);
+    border-top: 1px solid var(--hairline);
     font-size: 0.9375rem;
 }
-.notice__date { color: var(--text-muted); font-size: 0.875rem; white-space: nowrap; }
-.notice__more { margin-left: auto; white-space: nowrap; }
+.news__item.is-pinned { background-color: var(--accent-soft); }
+.news__date {
+    flex: none;
+    color: var(--text-muted);
+    font-size: 0.875rem;
+    white-space: nowrap;
+    font-variant-numeric: tabular-nums;   /* ZH: 日期等寬，左緣才對得齊 */
+}
+.news__pin {
+    flex: none;
+    font-size: 0.75rem;
+    font-weight: 700;
+    padding: 0 var(--space-2);
+    border-radius: var(--radius-sm);
+    background-color: var(--accent);
+    color: var(--on-accent);           /* ⚠ 黃底＝深字，由 token 決定 */
+}
+.news__title { color: var(--text-strong); min-width: 0; }
+.news__item.is-pinned .news__title { font-weight: 700; }
+.news__all {
+    display: block;
+    padding: var(--space-3);
+    text-align: center;
+    font-size: 0.875rem;
+    color: var(--link);
+    background-color: var(--surface-2);
+    border-top: 1px solid var(--hairline);
+}
+.news__all:hover { background-color: var(--surface); }
 
 /* ── 層級 1 · 額度 + 主要動作（主線的核心）────────────────────────── */
 .primary-card {
@@ -243,9 +287,89 @@ body {
  *     形狀見上方「層級 3 的動作按鈕」；這裡只補讓它脫離句子行高的間距。 */
 .handoff a { margin-top: var(--space-2); }
 
-/* ── 層級 2 · 入口卡 ─────────────────────────────────────────────── */
-.entries { margin-top: var(--space-6); display: grid; gap: var(--space-4); }
+/* ── 層級 2 · 引導流程 ───────────────────────────────────────────
+ * ZH: 窄螢幕直向堆疊、720px 以上並排成一列。**不需要第二套 DOM** ——
+ *     這是選這個版型（而不是畫成樹）最實際的理由：樹在手機上排不下，
+ *     只能捲或另做折疊清單，等於維護兩份。
+ *
+ * ZH: 「已完成」不用 opacity 調淡 —— 那會把整格的對比一起拉低，
+ *     連本來調到剛好通過 AA 的次要文字也一起犧牲。改用底色與字重表示。
+ * ──────────────────────────────────────────────────────────────── */
+.flow { margin-top: var(--space-6); }
+.flow__h {
+    margin: 0 0 var(--space-3);
+    font-size: 0.8125rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    color: var(--text-muted);
+}
+.flow__steps {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    gap: var(--space-2);
+}
+.flow__item { min-width: 0; }
 
+.step {
+    display: block;
+    height: 100%;
+    min-height: var(--tap-min);
+    padding: var(--space-4) var(--space-5);
+    background-color: var(--surface);
+    border: 1px solid var(--hairline);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-1);
+    color: inherit;
+    text-decoration: none;
+    transition: box-shadow 0.2s ease, border-color 0.2s ease;
+}
+.step:hover { box-shadow: var(--shadow-2); border-color: var(--accent); }
+.step:focus-visible { outline: var(--focus-ring); outline-offset: 2px; }
+
+/* ZH: 狀態標籤。空字串時整行收掉 —— 中間那兩步是偵測不到的，
+ *     留一個空行會讓版面看起來缺了東西。 */
+.step__state {
+    display: block;
+    font-size: 0.75rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    color: var(--text-muted);
+}
+.step__state:empty { display: none; }
+.step__title { display: block; font-weight: 700; color: var(--text-strong); font-size: 1.0625rem; }
+.step__desc { display: block; font-size: 0.9375rem; color: var(--text-muted); margin-top: var(--space-1); }
+
+/* ZH: 「現在在這」——左側粗邊是主要訊號（與 .entry--feature 同一個語彙）。 */
+.flow__item.is-now .step {
+    border-color: var(--accent);
+    border-left-width: 4px;
+    background-color: var(--accent-soft);
+}
+.flow__item.is-now .step__state { color: var(--warn); }
+
+.flow__item.is-done .step { background-color: var(--surface-2); box-shadow: none; }
+.flow__item.is-done .step__title { font-weight: 600; color: var(--text); }
+
+@media (min-width: 720px) {
+    /* ZH: 並排。grid-auto-columns: 1fr 讓每格等寬，格數會隨「看得見的步驟數」
+     *     自動變（文件庫沒內容時是 3 格）—— 不必為那個情況另寫規則。 */
+    .flow__steps { grid-auto-flow: column; grid-auto-columns: 1fr; }
+}
+
+/* ZH: 送過訓練 → 引導收起來之後，叫回來的那一行。 */
+.flow-reopen { margin-top: var(--space-6); margin-bottom: 0; text-align: center; }
+
+/* ── 清單卡（.entry）────────────────────────────────────────────────
+ * ZH: 🔴 **不要因為 grep 不到就刪掉。** 這三個 class 沒有出現在任何 .html ——
+ *     它們是 datasets.js / jobs.js / lab.js 用**樣板字串**產生的：
+ *         <div class="entry__title">${esc(d.name)}</div>
+ *     只掃 HTML 的話會得到「沒人用」這個結論，而那是錯的。
+ *     （2026-08-22 我就是這樣把它刪掉又補回來的。）
+ *
+ * ZH: 首頁原本的 .entries / .entry--feature 才是真的死碼，已隨首頁改版移除。
+ * ──────────────────────────────────────────────────────────────── */
 .entry {
     display: block;
     text-align: left;
@@ -264,9 +388,6 @@ body {
 .entry__title { font-weight: 700; color: var(--text-strong); font-size: 1.0625rem; }
 .entry__desc { font-size: 0.9375rem; color: var(--text-muted); margin-top: var(--space-1); }
 
-/* ZH: 機制甲——GPU 入口卡。文案是成果不是功能名，所以視覺上也該比其他入口重一階。 */
-.entry--feature { border-left: 4px solid var(--accent); }
-
 /* ── 層級 3 · 次要 ──────────────────────────────────────────────── */
 .minor {
     margin-top: var(--space-6);
@@ -277,6 +398,18 @@ body {
     display: flex; gap: var(--space-4); flex-wrap: wrap;
 }
 /* ZH: .minor 內的連結／按鈕外觀見上方「層級 3 的動作按鈕」那一組。 */
+
+/* ZH: .minor 裡的小標題（首頁的「隨時可以去」）。
+ *     .minor 是 flex 排，所以標題用 flex-basis:100% 自己佔滿一行。
+ * ZH: ⚠ **沒有動到 .minor 本身** —— 它有 6 個頁面在用。 */
+.minor__h {
+    flex-basis: 100%;
+    margin: 0;
+    font-size: 0.8125rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    color: var(--text-muted);
+}
 
 /* ── 錯誤區塊（部分失敗不整頁死）──────────────────────────────── */
 .inline-error {

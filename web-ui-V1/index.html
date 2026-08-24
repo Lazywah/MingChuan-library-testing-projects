@@ -12,7 +12,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Open+Sans:wght@400;600;700&display=swap" rel="stylesheet">
 
     <link rel="stylesheet" href="tokens.css?v=ff9cecda">
-    <link rel="stylesheet" href="styles.css?v=82edaf52">
+    <link rel="stylesheet" href="styles.css?v=3778871e">
 </head>
 <body>
 
@@ -26,12 +26,17 @@
 
 <main class="page">
 
-    <!-- 層級 0 · 公告橫幅：條件式，沒有公告時整塊不存在（不做「目前沒有公告」的卡片） -->
-    <div id="notice" class="notice" hidden>
-        <span class="notice__date" id="notice-date"></span>
-        <span id="notice-title"></span>
-        <a class="notice__more" id="notice-more" href="#" hidden></a>
-    </div>
+    <!-- ZH: 層級 0 · 公告。條件式——沒有公告時整塊不存在，
+             不做「目前沒有公告」的空卡片。
+         ZH: 內容由 app.js 填（至多 7 則，置頂排最前）。
+             置頂的判定在**後端**（announcements 端點已經將 is_pinned 排在前面），
+             前端只負責把那個旗標畫出來 —— 不要在這裡重新排序。 -->
+    <section class="news" id="news" hidden aria-labelledby="news-h">
+        <h2 class="news__h" id="news-h" data-i18n="idx_news_h">公告</h2>
+        <ul class="news__list" id="news-list"></ul>
+        <a class="news__all" id="news-all" href="news.html"
+           data-i18n="idx_news_all">看全部公告</a>
+    </section>
 
     <!-- 層級 1 · 額度 + 主要動作 -->
     <section class="primary-card" id="balance-card" aria-labelledby="balance-label">
@@ -52,34 +57,74 @@
         <div class="handoff" id="handoff" hidden></div>
     </section>
 
-    <!-- 層級 2 · 入口 -->
-    <div class="entries">
-        <!-- 機制甲：文案是成果，不是功能名。「運算任務」說明不了任何事。 -->
-        <button class="entry entry--feature" type="button" id="go-gpu">
-            <div class="entry__title" data-i18n="entry_gpu_title">訓練你的第一個影像分類模型</div>
-            <div class="entry__desc" data-i18n="entry_gpu_desc">用學校的 GPU，從我們準備好的範例開始，約 20 分鐘</div>
-        </button>
+    <!-- ==================================================================
+         ZH: 層級 2 · 引導流程。
+             步驟寫在 HTML 裡（而不是 JS 產生），是為了讓文案帶 data-i18n、
+             能被 check_untranslated_html 與 check_i18n 機械檢查到。
+             **狀態標籤由 app.js 填**（現在在這/下一步/已完成）。
 
-        <!-- ZH: 文件庫入口在有內容前不出現（V3 修正）。
-                 顯示與否由 docs-entry.js 依 docs-content.json 決定，本頁不做判斷。 -->
-        <a class="entry" href="docs.html" data-docs-entry hidden>
-            <div class="entry__title" data-i18n="entry_docs_title">看別人做過什麼</div>
-            <div class="entry__desc" data-i18n="entry_docs_desc">同學的作品與教學影片</div>
-        </a>
-    </div>
+         ZH: ⚠ 文件庫那一步帶 data-docs-entry，沒內容時會被 docs-entry.js
+             留在 hidden —— 所以步驟**不能寫死編號**（一、二、三），
+             否則文件庫一消失就會跳號。狀態標籤是 app.js **篩掉隱藏項之後**才排的。
+         ================================================================== -->
+    <section class="flow" id="flow" hidden aria-labelledby="flow-h">
+        <h2 class="flow__h" id="flow-h" data-i18n="idx_flow_h">第一次來？照這個順序走</h2>
+        <ol class="flow__steps" id="flow-steps">
+            <li class="flow__item">
+                <a class="step" id="step-myai" href="provision.html">
+                    <span class="step__state" data-state></span>
+                    <span class="step__title" data-i18n="step_myai_t">開通 MYAI</span>
+                    <span class="step__desc" data-i18n="step_myai_d">綁定學校信箱，拿到點數</span>
+                </a>
+            </li>
+            <li class="flow__item" data-docs-entry hidden>
+                <a class="step" id="step-docs" href="docs.html">
+                    <span class="step__state" data-state></span>
+                    <span class="step__title" data-i18n="entry_docs_title">看別人做過什麼</span>
+                    <span class="step__desc" data-i18n="entry_docs_desc">同學的作品與教學影片</span>
+                </a>
+            </li>
+            <li class="flow__item">
+                <a class="step" id="step-lab" href="lab.html">
+                    <span class="step__state" data-state></span>
+                    <span class="step__title" data-i18n="step_lab_t">開實驗室寫程式</span>
+                    <span class="step__desc" data-i18n="step_lab_d">瀏覽器裡的 VS Code</span>
+                </a>
+            </li>
+            <li class="flow__item">
+                <a class="step" id="step-gpu" href="gpu.html">
+                    <span class="step__state" data-state></span>
+                    <span class="step__title" data-i18n="entry_gpu_title">訓練你的第一個影像分類模型</span>
+                    <span class="step__desc" data-i18n="entry_gpu_desc">用學校的 GPU，從我們準備好的範例開始，約 20 分鐘</span>
+                </a>
+            </li>
+        </ol>
+    </section>
 
-    <!-- 層級 3 · 次要 -->
-    <nav class="minor">
+    <!-- ZH: 送過訓練的人，引導自動讓位（流程條收起來）。
+             不是永久拿掉 —— 這一行讓他隨時叫回來。 -->
+    <p class="flow-reopen" id="flow-reopen" hidden>
+        <button type="button" class="btn--minor" id="flow-show"
+                data-i18n="idx_flow_show">重新看引導</button>
+    </p>
+
+    <!-- ZH: 層級 3 · 隨時可以去。
+         ZH: ⚠ 這裡**不放「問 AI」與「實驗室」** —— 前者是上方的主要動作、
+             後者是流程的第三步。同一頁兩個入口通往同一個地方是雜訊不是方便
+             （擁有者裁定 2026-08-21，同一條規則也適用於這裡）。 -->
+    <nav class="minor" aria-labelledby="anytime-h">
+        <h2 class="minor__h" id="anytime-h" data-i18n="idx_anytime_h">隨時可以去</h2>
+        <a href="datasets.html" data-i18n="nav_datasets">我的資料集</a>
+        <a href="jobs.html" data-i18n="nav_jobs">我的訓練</a>
         <a href="#" id="link-usage" data-i18n="acct_usage">使用量明細</a>
-        <a href="#" id="link-lab" data-i18n="idx_open_lab">開啟我的實驗室</a>
         <a href="#" id="link-report" data-i18n="acct_report">問題回報</a>
     </nav>
 </main>
 
 <script src="docs-entry.js?v=4fa954e4"></script>
-<script src="i18n.js?v=1bff8dc8"></script>
+<script src="i18n.js?v=aab570a3"></script>
 <script src="prefs.js?v=8b7b4277"></script>
 <script src="chrome.js?v=f604ad71"></script>
-<script src="app.js?v=f2519c70"></script>
+<script src="app.js?v=89ef52bf"></script>
 </body>
 </html>

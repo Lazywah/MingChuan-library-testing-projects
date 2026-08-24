@@ -63,7 +63,10 @@ async function loadBalance() {
         //       provisioned=false                        → 沒有密碼可看，不給動作
         //       provisioned=true + initial_password       → 有密碼可看
         //       provisioned=true + initial_password=null  → 已確認或逾期
-        if (prov && prov.provisioned === false) return renderProvisioning();
+        // ZH: 記下來給引導流程與「問 AI」的分流用（兩處都要，不能只記其一）。
+        STATE.provisioned = !(prov && prov.provisioned === false);
+        maybeRenderFlow();
+        if (!STATE.provisioned) return renderProvisioning();
 
         if (bal.points == null) return renderNoBalance();
 
@@ -91,6 +94,10 @@ async function loadBalance() {
             : '';
         wireUsageLink();
     } catch (e) {
+        // ZH: 額度掛掉不該讓引導流程一起消失 —— 給一個保守值讓它照樣畫出來。
+        //     沒有這一行的話 STATE.provisioned 會永遠是 null，
+        //     maybeRenderFlow 一直等，流程條**安靜地不出現**。
+        if (STATE.provisioned === null) { STATE.provisioned = true; maybeRenderFlow(); }
         // 錯誤：**主要動作照常可用**——看不到額度不是不能用 AI 的理由
         value.textContent = '—';
         unit.hidden = true;
@@ -101,6 +108,8 @@ async function loadBalance() {
 // ZH: 還沒有 MYAI 帳號 —— **不給動作**。這個狀態下沒有初始密碼，
 //     給一個連結等於帶使用者去看一個空畫面。
 function renderProvisioning() {
+    // ZH: 這裡也可能是 FORCED==='empty' 直接進來的（沒經過 loadBalance 的主線）。
+    if (STATE.provisioned === null) { STATE.provisioned = false; maybeRenderFlow(); }
     $('balance-value').textContent = '—';
     $('balance-unit').hidden = true;
     $('balance-meta').textContent = T('idx_provisioning', '你的 AI 帳號正在開通，完成後這裡會顯示額度。');
@@ -115,35 +124,154 @@ function renderNoBalance() {
 }
 
 // ── 公告（層級 0，條件式）──────────────────────────────────────────────
-async function loadNotice() {
-    const box = $('notice');
+// ZH: 顯示上限 7 則。**排序完全交給後端** —— announcements 端點已經把 is_pinned
+//     的排在最前面（見 routers/announcements.py::list_announcements）。
+//     前端在這裡重排的話，兩邊的規則遲早會分岔，而分岔時沒有人會發現：
+//     畫面看起來仍然「有排序」，只是順序是錯的。
+const NEWS_MAX = 7;
+
+async function loadNews() {
+    const box = $('news');
+    const list = $('news-list');
     try {
-        let list;
+        let rows;
         if (FORCED === 'overflow') {
-            list = Array.from({ length: 12 }, (_, i) => ({
+            rows = Array.from({ length: 12 }, (_, i) => ({
                 title: '示範公告第 ' + (i + 1) + ' 則：系統維護與功能更新說明',
                 posted_at: '2026-08-16T09:00:00',
+                is_pinned: i === 0 ? 1 : 0,
             }));
         } else if (FORCED === 'empty' || FORCED === 'error') {
-            // 空／錯誤：橫幅不出現，其餘照常（部分失敗不整頁死）
+            // 空／錯誤：整塊不出現，其餘照常（部分失敗不整頁死）
             return;
         } else {
-            list = await get('/announcements');
+            // ZH: 🔴 多要一筆。只要 NEWS_MAX 筆的話，rows.length 永遠不會超過它，
+            //     下面那行「還有沒有更多」就永遠是否 ——
+            //     「看全部公告」永遠不會出現，而且**畫面上看不出來**（只是少一個連結）。
+            //     這個錯誤我實際寫出來過：用 ?state=overflow 驗時它是**本地造 12 筆假資料**，
+            //     繞過了 limit，於是連結正常出現 —— 驗的路徑不是使用者走的路徑。
+            rows = await get('/announcements?limit=' + (NEWS_MAX + 1));
         }
-        if (!list || !list.length) return;    // 沒有公告 → 整條不存在
+        if (!rows || !rows.length) return;    // 沒有公告 → 整塊不存在
 
-        const top = list[0];
-        $('notice-date').textContent = (top.posted_at || '').slice(0, 10);
-        $('notice-title').textContent = top.title;
-        if (list.length > 1) {
-            const more = $('notice-more');
-            more.textContent = T('idx_see_all', '查看全部 {n} 則').replace('{n}', list.length);
-            more.hidden = false;
-            more.addEventListener('click', (ev) => { ev.preventDefault(); location.href = 'news.html'; });
-        }
+        list.textContent = '';
+        rows.slice(0, NEWS_MAX).forEach((a) => {
+            const li = document.createElement('li');
+            li.className = 'news__item';
+
+            const d = document.createElement('span');
+            d.className = 'news__date';
+            d.textContent = (a.posted_at || '').slice(5, 10).replace('-', '/');
+            li.appendChild(d);
+
+            // ZH: 置頂用「文字徽章 + 底色」兩個訊號，不要只靠底色 ——
+            //     只有底色的話，色覺障礙或高對比模式下就完全沒有這個資訊。
+            if (a.is_pinned) {
+                li.classList.add('is-pinned');
+                const p = document.createElement('span');
+                p.className = 'news__pin';
+                p.textContent = T('idx_news_pinned', '置頂');
+                li.appendChild(p);
+            }
+
+            const t = document.createElement('span');
+            t.className = 'news__title';
+            // ZH: 用 textContent 不用 innerHTML —— 公告是管理端打進來的自由文字。
+            t.textContent = a.title || '';
+            li.appendChild(t);
+
+            list.appendChild(li);
+        });
+
+        // ZH: 只有「還有沒顯示到的」才給看全部；剛好 7 則以內就不必了。
+        //     上面要了 NEWS_MAX+1 筆，所以這裡才分得出「剛好 7 則」與「超過 7 則」。
+        $('news-all').hidden = rows.length <= NEWS_MAX;
         box.hidden = false;
     } catch (e) {
-        /* 公告取不到 → 橫幅不出現，首頁其餘照常 */
+        /* 公告取不到 → 整塊不出現，首頁其餘照常 */
+    }
+}
+
+// ══════════════════════════════════════════════════════════════════════
+// ZH: 引導流程的狀態
+// ----------------------------------------------------------------------
+// ZH: 🔴 **只有頭尾兩步偵測得到**，中間兩步刻意不標狀態：
+//       開通 MYAI  → /external-ai/my-provision 的 provisioned（首頁本來就在打）
+//       看文件庫    → 沒有任何追蹤，測不到
+//       開實驗室    → /lab/status 會去問 Docker，放首頁太重
+//       送 GPU 訓練 → /jobs?limit=1 的 total（多一支輕量呼叫）
+//
+// ZH: 所以「已完成」這個標籤**只會出現在偵測得到的步驟上**。
+//     對測不到的步驟猜一個狀態，比不標更糟 —— 使用者會相信它。
+// ══════════════════════════════════════════════════════════════════════
+const STATE = { provisioned: null, hasJobs: null };
+let FLOW_FORCED_OPEN = false;
+
+async function loadJobCount() {
+    try {
+        const r = await get('/jobs?limit=1');
+        STATE.hasJobs = !!(r && typeof r.total === 'number' && r.total > 0);
+    } catch (e) {
+        // ZH: 取不到就當「沒訓練過」——寧可多顯示一次引導，也不要把它藏起來。
+        STATE.hasJobs = false;
+    }
+    maybeRenderFlow();
+}
+
+function maybeRenderFlow() {
+    if (STATE.provisioned === null || STATE.hasJobs === null) return;
+    renderFlow();
+}
+
+function renderFlow() {
+    const sec = $('flow');
+    const reopen = $('flow-reopen');
+
+    // ZH: 送過訓練 ＝ 已經上手 → 引導讓位。不是永久拿掉，下面那一行叫得回來。
+    if (STATE.hasJobs && !FLOW_FORCED_OPEN) {
+        sec.hidden = true;
+        reopen.hidden = false;
+        return;
+    }
+    sec.hidden = false;
+    reopen.hidden = true;
+
+    // ZH: ⚠ 只排**看得見**的步驟。文件庫沒內容時那一格是 hidden，
+    //     若照 HTML 的順序寫死標籤，就會出現「下一步」後面接「最後」中間跳掉一格。
+    const items = Array.prototype.filter.call(
+        $('flow-steps').children, (li) => !li.hidden);
+    if (!items.length) return;
+
+    // ZH: 目前在第幾步。只用偵測得到的兩個事實推：
+    //     沒開通 → 停在開通那一步；已開通但沒訓練過 → 往後推一格。
+    const idxMyai = items.findIndex((li) => li.querySelector('#step-myai'));
+    let cur;
+    if (!STATE.provisioned) {
+        cur = idxMyai >= 0 ? idxMyai : 0;
+    } else {
+        cur = (idxMyai >= 0 ? idxMyai : -1) + 1;
+        if (cur >= items.length) cur = items.length - 1;
+    }
+
+    items.forEach((li, n) => {
+        const slot = li.querySelector('[data-state]');
+        if (!slot) return;
+        let key = '', fallback = '';
+        if (n < cur) { key = 'st_done'; fallback = '已完成'; }
+        else if (n === cur) { key = 'st_now'; fallback = '現在在這'; }
+        else if (n === cur + 1) { key = 'st_next'; fallback = '下一步'; }
+        slot.textContent = key ? T(key, fallback) : '';
+        li.classList.toggle('is-now', n === cur);
+        li.classList.toggle('is-done', n < cur);
+    });
+
+    // ZH: 文件庫那一格是 docs-entry.js **非同步**打開的（它要先抓 docs-content.json）。
+    //     沒有這個 observer 的話，第一次算標籤時它還是 hidden，
+    //     打開之後標籤就對不上了 —— 而且畫面上看不出哪裡怪。
+    if (!renderFlow._observing) {
+        renderFlow._observing = true;
+        new MutationObserver(() => renderFlow()).observe(
+            $('flow-steps'), { attributes: true, attributeFilter: ['hidden'], subtree: true });
     }
 }
 
@@ -208,30 +336,44 @@ function requireLogin() {
 }
 
 // ── 啟動 ─────────────────────────────────────────────────────────────
-$('go-myai').addEventListener('click', goMyai);
-$('go-gpu').addEventListener('click', () => { location.href = 'gpu.html'; });
+// ZH: 「問 AI」分流（擁有者裁定 2026-08-22）——已開通就直接跳廠商；
+//     還沒開通的話跳過去只會看到廠商的登入頁而他根本沒有帳號，
+//     所以改帶到說明頁（provision.html 已經會講「還在開通中」，
+//     並且在那裡提供問題回報的入口）。
+$('go-myai').addEventListener('click', () => {
+    if (STATE.provisioned === false) { location.href = 'provision.html'; return; }
+    goMyai();
+});
 $('link-usage').addEventListener('click', (ev) => {
     ev.preventDefault();
     location.href = 'usage.html';
 });
-$('link-lab').addEventListener('click', (ev) => {
-    ev.preventDefault();
-    location.href = 'lab.html';
-});
 $('link-report').addEventListener('click', (ev) => {
     ev.preventDefault();
     location.href = 'report.html';
+});
+// ZH: 引導收起來之後叫回來。只影響這一次瀏覽，不寫進偏好——
+//     那是「我想再看一次」，不是「我要永遠顯示」。
+$('flow-show').addEventListener('click', () => {
+    FLOW_FORCED_OPEN = true;
+    renderFlow();
 });
 
 // ZH: 先擋登入。requireLogin() 為 false 時已經在導向了，不要再發請求 ——
 //     那些請求必定 401，只會在 console 留下看起來像壞掉的紅字。
 if (requireLogin()) {
     loadBalance();
-    loadNotice();
+    loadNews();
+    loadJobCount();
 }
 
 
 // ── 語言切換時重繪 ───────────────────────────────────────────────────
 // ZH: prefs.js 的字典掃描只換得掉 `data-i18n` 元素；本頁 JS 產生的內容要自己重跑。
 //     只在語言**改變**時觸發（不是每次套用），所以不會在載入時多跑一次。
-document.addEventListener('prefs:langchanged', () => { loadBalance(); loadNotice(); });
+document.addEventListener('prefs:langchanged', () => {
+    loadBalance();
+    loadNews();
+    // ZH: 流程的狀態標籤也是 JS 產生的，換語言要一起重畫（狀態已在手上，不用重打 API）。
+    if (STATE.provisioned !== null && STATE.hasJobs !== null) renderFlow();
+});

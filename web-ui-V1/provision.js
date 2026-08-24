@@ -24,7 +24,11 @@ function authHeaders() {
     return t ? { Authorization: 'Bearer ' + t } : {};
 }
 
-function showMsg(text) {
+// ZH: stuck=true 時順便把「回報給我們」那一行打開。
+//     預設 false —— 「已確認／逾期」不是故障，給回報入口只會製造無效工單。
+function showMsg(text, stuck) {
+    var box = $('stuck');
+    if (box) box.hidden = !stuck;
     $('msg').textContent = text;
     $('msg').hidden = false;
     $('card').hidden = true;
@@ -47,12 +51,14 @@ async function load() {
         }
     } catch (e) {
         return showMsg(T('prov_state_fail', '暫時取不到開通狀態') + `（${e.message || e}）。`
-                       + T('prov_retry', '可以重新整理再試一次。'));
+                       + T('prov_retry', '可以重新整理再試一次。'), true);
     }
 
     if (!d.provisioned) {
+        // ZH: 首頁的「問 AI」在未開通時會把人帶到這裡（擁有者裁定 2026-08-22）。
+        //     所以這一支不只是「沒密碼可看」，而是他**本來想問 AI 卻問不了**。
         return showMsg(T('prov_pending', '你的 MYAI 帳號還在開通中，目前還沒有初始密碼。')
-            + T('prov_after', '開通完成後回到首頁就會看到提示。'));
+            + T('prov_after', '開通完成後回到首頁就會看到提示。'), true);
     }
     if (!d.initial_password) {
         // ZH: 這兩種原因在後端是同一個結果（密碼為 null），前端**不要猜**是哪一種。
