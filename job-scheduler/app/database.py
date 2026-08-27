@@ -264,6 +264,11 @@ def init_db():
             except Exception: pass
             try: conn.execute(text("ALTER TABLE users ADD COLUMN temp_purpose VARCHAR"))
             except Exception: pass
+            # --- v3.8 Lab 封存銷毀前的提醒（寄出時間，分第一封與最後一封）---
+            try: conn.execute(text("ALTER TABLE archived_lab_volumes ADD COLUMN reminded_first_at DATETIME"))
+            except Exception: pass
+            try: conn.execute(text("ALTER TABLE archived_lab_volumes ADD COLUMN reminded_final_at DATETIME"))
+            except Exception: pass
             # --- v3.6 實驗室多份存檔：使用者取的名字 ---
             try: conn.execute(text("ALTER TABLE lab_sessions ADD COLUMN display_name VARCHAR"))
             except Exception: pass

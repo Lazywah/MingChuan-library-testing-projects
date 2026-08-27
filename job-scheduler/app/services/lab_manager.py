@@ -1076,6 +1076,80 @@ def archive_user_lab(db: Session, user, retention_days: int, reason: str = "admi
     }
 
 
+def send_purge_reminders(db: Session) -> dict:
+    """
+    ZH: 封存的 Lab 資料**銷毀前**的提醒信。
+
+    ZH: 錨點是 `ArchivedLabVolume.expires_at`（＝刪帳號當下 + `lab_archive_days`），
+        不是任何使用者狀態 —— 帳號在封存的那一刻就已經不存在了。
+        收件地址用封存時快照下來的 `rec.email`。
+
+    ZH: 兩封信：剩 `lab_purge_first_days` 天寄第一封、剩 `lab_purge_final_days` 天寄最後一封。
+        已經落在最後通知窗內卻還沒寄過第一封時（保留期被調短、或系統停機一段時間），
+        **只寄最後那封並把兩格都標掉** —— 同一天收到兩封內容雷同的信只會讓人以為是系統壞了。
+
+    ZH: 跳過沒有地址的紀錄：孤兒 volume 被 `--adopt` 收編時 username/email 都是 None，
+        SSO 推不出信箱時會是 `@unknown`。這兩種寄了必退，只會灌爆退信紀錄。
+
+    ZH: 回傳各階段寄出的封數。**不拋錯** —— 呼叫端後面就是真正的銷毀，
+        提醒失敗不能讓銷毀停擺（反過來也一樣，見呼叫端的順序）。
+
+    @node job-scheduler/app/services/lab_manager.py::send_purge_reminders
+    """
+    from .. import crud
+    from . import email_service
+
+    out = {"first": 0, "final": 0, "skipped_no_email": 0}
+    try:
+        first_days = crud.get_setting(db, "lab_purge_first_days")
+        final_days = crud.get_setting(db, "lab_purge_final_days")
+    except Exception as e:  # noqa: BLE001
+        logger.warning("讀不到 Lab 銷毀提醒設定，這輪不寄：%s", e)
+        return out
+    if not first_days and not final_days:
+        return out
+
+    now = datetime.now(timezone.utc)
+    for rec in db.query(models.ArchivedLabVolume).all():
+        if rec.expires_at is None or rec.restored_at is not None:
+            continue                      # ZH: 已還原的不必再提醒
+        exp = rec.expires_at
+        if exp.tzinfo is None:
+            exp = exp.replace(tzinfo=timezone.utc)
+        delta = exp - now
+        if delta.total_seconds() <= 0:
+            continue                      # ZH: 已經到期，交給 purge，不再寄信
+        days_left = max(1, delta.days)
+
+        addr = (rec.email or "").strip()
+        want_final = bool(final_days) and days_left <= final_days and rec.reminded_final_at is None
+        want_first = bool(first_days) and days_left <= first_days and rec.reminded_first_at is None
+        if not want_final and not want_first:
+            continue
+        if not addr or addr.endswith("@unknown"):
+            out["skipped_no_email"] += 1
+            logger.info("封存 %s 沒有可用的收件地址（%r），跳過提醒",
+                        rec.volume_name, rec.email)
+            continue
+
+        stage = "final" if want_final else "first"
+        try:
+            email_service.send_lab_purge_reminder(
+                addr, rec.username or addr.split("@")[0], days_left,
+                exp.strftime("%Y-%m-%d"), stage=stage)
+        except Exception as e:  # noqa: BLE001
+            logger.warning("Lab 銷毀提醒寄給 %s 失敗：%s", addr, e)
+            continue
+        out[stage] += 1
+        rec.reminded_first_at = rec.reminded_first_at or now
+        if stage == "final":
+            rec.reminded_final_at = now
+    if out["first"] or out["final"] or out["skipped_no_email"]:
+        db.commit()
+        logger.info("Lab 銷毀提醒：%s", out)
+    return out
+
+
 def purge_expired_archives(db: Session) -> int:
     """
     ZH: 背景任務：(1) 移除逾期封存的 volume；(2) 自我修復——清掉「volume 早已不存在」

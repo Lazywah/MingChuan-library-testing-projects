@@ -345,6 +345,18 @@
       "tests": [
         "tests/test_smtp_settings.py"
       ]
+    },
+    {
+      "id": "lab-purge-reminder",
+      "name": "帳號刪除後 Lab 資料銷毀前的提醒信（剩 30 天／剩 7 天）",
+      "claimed": false,
+      "files": [
+        "job-scheduler/app/services/lab_manager.py",
+        "job-scheduler/app/services/email_service.py"
+      ],
+      "tests": [
+        "tests/test_lab_purge_reminders.py"
+      ]
     }
   ]
 }

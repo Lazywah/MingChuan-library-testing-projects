@@ -1470,6 +1470,12 @@ SYSTEM_SETTINGS = {
     "smtp_server":              {"group": "email", "type": "text",  "default": lambda: settings.SMTP_SERVER,      "min": None, "max": None, "maxlen": 253, "text_kind": "host",  "label": "SMTP 主機(留空=不實際寄出,只寫寄信紀錄)"},
     "smtp_port":                {"group": "email", "type": "int",   "default": lambda: settings.SMTP_PORT,        "min": 1,    "max": 65535, "label": "SMTP 埠(STARTTLS 通常是 587)"},
     "smtp_username":            {"group": "email", "type": "text",  "default": lambda: settings.SMTP_USERNAME,    "min": None, "max": None, "maxlen": 254, "text_kind": "any",   "label": "SMTP 帳號(密碼仍只從 .env 讀,不進資料庫)"},
+    # ZH: v3.8 帳號刪除後,Lab 資料銷毀前的提醒。天數是「距離銷毀還有幾天」。
+    #     ⚠ 保留期預設 30 天(lab_archive_days),所以第一封在**刪除當天**就寄出 ——
+    #     那正是使用者最需要知道的時刻(「我的東西還在,但只剩 30 天」)。
+    #     值會出現在信件內文,所以標星號。
+    "lab_purge_first_days": {"starred": True, "group": "platform", "type": "int", "default": lambda: 30, "min": 0, "max": 365, "label": "Lab 資料銷毀前第一次提醒(剩幾天;0=不寄)"},
+    "lab_purge_final_days": {"starred": True, "group": "platform", "type": "int", "default": lambda: 7,  "min": 0, "max": 365, "label": "Lab 資料銷毀前最後提醒(剩幾天;0=不寄)"},
     # ZH: v3.8 管理員告警信。收件人留空 = 完全不寄（預設就是留空）——
     #     一個沒有人填收件人的告警系統應該安靜，而不是往預設信箱亂寄。
     "admin_alert_emails":       {"group": "email", "type": "text",  "default": lambda: "",   "min": None, "max": None, "maxlen": 500, "text_kind": "emails", "label": "管理員告警收件人(逗號分隔;留空=不寄告警)"},

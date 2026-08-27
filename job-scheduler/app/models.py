@@ -308,6 +308,10 @@ class ArchivedLabVolume(Base):
     reason       = Column(String, nullable=True)     # ZH: 封存原因（admin_delete / adopted_orphan…）
     archived_at  = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     expires_at   = Column(DateTime, nullable=True)   # ZH: 逾此時間背景任務會真正刪除
+    # ZH: v3.8 銷毀前的提醒。分兩格而不是一個「已提醒」布林 ——
+    #     兩封信的內容與急迫度不同,只記一格的話補寄或稽核時分不出寄過哪一封。
+    reminded_first_at = Column(DateTime, nullable=True)   # ZH: 第一次提醒寄出時間
+    reminded_final_at = Column(DateTime, nullable=True)   # ZH: 最後提醒寄出時間
     restored_at  = Column(DateTime, nullable=True)   # ZH: 已還原給誰/何時（保留紀錄）
     restored_to  = Column(String, nullable=True)
 

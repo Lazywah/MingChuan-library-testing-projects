@@ -327,6 +327,54 @@ def send_temp_password(to_email: str, username: str, temp_password: str, is_new_
                username=username)
 
 
+LAB_PURGE_KIND_PREFIX = "lab_purge:"
+
+
+def send_lab_purge_reminder(to_email: str, username: str, days_left: int,
+                            expires_on: str, stage: str = "first"):
+    """
+    ZH: 帳號已被刪除後，Lab 資料銷毀前的提醒信。
+
+    ZH: ⚠️ 措辭前提：**寄這封信的時候帳號已經不在了。**
+        所以不能寫「請登入處理」——他登不進來。能做的只有聯絡管理員還原
+        （`POST /admin/lab-archives/{volume}/restore` 是管理員專屬）。
+        寫成「登入即可保留」會讓人白跑一趟，然後資料照樣被銷毀。
+
+    ZH: 也不寫「你的帳號被停權」之類的猜測 —— 我們只知道帳號被刪了，
+        不知道原因（畢業、離職、管理員手動）。信裡只陳述事實與期限。
+
+    @node job-scheduler/app/services/email_service.py::send_lab_purge_reminder
+    """
+    urgent = (stage == "final")
+    zh_head = "【最後通知】" if urgent else ""
+    en_head = "[Final notice] " if urgent else ""
+    html = f"""
+    <html>
+        <body>
+            <h2>{username} 你好 / Hello {username},</h2>
+            <p>{zh_head}你在 MCU AI Base 的帳號已被移除，程式實驗室（Code Lab）的檔案
+               目前<b>仍然保留著</b>，但會在 <b>{expires_on}</b>（約 {days_left} 天後）自動銷毀，
+               屆時無法復原。</p>
+            <p>如果還需要這些檔案，請在期限前<b>聯絡管理員</b>，由管理員還原到指定帳號。
+               帳號已經移除，所以無法自行登入取回。</p>
+            <hr>
+            <p>{en_head}Your MCU AI Base account has been removed. Your Code Lab files are
+               <b>still kept</b>, but will be destroyed on <b>{expires_on}</b>
+               (in about {days_left} days) and cannot be recovered afterwards.</p>
+            <p>If you still need them, <b>contact an administrator</b> before that date —
+               they can restore the files to an account for you. You cannot sign in
+               yourself, because the account no longer exists.</p>
+            <br>
+            <p>MCU AI Base</p>
+        </body>
+    </html>
+    """
+    send_email(to_email,
+               f"{zh_head}程式實驗室檔案將於 {expires_on} 銷毀 / "
+               f"{en_head}Code Lab files will be deleted on {expires_on}",
+               html, kind=LAB_PURGE_KIND_PREFIX + stage, username=username)
+
+
 def send_myai_provisioned(to_email: str, username: str, platform_url: str = ""):
     """
     ZH: v3.5 MYAI 開通完成通知。

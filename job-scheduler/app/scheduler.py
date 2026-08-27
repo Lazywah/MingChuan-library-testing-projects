@@ -200,6 +200,9 @@ async def _storage_lifecycle_loop():
                 # EN: v3.3 daily retention purges
                 try:
                     from .services import lab_manager as _lm
+                    # ZH: 🔴 **提醒要在銷毀之前。** 反過來的話同一輪會先把資料刪掉、
+                    #     再寄一封「你的檔案即將銷毀」—— 收到信時東西已經沒了。
+                    _lm.send_purge_reminders(db)
                     n = _lm.purge_expired_archives(db)
                     if n:
                         logger.info(f"ZH: 已銷毀 {n} 筆逾期 Lab 封存")
