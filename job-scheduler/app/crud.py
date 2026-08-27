@@ -1470,6 +1470,10 @@ SYSTEM_SETTINGS = {
     "smtp_server":              {"group": "email", "type": "text",  "default": lambda: settings.SMTP_SERVER,      "min": None, "max": None, "maxlen": 253, "text_kind": "host",  "label": "SMTP 主機(留空=不實際寄出,只寫寄信紀錄)"},
     "smtp_port":                {"group": "email", "type": "int",   "default": lambda: settings.SMTP_PORT,        "min": 1,    "max": 65535, "label": "SMTP 埠(STARTTLS 通常是 587)"},
     "smtp_username":            {"group": "email", "type": "text",  "default": lambda: settings.SMTP_USERNAME,    "min": None, "max": None, "maxlen": 254, "text_kind": "any",   "label": "SMTP 帳號(密碼仍只從 .env 讀,不進資料庫)"},
+    # ZH: v3.8 管理員告警信。收件人留空 = 完全不寄（預設就是留空）——
+    #     一個沒有人填收件人的告警系統應該安靜，而不是往預設信箱亂寄。
+    "admin_alert_emails":       {"group": "email", "type": "text",  "default": lambda: "",   "min": None, "max": None, "maxlen": 500, "text_kind": "emails", "label": "管理員告警收件人(逗號分隔;留空=不寄告警)"},
+    "admin_alert_min_hours":    {"group": "email", "type": "int",   "default": lambda: 6,    "min": 1,    "max": 168,  "label": "同一類告警最短間隔(小時,避免壞掉時每輪都寄)"},
     "smtp_from_email": {"starred": True, "group": "email", "type": "text", "default": lambda: settings.SMTP_FROM_EMAIL, "min": None, "max": None, "maxlen": 254, "text_kind": "email", "label": "寄件者地址(使用者在信箱裡看到的寄件人)"},
     "rag_chat_model":           {"starred": True, "group": "assistant", "type": "choice", "default": lambda: settings.RAG_CHAT_MODEL,             "min": None, "max": None, "label": "小基回應用的模型"},
 }
@@ -1504,6 +1508,16 @@ def _validate_text_setting(key: str, spec: dict, raw) -> str:
     elif kind == "email":
         if not _RE_SETTING_EMAIL.match(v):
             raise ValueError(f"設定 {key} 需為單一電子郵件地址：{v}")
+    elif kind == "emails":
+        # ZH: 逗號分隔的多個地址。**逐一驗**並回寫正規化後的字串 ——
+        #     只驗整串的話，一個打錯的地址會混在裡面存進去，
+        #     然後那一封告警安靜地少寄給一個人（其餘照常送達，所以沒人會發現）。
+        if v:
+            parts = [x.strip() for x in v.split(",")]
+            bad = [x for x in parts if not _RE_SETTING_EMAIL.match(x)]
+            if bad:
+                raise ValueError(f"設定 {key} 這些不是有效的電子郵件地址：{', '.join(bad)}")
+            v = ", ".join(parts)
     return v
 
 
@@ -1601,7 +1615,7 @@ if _missing:
 # ZH: text 型旋鈕一定要宣告 maxlen 與 text_kind。
 #     漏宣告不會當場壞掉 —— 它只是**悄悄不驗**，然後某個亂填的值被存進去，
 #     壞在背景寄信任務裡。所以在匯入時就擋。
-_VALID_TEXT_KINDS = {"any", "host", "email"}
+_VALID_TEXT_KINDS = {"any", "host", "email", "emails"}
 _bad_text = [k for k, v in SYSTEM_SETTINGS.items()
              if v.get("type") == "text"
              and (v.get("maxlen") is None or v.get("text_kind") not in _VALID_TEXT_KINDS)]

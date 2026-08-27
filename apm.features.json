@@ -333,6 +333,18 @@
       "tests": [
         "tests/test_smtp_settings.py"
       ]
+    },
+    {
+      "id": "admin-alert-mail",
+      "name": "管理員告警信（背景迴圈吞掉的錯誤寄給收件人清單，同類節流）",
+      "claimed": false,
+      "files": [
+        "job-scheduler/app/services/email_service.py",
+        "job-scheduler/app/scheduler.py"
+      ],
+      "tests": [
+        "tests/test_smtp_settings.py"
+      ]
     }
   ]
 }

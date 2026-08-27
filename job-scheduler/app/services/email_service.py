@@ -3,7 +3,7 @@ import logging
 from email.utils import make_msgid
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from ..config import settings
 
 logger = logging.getLogger(__name__)
@@ -166,6 +166,92 @@ def send_email(to_email: str, subject: str, html_content: str,
     except Exception as e:
         logger.error(f"寄信失敗 {to_email}: {e}")
         _record(to_email, subject, "failed", str(e)[:400], kind, username, user_id, msg_id)
+
+ALERT_KIND_PREFIX = "alert:"
+
+
+def _alert_recent(db, kind: str, hours: int) -> bool:
+    """ZH: 這一類告警在 `hours` 小時內已經寄過了嗎。
+
+    ZH: 用 email_log 當節流狀態,不另外開一張表 —— 「上次寄的時間」本來就記在那裡,
+        另存一份就會有兩個真相。
+
+    @node job-scheduler/app/services/email_service.py::_alert_recent
+    """
+    from .. import models
+    since = datetime.now(timezone.utc) - timedelta(hours=hours)
+    row = (db.query(models.EmailLog)
+           .filter(models.EmailLog.kind == ALERT_KIND_PREFIX + kind)
+           .order_by(models.EmailLog.created_at.desc())
+           .first())
+    if row is None or row.created_at is None:
+        return False
+    # ZH: created_at 存進去時是 aware(UTC),但 SQLite 讀回來是 naive ——
+    #     直接跟 aware 的 since 相比會 TypeError,而這個函式一旦拋錯,
+    #     節流就等於失效、告警會變成每輪一封。所以在這裡補上時區。
+    last = row.created_at
+    if last.tzinfo is None:
+        last = last.replace(tzinfo=timezone.utc)
+    return last > since
+
+
+def send_admin_alert(kind: str, subject: str, html_content: str) -> int:
+    """
+    ZH: 寄一封**管理員告警信**給設定裡的收件人清單。
+
+    ZH: 回傳值是**交給 send_email 的封數,不是送達數,也不是「有寄出去」**。
+        保留網域會在 send_email 裡被擋下(記成 blocked)、中繼拒收會記成 refused,
+        兩種都算在回傳值裡。沿用本模組一貫的措辭:我們只宣稱做到哪一步。
+        收件人全部填錯的話,告警會**安靜地被擋掉而且照樣計入節流** ——
+        要確認告警真的出得去,看寄信紀錄頁的 alert:* 那幾筆狀態。
+
+    ZH: 三個刻意的設計：
+
+        1. **收件人留空就完全不寄**（預設就是空的）。沒有人填收件人的告警系統
+           應該安靜,而不是往某個預設信箱亂寄。
+
+        2. **逐一寄,不用 CC/BCC。** 一個地址被拒不會連累其他人,
+           而且收件人彼此看不到對方的信箱。代價是 n 封信,但告警本來就該很少。
+
+        3. 🔴 **同一類告警有最短間隔。** 這是整件事的成敗關鍵 ——
+           觸發點都在**每幾分鐘跑一次的背景迴圈**裡,壞掉的東西會一直壞著。
+           沒有節流的話,一次故障就是每輪一封信,收件人第二天就會把規則設成
+           全部丟垃圾桶,於是下一次真的出事時**沒有人會看到**。
+           節流狀態記在 email_log 的 kind 上(`alert:<kind>`)。
+
+    ZH: 這個函式**絕不拋錯** —— 呼叫端都在背景迴圈的 except 區塊裡,
+        在那裡再炸一次會把整個迴圈打斷。
+
+    @node job-scheduler/app/services/email_service.py::send_admin_alert
+    """
+    try:
+        from ..database import SessionLocal
+        from .. import crud
+        db = SessionLocal()
+        try:
+            raw = crud.get_setting(db, "admin_alert_emails") or ""
+            recipients = [x.strip() for x in raw.split(",") if x.strip()]
+            if not recipients:
+                return 0
+            hours = crud.get_setting(db, "admin_alert_min_hours")
+            if _alert_recent(db, kind, hours):
+                logger.info("告警 %s 在 %s 小時內已寄過,這次略過", kind, hours)
+                return 0
+        finally:
+            db.close()
+    except Exception as e:  # noqa: BLE001
+        logger.warning("讀取告警設定失敗,不寄告警：%s", e)
+        return 0
+
+    sent = 0
+    for addr in recipients:
+        try:
+            send_email(addr, subject, html_content, kind=ALERT_KIND_PREFIX + kind)
+            sent += 1
+        except Exception as e:  # noqa: BLE001
+            logger.warning("告警信寄給 %s 失敗：%s", addr, e)
+    return sent
+
 
 def send_login_alert(to_email: str, username: str, ip_address: str):
     """

@@ -71,7 +71,7 @@ class TestTextSettingValidation:
         bad = [k for k, v in crud.SYSTEM_SETTINGS.items()
                if v.get("type") == "text"
                and (v.get("maxlen") is None
-                    or v.get("text_kind") not in {"any", "host", "email"})]
+                    or v.get("text_kind") not in crud._VALID_TEXT_KINDS)]
         assert bad == []
 
 
@@ -143,3 +143,106 @@ class TestBounceReaderFollowsTheOverride:
     def test_without_db_it_still_falls_back_to_env(self):
         """ZH: db=None 的行為要與 v3.7 相同,不能因為新參數而變。"""
         assert bounce_reader.imap_config()["user"] == (settings.SMTP_USERNAME or "").strip()
+
+
+# ==============================================================================
+# ZH: 管理員告警信（v3.8）
+# ==============================================================================
+
+@pytest.fixture
+def shared_db(db_engine, db, monkeypatch):
+    """
+    ZH: 讓 `SessionLocal()` 指向**測試那個記憶體 DB**。
+
+    ZH: 為什麼需要：send_admin_alert 與寄信紀錄都是自行開 session
+        （它們多半跑在 BackgroundTasks 裡、手上沒有 db）。不接起來的話,
+        測試寫進 fixture 的設定它讀不到,而它寫的 email_log
+        會落在 /tmp/test_ai_platform.db —— **節流那條測試會變成永遠通過**,
+        因為它每次都在一個空的資料表裡找不到上一封。
+    """
+    from sqlalchemy.orm import sessionmaker
+    import app.database as database
+    monkeypatch.setattr(database, "SessionLocal",
+                        sessionmaker(autocommit=False, autoflush=False, bind=db_engine))
+    return db
+
+
+class TestAdminAlert:
+    def test_no_recipients_means_no_mail_at_all(self, shared_db, monkeypatch):
+        """ZH: 預設就是空的。沒有人填收件人的告警系統應該安靜。"""
+        sent = []
+        monkeypatch.setattr(email_service, "send_email",
+                            lambda *a, **k: sent.append(a))
+        assert email_service.send_admin_alert("myai_sync", "主旨", "<p>x</p>") == 0
+        assert sent == []
+
+    def test_sends_one_mail_per_recipient(self, shared_db, monkeypatch):
+        """ZH: 逐一寄 —— 一個地址被拒不連累其他人,收件人也看不到彼此。"""
+        crud.set_settings(shared_db, {"admin_alert_emails":
+                                      "a@mcu.edu.tw, b@mcu.edu.tw, c@mcu.edu.tw"})
+        to = []
+        monkeypatch.setattr(email_service, "send_email",
+                            lambda addr, *a, **k: to.append(addr))
+        assert email_service.send_admin_alert("myai_sync", "主旨", "<p>x</p>") == 3
+        assert to == ["a@mcu.edu.tw", "b@mcu.edu.tw", "c@mcu.edu.tw"]
+
+    def test_same_kind_is_throttled_within_the_window(self, shared_db, monkeypatch):
+        """
+        ZH: 🔴 整件事的成敗關鍵。觸發點在每幾分鐘跑一次的背景迴圈裡,
+            沒有節流的話一次故障 = 每輪一封信,收件人隔天就會全部丟垃圾桶。
+        """
+        crud.set_settings(shared_db, {"admin_alert_emails": "ops@mcu.edu.tw",
+                                      "admin_alert_min_hours": 6})
+        # ZH: 用真的 send_email —— 它要寫 email_log,節流才有東西可讀。
+        #     測試環境 SMTP 主機是空的,所以走 mock 分支不會真的寄出去。
+        assert email_service.send_admin_alert("myai_sync", "主旨", "<p>x</p>") == 1
+        assert email_service.send_admin_alert("myai_sync", "主旨", "<p>x</p>") == 0
+
+    def test_a_different_kind_is_not_throttled(self, shared_db):
+        """ZH: 節流是**分類**的。MYAI 壞掉不該讓退信回收的告警也發不出來。"""
+        crud.set_settings(shared_db, {"admin_alert_emails": "ops@mcu.edu.tw"})
+        assert email_service.send_admin_alert("myai_sync", "主旨", "<p>x</p>") == 1
+        assert email_service.send_admin_alert("bounce_scan", "主旨", "<p>x</p>") == 1
+
+    def test_throttle_expires(self, shared_db):
+        """
+        ZH: **陽性對照。** 上面那條「第二次回 0」如果是因為別的原因(例如收件人沒讀到)
+            而回 0,它一樣會綠。這條把上一封的時間往前撥,證明**時間到了就會再寄** ——
+            兩條一起看才知道回 0 是節流,不是壞掉。
+        """
+        from datetime import datetime, timedelta, timezone
+        from app import models
+        crud.set_settings(shared_db, {"admin_alert_emails": "ops@mcu.edu.tw",
+                                      "admin_alert_min_hours": 6})
+        assert email_service.send_admin_alert("myai_sync", "主旨", "<p>x</p>") == 1
+        assert email_service.send_admin_alert("myai_sync", "主旨", "<p>x</p>") == 0
+
+        row = (shared_db.query(models.EmailLog)
+               .filter(models.EmailLog.kind == "alert:myai_sync")
+               .order_by(models.EmailLog.created_at.desc()).first())
+        row.created_at = datetime.now(timezone.utc) - timedelta(hours=7)
+        shared_db.commit()
+
+        assert email_service.send_admin_alert("myai_sync", "主旨", "<p>x</p>") == 1
+
+
+class TestAdminAlertRecipientValidation:
+    def test_multiple_addresses_are_normalised(self, db):
+        crud.set_settings(db, {"admin_alert_emails": " a@mcu.edu.tw ,b@mcu.edu.tw "})
+        assert crud.get_setting(db, "admin_alert_emails") == "a@mcu.edu.tw, b@mcu.edu.tw"
+
+    def test_one_bad_address_rejects_the_whole_list(self, db):
+        """ZH: 不能只存好的那幾個 —— 那會變成「安靜地少寄給一個人」。"""
+        with pytest.raises(ValueError) as e:
+            crud.set_settings(db, {"admin_alert_emails": "ok@mcu.edu.tw, 壞掉的"})
+        assert "壞掉的" in str(e.value)
+
+
+class TestSchedulerAlertHelperNeverRaises:
+    def test_alert_helper_swallows_failures(self, monkeypatch):
+        """ZH: 呼叫點都在 except 區塊裡,在那裡再炸一次會打斷整個背景迴圈。"""
+        from app import scheduler
+        def _boom(*a, **k):
+            raise RuntimeError("寄信炸了")
+        monkeypatch.setattr(email_service, "send_admin_alert", _boom)
+        scheduler._alert("myai_sync", "標題", "細節")   # ZH: 不該拋出來

@@ -212,6 +212,13 @@ docker volume prune -f         # 移除 dangling volume
 | 場景 | 動作 |
 |---|---|
 | **學生**忘記密碼（SSO 帳號）| 平台無法重設 → 請他到學校中央入口 <https://www1.mcu.edu.tw/ForgetPassword.aspx>（學號＋身分證字號）|
+> **管理員告警信（v3.8）**：MYAI 自動同步失敗、退信回收失敗這兩件事以前只寫容器日誌，
+> 沒有人會翻。現在會寄信給 admin「平台設定 → 寄信（SMTP）→ 管理員告警收件人」清單上的人。
+> **收件人留空（預設）＝完全不寄。** 同一類告警有最短間隔（預設 6 小時），
+> 避免壞掉的東西每輪寄一封把收件人洗到把規則設成全部丟垃圾桶。
+> 告警到底出得去沒有，看寄信紀錄頁 `alert:*` 那幾筆的狀態——
+> 收件人填錯的話會是 `blocked`／`refused`，而且**照樣計入節流**。
+
 | **本機帳號**忘記密碼（老師/admin）| admin UI → 使用者管理 → 找該 user → Reset → 系統寄信（**需先設定 SMTP**，否則無法送達；v3.8 起可在 admin「平台設定 → 寄信（SMTP）」設，密碼仍在 `.env`）|
 | Lab 卡住、要強制停 | admin UI → Lab Sessions → Force Stop（或 API `POST /admin/lab/sessions/<uid>/force-stop`）|
 | 某學生濫用 Token | admin UI → 該 user → 調 `tokens_limit` |

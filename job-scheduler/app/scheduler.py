@@ -246,6 +246,32 @@ async def _storage_lifecycle_loop():
 # EN: v2.8 MYAI vendor auto-sync loop (every N hours, read-only)
 # ==============================================================================
 
+def _alert(kind: str, title: str, detail: str) -> None:
+    """
+    ZH: 把背景迴圈裡「被吞掉的錯誤」寄給管理員。
+
+    ZH: 這些 except 區塊原本只有 logger —— 而容器日誌沒有人會定期翻。
+        症狀共通點是**畫面上一切正常**:同步停了、退信收不到,
+        管理端看起來都跟平常一樣。
+
+    ZH: 節流與「收件人留空就不寄」都在 email_service.send_admin_alert 裡,
+        這裡不重複判斷。**本函式不拋錯** —— 呼叫點都在 except 區塊內,
+        在那裡再炸一次會把整個背景迴圈打斷。
+
+    @node job-scheduler/app/scheduler.py::_alert
+    """
+    try:
+        from .services import email_service
+        html = (f"<p><b>{title}</b></p>"
+                f"<p>時間（UTC）：{datetime.now(timezone.utc):%Y-%m-%d %H:%M:%S}</p>"
+                f"<pre>{detail[:1000]}</pre>"
+                f"<p>這封信由平台自動寄出。要調整收件人或間隔："
+                f"管理端 → 平台設定 → 寄信（SMTP）。</p>")
+        email_service.send_admin_alert(kind, f"[AI Base 告警] {title}", html)
+    except Exception as e:  # noqa: BLE001
+        logger.warning("寄送管理員告警失敗（不影響背景迴圈）：%s", e)
+
+
 async def _myai_sync_loop():
     """ZH: headless 同步 myai168 帳號/Token。帳密未設則不啟用（帳密是 .env，非 runtime）。
        v3.1 step 6：同步間隔改由 SystemConfig(myai_sync_interval_hours) 每輪重讀，admin 可即時調；
@@ -280,6 +306,10 @@ async def _myai_sync_loop():
                     logger.info(f"ZH: MYAI 自動同步完成 | EN: MYAI auto-sync done: {res}")
                 except Exception as e:  # noqa: BLE001
                     logger.error(f"ZH: MYAI 自動同步錯誤 | EN: MYAI auto-sync error: {e}")
+                    # ZH: v3.8 這一行以前只寫 log。2026-08-16 廠商改版讓同步靜默失效
+                    #     **29 天、漏 201 筆**,而錯誤就在這個位置被吞掉 ——
+                    #     沒有人會去翻容器日誌。收件人沒設定就不會寄,所以是安全的。
+                    _alert("myai_sync", "MYAI 自動同步失敗", str(e))
                 sleep_s = interval_hours * 3600
         finally:
             db.close()
@@ -381,8 +411,12 @@ async def _bounce_scan_loop():
                 db.close()
         except bounce_reader.BounceReaderError as e:
             logger.warning(f"ZH: 退信回收未執行（設定或連線問題）: {e}")
+            # ZH: 這條是「沒設定或連不上」,不是程式壞了 —— 但結果一樣是
+            #     **退信全部收不到而畫面上一切正常**,所以照樣要讓人知道。
+            _alert("bounce_scan", "退信回收未執行", str(e))
         except Exception as e:  # noqa: BLE001
             logger.warning(f"ZH: 退信回收錯誤（略過本輪）: {e}")
+            _alert("bounce_scan", "退信回收發生錯誤", str(e))
         try:
             await asyncio.sleep(sleep_s)
         except asyncio.CancelledError:
