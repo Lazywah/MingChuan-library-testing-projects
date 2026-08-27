@@ -1166,3 +1166,17 @@ textarea.field__input { resize: vertical; min-height: 6rem; }
     font: inherit;
 }
 .onb__err { margin: 0 0 var(--space-3); color: var(--mcu-error-600); font-size: 0.9rem; }
+
+/* ZH: 二次確認頁的對照表。送出之後這幾項就鎖住了,所以要把選到的值
+ *     原樣攤開讓人看一眼 —— 手殘按錯的代價是等管理員核可解鎖。 */
+.onb__review {
+    margin-bottom: var(--space-4);
+    padding: var(--space-3);
+    background: var(--surface-2);
+    border-radius: var(--radius-sm);
+}
+.onb__row { display: flex; gap: var(--space-3); padding: var(--space-1) 0; }
+.onb__k { flex: 0 0 6em; color: var(--text-muted); }
+.onb__v { color: var(--text-strong); font-weight: 600; }
+/* ZH: 兩顆鈕直排。btn--block 本來就有 margin-top,所以只補間距不重設。 */
+.onb__box .btn--block + .btn--block { margin-top: var(--space-2); }

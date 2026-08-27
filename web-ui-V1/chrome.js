@@ -553,16 +553,21 @@
 
     async function maybeShowOnboarding(me) {
         if (!me || me.onboarded_at) return;          // ZH: 設定過就不再問
-        var opts;
         try {
             var r = await fetch(API + '/system/org-options', { headers: authHeaders() });
             if (!r.ok) return;                       // ZH: 讀不到選項就不要擋住人
-            opts = await r.json();
+            _onbOpts = await r.json();
         } catch (e) { return; }
-        buildOnboarding(me, opts);
+        buildOnboarding(me, _onbOpts, null);
     }
 
-    function buildOnboarding(me, opts) {
+    // ZH: 選項清單存起來 —— 從確認頁「返回修改」時要重畫第一頁,
+    //     再打一次 API 只是讓他多等一次而已。
+    var _onbOpts = null;
+
+    // ZH: `prefill` 是從確認頁返回時帶回來的選擇。沒有它的話,
+    //     使用者按返回等於從頭再選一次 —— 那比沒有返回鍵更氣人。
+    function buildOnboarding(me, opts, prefill) {
         var field = onbFieldFor(me.role);
         var box = document.createElement('div');
         box.className = 'onb';
@@ -626,22 +631,98 @@
                   + orgHtml + '</select></div>'
                 : '')
             + '<button class="btn btn--primary btn--block" type="button" id="onb-go">'
-            + esc(T('onb_save', '完成設定')) + '</button>'
+            + esc(T('onb_next', '下一步')) + '</button>'
             + '</div>';
 
         document.body.appendChild(box);
+
+        if (prefill) {
+            var cs = box.querySelector('#onb-campus');
+            if (multi) {
+                Array.prototype.forEach.call(cs.options, function (o) {
+                    o.selected = prefill.campuses.indexOf(o.value) >= 0;
+                });
+            } else {
+                cs.value = prefill.campuses[0] || '';
+            }
+            var oe = box.querySelector('#onb-org');
+            if (oe && prefill.org) oe.value = prefill.org;
+        }
+
         box.querySelector('#onb-go').addEventListener('click', function () {
-            submitOnboarding(box, multi, field);
+            reviewOnboarding(box, multi, field);
         });
     }
 
-    async function submitOnboarding(box, multi, field) {
+    // ── 二次確認（v3.8）──────────────────────────────────────────────
+    // ZH: 送出之後這幾項就**鎖住**了 —— 要再改得發問題回報、等管理員核可解鎖。
+    //     所以手殘按到的代價不是「重按一次」而是「等好幾天」。
+    //     確認頁把選到的值原樣列出來,並明講之後不能自己改。
+    //
+    // ZH: 🔴 **確認頁不重新讀取欄位** —— 它顯示的就是待會要送出的那份資料。
+    //     重讀的話,顯示與送出會是兩次不同的讀取,中間任何變動都看不出來。
+    function reviewOnboarding(box, multi, field) {
         var sel = box.querySelector('#onb-campus');
         var campuses = multi
             ? Array.prototype.slice.call(sel.selectedOptions).map(function (o) { return o.value; })
             : (sel.value ? [sel.value] : []);
         var orgEl = box.querySelector('#onb-org');
-        var btn = box.querySelector('#onb-go');
+        var orgValue = orgEl ? orgEl.value : null;
+        var err = box.querySelector('#onb-err');
+
+        // ZH: 明顯的漏填在這裡先擋 —— 讓他確認一份空的再被後端退回很不友善。
+        if (!campuses.length) {
+            err.textContent = T('onb_need_campus', '請先選擇校區。');
+            err.hidden = false;
+            return;
+        }
+        if (orgEl && !orgValue) {
+            err.textContent = field === 'unit'
+                ? T('onb_need_unit', '請先選擇行政單位。')
+                : T('onb_need_dept', '請先選擇學系。');
+            err.hidden = false;
+            return;
+        }
+        err.hidden = true;
+
+        var orgLabel = orgEl && orgEl.selectedOptions[0]
+            ? orgEl.selectedOptions[0].textContent : '';
+        var rows = '<div class="onb__row"><span class="onb__k">'
+            + esc(T('onb_campus', '校區')) + '</span><span class="onb__v">'
+            + esc(campuses.join('、')) + '</span></div>'
+            + (orgEl
+                ? '<div class="onb__row"><span class="onb__k">'
+                  + esc(field === 'unit' ? T('onb_unit', '行政單位') : T('onb_dept', '學系'))
+                  + '</span><span class="onb__v">' + esc(orgLabel) + '</span></div>'
+                : '');
+
+        box.querySelector('.onb__box').innerHTML =
+            '<h2 class="onb__title" id="onb-title">'
+            + esc(T('onb_confirm_title', '確認一下')) + '</h2>'
+            + '<p class="onb__sub">' + esc(T('onb_confirm_sub',
+                '送出之後這些資料就不能自己修改了。要更改需要向管理員申請。')) + '</p>'
+            + '<p class="onb__err" id="onb-err" hidden></p>'
+            + '<div class="onb__review">' + rows + '</div>'
+            + '<button class="btn btn--primary btn--block" type="button" id="onb-yes">'
+            + esc(T('onb_confirm_yes', '確認送出')) + '</button>'
+            + '<button class="btn btn--ghost btn--block" type="button" id="onb-back">'
+            + esc(T('onb_confirm_back', '返回修改')) + '</button>';
+
+        box.querySelector('#onb-yes').addEventListener('click', function () {
+            submitOnboarding(box, campuses, orgValue);
+        });
+        // ZH: 返回就重畫第一頁 —— 但**要把剛才選的帶回去**,
+        //     不然他返回之後得從頭再選一次,那比沒有返回鍵更氣人。
+        box.querySelector('#onb-back').addEventListener('click', function () {
+            box.remove();
+            buildOnboarding(_me, _onbOpts, { campuses: campuses, org: orgValue });
+        });
+    }
+
+    // ZH: 收的是**確認頁顯示過的那份值**,不是重新讀欄位 ——
+    //     重讀的話「他看到的」與「送出去的」會是兩次不同的讀取。
+    async function submitOnboarding(box, campuses, orgValue) {
+        var btn = box.querySelector('#onb-yes');
         var err = box.querySelector('#onb-err');
 
         btn.disabled = true;
@@ -649,8 +730,7 @@
             var r = await fetch(API + '/system/onboarding', {
                 method: 'POST',
                 headers: Object.assign({ 'Content-Type': 'application/json' }, authHeaders()),
-                body: JSON.stringify({ campuses: campuses,
-                                       org_value: orgEl ? orgEl.value : null }),
+                body: JSON.stringify({ campuses: campuses, org_value: orgValue }),
             });
             if (!r.ok) {
                 // ZH: 後端的訊息是給人看的（「請選擇校區」「沒有這個學系」）,直接顯示。

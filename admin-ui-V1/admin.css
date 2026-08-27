@@ -95,10 +95,16 @@
 
 .adm-sec__head {
     display: flex;
-    align-items: baseline;
+    /* ZH: 2026-08-27 從 baseline 改成 center。
+     *     baseline 是**依文字基線**對齊,而原生 <input type="date"> 的基線
+     *     跟按鈕不一樣 —— 實測整組日期被推低 12px,看起來就是「沒對齊」。
+     *     這一列是工具列（標題 + 控制項）,置中才是對的。 */
+    align-items: center;
     gap: var(--space-3);
     margin-bottom: var(--space-3);
+    flex-wrap: wrap;      /* ZH: 窄畫面時整組換行,不要把標題列撐爆 */
 }
+
 
 .adm-sec__head h2 {
     margin: 0;
@@ -136,6 +142,12 @@
     width: auto;
     min-width: 9.5rem;      /* ZH: 放得下 YYYY-MM-DD 與瀏覽器自己的日曆圖示 */
     font-size: 0.875rem;
+    /* ZH: 2026-08-27 對齊同一列的按鈕高度（--tap-min = 44px）。
+     *     .field__input 的 padding 是 12px 上下,算出來 51px ——
+     *     跟旁邊 44px 的按鈕擺在一起就是差 7px 的參差。
+     *     padding-block 歸零 + 固定高度,左右 padding 保留。 */
+    height: var(--tap-min);
+    padding-block: 0;
 }
 
 /* ── 需要你處理的 ──────────────────────────────────────────────────────────
@@ -320,6 +332,7 @@
 .adm-inline {
     display: flex;
     flex-wrap: wrap;
+    align-items: center;   /* ZH: 不置中的話標籤會被拉成跟輸入框一樣高,文字黏在頂端 */
     gap: var(--space-2);
     margin-top: var(--space-3);
 }
@@ -411,6 +424,10 @@
 .adm-sec__head h2 {
     flex: none;
     white-space: nowrap;
+    /* ZH: 2026-08-27 標題的下外距歸零。align-items:center 對齊的是**外邊距框** ——
+     *     h1 帶著 margin-bottom:12px 的話,文字看起來會比同一列的控制項高 12px,
+     *     而那正是「沒對齊」的第二個來源（第一個是 baseline,見上面）。 */
+    margin: 0;
 }
 
 /* ── 核取方塊 ─────────────────────────────────────────────────────────────
@@ -1078,3 +1095,37 @@ textarea.field__input {
     color: var(--text-strong);
     font-variant-numeric: tabular-nums;
 }
+
+/* ── 區塊標題右側的控制項（數據頁的「分組方式」）─────────────────────
+ * ZH: 2026-08-27 新增。原本借用 .adm-inline —— 那個 class 是給
+ *     「加額度那排」用的,帶著 margin-top 又會換行,
+ *     擺進標題列的實測結果是**整組換成兩行、84px 高**。
+ * ZH: 下拉的字級與高度對齊同一列的按鈕,否則三種控制項三種高度。
+ * ─────────────────────────────────────────────────────────────── */
+.adm-sec__tool {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    white-space: nowrap;
+    font-size: 0.8125rem;
+    color: var(--text-muted);
+}
+.adm-sec__tool .field__input {
+    width: auto;
+    height: var(--tap-min);
+    padding-block: 0;
+    font-size: 0.875rem;
+}
+
+/* ── 標題列子元素的外距歸零（位置有意義，見下）──────────────────────
+ * ZH: 2026-08-27。這是「沒對齊」的第三個也最不直覺的來源:
+ *     align-items:center 對齊的是**外邊距框**,而這些元件在別處是直排堆疊用的,
+ *     各自帶著不同的 margin-top（.adm-inline 12px、.footnote 24px、標題 0）——
+ *     於是三種控制項在同一列上停在三個高度。
+ *     水平間距由容器的 gap 給,子元素不需要自己有外距。
+ *
+ * ZH: 🔴 **這條必須放在 `.adm-inline` 之後。** 兩者權重相同（都是一個類別選擇器）,
+ *     所以誰在後面誰贏 —— 放在檔案前面的話它會被 `.adm-inline` 的 margin-top
+ *     蓋掉,而症狀是「規則明明寫了卻沒有效果」,在 devtools 裡才看得出被劃掉。
+ * ─────────────────────────────────────────────────────────────── */
+.adm-sec__head > * { margin-block: 0; }
