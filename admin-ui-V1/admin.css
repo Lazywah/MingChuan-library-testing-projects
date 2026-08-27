@@ -106,6 +106,18 @@
     color: var(--text-strong);
 }
 
+/* ZH: 分區小標（營運設定依 MYAI / 平台 / 小基 分組）。
+ * ZH: 比 h2 小一階，而且**不用 --accent** —— 這一區已經有「已覆寫」的黃色藥丸，
+ *     小標再上黃色會跟它搶，管理者就分不出哪個才是「你改過這一項」。
+ * ZH: 第一個小標不要頂上多餘的間距（它緊接在說明文字下面）。 */
+.adm-subhead {
+    margin: var(--space-6) 0 var(--space-2);
+    font-size: 0.9375rem;
+    font-weight: 700;
+    color: var(--text-strong);
+}
+.adm-subhead:first-child { margin-top: var(--space-2); }
+
 /* ── 需要你處理的 ──────────────────────────────────────────────────────────
    ZH: 沒事的時候**要明確說沒事**（.adm-clear），不要留白。
        留白與「還在載入」在畫面上長得一模一樣，人會多等、重新整理、再懷疑壞了。 */

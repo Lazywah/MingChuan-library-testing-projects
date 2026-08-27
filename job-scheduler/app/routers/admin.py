@@ -79,7 +79,10 @@ def get_system_settings(
 
     @node job-scheduler/app/routers/admin.py::get_system_settings
     """
-    return {"settings": crud.get_all_settings(db)}
+    # ZH: 分組定義一起送 —— **有順序**，前端照著畫分區，不自己維護一份對照表。
+    #     前端自己維護的話，後端新增旋鈕時前端那份會漏掉，
+    #     而漏掉的表現是那個旋鈕安靜地不出現在任何一區。
+    return {"settings": crud.get_all_settings(db), "groups": crud.SETTING_GROUPS}
 
 
 @router.put("/system-settings", summary="更新營運型系統設定（值留空＝回退預設）")

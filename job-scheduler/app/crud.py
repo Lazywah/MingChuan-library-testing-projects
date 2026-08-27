@@ -1410,31 +1410,45 @@ def set_system_config(db: Session, key: str, value: str, description: Optional[s
 # EN: v3.1 step 6 — runtime-tunable operational settings (admin UI). SystemConfig overrides
 #     the .env/Settings default; values are type-checked and clamped to a safe range.
 # ==============================================================================
+# ZH: 分組。**有順序** —— 畫面就照這個順序分區，前端不另外排。
+#
+# ZH: 為什麼分組定義放後端而不是前端：新增一個旋鈕時，`group` 是**必填**
+#     （下面有自檢會擋），所以加設定的人一定會想「這屬於哪一區」。
+#     放前端的話，前端那份對照表遲早漏掉新的 key，而漏掉的表現是
+#     那個旋鈕**安靜地從畫面上消失**（它不屬於任何一區）。
+SETTING_GROUPS = [
+    {"key": "platform",  "label": "平台營運"},
+    {"key": "myai",      "label": "MYAI 廠商整合"},
+    {"key": "assistant", "label": "小基（RAG 助手）"},
+]
+_GROUP_KEYS = {g["key"] for g in SETTING_GROUPS}
+
+
 SYSTEM_SETTINGS = {
-    "monthly_token_limit":      {"type": "int",   "default": lambda: settings.DEFAULT_MONTHLY_TOKEN_LIMIT, "min": 0,   "max": None, "label": "每月 Token 額度(新帳號預設；改既有帳號用批量設定)"},
-    "token_reset_day":          {"type": "int",   "default": lambda: settings.TOKEN_RESET_DAY,             "min": 1,   "max": 28,   "label": "額度重置日(每月第幾天)"},
-    "job_timeout_minutes":      {"type": "int",   "default": lambda: settings.JOB_TIMEOUT_MINUTES,         "min": 1,   "max": None, "label": "任務逾時(分鐘)"},
-    "myai_sync_interval_hours": {"type": "int",   "default": lambda: settings.MYAI_SYNC_INTERVAL_HOURS,    "min": 0,   "max": 168,  "label": "MYAI 同步間隔(小時, 0=關閉)"},
-    "rag_top_k":                {"type": "int",   "default": lambda: settings.RAG_TOP_K,                   "min": 1,   "max": 20,   "label": "小基 RAG 取回片段數"},
-    "rag_min_score":            {"type": "float", "default": lambda: settings.RAG_MIN_SCORE,               "min": 0.0, "max": 1.0,  "label": "小基 RAG 相似度門檻"},
-    "rag_history_turns":        {"type": "int",   "default": lambda: settings.RAG_HISTORY_TURNS,           "min": 0,   "max": 20,   "label": "小基 RAG 帶入對話輪數"},
+    "monthly_token_limit":      {"group": "platform", "type": "int",   "default": lambda: settings.DEFAULT_MONTHLY_TOKEN_LIMIT, "min": 0,   "max": None, "label": "每月 Token 額度(新帳號預設；改既有帳號用批量設定)"},
+    "token_reset_day":          {"group": "platform", "type": "int",   "default": lambda: settings.TOKEN_RESET_DAY,             "min": 1,   "max": 28,   "label": "額度重置日(每月第幾天)"},
+    "job_timeout_minutes":      {"group": "platform", "type": "int",   "default": lambda: settings.JOB_TIMEOUT_MINUTES,         "min": 1,   "max": None, "label": "任務逾時(分鐘)"},
+    "myai_sync_interval_hours": {"group": "myai", "type": "int",   "default": lambda: settings.MYAI_SYNC_INTERVAL_HOURS,    "min": 0,   "max": 168,  "label": "MYAI 同步間隔(小時, 0=關閉)"},
+    "rag_top_k":                {"group": "assistant", "type": "int",   "default": lambda: settings.RAG_TOP_K,                   "min": 1,   "max": 20,   "label": "小基 RAG 取回片段數"},
+    "rag_min_score":            {"group": "assistant", "type": "float", "default": lambda: settings.RAG_MIN_SCORE,               "min": 0.0, "max": 1.0,  "label": "小基 RAG 相似度門檻"},
+    "rag_history_turns":        {"group": "assistant", "type": "int",   "default": lambda: settings.RAG_HISTORY_TURNS,           "min": 0,   "max": 20,   "label": "小基 RAG 帶入對話輪數"},
     # v3.3 MYAI 自動開通
-    "myai_autoprovision":       {"type": "int",   "default": lambda: 0,                                    "min": 0,   "max": 1,    "label": "MYAI 首次登入自動開通(1=開, 0=關)"},
-    "myai_init_pwd_days":       {"type": "int",   "default": lambda: 30,                                   "min": 1,   "max": 180,  "label": "MYAI 初始密碼保存天數(逾期自動清除)"},
-    "myai_initial_credit":      {"type": "int",   "default": lambda: 0,                                    "min": 0,   "max": None, "label": "MYAI 新帳號初始點數(0=不發放)"},
+    "myai_autoprovision":       {"group": "myai", "type": "int",   "default": lambda: 0,                                    "min": 0,   "max": 1,    "label": "MYAI 首次登入自動開通(1=開, 0=關)"},
+    "myai_init_pwd_days":       {"group": "myai", "type": "int",   "default": lambda: 30,                                   "min": 1,   "max": 180,  "label": "MYAI 初始密碼保存天數(逾期自動清除)"},
+    "myai_initial_credit":      {"group": "myai", "type": "int",   "default": lambda: 0,                                    "min": 0,   "max": None, "label": "MYAI 新帳號初始點數(0=不發放)"},
     # v3.3 刪除使用者後 Lab volume 的封存保留天數（逾期背景任務真正刪除）
-    "lab_archive_days":         {"type": "int",   "default": lambda: 30,                                   "min": 1,   "max": 365,  "label": "刪除帳號後 Lab 資料封存天數(逾期銷毀)"},
+    "lab_archive_days":         {"group": "platform", "type": "int",   "default": lambda: 30,                                   "min": 1,   "max": 365,  "label": "刪除帳號後 Lab 資料封存天數(逾期銷毀)"},
     # v3.4 有使用者在線時的 MYAI 輪詢間隔（無人在線會完全跳過，不受此值影響）
-    "myai_active_poll_minutes": {"type": "int",   "default": lambda: 3,                                    "min": 1,   "max": 60,   "label": "MYAI 輪詢間隔(分, 僅有人在線時; 無人時自動休息)"},
-    "myai_usage_window_min":    {"type": "int",   "default": lambda: 15,                                   "min": 1,   "max": 180,  "label": "判定「正在使用 MYAI」的時間窗(分)"},
-    "bounce_scan_minutes":      {"type": "int",   "default": lambda: 30,                                   "min": 0,   "max": 1440, "label": "退信回收掃描間隔(分, 0=停用)"},
+    "myai_active_poll_minutes": {"group": "myai", "type": "int",   "default": lambda: 3,                                    "min": 1,   "max": 60,   "label": "MYAI 輪詢間隔(分, 僅有人在線時; 無人時自動休息)"},
+    "myai_usage_window_min":    {"group": "myai", "type": "int",   "default": lambda: 15,                                   "min": 1,   "max": 180,  "label": "判定「正在使用 MYAI」的時間窗(分)"},
+    "bounce_scan_minutes":      {"group": "platform", "type": "int",   "default": lambda: 30,                                   "min": 0,   "max": 1440, "label": "退信回收掃描間隔(分, 0=停用)"},
     # ZH: v3.7 小基要用哪個模型回答。值是**模型登錄表裡的 api_model_id**，
     #     選項由「平台設定 → 模型」那張表決定，所以不必在這裡維護一份清單。
     #
     # ZH: ⚠ 選外部模型（Claude / Gemini）代表**把問題送到校外廠商**——
     #     而小基的程式家教模式會讀使用者自己的檔案。介面上要講清楚，
     #     這是政策決定不只是設定。
-    "rag_chat_model":           {"type": "choice", "default": lambda: settings.RAG_CHAT_MODEL,             "min": None, "max": None, "label": "小基回應用的模型"},
+    "rag_chat_model":           {"group": "assistant", "type": "choice", "default": lambda: settings.RAG_CHAT_MODEL,             "min": None, "max": None, "label": "小基回應用的模型"},
 }
 
 
@@ -1513,6 +1527,16 @@ def rag_model_provider(db: Session, model_id: str) -> str:
     return ((row.api_provider or "ollama").lower() if row else "ollama")
 
 
+# ZH: 自檢。漏標或標錯 group 的旋鈕會在**匯入時**就炸掉，
+#     而不是安靜地從管理畫面上消失（後者沒有人會回報）。
+_missing = [k for k, v in SYSTEM_SETTINGS.items()
+            if v.get("group") not in _GROUP_KEYS]
+if _missing:
+    raise RuntimeError(
+        "SYSTEM_SETTINGS 裡這些旋鈕沒有合法的 group：%s"
+        "（可用：%s）" % (_missing, sorted(_GROUP_KEYS)))
+
+
 def get_all_settings(db: Session) -> list:
     """ZH: 給 admin GET — 每個 key 的 生效值/預設值/範圍/是否已覆寫。
 
@@ -1523,6 +1547,7 @@ def get_all_settings(db: Session) -> list:
         raw = get_system_config(db, key, "")
         item = {
             "key": key,
+            "group": spec["group"],
             "label": spec["label"],
             "type": spec["type"],
             "value": get_setting(db, key),

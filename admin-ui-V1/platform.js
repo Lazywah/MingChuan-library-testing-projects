@@ -179,9 +179,15 @@
     var SETTINGS = [];
     var EDITING = false;
 
+    var GROUPS = [];
+
     async function loadSettings() {
         try {
-            SETTINGS = (await api('/admin/system-settings')).settings || [];
+            var r = await api('/admin/system-settings');
+            SETTINGS = r.settings || [];
+            // ZH: 分組與順序都由後端決定 —— 前端不維護對照表，
+            //     不然後端新增旋鈕時這裡會漏，而漏掉的旋鈕會安靜地不出現。
+            GROUPS = r.groups || [];
         } catch (e) {
             $('settings').innerHTML = '<p class="footnote">'
                 + esc(T('ov_fail_part', '這一段暫時讀不到（{w}）').replace('{w}', e.message)) + '</p>';
@@ -208,7 +214,9 @@
                     ['pf_default_h', '預設'], ['pf_range_h', '範圍']];
         if (EDITING) cols = cols.concat([['', '']]);
 
-        $('settings').innerHTML = tableHtml(cols, SETTINGS.map(function (s2) {
+        // ZH: 一列的 HTML。抽出來是為了讓下面能按分組各自組表，
+        //     而不是把整個 map 複製三份。
+        function rowHtml(s2) {
             var range = (s2.min != null && s2.max != null)
                 ? T('pf_range', '{min}–{max}').replace('{min}', s2.min).replace('{max}', s2.max)
                 : '—';
@@ -251,7 +259,35 @@
                 + '<td class="num"><button class="btn btn--minor" type="button"'
                 + ' data-reset="' + esc(s2.key) + '"' + (s2.overridden ? '' : ' disabled') + '>'
                 + esc(T('pf_reset', '回到預設')) + '</button></td></tr>';
-        }).join(''));
+        }
+
+        // ZH: 依後端給的順序分區。
+        //
+        // ZH: 🔴 **不屬於任何已知分組的旋鈕要有地方去**。
+        //     後端雖然有自檢擋著（漏標 group 會在匯入時就炸），
+        //     但假如前後端版本對不上（例如瀏覽器快取了舊的 JS），
+        //     漏接的旋鈕就會**安靜地消失** —— 而那是沒有人會回報的故障。
+        //     所以這裡兵分兩路：有分組就按分組，剩下的一律掃進最後一區。
+        var known = {};
+        GROUPS.forEach(function (g) { known[g.key] = true; });
+        var leftover = SETTINGS.filter(function (x) { return !known[x.group]; });
+
+        var blocks = GROUPS.map(function (g) {
+            var rows = SETTINGS.filter(function (x) { return x.group === g.key; });
+            if (!rows.length) return '';        // 空的分組不畫標題
+            return '<h3 class="adm-subhead">' + esc(g.label) + '</h3>'
+                 + tableHtml(cols, rows.map(rowHtml).join(''));
+        });
+
+        if (leftover.length) {
+            blocks.push('<h3 class="adm-subhead">'
+                + esc(T('pf_group_other', '其他')) + '</h3>'
+                + tableHtml(cols, leftover.map(rowHtml).join('')));
+        }
+
+        // ZH: 一個都沒有的話講清楚，不要留一塊空白讓人以為還在載入。
+        $('settings').innerHTML = blocks.join('')
+            || '<p class="footnote">' + esc(T('pf_no_settings', '目前沒有可調的設定。')) + '</p>';
 
         wireExternalWarning();
 
