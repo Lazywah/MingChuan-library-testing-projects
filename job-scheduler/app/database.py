@@ -267,7 +267,11 @@ def init_db():
             # --- v3.8 組織欄位：行政單位與校區（學院由 org_departments 推導，不存欄位）---
             try: conn.execute(text("ALTER TABLE users ADD COLUMN unit VARCHAR"))
             except Exception: pass
-            try: conn.execute(text("ALTER TABLE users ADD COLUMN campus VARCHAR"))
+            # ZH: campus 同一天內從單一欄位改成 user_campuses 關聯表（教職員可多校區）。
+            #     這個欄位從來沒有被寫入過任何值就被換掉了,所以直接移除 ——
+            #     留著不用的欄位就是下一個 online_status（deprecated 了三版還在表上）。
+            #     SQLite 3.35+ 才支援 DROP COLUMN;舊版會失敗而欄位留著,不影響功能。
+            try: conn.execute(text("ALTER TABLE users DROP COLUMN campus"))
             except Exception: pass
             # --- v3.8 Lab 封存銷毀前的提醒（寄出時間，分第一封與最後一封）---
             try: conn.execute(text("ALTER TABLE archived_lab_volumes ADD COLUMN reminded_first_at DATETIME"))

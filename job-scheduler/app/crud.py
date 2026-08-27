@@ -1729,6 +1729,56 @@ def seed_org_tables(db: Session) -> dict:
     return out
 
 
+def campuses_of(db: Session, user_id: str) -> list:
+    """ZH: 這個人所屬的校區（可能多個）。順序照 org_seed.CAMPUSES,不是插入順序。
+
+    @node job-scheduler/app/crud.py::campuses_of
+    """
+    from . import org_seed
+    got = {r.campus for r in db.query(models.UserCampus)
+           .filter(models.UserCampus.user_id == user_id).all()}
+    return [c for c in org_seed.CAMPUSES if c in got]
+
+
+def set_user_campuses(db: Session, user: models.User, campuses: list) -> list:
+    """
+    ZH: 設定一個人的校區。**規則的唯一實作點。**
+
+    ZH: 規則（擁有者裁定 2026-08-27）：
+          學生 —— 只能一個
+          其餘 —— 不限（教職員可能同時在台北與桃園有課）
+
+    ZH: 為什麼規則在這裡而不是資料庫約束：SQLite 的 CHECK 看不到 users.role,
+        拆成兩半會讓「規則到底是什麼」要看兩個地方。代價是繞過這支函式直接寫表
+        就不受約束 —— 所以**寫入一律走這裡**，不要在別處 db.add(UserCampus)。
+
+    ZH: 校區名一律對照 org_seed.CAMPUSES 驗，打錯的值存進去之後
+        分組統計會多出一個沒有人看得懂的類別,而且不會報錯。
+
+    @node job-scheduler/app/crud.py::set_user_campuses
+    """
+    from . import org_seed
+    want = []
+    for c in campuses or []:
+        c = (c or "").strip()
+        if not c:
+            continue
+        if c not in org_seed.CAMPUSES:
+            raise ValueError(f"沒有這個校區：{c}（可選：{'、'.join(org_seed.CAMPUSES)}）")
+        if c not in want:
+            want.append(c)
+
+    if user.role == "student" and len(want) > 1:
+        raise ValueError(f"學生只能屬於一個校區（收到 {len(want)} 個：{'、'.join(want)}）")
+
+    db.query(models.UserCampus).filter(
+        models.UserCampus.user_id == user.id).delete(synchronize_session=False)
+    for c in want:
+        db.add(models.UserCampus(user_id=user.id, campus=c))
+    db.commit()
+    return campuses_of(db, user.id)
+
+
 def college_of(db: Session, department: Optional[str]) -> Optional[str]:
     """
     ZH: 由學系推學院。查不到就回 None —— **不猜**。

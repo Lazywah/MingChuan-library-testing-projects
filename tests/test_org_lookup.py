@@ -102,14 +102,63 @@ class TestOrgOptions:
 
 
 class TestUserColumns:
-    def test_unit_and_campus_are_storable(self, db):
+    def test_unit_is_storable(self, db):
         user = make_user(db)
         user.unit = "資訊網路處/桃園資訊服務組"
-        user.campus = "桃園"
         db.commit()
         db.refresh(user)
-        assert (user.unit, user.campus) == ("資訊網路處/桃園資訊服務組", "桃園")
+        assert user.unit == "資訊網路處/桃園資訊服務組"
 
     def test_college_is_not_a_user_column(self):
         """ZH: 學院刻意不存進 users —— 改對照表要全站生效,不必回填幾千筆。"""
         assert "college" not in models.User.__table__.columns
+
+    def test_campus_is_not_a_user_column_either(self):
+        """
+        ZH: campus 一開始是 users 的單一欄位,同一天改成 user_campuses 關聯表 ——
+            教職員可以同時在台北與桃園有課,單一欄位表達不了。
+            這條釘住「不要再加回去」:兩個地方都存校區就會漂開。
+        """
+        assert "campus" not in models.User.__table__.columns
+
+
+class TestUserCampuses:
+    def test_student_is_limited_to_one(self, db):
+        user = make_user(db, role="student")
+        with pytest.raises(ValueError) as e:
+            crud.set_user_campuses(db, user, ["台北", "桃園"])
+        assert "學生" in str(e.value)
+
+    def test_student_may_have_exactly_one(self, db):
+        user = make_user(db, role="student")
+        assert crud.set_user_campuses(db, user, ["桃園"]) == ["桃園"]
+
+    def test_staff_may_have_several(self, db):
+        """ZH: 教職員同時在台北與桃園有課是常態,這是改成關聯表的理由。"""
+        user = make_user(db, username="s1", email="s1@example.com", role="staff")
+        assert crud.set_user_campuses(db, user, ["桃園", "台北"]) == ["台北", "桃園"]
+
+    def test_order_follows_the_canonical_list_not_insertion(self, db):
+        """ZH: 顯示順序要穩定,否則同一個人在不同頁面上的校區順序會不一樣。"""
+        user = make_user(db, username="s2", email="s2@example.com", role="teacher")
+        assert crud.set_user_campuses(db, user, ["美國分校", "台北", "金門"]) ==             ["台北", "金門", "美國分校"]
+
+    def test_unknown_campus_is_rejected(self, db):
+        """ZH: 打錯的校區名存進去,分組統計會多出一個沒人看得懂的類別而且不報錯。"""
+        user = make_user(db, username="s3", email="s3@example.com", role="teacher")
+        with pytest.raises(ValueError):
+            crud.set_user_campuses(db, user, ["台中"])
+
+    def test_setting_replaces_rather_than_appends(self, db):
+        user = make_user(db, username="s4", email="s4@example.com", role="teacher")
+        crud.set_user_campuses(db, user, ["台北", "桃園"])
+        assert crud.set_user_campuses(db, user, ["金門"]) == ["金門"]
+
+    def test_duplicates_in_the_input_are_collapsed(self, db):
+        user = make_user(db, username="s5", email="s5@example.com", role="student")
+        assert crud.set_user_campuses(db, user, ["台北", "台北"]) == ["台北"]
+
+    def test_empty_clears(self, db):
+        user = make_user(db, username="s6", email="s6@example.com", role="teacher")
+        crud.set_user_campuses(db, user, ["台北"])
+        assert crud.set_user_campuses(db, user, []) == []

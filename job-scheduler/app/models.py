@@ -91,7 +91,8 @@ class User(Base):
     # ZH: v3.8 組織欄位。學院**不在這裡** —— 由 department 經 org_departments 推導。
     #     unit 只有職員（role='staff'）有意義；campus 所有人都可以有。
     unit       = Column(String, nullable=True)                                # ZH: 行政單位（org_units.path）
-    campus     = Column(String, nullable=True)                                # ZH: 所屬校區
+    # ZH: 校區在 user_campuses（多對多）—— 教職員可以同時屬於多個校區
+    #     （擁有者裁定 2026-08-27）。學生限一個,規則在 crud.set_user_campuses。
     # ZH: v3.5 介面偏好——**跟帳號走，不是跟裝置走**（擁有者裁定）：換一台機器登入設定要在。
     #     只有兩個設定，沿用本表既有的個人偏好欄位慣例（tutorial_dismissed / department），
     #     不另開 user_preferences 表。前端另存一份 localStorage 當**快取**（避免載入時閃一下），
@@ -289,6 +290,24 @@ class EmailLog(Base):
     #     只靠 to_email 比對，同一人寄過多封時會對錯封。
     message_id = Column(String, nullable=True, index=True)
     bounced_at = Column(DateTime, nullable=True)             # ZH: 收到退信的時間（status 轉 bounced/deferred）
+
+
+class UserCampus(Base):
+    """
+    ZH: v3.8 使用者 ↔ 校區。**一開始做成 users.campus 單一欄位,同一天改掉了** ——
+        教職員可以同時在台北與桃園有課,單一欄位表達不了。
+
+    ZH: 學生限一個、教職員不限,這條規則放在 crud.set_user_campuses（寫入端），
+        不做成資料庫約束:SQLite 的 CHECK 看不到另一張表的 role,
+        而把規則拆成兩半會讓「規則到底是什麼」要看兩個地方。
+
+    EN: v3.8 user↔campus. Staff may belong to several campuses; students to one.
+    """
+    __tablename__ = "user_campuses"
+
+    user_id = Column(String, ForeignKey("users.id", ondelete="CASCADE"),
+                     primary_key=True)
+    campus  = Column(String, primary_key=True)
 
 
 class OrgDepartment(Base):
