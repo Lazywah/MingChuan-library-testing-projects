@@ -357,6 +357,19 @@
       "tests": [
         "tests/test_lab_purge_reminders.py"
       ]
+    },
+    {
+      "id": "org-lookup",
+      "name": "組織對照（學系→學院、行政單位、校區；學院為推導不存欄位）",
+      "claimed": false,
+      "files": [
+        "job-scheduler/app/org_seed.py",
+        "job-scheduler/app/crud.py",
+        "job-scheduler/app/routers/system.py"
+      ],
+      "tests": [
+        "tests/test_org_lookup.py"
+      ]
     }
   ]
 }

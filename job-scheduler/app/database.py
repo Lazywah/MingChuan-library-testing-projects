@@ -264,6 +264,11 @@ def init_db():
             except Exception: pass
             try: conn.execute(text("ALTER TABLE users ADD COLUMN temp_purpose VARCHAR"))
             except Exception: pass
+            # --- v3.8 組織欄位：行政單位與校區（學院由 org_departments 推導，不存欄位）---
+            try: conn.execute(text("ALTER TABLE users ADD COLUMN unit VARCHAR"))
+            except Exception: pass
+            try: conn.execute(text("ALTER TABLE users ADD COLUMN campus VARCHAR"))
+            except Exception: pass
             # --- v3.8 Lab 封存銷毀前的提醒（寄出時間，分第一封與最後一封）---
             try: conn.execute(text("ALTER TABLE archived_lab_volumes ADD COLUMN reminded_first_at DATETIME"))
             except Exception: pass
@@ -323,5 +328,18 @@ def init_db():
             _db.close()
     except Exception as e:
         logger.warning(f"Seed external_ai_url skipped: {e}")
+
+    # --- v3.8 組織對照種子（學系→學院、行政單位）---
+    # ZH: 只在表是空的時候填。種子是初值不是真相 —— 管理者改過的名字
+    #     不會在下次重開時被蓋回去（見 crud.seed_org_tables 與 org_seed.py 檔頭）。
+    try:
+        from . import crud as _crud
+        _db = SessionLocal()
+        try:
+            _crud.seed_org_tables(_db)
+        finally:
+            _db.close()
+    except Exception as e:  # noqa: BLE001 - 種子失敗不該擋住開機
+        logger.warning(f"Seed org tables skipped: {e}")
 
     logger.info(f"ZH: 資料庫初始化完成 ({settings.DATABASE_PATH}) | EN: Database initialized ({settings.DATABASE_PATH})")

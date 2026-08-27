@@ -1697,6 +1697,75 @@ def get_public_settings(db: Session) -> dict:
             for k, spec in SYSTEM_SETTINGS.items() if spec.get("public")}
 
 
+# ==============================================================================
+# ZH: v3.8 組織對照（學系→學院、行政單位、校區）
+# EN: v3.8 organisation lookups
+# ==============================================================================
+
+def seed_org_tables(db: Session) -> dict:
+    """
+    ZH: 第一次啟動時把種子資料填進兩張對照表。**表裡已經有東西就完全不動。**
+
+    ZH: 為什麼不是每次啟動都對齊種子：那樣管理者改過的名字會在下次重開時被蓋回去，
+        而且沒有任何提示。種子只是初值，真相在表裡（見 org_seed.py 的檔頭）。
+
+    @node job-scheduler/app/crud.py::seed_org_tables
+    """
+    from . import org_seed
+    out = {"departments": 0, "units": 0}
+    if db.query(models.OrgDepartment).count() == 0:
+        for college, depts in org_seed.COLLEGES.items():
+            for name in depts:
+                db.add(models.OrgDepartment(name=name, college=college))
+                out["departments"] += 1
+    if db.query(models.OrgUnit).count() == 0:
+        for name, parent in org_seed.UNITS:
+            db.add(models.OrgUnit(path=f"{parent}/{name}" if parent else name,
+                                  name=name, parent=parent))
+            out["units"] += 1
+    if out["departments"] or out["units"]:
+        db.commit()
+        logger.info("組織對照種子資料已寫入: %s", out)
+    return out
+
+
+def college_of(db: Session, department: Optional[str]) -> Optional[str]:
+    """
+    ZH: 由學系推學院。查不到就回 None —— **不猜**。
+
+    ZH: 查不到是正常情況，不是錯誤：使用者的 department 是自由文字，
+        可能是舊系名、可能有錯字、也可能根本沒填。呼叫端要把 None
+        顯示成「未分類」而不是硬塞一個學院進去 —— 塞錯的學院沒有人看得出來。
+
+    @node job-scheduler/app/crud.py::college_of
+    """
+    if not department:
+        return None
+    row = (db.query(models.OrgDepartment)
+           .filter(models.OrgDepartment.name == department.strip()).first())
+    return row.college if row else None
+
+
+def org_options(db: Session) -> dict:
+    """ZH: 給下拉選單用的三份清單（學院含底下的系、行政單位、校區）。
+
+    @node job-scheduler/app/crud.py::org_options
+    """
+    from . import org_seed
+    depts = (db.query(models.OrgDepartment)
+             .filter(models.OrgDepartment.active == 1)
+             .order_by(models.OrgDepartment.college, models.OrgDepartment.name).all())
+    units = (db.query(models.OrgUnit)
+             .filter(models.OrgUnit.active == 1).all())
+    return {
+        "campuses": org_seed.CAMPUSES,
+        "departments": [{"name": d.name, "college": d.college, "campus": d.campus}
+                        for d in depts],
+        "units": [{"path": u.path, "name": u.name, "parent": u.parent,
+                   "campus": u.campus} for u in units],
+    }
+
+
 def effective_smtp(db: Session) -> dict:
     """
     ZH: SMTP 的**生效**連線設定 —— 全站唯一解析點。

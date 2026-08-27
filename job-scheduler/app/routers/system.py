@@ -46,3 +46,19 @@ def get_public_settings(
     @node job-scheduler/app/routers/system.py::get_public_settings
     """
     return {"settings": crud.get_public_settings(db)}
+
+
+@router.get("/org-options", summary="組織對照清單（學院/學系、行政單位、校區）")
+def get_org_options(
+    db: Session = Depends(get_db),
+    _user: models.User = Depends(get_current_user),
+):
+    """
+    ZH: 下拉選單要用的三份清單。**要求登入**，理由同上面那支。
+
+    ZH: 為什麼由後端給而不是前端寫死：系所會異動（2023→2025 之間銘傳併過兩個學院）。
+        前端自己維護一份的話，改了對照表前端還是舊的，而且沒有任何提示。
+
+    @node job-scheduler/app/routers/system.py::get_org_options
+    """
+    return crud.org_options(db)

@@ -88,6 +88,10 @@ class User(Base):
     temp_purpose = Column(String, nullable=True)                              # ZH: 為什麼開這個帳號（臨時帳號必填）
     tutorial_dismissed = Column(Integer, default=0)                           # ZH: 是否不再顯示教學 (0:否, 1:是) | EN: Tutorial dismissed (0:no, 1:yes)
     department = Column(String, nullable=True)                                # ZH: 學系資訊 | EN: Department
+    # ZH: v3.8 組織欄位。學院**不在這裡** —— 由 department 經 org_departments 推導。
+    #     unit 只有職員（role='staff'）有意義；campus 所有人都可以有。
+    unit       = Column(String, nullable=True)                                # ZH: 行政單位（org_units.path）
+    campus     = Column(String, nullable=True)                                # ZH: 所屬校區
     # ZH: v3.5 介面偏好——**跟帳號走，不是跟裝置走**（擁有者裁定）：換一台機器登入設定要在。
     #     只有兩個設定，沿用本表既有的個人偏好欄位慣例（tutorial_dismissed / department），
     #     不另開 user_preferences 表。前端另存一份 localStorage 當**快取**（避免載入時閃一下），
@@ -285,6 +289,42 @@ class EmailLog(Base):
     #     只靠 to_email 比對，同一人寄過多封時會對錯封。
     message_id = Column(String, nullable=True, index=True)
     bounced_at = Column(DateTime, nullable=True)             # ZH: 收到退信的時間（status 轉 bounced/deferred）
+
+
+class OrgDepartment(Base):
+    """
+    ZH: v3.8 學系 → 學院對照。**主鍵就是學系全名** —— `users.department` 存的就是它，
+        用名稱當鍵，join 才不必再維護一組 id 對應。
+    ZH: 學院不存進 users：改對照表就全站生效，不必回填幾千筆使用者。
+    EN: v3.8 department→college lookup; college is derived, never stored on users.
+    """
+    __tablename__ = "org_departments"
+
+    name    = Column(String, primary_key=True)                 # ZH: 學系全名
+    college = Column(String, nullable=False, index=True)       # ZH: 所屬學院
+    # ZH: 校區由管理者選 —— 官網的教學單位頁沒有標校區，硬推會是假資料。
+    campus  = Column(String, nullable=True)
+    active  = Column(Integer, default=1)                       # ZH: 停招的留著但不進下拉
+
+
+class OrgUnit(Base):
+    """
+    ZH: v3.8 行政單位（`users.unit` 用，只有職員有）。
+
+    ZH: 🔴 **主鍵是路徑不是名稱**：官網底下有兩個「事務組」（總務處／金門分部）
+        與兩個「處長室」（桃園／基河行政處）。名稱當鍵會撞，
+        而改名字讓它不撞的話，職員在下拉裡就找不到自己單位的正式名稱了。
+        路徑長成 `總務處/事務組`，看得懂又唯一。
+    EN: v3.8 administrative units; PK is the path because the official org chart
+        genuinely contains duplicate unit names under different parents.
+    """
+    __tablename__ = "org_units"
+
+    path   = Column(String, primary_key=True)                  # ZH: 上層/名稱，或頂層就是名稱
+    name   = Column(String, nullable=False, index=True)        # ZH: 顯示用的原名（逐字照官網）
+    parent = Column(String, nullable=True, index=True)         # ZH: 上層處室名；頂層為 NULL
+    campus = Column(String, nullable=True)
+    active = Column(Integer, default=1)
 
 
 class ArchivedLabVolume(Base):
