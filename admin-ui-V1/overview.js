@@ -65,16 +65,37 @@
 
         if (!failed(nodes)) {
             var list = nodes.nodes || [];
-            var off = list.filter(function (n) { return n.state === 'offline'; }).length;
-            var dis = list.filter(function (n) { return n.state === 'disabled'; }).length;
-            var conflict = list.some(function (n) { return n.ip_conflict; });
+            var offList = list.filter(function (n) { return n.state === 'offline'; });
+            var disList = list.filter(function (n) { return n.state === 'disabled'; });
+            var off = offList.length;
+            var dis = disList.length;
+            var conflictNode = list.filter(function (n) { return n.ip_conflict; })[0];
+            var conflict = !!conflictNode;
+
+            // ZH: 「去看」要連到**那個節點**,不是只連到平台設定頁。
+            //     只給 platform.html 的話會停在頁面最上面 ——
+            //     GPU 節點那一區在很下面,使用者得自己找。
+            //
+            // ZH: `#node-<id>` 是平台設定頁認得的深層連結:它會切到「平台」檢視、
+            //     捲到 GPU 節點區,而且**在下拉裡選中那一台**（見 platform.js 的
+            //     viewFromHash / scrollToHash / hashNodeId 三支）。
+            //
+            // ZH: 多台同時掉線時取第一台 —— 捲動的目標是整個區塊,
+            //     所以看得到全部;選中第一台只是給一個合理的起點。
+            function nodeLink(n) {
+                return n && n.node_id
+                    ? 'platform.html#node-' + encodeURIComponent(n.node_id)
+                    : 'platform.html';
+            }
             // ZH: 🔴 撞名放在最前面 —— 它會讓派工結果**無聲地錯**，
             //     比掉線嚴重（掉線至少看得出來沒在跑）。
-            if (conflict) items.push({ sev: 'error', go: 'platform.html',
+            if (conflict) items.push({ sev: 'error', go: nodeLink(conflictNode),
                                 text: T('ov_a_conflict',
                                     '有節點回報 NODE_ID 撞名 —— 兩台機器用了同一個名字，派工會亂') });
-            if (off) items.push({ sev: 'warn', text: T('ov_a_offline', '{n} 個 GPU 節點掉線').replace('{n}', off), go: 'platform.html' });
-            if (dis) items.push({ sev: 'warn', text: T('ov_a_disabled', '{n} 個 GPU 節點被停用中').replace('{n}', dis), go: 'platform.html' });
+            if (off) items.push({ sev: 'warn', go: nodeLink(offList[0]),
+                text: T('ov_a_offline', '{n} 個 GPU 節點掉線').replace('{n}', off) });
+            if (dis) items.push({ sev: 'warn', go: nodeLink(disList[0]),
+                text: T('ov_a_disabled', '{n} 個 GPU 節點被停用中').replace('{n}', dis) });
         }
 
         if (!failed(jobs)) {
