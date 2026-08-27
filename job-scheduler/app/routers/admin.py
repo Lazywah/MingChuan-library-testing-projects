@@ -1446,29 +1446,57 @@ def get_user_analytics(
 
 @router.get("/analytics")
 def get_analytics(
+    group_by: str = Query("department", description="department / college / unit"),
     department: Optional[str] = Query("all"),
     db: Session = Depends(get_db),
     _: models.User = Depends(require_admin),
 ) -> Any:
-    """ZH: 取得管理員分析數據（學系/工具用量）| EN: Get admin analytics (department/tool usage)
+    """
+    ZH: 平台使用統計。v3.8 起可以選**依學院／學系／行政單位**分組（#13）。
+
+    ZH: 學院**不是 users 的欄位** —— 由 `department` 外連 `org_departments` 推出來。
+        所以改對照表就會全站生效,不必回填幾千筆使用者。
+
+    ZH: 🔴 外連（outerjoin）不是內連：對不到對照表的學系**必須留下來**,
+        用內連會讓那些人從統計裡**安靜地消失** —— 人數對不上,而畫面上看不出少了誰。
+        對不到的一律回 None,由前端顯示成「未分類」。
+
+    ZH: 行政單位只有職員會有值,所以依單位分組時,學生那一大群會全部落在「未分類」。
+        那是正確的,不是 bug。
 
     @node job-scheduler/app/routers/admin.py::get_analytics
     """
+    if group_by not in ("department", "college", "unit"):
+        raise HTTPException(status_code=400,
+                            detail=f"不支援的分組方式：{group_by}（可用：department / college / unit）")
+
+    if group_by == "college":
+        label_col = models.OrgDepartment.college
+    elif group_by == "unit":
+        label_col = models.User.unit
+    else:
+        label_col = models.User.department
+
     base_q = db.query(
-        models.User.department,
+        label_col.label("grp"),
         func.count(models.User.id).label("user_count"),
         func.sum(models.User.login_count).label("total_logins"),
         func.sum(models.User.lifetime_tokens_used).label("total_tokens"),
     )
+    if group_by == "college":
+        base_q = base_q.outerjoin(
+            models.OrgDepartment,
+            models.User.department == models.OrgDepartment.name)
 
+    # ZH: `department` 這個篩選沿用舊參數名（前端與匯出都在用）——
+    #     它篩的一律是**學系**，與 group_by 無關：先篩人，再看要怎麼分組。
     if department != "all":
-        rows = base_q.filter(models.User.department == department).group_by(models.User.department).all()
-    else:
-        rows = base_q.group_by(models.User.department).all()
+        base_q = base_q.filter(models.User.department == department)
+    rows = base_q.group_by(label_col).all()
 
-    dept_stats = [
+    group_stats = [
         {
-            "department": r.department or "Unknown",
+            "group": r.grp,                    # ZH: None = 未分類，文案由前端決定
             "user_count": r.user_count,
             "total_logins": r.total_logins or 0,
             "total_tokens": r.total_tokens or 0,
@@ -1487,8 +1515,9 @@ def get_analytics(
     tool_stats = tool_q.group_by(models.ChatHistory.tool_type).all()
 
     return {
+        "group_by": group_by,
         "department_filter": department,
-        "department_stats": dept_stats,
+        "group_stats": group_stats,
         "tools_breakdown": [
             {"tool_type": s.tool_type or "chat", "usage_count": s.usage_count}
             for s in tool_stats

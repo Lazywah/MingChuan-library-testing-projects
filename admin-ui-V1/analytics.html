@@ -79,7 +79,18 @@
     </section>
 
     <section class="adm-sec" aria-labelledby="h-platform">
-        <div class="adm-sec__head"><h2 id="h-platform" data-i18n="an_platform">平台使用</h2></div>
+        <div class="adm-sec__head"><h2 id="h-platform" data-i18n="an_platform">平台使用</h2>
+            <!-- ZH: v3.8 #13 —— 依學院／學系／行政單位分組。
+                 選項不寫死在這裡的 label 文字上，值才是契約（後端只認這三個）。 -->
+            <label class="adm-inline">
+                <span data-i18n="an_group_by">分組方式</span>
+                <select class="field__input" id="an-group">
+                    <option value="college" data-i18n="an_by_college">依學院</option>
+                    <option value="department" selected data-i18n="an_by_dept">依學系</option>
+                    <option value="unit" data-i18n="an_by_unit">依行政單位</option>
+                </select>
+            </label>
+        </div>
         <div id="platform" aria-live="polite"><span class="skeleton skeleton--line"></span></div>
     </section>
 
@@ -88,9 +99,9 @@
 <script src="tz.js?v=2e214a8b"></script>
 <!-- ⚠ ZH: 順序不能動 —— i18n-admin 在 i18n 之後、prefs 之前。 -->
 <script src="i18n.js?v=cf70801b"></script>
-<script src="i18n-admin.js?v=1ea7de29"></script>
+<script src="i18n-admin.js?v=47aa1a18"></script>
 <script src="prefs.js?v=a25a96d6"></script>
 <script src="admin-chrome.js?v=ca5eba9c"></script>
-<script src="analytics.js?v=62f0af9f"></script>
+<script src="analytics.js?v=1ba22ce0"></script>
 </body>
 </html>

@@ -422,6 +422,19 @@
       "tests": [
         "tests/test_profile_unlock.py"
       ]
+    },
+    {
+      "id": "analytics-grouping",
+      "name": "數據頁依學院／學系／行政單位分組（#13 原始需求）",
+      "claimed": false,
+      "files": [
+        "job-scheduler/app/routers/admin.py",
+        "admin-ui-V1/analytics.js",
+        "admin-ui-V1/analytics.html"
+      ],
+      "tests": [
+        "tests/test_analytics_grouping.py"
+      ]
     }
   ]
 }

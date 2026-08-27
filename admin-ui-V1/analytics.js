@@ -706,17 +706,30 @@
             + '</div>';
     }
 
-    // ── 平台使用（學系）───────────────────────────────────────────────────
+    // ── 平台使用（依學院／學系／行政單位）─────────────────────────────────
+    // ZH: v3.8 #13。分組方式由後端算,前端只送 group_by ——
+    //     學院是由學系經對照表推的,前端自己推的話對照表改了這裡還是舊的。
+    function groupBy() {
+        var el = $('an-group');
+        return (el && el.value) || 'department';
+    }
+
+    function groupHeadKey() {
+        return { college: ['an_dept_college', '學院'],
+                 unit:    ['an_dept_unit', '行政單位'] }[groupBy()]
+            || ['an_dept', '學系'];
+    }
+
     function renderPlatform(a) {
         if (failed(a)) { $('platform').innerHTML = failBox(a); return; }
-        var rows = a.department_stats || [];
+        var rows = a.group_stats || [];
         if (!rows.length) {
             $('platform').innerHTML = '<p class="footnote">'
                 + esc(T('an_platform_none', '還沒有足夠的資料。')) + '</p>';
             return;
         }
         var head = [
-            ['an_dept', '學系'], ['an_users', '人數'],
+            groupHeadKey(), ['an_users', '人數'],
             ['an_dept_logins', '登入次數'], ['', 'Token'],       // ZH: 中英一樣，不需要 key
         ];
         $('platform').innerHTML =
@@ -725,7 +738,9 @@
             + '</tr></thead><tbody>'
             + rows.map(function (r) {
                 return '<tr>'
-                    + '<td>' + esc(r.department) + '</td>'
+                    // ZH: 後端對不到對照表時回 null（不是字串）——
+                    //     文案在前端決定,才翻得了中英。
+                    + '<td>' + esc(r.group || T('an_unclassified', '未分類')) + '</td>'
                     + '<td class="num">' + esc(num(r.user_count)) + '</td>'
                     + '<td class="num">' + esc(num(r.total_logins)) + '</td>'
                     + '<td class="num">' + esc(num(r.total_tokens)) + '</td>'
@@ -781,12 +796,24 @@
                       + '&end=' + encodeURIComponent(RANGE.end)
                     : 'days=' + DAYS))),
             safe(get('/admin/jobs?limit=500')),
-            safe(get('/admin/analytics')),
+            safe(get('/admin/analytics?group_by=' + encodeURIComponent(groupBy()))),
         ]);
         renderMyai(out[0]);
         renderJobs(out[1]);
         renderPlatform(out[2]);
     }
+
+
+    // ZH: 切換分組只重打**平台那一支** —— 整頁 load() 會連 MYAI 與訓練任務
+    //     一起重打，那兩支跟分組無關，白等而且會讓畫面整個閃一次。
+    (function wireGroupSwitch() {
+        var el = $('an-group');
+        if (!el) return;
+        el.addEventListener('change', async function () {
+            renderPlatform(await safe(
+                get('/admin/analytics?group_by=' + encodeURIComponent(groupBy()))));
+        });
+    })();
 
     // ==================================================================
     // ZH: 匯出。端點要 Authorization 標頭，所以**不能用 <a href> 直接下載**
