@@ -65,7 +65,7 @@ class BounceReaderError(Exception):
 # ==============================================================================
 # 設定
 # ==============================================================================
-def imap_config() -> dict:
+def imap_config(db: Session | None = None) -> dict:
     """
     ZH: 取 IMAP 連線設定。預設沿用 SMTP 的帳密（Gmail 應用程式密碼 IMAP 通用），
         主機由 SMTP 主機推導（smtp.gmail.com → imap.gmail.com），可用 IMAP_* 覆寫。
@@ -74,16 +74,27 @@ def imap_config() -> dict:
 
     @node job-scheduler/app/services/bounce_reader.py::imap_config
     """
+    # ZH: v3.8 SMTP 主機/帳號可由管理端覆寫,IMAP 是**從它推導**的 ——
+    #     這裡沒有一起跟著讀的話,管理者換一次主機就會變成
+    #     「信從新主機寄出、退信仍輪詢舊主機」,而且完全不報錯。
+    #     db 為 None（例如單元測試直接呼叫）時退回純 .env,行為與 v3.7 相同。
+    from .. import crud
+    smtp_cfg = crud.effective_smtp(db) if db is not None else {
+        "server": settings.SMTP_SERVER, "username": settings.SMTP_USERNAME,
+        "password": settings.SMTP_PASSWORD, "from_email": settings.SMTP_FROM_EMAIL}
+
     host = (getattr(settings, "IMAP_SERVER", "") or "").strip()
     if not host:
-        smtp = (settings.SMTP_SERVER or "").strip().lower()
+        smtp = (smtp_cfg["server"] or "").strip().lower()
         # ZH: 只做最常見的 smtp.→imap. 推導；其他情況請明確設 IMAP_SERVER
         host = ("imap." + smtp[5:]) if smtp.startswith("smtp.") else ""
     return {
         "host": host,
         "port": int(getattr(settings, "IMAP_PORT", 0) or 993),
-        "user": (getattr(settings, "IMAP_USERNAME", "") or settings.SMTP_USERNAME or "").strip(),
-        "password": (getattr(settings, "IMAP_PASSWORD", "") or settings.SMTP_PASSWORD or ""),
+        "user": (getattr(settings, "IMAP_USERNAME", "") or smtp_cfg["username"] or "").strip(),
+        "password": (getattr(settings, "IMAP_PASSWORD", "") or smtp_cfg["password"] or ""),
+        # ZH: 一起帶出來,讓 parse 階段用同一個寄件地址判斷「哪封退信是我們的」。
+        "from_email": (smtp_cfg["from_email"] or ""),
         "folder": (getattr(settings, "IMAP_FOLDER", "") or "INBOX").strip(),
     }
 
@@ -161,7 +172,7 @@ def _original_message_id(msg: Message) -> str | None:
     return None
 
 
-def _plaintext_fallback(msg: Message) -> list[dict]:
+def _plaintext_fallback(msg: Message, ours: str = "") -> list[dict]:
     """
     ZH: 沒有標準 DSN 結構時的後援 —— 從純文字內容抓 5.x.x/4.x.x 狀態碼與地址。
         刻意保守：抓不到狀態碼就不猜，回空（寧可漏抓，不要誤判成退信）。
@@ -180,7 +191,9 @@ def _plaintext_fallback(msg: Message) -> list[dict]:
         return []
     status = m.group(1)
     # ZH: 排除我們自己的寄件地址，剩下的第一個地址視為收件人
-    ours = (settings.SMTP_FROM_EMAIL or "").lower()
+    # ZH: 呼叫端沒給就退回 .env —— 但正常路徑一定會給（見 scan_bounces）。
+    #     這個值錯了的症狀是**把我們自己的地址當成收件人**,於是退信對到錯的人。
+    ours = (ours or settings.SMTP_FROM_EMAIL or "").lower()
     addrs = [a for a in _RE_ADDR.findall(text) if a.lower() != ours]
     if not addrs:
         return []
@@ -188,7 +201,7 @@ def _plaintext_fallback(msg: Message) -> list[dict]:
              "diagnostic": text.strip()[:400]}]
 
 
-def parse_bounce(raw: bytes) -> dict | None:
+def parse_bounce(raw: bytes, ours: str = "") -> dict | None:
     """
     ZH: 解析一封退信 → {"message_id":…, "recipients":[{recipient,status,action,diagnostic}]}
         不是退信、或解析不出收件人 → 回 None（呼叫端跳過，不留任何內容）。
@@ -203,7 +216,7 @@ def parse_bounce(raw: bytes) -> dict | None:
         return None
     if not is_bounce(msg):
         return None
-    recipients = _walk_delivery_status(msg) or _plaintext_fallback(msg)
+    recipients = _walk_delivery_status(msg) or _plaintext_fallback(msg, ours)
     if not recipients:
         return None
     return {"message_id": _original_message_id(msg), "recipients": recipients}
@@ -286,7 +299,7 @@ def scan_bounces(db: Session, max_messages: int = 200) -> dict:
     """
     from .. import crud
 
-    cfg = imap_config()
+    cfg = imap_config(db)
     if not cfg["host"] or not cfg["user"] or not cfg["password"]:
         raise BounceReaderError(
             "IMAP 未設定：需要 IMAP_SERVER（或可由 SMTP_SERVER 推導）與帳密。"
@@ -348,7 +361,7 @@ def scan_bounces(db: Session, max_messages: int = 200) -> dict:
             typ, fetched = M.uid("FETCH", uid, "(BODY.PEEK[])")
             if typ != "OK" or not fetched or not isinstance(fetched[0], tuple):
                 continue
-            parsed = parse_bounce(fetched[0][1])
+            parsed = parse_bounce(fetched[0][1], cfg.get("from_email", ""))
             if not parsed:
                 continue          # ZH: 不是退信 → 不解析、不留存、不標記
             bounces += 1

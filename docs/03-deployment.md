@@ -330,7 +330,7 @@ mock:
 | `WEBUI_SECRET_KEY` | dev-default | 隨機 |
 | `CORS_ORIGINS` | 空（允許全部）| 明確列出正式 domain |
 | `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` / `GOOGLE_API_KEY` | placeholder | 真實 API key |
-| SMTP_* | 空 | 學校 SMTP 設定 |
+| SMTP_* | 空 | 學校 SMTP 設定。**v3.8 起主機／埠／帳號／寄件者也可在 admin「平台設定 → 寄信（SMTP）」改，改了以那邊為準；`SMTP_PASSWORD` 仍只讀這裡、不進資料庫** |
 
 > 最快做法：上線前重跑 `python scripts/setup_env.py` 生新的 `.env`（會自動備份舊的）。
 

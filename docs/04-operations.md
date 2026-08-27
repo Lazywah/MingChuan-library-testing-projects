@@ -212,7 +212,7 @@ docker volume prune -f         # 移除 dangling volume
 | 場景 | 動作 |
 |---|---|
 | **學生**忘記密碼（SSO 帳號）| 平台無法重設 → 請他到學校中央入口 <https://www1.mcu.edu.tw/ForgetPassword.aspx>（學號＋身分證字號）|
-| **本機帳號**忘記密碼（老師/admin）| admin UI → 使用者管理 → 找該 user → Reset → 系統寄信（**需先設定 SMTP**，否則無法送達）|
+| **本機帳號**忘記密碼（老師/admin）| admin UI → 使用者管理 → 找該 user → Reset → 系統寄信（**需先設定 SMTP**，否則無法送達；v3.8 起可在 admin「平台設定 → 寄信（SMTP）」設，密碼仍在 `.env`）|
 | Lab 卡住、要強制停 | admin UI → Lab Sessions → Force Stop（或 API `POST /admin/lab/sessions/<uid>/force-stop`）|
 | 某學生濫用 Token | admin UI → 該 user → 調 `tokens_limit` |
 | 學期末清空使用量 | admin UI → 批次選使用者 → Batch Reset Usage |

@@ -28,6 +28,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Optional, List
 import json
 import logging
+import re
 
 from . import models, schemas
 from .config import settings
@@ -1423,6 +1424,10 @@ SETTING_GROUPS = [
     {"key": "platform",  "view": "platform", "label": "平台營運"},
     {"key": "myai",      "view": "myai",     "label": "MYAI 廠商整合"},
     {"key": "assistant", "view": "platform", "label": "小基（RAG 助手）"},
+    # ZH: v3.8 寄信自成一區。塞進「平台營運」的話那一區會變成 9 個旋鈕,
+    #     而 SMTP 是「壞了整批通知就全部不會到」的東西,值得自己一格。
+    #     view 仍是 platform —— 分區是「這是什麼」,檢視是「何時會來看它」。
+    {"key": "email",     "view": "platform", "label": "寄信（SMTP）"},
 ]
 _VIEW_KEYS = {"platform", "myai"}
 
@@ -1460,8 +1465,46 @@ SYSTEM_SETTINGS = {
     # ZH: ⚠ 選外部模型（Claude / Gemini）代表**把問題送到校外廠商**——
     #     而小基的程式家教模式會讀使用者自己的檔案。介面上要講清楚，
     #     這是政策決定不只是設定。
+    # ZH: v3.8 SMTP 連線設定改為管理端可設（擁有者 2026-08-27 裁定）。
+    #     🔴 **密碼刻意不在這裡** —— 見 effective_smtp() 的說明。
+    "smtp_server":              {"group": "email", "type": "text",  "default": lambda: settings.SMTP_SERVER,      "min": None, "max": None, "maxlen": 253, "text_kind": "host",  "label": "SMTP 主機(留空=不實際寄出,只寫寄信紀錄)"},
+    "smtp_port":                {"group": "email", "type": "int",   "default": lambda: settings.SMTP_PORT,        "min": 1,    "max": 65535, "label": "SMTP 埠(STARTTLS 通常是 587)"},
+    "smtp_username":            {"group": "email", "type": "text",  "default": lambda: settings.SMTP_USERNAME,    "min": None, "max": None, "maxlen": 254, "text_kind": "any",   "label": "SMTP 帳號(密碼仍只從 .env 讀,不進資料庫)"},
+    "smtp_from_email": {"starred": True, "group": "email", "type": "text", "default": lambda: settings.SMTP_FROM_EMAIL, "min": None, "max": None, "maxlen": 254, "text_kind": "email", "label": "寄件者地址(使用者在信箱裡看到的寄件人)"},
     "rag_chat_model":           {"starred": True, "group": "assistant", "type": "choice", "default": lambda: settings.RAG_CHAT_MODEL,             "min": None, "max": None, "label": "小基回應用的模型"},
 }
+
+
+_RE_SETTING_EMAIL = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+
+
+def _validate_text_setting(key: str, spec: dict, raw) -> str:
+    """
+    ZH: 驗證文字型旋鈕。**擋下來的都是「存進去不會報錯、但用起來一定壞」的值。**
+
+    ZH: 為什麼要驗：這些值最後會被丟進 smtplib 或信件標頭。
+        主機名塞進 `https://smtp.x.com` 這種東西,連線會失敗在**背景任務裡**——
+        管理者的畫面上一切正常,只有寄信紀錄裡多一筆 failed,而那一頁沒人天天看。
+
+    ZH: 刻意**不驗**主機是否真的連得上：那是網路狀態不是設定合法性,
+        而且驗了會讓「設定頁存檔」這個動作變成一次對外連線。
+
+    @node job-scheduler/app/crud.py::_validate_text_setting
+    """
+    v = str(raw).strip()
+    maxlen = spec.get("maxlen", 200)
+    if len(v) > maxlen:
+        raise ValueError(f"設定 {key} 太長（上限 {maxlen} 字元，收到 {len(v)}）")
+    kind = spec.get("text_kind", "any")
+    if kind == "host":
+        if any(c.isspace() for c in v):
+            raise ValueError(f"設定 {key} 不可有空白：{v}")
+        if "://" in v or "/" in v:
+            raise ValueError(f"設定 {key} 要填主機名，不是網址：{v}")
+    elif kind == "email":
+        if not _RE_SETTING_EMAIL.match(v):
+            raise ValueError(f"設定 {key} 需為單一電子郵件地址：{v}")
+    return v
 
 
 def _clamp_setting(v, lo, hi):
@@ -1489,6 +1532,13 @@ def get_setting(db: Session, key: str):
     #     然後**靜默退回預設值**：管理者選了 Claude，小基卻還在用 .env 的 Ollama，
     #     而畫面上顯示的是他選的那個。這種不一致沒有任何錯誤訊息。
     if spec["type"] == "choice":
+        return raw
+    # ZH: text 與 choice 同樣不能走數字轉換,但理由不同 ——
+    #     choice 是「值必須在清單裡」,text 是「值本來就是自由文字」。
+    #     兩個都掉進下面那個 try 的話,`int("smtp.gmail.com")` 會丟例外,
+    #     然後**靜默退回 .env 的舊主機**:管理者改了設定、畫面顯示他改的值,
+    #     信卻還是從舊主機寄出去。
+    if spec["type"] == "text":
         return raw
     try:
         v = int(raw) if spec["type"] == "int" else float(raw)
@@ -1547,6 +1597,18 @@ if _missing:
     raise RuntimeError(
         "SYSTEM_SETTINGS 裡這些旋鈕沒有合法的 group：%s"
         "（可用：%s）" % (_missing, sorted(_GROUP_KEYS)))
+
+# ZH: text 型旋鈕一定要宣告 maxlen 與 text_kind。
+#     漏宣告不會當場壞掉 —— 它只是**悄悄不驗**，然後某個亂填的值被存進去，
+#     壞在背景寄信任務裡。所以在匯入時就擋。
+_VALID_TEXT_KINDS = {"any", "host", "email"}
+_bad_text = [k for k, v in SYSTEM_SETTINGS.items()
+             if v.get("type") == "text"
+             and (v.get("maxlen") is None or v.get("text_kind") not in _VALID_TEXT_KINDS)]
+if _bad_text:
+    raise RuntimeError(
+        "SYSTEM_SETTINGS 裡這些文字型旋鈕沒有宣告 maxlen 或 text_kind：%s"
+        "（text_kind 可用：%s）" % (_bad_text, sorted(_VALID_TEXT_KINDS)))
 
 # ZH: public（前台唯讀端點會送出去的白名單）必須同時是 starred。
 #     星號的定義就是「值使用者看得到 **或** 改之前應先公告」——
@@ -1615,6 +1677,39 @@ def get_public_settings(db: Session) -> dict:
             for k, spec in SYSTEM_SETTINGS.items() if spec.get("public")}
 
 
+def effective_smtp(db: Session) -> dict:
+    """
+    ZH: SMTP 的**生效**連線設定 —— 全站唯一解析點。
+
+    ZH: 為什麼一定要單一解析點：`smtp_server` 一旦可以被管理端覆寫，
+        「寄信」與「退信回收」就會各自看到不同的主機。
+        退信回收的 IMAP 主機是**從 SMTP 主機推導**的（smtp.x → imap.x），
+        寄信端的比對又用 `from_email` 判斷「哪封退信是我們寄的」。
+        兩邊分開讀的話，管理者換一次主機就會：信從新主機寄出、
+        退信回收仍然輪詢舊主機、於是**所有退信都收不到而且沒有任何錯誤**。
+        （同一形狀已經發生過：MYAI 廠商改版讓交易同步靜默失效 29 天。）
+
+    ZH: 🔴 **密碼刻意不可設定，只從 `.env` 讀。**
+        擁有者 2026-08-27 裁定。理由不是「懶得做」：
+        SystemConfig 是明文表，admin 的設定頁會把值回填到畫面上，
+        寄信紀錄與稽核也都讀得到那張表。把 SMTP 密碼放進去，
+        等於多開一個「看得到管理頁就拿得到寄件帳號」的面孔，
+        而現行所有密鑰都只從 `.env` 讀、絕不進版控。
+
+    ZH: 回傳的 password 直接取 `.env`；其餘四項 SystemConfig 有覆寫就用覆寫。
+
+    @node job-scheduler/app/crud.py::effective_smtp
+    """
+    return {
+        "server":     get_setting(db, "smtp_server"),
+        "port":       get_setting(db, "smtp_port"),
+        "username":   get_setting(db, "smtp_username"),
+        "from_email": get_setting(db, "smtp_from_email"),
+        # ZH: 不經 SystemConfig。這一行是上面那段註解的實作。
+        "password":   settings.SMTP_PASSWORD,
+    }
+
+
 def set_settings(db: Session, updates: dict) -> list:
     """
     ZH: 給 admin PUT — 逐鍵驗證型別+夾限後 upsert；值為 None/空字串＝清除覆寫(回退預設)。
@@ -1641,6 +1736,10 @@ def set_settings(db: Session, updates: dict) -> list:
             if v not in allowed:
                 raise ValueError(f"設定 {key} 的值不在可選清單裡：{v}")
             set_system_config(db, key, v, description=spec["label"])
+            continue
+        if spec["type"] == "text":
+            set_system_config(db, key, _validate_text_setting(key, spec, val),
+                              description=spec["label"])
             continue
         try:
             v = int(val) if spec["type"] == "int" else float(val)

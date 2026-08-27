@@ -320,6 +320,19 @@
       "tests": [
         "tests/test_public_settings.py"
       ]
+    },
+    {
+      "id": "smtp-admin-config",
+      "name": "SMTP 連線設定管理端可設（密碼仍只讀 .env）",
+      "claimed": false,
+      "files": [
+        "job-scheduler/app/crud.py",
+        "job-scheduler/app/services/email_service.py",
+        "job-scheduler/app/services/bounce_reader.py"
+      ],
+      "tests": [
+        "tests/test_smtp_settings.py"
+      ]
     }
   ]
 }

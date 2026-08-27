@@ -233,8 +233,9 @@ async def forgot_password(
             detail += f"：{reset_url}"
         raise HTTPException(status_code=400, detail=detail)
 
-    from ..config import settings as _settings
-    if not _settings.SMTP_SERVER:
+    # ZH: v3.8 看的是**生效值**（管理端覆寫優先）。只看 .env 的話，
+    #     管理者在設定頁把 SMTP 開起來之後，這條路徑仍然回 503 說沒設定。
+    if not crud.effective_smtp(db)["server"]:
         # ZH: 密碼「未被重置」— 不能因無法送達而鎖死使用者或洩漏明文
         # EN: Password is NOT reset — cannot deliver it safely without SMTP
         raise HTTPException(

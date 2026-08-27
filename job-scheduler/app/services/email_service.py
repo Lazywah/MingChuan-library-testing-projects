@@ -54,6 +54,32 @@ def is_undeliverable_by_spec(to_email: str) -> bool:
     return dom in _RESERVED_DOMAINS or dom.endswith(_RESERVED_TLDS)
 
 
+def _smtp():
+    """
+    ZH: 取 SMTP 生效設定（管理端覆寫優先，否則 `.env`）。本模組多由 BackgroundTasks
+        呼叫、手上沒有 db，所以自行開一個 session。
+
+    ZH: **讀設定失敗一律回退純 `.env`，絕不讓寄信路徑因為讀不到設定而中斷。**
+        這裡不寫 email log —— 這個函式在 send_email 決定要不要寄之前就跑，
+        還不知道該記哪一封。
+
+    @node job-scheduler/app/services/email_service.py::_smtp
+    """
+    try:
+        from ..database import SessionLocal
+        from .. import crud
+        db = SessionLocal()
+        try:
+            return crud.effective_smtp(db)
+        finally:
+            db.close()
+    except Exception as e:  # noqa: BLE001
+        logger.warning("讀取 SMTP 設定失敗，回退 .env：%s", e)
+        return {"server": settings.SMTP_SERVER, "port": settings.SMTP_PORT,
+                "username": settings.SMTP_USERNAME, "from_email": settings.SMTP_FROM_EMAIL,
+                "password": settings.SMTP_PASSWORD}
+
+
 def send_email(to_email: str, subject: str, html_content: str,
                kind: str = None, username: str = None, user_id: str = None):
     """
@@ -77,7 +103,8 @@ def send_email(to_email: str, subject: str, html_content: str,
     # ZH: v3.5 自己產 Message-ID —— 退信(DSN)會夾帶原信的 Message-ID，這是把
     #     「非同步退信」對回「當初那一封」的唯一可靠鍵。交給 SMTP 伺服器自動產的話
     #     我們拿不到值，之後只能靠 to_email 猜，同一人寄過多封就會對錯。
-    msg_id = make_msgid(domain=(settings.SMTP_FROM_EMAIL.split("@")[-1] or None))
+    cfg = _smtp()
+    msg_id = make_msgid(domain=((cfg["from_email"] or "").split("@")[-1] or None))
 
     # ZH: 保留網域一律不寄。這道閘門刻意放在**最前面、且不依賴任何設定** ——
     #     實測踩過：跑測試時 conftest 沒有覆蓋 SMTP_SERVER，43 個測試登入點
@@ -90,35 +117,35 @@ def send_email(to_email: str, subject: str, html_content: str,
                 kind, username, user_id, msg_id)
         return
 
-    if not settings.SMTP_SERVER:
+    if not cfg["server"]:
         logger.info(f"========== [MOCK EMAIL] ==========")
         logger.info(f"To: {to_email}")
         logger.info(f"Subject: {subject}")
         logger.info(f"Content: \n{html_content}")
         logger.info(f"==================================")
-        _record(to_email, subject, "mock", "SMTP_SERVER 未設定，未實際寄出",
+        _record(to_email, subject, "mock", "SMTP 主機未設定，未實際寄出",
                 kind, username, user_id, msg_id)
         return
 
     try:
         msg = MIMEMultipart("alternative")
         msg["Subject"] = subject
-        msg["From"] = settings.SMTP_FROM_EMAIL
+        msg["From"] = cfg["from_email"]
         msg["To"] = to_email
         msg["Message-ID"] = msg_id
 
         part = MIMEText(html_content, "html")
         msg.attach(part)
 
-        server = smtplib.SMTP(settings.SMTP_SERVER, settings.SMTP_PORT)
+        server = smtplib.SMTP(cfg["server"], cfg["port"])
         try:
             server.ehlo()
             server.starttls()
-            if settings.SMTP_USERNAME and settings.SMTP_PASSWORD:
-                server.login(settings.SMTP_USERNAME, settings.SMTP_PASSWORD)
+            if cfg["username"] and cfg["password"]:
+                server.login(cfg["username"], cfg["password"])
 
             # ZH: sendmail 回傳 dict = 「部分收件人被拒」（其餘仍送出）；原本這個回傳值被丟掉
-            refused = server.sendmail(settings.SMTP_FROM_EMAIL, to_email, msg.as_string())
+            refused = server.sendmail(cfg["from_email"], to_email, msg.as_string())
         finally:
             try:
                 server.quit()

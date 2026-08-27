@@ -124,14 +124,17 @@ def get_email_log(
     if status:
         q = q.filter(models.EmailLog.status == status)
     rows = q.order_by(models.EmailLog.created_at.desc()).limit(limit).all()
+    _smtp_cfg = crud.effective_smtp(db)
     counts = dict(
         db.query(models.EmailLog.status, func.count(models.EmailLog.id))
         .group_by(models.EmailLog.status).all()
     )
     return {
         "counts": counts,
-        "smtp_configured": bool(settings.SMTP_SERVER),
-        "from_email": settings.SMTP_FROM_EMAIL,
+        # ZH: v3.8 顯示生效值 —— 這一頁就是管理者用來確認「我剛改的設定生效了沒」的地方，
+        #     顯示 .env 的舊值會讓他以為沒存到，然後再存一次。
+        "smtp_configured": bool(_smtp_cfg["server"]),
+        "from_email": _smtp_cfg["from_email"],
         "logs": [{
             "id": r.id, "to_email": r.to_email, "username": r.username,
             "kind": r.kind, "subject": r.subject, "status": r.status,
