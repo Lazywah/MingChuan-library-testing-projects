@@ -323,6 +323,11 @@ class UserResponse(BaseModel):
     # ZH: v3.8 管理權限。這是**回應** schema —— 使用者看得到自己有沒有,但改不了。
     is_admin: int = 0
     onboarded_at: Optional[UtcDatetime] = None
+    # ZH: v3.8 管理者開放的一次性修改。`None` = 鎖著。
+    #     🔴 這是**唯讀的狀態回報** —— 使用者改不了它,寫入只有管理端那支端點。
+    #     沒有這個欄位的話,前端無從得知「現在可以改了」,
+    #     管理者開了也沒有任何地方能用（v3.8 開發中實際發生過）。
+    profile_unlock: Optional[List[str]] = None
     login_count: int = 0
     lifetime_tokens_used: int = 0
     last_login_ip: Optional[str] = None

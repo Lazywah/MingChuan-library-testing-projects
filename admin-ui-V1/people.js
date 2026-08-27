@@ -471,7 +471,12 @@
             //     新的設定請用身分 + 這個勾選框。
             + '<label class="field field--check">'
             + '<input type="checkbox" id="f-is-admin"' + (u.is_admin ? ' checked' : '') + '>'
-            + '<span>' + esc(T('pp_c_is_admin', '管理權限（可進管理端）')) + '</span></label>'
+            + '<span class="field--check__text">'
+            + '<span class="field--check__title">'
+            + esc(T('pp_c_is_admin', '管理權限')) + '</span>'
+            + '<span class="field--check__hint">'
+            + esc(T('pp_c_is_admin_hint', '可以進管理端。與角色無關 —— 學生也可以有。'))
+            + '</span></span></label>'
             + field('f-pw', T('pp_new_pw', '新密碼'), '', 'password')
             + '<p class="footnote">' + esc(T('pp_pw_hint', '留空就不改密碼')) + '</p>'
             // ZH: 儲存前的第二次確認。與解鎖那次是**分開的兩個欄位**——
@@ -615,6 +620,12 @@
             + '<div class="adm-card__title">' + esc(T('pp_lab', '程式實驗室')) + '</div>'
             + '<span class="skeleton skeleton--line"></span></section>'
 
+            // ZH: 一次性解鎖。放在配額與實驗室之後 —— 那兩個是「他有什麼」,
+            //     這個是「他能不能改自己的資料」,同樣是針對這一個人的設定。
+            + '<section class="adm-card" id="unlock-box">'
+            + '<div class="adm-card__title">' + esc(T('pp_unlock', '修改個人資料的授權')) + '</div>'
+            + '<span class="skeleton skeleton--line"></span></section>'
+
             // ZH: 外部 AI 的綁定與消耗。放在這裡而不是「數據」那一頁 ——
             //     那一頁是看趨勢的，要查某一個人就該在人這一頁查完。
             + '<section class="adm-card" id="ext-box">'
@@ -643,6 +654,7 @@
         if (u.expires_at) wireExtend(u);
         loadQuota(u);
         loadLab(u);
+        loadUnlock(u);
         loadExtAi(u);
     }
 
@@ -950,6 +962,97 @@
             await api('/external-ai/admin/accounts/' + encodeURIComponent(b.id), { method: 'DELETE' });
             loadExtAi(u);
         } catch (e) { say('e-msg', e.message); }
+    }
+
+    // ZH: 一次性解鎖（v3.8）。校區／學系／行政單位在使用者初次設定之後就鎖住,
+    //     要改得由管理者在這裡開放一次。「一次」＝**他成功存檔一次**,不是一段時間。
+    var UNLOCK_LABELS = { campus: ['pp_unl_campus', '校區'],
+                          department: ['pp_unl_dept', '學系'],
+                          unit: ['pp_unl_unit', '行政單位'] };
+
+    async function loadUnlock(u) {
+        var box = $('unlock-box');
+        try {
+            var d = await api('/admin/users/' + encodeURIComponent(u.id) + '/profile-unlock');
+            var a = d.active;
+            box.innerHTML =
+                '<div class="adm-card__title">' + esc(T('pp_unlock', '修改個人資料的授權')) + '</div>'
+                + (a
+                    // ZH: 已開放時把**範圍**列出來 —— 只說「已開放」的話,
+                    //     管理者不知道他能改哪幾項,而範圍是核可時就決定好的。
+                    ? '<div class="adm-alert"><span>'
+                      + esc(T('pp_unl_open', '已開放（{f}）').replace('{f}',
+                            (a.fields || []).map(function (f) {
+                                return T(UNLOCK_LABELS[f] ? UNLOCK_LABELS[f][0] : f,
+                                         UNLOCK_LABELS[f] ? UNLOCK_LABELS[f][1] : f);
+                            }).join('、')))
+                      + '　<span class="footnote">' + esc(TW.date(a.granted_at))
+                      + (a.reason ? '　' + esc(a.reason) : '') + '</span></span>'
+                      + '<button class="btn btn--minor" type="button" id="unl-cancel">'
+                      + esc(T('pp_unl_cancel', '收回')) + '</button></div>'
+                    : '<p class="footnote">' + esc(T('pp_unl_locked', '目前鎖定中。')) + '</p>')
+                + (d.last_used
+                    ? '<p class="footnote">'
+                      + esc(T('pp_unl_last', '上次修改：{d}').replace('{d}', TW.date(d.last_used.used_at)))
+                      + '</p>'
+                    : '')
+                // ZH: 核可表單常駐（不收進 fold）—— 使用者是用「問題回報」來申請的,
+                //     管理者看到申請時人已經在這一頁上了,再多一次展開只是多一步。
+                + '<div class="adm-card__title" style="margin-top:1rem">'
+                + esc(T('pp_unl_grant', '開放一次修改')) + '</div>'
+                + '<div class="adm-inline">'
+                + (d.unlockable || []).map(function (f) {
+                    var lab = UNLOCK_LABELS[f] || [f, f];
+                    return '<label class="field field--check">'
+                        + '<input type="checkbox" data-unl="' + esc(f) + '">'
+                        + '<span class="field--check__text"><span class="field--check__title">'
+                        + esc(T(lab[0], lab[1])) + '</span></span></label>';
+                }).join('')
+                + '</div>'
+                + field('unl-reason', T('pp_unl_reason', '原因（會寫進稽核）'), '')
+                + '<div class="ds__actions">'
+                + '<button class="btn btn--primary" type="button" id="unl-go">'
+                + esc(T('pp_unl_do', '開放一次修改')) + '</button></div>'
+                + '<div class="inline-error" id="unl-msg" hidden></div>';
+
+            var go = $('unl-go');
+            if (go) go.addEventListener('click', function () { grantUnlock(u); });
+            var cancel = $('unl-cancel');
+            // ZH: 「收回」＝把還沒用掉的那筆標成已用掉。不刪紀錄 —— 稽核要看得出開過。
+            if (cancel) cancel.addEventListener('click', function () { grantUnlock(u, true); });
+        } catch (e) {
+            box.innerHTML = '<div class="adm-card__title">'
+                + esc(T('pp_unlock', '修改個人資料的授權')) + '</div>'
+                + '<p class="footnote">' + esc(e.message) + '</p>';
+        }
+    }
+
+    async function grantUnlock(u, revoke) {
+        var msg = $('unl-msg');
+        var fields = revoke ? [] : [].slice.call(
+            document.querySelectorAll('#unlock-box [data-unl]:checked')
+        ).map(function (b) { return b.dataset.unl; });
+        // ZH: 前端先擋沒勾任何欄位 —— 後端也會擋,但讓他先看到訊息比較快。
+        if (!revoke && !fields.length) {
+            if (msg) { msg.textContent = T('pp_unl_pick', '請先勾選要開放哪幾項。'); msg.hidden = false; }
+            return;
+        }
+        try {
+            if (revoke) {
+                await api('/admin/users/' + encodeURIComponent(u.id) + '/profile-unlock/revoke',
+                          { method: 'POST' });
+            } else {
+                await api('/admin/users/' + encodeURIComponent(u.id) + '/profile-unlock', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ fields: fields,
+                                           reason: ($('unl-reason') || {}).value || '' }),
+                });
+            }
+            loadUnlock(u);          // ZH: 重讀 —— 狀態由後端決定,不要在前端自己推
+        } catch (e) {
+            if (msg) { msg.textContent = e.message; msg.hidden = false; }
+        }
     }
 
     async function loadQuota(u) {

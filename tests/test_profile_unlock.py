@@ -172,3 +172,131 @@ class TestEndpoint:
                .filter_by(action="grant_profile_unlock").first())
         assert row is not None, "核可解鎖沒有留下稽核紀錄"
         assert row.admin_id == adm.id and row.target_user == u.id
+
+
+class TestQueryEndpoint:
+    def test_locked_state(self, client, seeded):
+        u = make_user(seeded)
+        _admin(seeded)
+        r = client.get(f"/api/v1/admin/users/{u.id}/profile-unlock",
+                       headers=auth_headers(client, "adm", "password123"))
+        assert r.status_code == 200, r.text
+        d = r.json()
+        assert d["active"] is None and d["last_used"] is None
+        # ZH: 可解鎖欄位由後端給 —— 前端自己維護一份的話,加了新欄位它還是舊的。
+        assert d["unlockable"] == list(crud.UNLOCKABLE_FIELDS)
+
+    def test_shows_the_scope_not_just_open(self, client, seeded):
+        """ZH: 只說「已開放」的話,管理者不知道他能改哪幾項 —— 而範圍是核可時就定好的。"""
+        u = make_user(seeded)
+        adm = _admin(seeded)
+        crud.grant_profile_unlock(seeded, u, ["campus", "department"], adm, "轉系")
+        d = client.get(f"/api/v1/admin/users/{u.id}/profile-unlock",
+                       headers=auth_headers(client, "adm", "password123")).json()
+        assert sorted(d["active"]["fields"]) == ["campus", "department"]
+        assert d["active"]["reason"] == "轉系"
+        assert d["active"]["used_at"] is None
+
+    def test_last_used_distinguishes_never_from_just_used(self, client, seeded):
+        """
+        ZH: 沒有 last_used 的話,「從沒申請過」與「剛用掉」在畫面上長得一樣 ——
+            都是「目前鎖定中」。管理者要判斷「他上次申請是什麼時候、改完了沒」。
+        """
+        u = make_user(seeded)
+        adm = _admin(seeded)
+        crud.complete_onboarding(seeded, u, ["台北"], "資訊工程學系")
+        crud.grant_profile_unlock(seeded, u, ["campus"], adm)
+        crud.complete_onboarding(seeded, u, ["桃園"], None)
+        d = client.get(f"/api/v1/admin/users/{u.id}/profile-unlock",
+                       headers=auth_headers(client, "adm", "password123")).json()
+        assert d["active"] is None
+        assert d["last_used"] is not None and d["last_used"]["used_at"] is not None
+
+    def test_unknown_user_is_404(self, client, seeded):
+        """ZH: 回 200 帶一堆 null 的話,打錯 id 看起來像「這個人沒有解鎖」。"""
+        _admin(seeded)
+        r = client.get("/api/v1/admin/users/nope/profile-unlock",
+                       headers=auth_headers(client, "adm", "password123"))
+        assert r.status_code == 404
+
+    def test_requires_admin(self, client, seeded):
+        u = make_user(seeded)
+        r = client.get(f"/api/v1/admin/users/{u.id}/profile-unlock",
+                       headers=auth_headers(client))
+        assert r.status_code == 403
+
+
+class TestRevoke:
+    def test_revoke_marks_used_and_keeps_the_row(self, client, seeded):
+        """
+        ZH: 🔴 收回是**標成已用掉,不刪紀錄**。刪掉的話「這個人曾經被開過一次」
+            就查不到了 —— 而「開過但沒用」正是稽核時想知道的事
+            （例如核可之後才發現不該開）。
+        """
+        u = make_user(seeded)
+        adm = _admin(seeded)
+        crud.grant_profile_unlock(seeded, u, ["campus"], adm)
+        r = client.post(f"/api/v1/admin/users/{u.id}/profile-unlock/revoke",
+                        headers=auth_headers(client, "adm", "password123"))
+        assert r.status_code == 200, r.text
+        assert crud.active_unlock(seeded, u.id) is None
+        rows = seeded.query(models.ProfileUnlock).filter_by(user_id=u.id).all()
+        assert len(rows) == 1, "紀錄被刪掉了 —— 之後查不出曾經開過"
+        assert rows[0].used_at is not None
+
+    def test_revoke_is_audited(self, client, seeded):
+        u = make_user(seeded)
+        adm = _admin(seeded)
+        crud.grant_profile_unlock(seeded, u, ["campus"], adm)
+        client.post(f"/api/v1/admin/users/{u.id}/profile-unlock/revoke",
+                    headers=auth_headers(client, "adm", "password123"))
+        row = (seeded.query(models.AdminAction)
+               .filter_by(action="revoke_profile_unlock").first())
+        assert row is not None and row.target_user == u.id
+
+    def test_revoking_nothing_is_404(self, client, seeded):
+        u = make_user(seeded)
+        _admin(seeded)
+        r = client.post(f"/api/v1/admin/users/{u.id}/profile-unlock/revoke",
+                        headers=auth_headers(client, "adm", "password123"))
+        assert r.status_code == 404
+
+    def test_a_revoked_unlock_no_longer_lets_the_user_save(self, client, seeded):
+        """ZH: 陽性對照 —— 收回之後使用者那邊真的存不了了,不是只有畫面變。"""
+        u = make_user(seeded)
+        adm = _admin(seeded)
+        crud.complete_onboarding(seeded, u, ["台北"], "資訊工程學系")
+        crud.grant_profile_unlock(seeded, u, ["campus"], adm)
+        client.post(f"/api/v1/admin/users/{u.id}/profile-unlock/revoke",
+                    headers=auth_headers(client, "adm", "password123"))
+        with pytest.raises(ValueError, match="鎖定"):
+            crud.complete_onboarding(seeded, u, ["桃園"], None)
+
+
+class TestUserSeesTheUnlock:
+    def test_me_reports_the_unlock_scope(self, client, seeded):
+        """
+        ZH: 🔴 沒有這個欄位的話,管理者開了解鎖,**使用者端沒有任何地方能用它** ——
+            前端只在 onboarded_at 是 null 時才顯示表單。
+            v3.8 開發中實際發生過:後端做完、管理端介面做完,而使用者那邊打不開。
+        """
+        u = make_user(seeded)
+        adm = _admin(seeded)
+        crud.complete_onboarding(seeded, u, ["台北"], "資訊工程學系")
+        h = auth_headers(client)
+        assert client.get("/api/v1/auth/me", headers=h).json()["profile_unlock"] is None
+
+        crud.grant_profile_unlock(seeded, u, ["campus"], adm)
+        assert client.get("/api/v1/auth/me", headers=h).json()["profile_unlock"] == ["campus"]
+
+    def test_it_clears_after_the_edit(self, client, seeded):
+        u = make_user(seeded)
+        adm = _admin(seeded)
+        crud.complete_onboarding(seeded, u, ["台北"], "資訊工程學系")
+        crud.grant_profile_unlock(seeded, u, ["campus"], adm)
+        h = auth_headers(client)
+        client.post("/api/v1/system/onboarding", json={"campuses": ["桃園"]}, headers=h)
+        me = client.get("/api/v1/auth/me", headers=h).json()
+        assert me["profile_unlock"] is None
+        assert me["campuses"] == ["桃園"]
+        assert me["department"] == "資訊工程學系", "核可範圍外的欄位被動到了"

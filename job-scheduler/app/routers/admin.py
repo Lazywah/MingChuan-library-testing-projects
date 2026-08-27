@@ -103,6 +103,42 @@ def put_system_settings(
 # ZH: v3.8 個人組織資料的一次性解鎖
 # EN: v3.8 one-shot unlock for a user's own org fields
 # ==============================================================================
+@router.get("/users/{user_id}/profile-unlock", summary="查目前的一次性解鎖狀態")
+def get_profile_unlock(
+    user_id: str,
+    db: Session = Depends(get_db),
+    _admin: models.User = Depends(require_admin),
+):
+    """
+    ZH: 這個人現在有沒有還沒用掉的解鎖,以及最近一次的紀錄。
+
+    ZH: 為什麼不併進使用者清單：清單一次回幾百人,每人多一次查詢不划算。
+        跟配額、實驗室一樣,開啟帳號詳細時再非同步補。
+
+    ZH: `last_used` 是給管理者判斷用的 —— 「他上次申請是什麼時候、改完了沒」,
+        沒有這個就只看得到「現在鎖著」,分不出「從沒申請過」與「剛用掉」。
+
+    @node job-scheduler/app/routers/admin.py::get_profile_unlock
+    """
+    # ZH: 查不存在的帳號要 404,與核可那支一致 —— 回 200 帶一堆 null 的話,
+    #     打錯 id 看起來就像「這個人沒有解鎖」,而不是「沒有這個人」。
+    if not db.query(models.User).filter(models.User.id == user_id).first():
+        raise HTTPException(status_code=404, detail="找不到這個使用者")
+
+    active = crud.active_unlock(db, user_id)
+    last_used = (db.query(models.ProfileUnlock)
+                 .filter(models.ProfileUnlock.user_id == user_id,
+                         models.ProfileUnlock.used_at.isnot(None))
+                 .order_by(models.ProfileUnlock.used_at.desc()).first())
+    def _row(r):
+        if r is None:
+            return None
+        return {"fields": [f for f in (r.fields or "").split(",") if f],
+                "reason": r.reason, "granted_at": r.granted_at, "used_at": r.used_at}
+    return {"unlockable": list(crud.UNLOCKABLE_FIELDS),
+            "active": _row(active), "last_used": _row(last_used)}
+
+
 @router.post("/users/{user_id}/profile-unlock", summary="核可一次性修改個人組織資料")
 def grant_profile_unlock(
     user_id: str,
@@ -141,6 +177,34 @@ def grant_profile_unlock(
     db.commit()
     return {"fields": row.fields.split(","), "granted_at": row.granted_at,
             "used_at": row.used_at}
+
+
+@router.post("/users/{user_id}/profile-unlock/revoke", summary="收回還沒用掉的解鎖")
+def revoke_profile_unlock(
+    user_id: str,
+    db: Session = Depends(get_db),
+    admin: models.User = Depends(require_admin),
+):
+    """
+    ZH: 把還沒用掉的解鎖收回來（核可錯了、或那個人已經不需要改了）。
+
+    ZH: 🔴 **標成已用掉,不刪紀錄。** 刪掉的話「這個人曾經被開過一次」就查不到了 ——
+        而「開過但沒用」正是稽核時想知道的事（例如核可之後才發現不該開）。
+
+    @node job-scheduler/app/routers/admin.py::revoke_profile_unlock
+    """
+    row = crud.active_unlock(db, user_id)
+    if row is None:
+        raise HTTPException(status_code=404, detail="這個帳號目前沒有未使用的解鎖")
+    row.used_at = datetime.now(timezone.utc)
+    db.add(models.AdminAction(
+        admin_id=admin.id,
+        target_user=user_id,
+        action="revoke_profile_unlock",
+        payload=json.dumps({"fields": row.fields}, ensure_ascii=False),
+    ))
+    db.commit()
+    return {"revoked": True, "fields": [f for f in (row.fields or "").split(",") if f]}
 
 
 @router.get("/email-log", summary="寄信紀錄（誰、何時、結果）")

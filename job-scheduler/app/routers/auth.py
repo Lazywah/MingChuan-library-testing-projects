@@ -314,6 +314,10 @@ def read_users_me(current_user: models.User = Depends(get_current_user),
     """
     out = schemas.UserResponse.model_validate(current_user)
     out.campuses = crud.campuses_of(db, current_user.id)
+    # ZH: 同理,一次性解鎖也在關聯表裡,ORM 模式帶不出來。
+    unlock = crud.active_unlock(db, current_user.id)
+    out.profile_unlock = ([f for f in (unlock.fields or "").split(",") if f]
+                          if unlock else None)
     return out
 
 # ==============================================================================

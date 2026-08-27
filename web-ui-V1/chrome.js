@@ -551,14 +551,23 @@
         return (role === 'staff' || role === 'admin') ? 'unit' : 'department';
     }
 
+    // ZH: 這個彈窗有**兩種模式**：
+    //       初次設定 —— onboarded_at 是 null,兩項都要填,不能跳過
+    //       解鎖修改 —— 已經設定過,但管理者開放了一次修改（profile_unlock 有值）
+    //
+    // ZH: 🔴 沒有第二種模式的話,整條路是**斷的**：管理者按了「開放一次修改」,
+    //     使用者端卻沒有任何地方能用它。（v3.8 開發中實際發生過,
+    //     後端做完了、管理端介面做完了,使用者那邊卻打不開表單。）
     async function maybeShowOnboarding(me) {
-        if (!me || me.onboarded_at) return;          // ZH: 設定過就不再問
+        if (!me) return;
+        var unlock = me.onboarded_at ? (me.profile_unlock || null) : null;
+        if (me.onboarded_at && !unlock) return;      // ZH: 設定過且沒開放 → 不問
         try {
             var r = await fetch(API + '/system/org-options', { headers: authHeaders() });
             if (!r.ok) return;                       // ZH: 讀不到選項就不要擋住人
             _onbOpts = await r.json();
         } catch (e) { return; }
-        buildOnboarding(me, _onbOpts, null);
+        buildOnboarding(me, _onbOpts, null, unlock);
     }
 
     // ZH: 選項清單存起來 —— 從確認頁「返回修改」時要重畫第一頁,
@@ -567,8 +576,16 @@
 
     // ZH: `prefill` 是從確認頁返回時帶回來的選擇。沒有它的話,
     //     使用者按返回等於從頭再選一次 —— 那比沒有返回鍵更氣人。
-    function buildOnboarding(me, opts, prefill) {
+    // ZH: `unlock` 是管理者核可的欄位清單（null = 初次設定,全部都要填）。
+    var _onbUnlock = null;
+
+    function buildOnboarding(me, opts, prefill, unlock) {
+        _onbUnlock = unlock || null;
         var field = onbFieldFor(me.role);
+        // ZH: 解鎖模式下只顯示核可範圍內的欄位 —— 顯示了卻不能存,
+        //     使用者會以為自己改成功了,而後端會退回「這次核可的範圍不包含…」。
+        var askCampus = !unlock || unlock.indexOf('campus') >= 0;
+        var askOrg = !!field && (!unlock || unlock.indexOf(field) >= 0);
         var box = document.createElement('div');
         box.className = 'onb';
         box.setAttribute('role', 'dialog');
@@ -582,7 +599,7 @@
         }).join('');
 
         var orgHtml = '';
-        if (field === 'department') {
+        if (askOrg && field === 'department') {
             // ZH: 依學院分組,51 個系直接平鋪很難找。
             var byCollege = {};
             opts.departments.forEach(function (d) {
@@ -595,7 +612,7 @@
                         return '<option value="' + esc(n) + '">' + esc(n) + '</option>';
                     }).join('') + '</optgroup>';
             }).join('');
-        } else if (field === 'unit') {
+        } else if (askOrg && field === 'unit') {
             // ZH: 97 個單位,依上層處室分組。頂層單位自成一組。
             var tops = opts.units.filter(function (u) { return !u.parent; });
             orgHtml = tops.map(function (t) {
@@ -611,17 +628,22 @@
 
         box.innerHTML =
             '<div class="onb__box">'
-            + '<h2 class="onb__title" id="onb-title">' + esc(T('onb_title', '先完成基本設定')) + '</h2>'
-            + '<p class="onb__sub">' + esc(T('onb_sub', '這些資料用來做統計分組，只需要設定一次。')) + '</p>'
+            + '<h2 class="onb__title" id="onb-title">'
+            + esc(unlock ? T('onb_edit_title', '修改你的資料')
+                         : T('onb_title', '先完成基本設定')) + '</h2>'
+            + '<p class="onb__sub">'
+            + esc(unlock
+                ? T('onb_edit_sub', '管理員開放了一次修改。存檔之後會再次鎖定。')
+                : T('onb_sub', '這些資料用來做統計分組，只需要設定一次。')) + '</p>'
             + '<p class="onb__err" id="onb-err" hidden></p>'
-            + '<div class="onb__field">'
+            + (askCampus ? '<div class="onb__field">'
             +   '<label class="onb__label" for="onb-campus">' + esc(T('onb_campus', '校區')) + '</label>'
             +   '<select class="onb__select" id="onb-campus"' + (multi ? ' multiple size="5"' : '') + '>'
             +     (multi ? '' : '<option value="">' + esc(T('onb_pick', '請選擇')) + '</option>')
             +     campusOpts + '</select>'
             +   (multi ? '<span class="onb__hint">' + esc(T('onb_campus_multi', '可以選多個（按住 Ctrl／⌘）。')) + '</span>' : '')
-            + '</div>'
-            + (field
+            + '</div>' : '')
+            + (askOrg
                 ? '<div class="onb__field">'
                   + '<label class="onb__label" for="onb-org">'
                   + esc(field === 'unit' ? T('onb_unit', '行政單位') : T('onb_dept', '學系'))
@@ -636,6 +658,12 @@
 
         document.body.appendChild(box);
 
+        // ZH: 解鎖模式帶入現有值 —— 只開放改校區時,不該讓他連學系一起重選;
+        //     而且看得到目前是什麼,才知道自己要改成什麼。
+        if (!prefill && unlock) {
+            prefill = { campuses: me.campuses || [],
+                        org: (field === 'unit' ? me.unit : me.department) || '' };
+        }
         if (prefill) {
             var cs = box.querySelector('#onb-campus');
             if (multi) {
@@ -662,16 +690,18 @@
     // ZH: 🔴 **確認頁不重新讀取欄位** —— 它顯示的就是待會要送出的那份資料。
     //     重讀的話,顯示與送出會是兩次不同的讀取,中間任何變動都看不出來。
     function reviewOnboarding(box, multi, field) {
+        // ZH: 解鎖模式下只會出現核可範圍內的欄位,所以兩個都可能不存在。
         var sel = box.querySelector('#onb-campus');
-        var campuses = multi
-            ? Array.prototype.slice.call(sel.selectedOptions).map(function (o) { return o.value; })
-            : (sel.value ? [sel.value] : []);
+        var campuses = !sel ? []
+            : multi
+                ? Array.prototype.slice.call(sel.selectedOptions).map(function (o) { return o.value; })
+                : (sel.value ? [sel.value] : []);
         var orgEl = box.querySelector('#onb-org');
         var orgValue = orgEl ? orgEl.value : null;
         var err = box.querySelector('#onb-err');
 
         // ZH: 明顯的漏填在這裡先擋 —— 讓他確認一份空的再被後端退回很不友善。
-        if (!campuses.length) {
+        if (sel && !campuses.length) {
             err.textContent = T('onb_need_campus', '請先選擇校區。');
             err.hidden = false;
             return;
@@ -687,9 +717,9 @@
 
         var orgLabel = orgEl && orgEl.selectedOptions[0]
             ? orgEl.selectedOptions[0].textContent : '';
-        var rows = '<div class="onb__row"><span class="onb__k">'
+        var rows = (sel ? '<div class="onb__row"><span class="onb__k">'
             + esc(T('onb_campus', '校區')) + '</span><span class="onb__v">'
-            + esc(campuses.join('、')) + '</span></div>'
+            + esc(campuses.join('、')) + '</span></div>' : '')
             + (orgEl
                 ? '<div class="onb__row"><span class="onb__k">'
                   + esc(field === 'unit' ? T('onb_unit', '行政單位') : T('onb_dept', '學系'))
@@ -715,7 +745,9 @@
         //     不然他返回之後得從頭再選一次,那比沒有返回鍵更氣人。
         box.querySelector('#onb-back').addEventListener('click', function () {
             box.remove();
-            buildOnboarding(_me, _onbOpts, { campuses: campuses, org: orgValue });
+            // ZH: 🔴 `_onbUnlock` 要一起帶回去 —— 不帶的話返回之後會變成
+            //     初次設定模式,欄位全開,而使用者存下去會被後端擋「超出核可範圍」。
+            buildOnboarding(_me, _onbOpts, { campuses: campuses, org: orgValue }, _onbUnlock);
         });
     }
 

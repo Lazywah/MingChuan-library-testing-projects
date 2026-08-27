@@ -445,6 +445,41 @@
     block-size: 1.15em;
 }
 
+/* ── 勾選型欄位（管理權限）────────────────────────────────────────────────
+ * ZH: 共用的 `.field` 是**縱向** flex（標籤在上、輸入在下）——
+ *     文字框那樣是對的,但勾選框套上去會變成「方塊一行、說明一行」,
+ *     而且方塊孤零零地靠左,看起來像沒做完。
+ *
+ * ZH: 這個修飾類別把它轉成橫向,並加一層淡底把它跟上面的下拉分開 ——
+ *     它跟角色是**兩個不同的概念**（身分 vs 權限）,擠在一起看起來像同一組設定。
+ * ──────────────────────────────────────────────────────────────────── */
+.field--check {
+    flex-direction: row;
+    align-items: flex-start;
+    gap: var(--space-3);
+    padding: var(--space-3);
+    background-color: var(--surface-2);
+    border: 1px solid var(--hairline);
+    border-radius: var(--radius-sm);
+}
+/* ZH: 蓋掉上面那條 `align-self: start` —— 這裡要跟第一行文字對齊,
+ *     而不是貼著整塊的頂端（說明有兩行時會差一截）。 */
+.adm-card .field--check > input[type="checkbox"] {
+    align-self: center;
+    margin: 0;
+    flex: none;
+    cursor: pointer;
+}
+.field--check__text { display: flex; flex-direction: column; gap: 2px; cursor: pointer; }
+.field--check__title { color: var(--text-strong); font-weight: 600; }
+/* ZH: 說明用 --text-muted 而不是再開一個尺寸 —— 這一頁的說明文字都是這個量級。 */
+.field--check__hint { font-size: 0.8125rem; color: var(--text-muted); }
+/* ZH: 打開時給一點顏色,讓「這個人有管理權限」在一整頁欄位裡看得出來。 */
+.field--check:has(input:checked) {
+    background-color: var(--warn-soft);
+    border-color: var(--warn);
+}
+
 /* ── 可點的卡片（總覽的 GPU → 平台設定）───────────────────────────────────
    ZH: 用 <a> 做的卡片。要拿掉連結的底線與顏色，但**保留可點的線索**
        （游標 + hover 的位移與陰影），否則它看起來像一張普通的卡。 */
