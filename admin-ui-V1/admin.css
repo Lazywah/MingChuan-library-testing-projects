@@ -648,7 +648,10 @@ textarea.field__input {
     flex: none;
     padding: 2px;
     background-color: var(--surface-2);
-    border: 1px solid var(--border);
+    /* ZH: 2026-08-27 從 var(--border) 改成 var(--hairline) ——
+     *     `--border` 這個變數**沒有定義**,所以這條外框一直是隱形的。
+     *     CSS 用未定義變數會靜默失效,畫面上看不出是拼錯。 */
+    border: 1px solid var(--hairline);
     border-radius: var(--radius-pill);
 }
 .adm-seg__thumb {

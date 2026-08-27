@@ -420,15 +420,22 @@ body {
  *
  * ZH: 狀態（aria-pressed）由 prefs.js 的 applyLang 統一重畫，這裡只管外觀。
  * ──────────────────────────────────────────────────────────────── */
+/* ZH: 2026-08-27 改成分段控制（segmented control）的樣子,與管理端
+ *     「平台／MYAI」那個檢視滑條一致：灰底軌道 + 內嵌的藥丸。
+ *     顏色不變 —— 選中的仍是 --accent（黃）,不是那邊的白色。
+ *
+ * ZH: 軌道用 --surface-2 而不是 --surface：內嵌藥丸要浮起來,
+ *     底色跟它一樣的話就看不出「軌道」與「目前在哪一格」。
+ */
 .lang-switch {
     display: inline-flex;
     align-items: center;
     flex: none;
     margin-right: var(--space-2);
+    padding: 2px;                      /* ZH: 藥丸與軌道之間的內縮 */
     border: 1px solid var(--hairline);
     border-radius: var(--radius-pill);
-    overflow: hidden;
-    background-color: var(--surface);
+    background-color: var(--surface-2);
 }
 .lang-switch button {
     /* ZH: 頂部列很擠，所以比 --tap-min 小。可點高度靠上下 padding 撐到 32px，
@@ -445,11 +452,21 @@ body {
     cursor: pointer;
     white-space: nowrap;
 }
-.lang-switch button + button { border-left: 1px solid var(--hairline); }
-.lang-switch button:hover { background-color: var(--surface-2); color: var(--text-strong); }
+/* ZH: 分隔線拿掉 —— 內嵌藥丸本身就分得出兩格,再加一條線會跟藥丸的邊撞在一起。 */
+.lang-switch button {
+    border-radius: var(--radius-pill);
+    transition: background-color 0.18s ease, color 0.18s ease;
+}
+/* ZH: 未選中的那格 hover 時只給很淡的底 —— 給 --surface-2 的話
+ *     它會跟軌道同色,看起來像沒有反應。 */
+.lang-switch button:hover:not([aria-pressed="true"]) {
+    background-color: var(--surface);
+    color: var(--text-strong);
+}
 .lang-switch button[aria-pressed="true"] {
     background-color: var(--accent);
     color: var(--on-accent);          /* ⚠ 黃底＝深字、藍底＝白字，由 token 決定 */
+    box-shadow: var(--shadow-1);      /* ZH: 讓藥丸浮在軌道上,與檢視滑條一致 */
 }
 .lang-switch button:focus-visible { outline: var(--focus-ring); outline-offset: -2px; }
 
