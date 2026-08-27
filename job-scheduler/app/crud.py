@@ -1425,23 +1425,31 @@ SETTING_GROUPS = [
     {"key": "assistant", "view": "platform", "label": "小基（RAG 助手）"},
 ]
 _VIEW_KEYS = {"platform", "myai"}
+
+# ZH: 星號（starred）的意思（擁有者裁定 2026-08-27）：
+#       這個值**使用者看得到**，或者**改之前應該先公告**。
+#     不是「比較重要」也不是「比較危險」 —— 同步間隔改錯一樣會出事，
+#     但那是內部的事，不需要先跟使用者說。
+#
+# ZH: 預設不標。新增旋鈕時不會因為忘了標而變成誤報，
+#     反過來漏標一個該標的只是少一個提醒 —— 比亂標好。
 _GROUP_KEYS = {g["key"] for g in SETTING_GROUPS}
 
 
 SYSTEM_SETTINGS = {
-    "monthly_token_limit":      {"group": "platform", "type": "int",   "default": lambda: settings.DEFAULT_MONTHLY_TOKEN_LIMIT, "min": 0,   "max": None, "label": "每月 Token 額度(新帳號預設；改既有帳號用批量設定)"},
-    "token_reset_day":          {"group": "platform", "type": "int",   "default": lambda: settings.TOKEN_RESET_DAY,             "min": 1,   "max": 28,   "label": "額度重置日(每月第幾天)"},
-    "job_timeout_minutes":      {"group": "platform", "type": "int",   "default": lambda: settings.JOB_TIMEOUT_MINUTES,         "min": 1,   "max": None, "label": "任務逾時(分鐘)"},
+    "monthly_token_limit":      {"starred": True, "group": "platform", "type": "int",   "default": lambda: settings.DEFAULT_MONTHLY_TOKEN_LIMIT, "min": 0,   "max": None, "label": "每月 Token 額度(新帳號預設；改既有帳號用批量設定)"},
+    "token_reset_day":          {"starred": True, "group": "platform", "type": "int",   "default": lambda: settings.TOKEN_RESET_DAY,             "min": 1,   "max": 28,   "label": "額度重置日(每月第幾天)"},
+    "job_timeout_minutes":      {"starred": True, "group": "platform", "type": "int",   "default": lambda: settings.JOB_TIMEOUT_MINUTES,         "min": 1,   "max": None, "label": "任務逾時(分鐘)"},
     "myai_sync_interval_hours": {"group": "myai", "type": "int",   "default": lambda: settings.MYAI_SYNC_INTERVAL_HOURS,    "min": 0,   "max": 168,  "label": "MYAI 同步間隔(小時, 0=關閉)"},
     "rag_top_k":                {"group": "assistant", "type": "int",   "default": lambda: settings.RAG_TOP_K,                   "min": 1,   "max": 20,   "label": "小基 RAG 取回片段數"},
     "rag_min_score":            {"group": "assistant", "type": "float", "default": lambda: settings.RAG_MIN_SCORE,               "min": 0.0, "max": 1.0,  "label": "小基 RAG 相似度門檻"},
     "rag_history_turns":        {"group": "assistant", "type": "int",   "default": lambda: settings.RAG_HISTORY_TURNS,           "min": 0,   "max": 20,   "label": "小基 RAG 帶入對話輪數"},
     # v3.3 MYAI 自動開通
-    "myai_autoprovision":       {"group": "myai", "type": "int",   "default": lambda: 0,                                    "min": 0,   "max": 1,    "label": "MYAI 首次登入自動開通(1=開, 0=關)"},
-    "myai_init_pwd_days":       {"group": "myai", "type": "int",   "default": lambda: 30,                                   "min": 1,   "max": 180,  "label": "MYAI 初始密碼保存天數(逾期自動清除)"},
-    "myai_initial_credit":      {"group": "myai", "type": "int",   "default": lambda: 0,                                    "min": 0,   "max": None, "label": "MYAI 新帳號初始點數(0=不發放)"},
+    "myai_autoprovision":       {"starred": True, "group": "myai", "type": "int",   "default": lambda: 0,                                    "min": 0,   "max": 1,    "label": "MYAI 首次登入自動開通(1=開, 0=關)"},
+    "myai_init_pwd_days":       {"starred": True, "group": "myai", "type": "int",   "default": lambda: 30,                                   "min": 1,   "max": 180,  "label": "MYAI 初始密碼保存天數(逾期自動清除)"},
+    "myai_initial_credit":      {"starred": True, "group": "myai", "type": "int",   "default": lambda: 0,                                    "min": 0,   "max": None, "label": "MYAI 新帳號初始點數(0=不發放)"},
     # v3.3 刪除使用者後 Lab volume 的封存保留天數（逾期背景任務真正刪除）
-    "lab_archive_days":         {"group": "platform", "type": "int",   "default": lambda: 30,                                   "min": 1,   "max": 365,  "label": "刪除帳號後 Lab 資料封存天數(逾期銷毀)"},
+    "lab_archive_days":         {"starred": True, "group": "platform", "type": "int",   "default": lambda: 30,                                   "min": 1,   "max": 365,  "label": "刪除帳號後 Lab 資料封存天數(逾期銷毀)"},
     # v3.4 有使用者在線時的 MYAI 輪詢間隔（無人在線會完全跳過，不受此值影響）
     "myai_active_poll_minutes": {"group": "myai", "type": "int",   "default": lambda: 3,                                    "min": 1,   "max": 60,   "label": "MYAI 輪詢間隔(分, 僅有人在線時; 無人時自動休息)"},
     "myai_usage_window_min":    {"group": "myai", "type": "int",   "default": lambda: 15,                                   "min": 1,   "max": 180,  "label": "判定「正在使用 MYAI」的時間窗(分)"},
@@ -1452,7 +1460,7 @@ SYSTEM_SETTINGS = {
     # ZH: ⚠ 選外部模型（Claude / Gemini）代表**把問題送到校外廠商**——
     #     而小基的程式家教模式會讀使用者自己的檔案。介面上要講清楚，
     #     這是政策決定不只是設定。
-    "rag_chat_model":           {"group": "assistant", "type": "choice", "default": lambda: settings.RAG_CHAT_MODEL,             "min": None, "max": None, "label": "小基回應用的模型"},
+    "rag_chat_model":           {"starred": True, "group": "assistant", "type": "choice", "default": lambda: settings.RAG_CHAT_MODEL,             "min": None, "max": None, "label": "小基回應用的模型"},
 }
 
 
@@ -1559,6 +1567,7 @@ def get_all_settings(db: Session) -> list:
         item = {
             "key": key,
             "group": spec["group"],
+            "starred": bool(spec.get("starred")),
             "label": spec["label"],
             "type": spec["type"],
             "value": get_setting(db, key),

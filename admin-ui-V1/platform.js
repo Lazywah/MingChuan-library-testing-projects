@@ -318,7 +318,16 @@
                 : '—';
             // ZH: `overridden` 是後端給的 —— 標出來，管理者才分得出
             //     「這是我改過的」與「這是 .env 的預設」。
-            var name = '<td>' + esc(s2.label)
+            // ZH: 星號在標籤前面。用 title 而不是只給一個符號 ——
+            //     一個沒有解釋的星號，下一個接手的人根本不知道它在講什麼。
+            //     區塊上方另外有一行圖例（見 analytics 以外的 pf_star_legend）。
+            var star = s2.starred
+                ? '<span class="pf-star" title="' + esc(T('pf_star_why',
+                    '這個值使用者看得到，或者改之前應該先公告。'))
+                    + '" aria-label="' + esc(T('pf_star_why',
+                    '這個值使用者看得到，或者改之前應該先公告。')) + '">\u2605</span> '
+                : '';
+            var name = '<td>' + star + esc(s2.label)
                 + (s2.overridden ? ' <span class="adm-pill adm-pill--temp">'
                     + esc(T('pf_overridden', '已覆寫')) + '</span>' : '') + '</td>';
 
