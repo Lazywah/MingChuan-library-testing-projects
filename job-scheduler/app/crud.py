@@ -1484,7 +1484,12 @@ SYSTEM_SETTINGS = {
     "lab_purge_final_days": {"starred": True, "group": "platform", "type": "int", "default": lambda: 7,  "min": 0, "max": 365, "label": "Lab 資料銷毀前最後提醒(剩幾天;0=不寄)"},
     # ZH: v3.8 管理員告警信。收件人留空 = 完全不寄（預設就是留空）——
     #     一個沒有人填收件人的告警系統應該安靜，而不是往預設信箱亂寄。
-    "admin_alert_emails":       {"group": "email", "type": "text",  "default": lambda: "",   "min": None, "max": None, "maxlen": 500, "text_kind": "emails", "label": "管理員告警收件人(逗號分隔;留空=不寄告警)"},
+    "admin_alert_emails":       {"group": "email", "type": "text",  "default": lambda: "",   "min": None, "max": None, "maxlen": 500, "text_kind": "emails", "label": "管理員告警收件人 To(逗號分隔;與 CC 都留空=不寄告警)"},
+    # ZH: v3.8 —— 告警信的 CC 收件人。To（admin_alert_emails）是「該處理的人」，
+    #     CC 是「知道就好的人」。兩份都空 = 完全不寄（沒有人填收件人的告警系統應該安靜）。
+    # ZH: ⚠ CC 之後收件人**彼此看得到對方的信箱** —— 這是 CC 的本意（讓大家知道誰也收到了），
+    #     但它推翻了原本「逐一寄、彼此看不到」的設計。只放內部管理員的地址。
+    "admin_alert_cc_emails":    {"group": "email", "type": "text",  "default": lambda: "",   "min": None, "max": None, "maxlen": 500, "text_kind": "emails", "label": "管理員告警 CC 收件人(逗號分隔;留空=沒有 CC)"},
     "admin_alert_min_hours":    {"group": "email", "type": "int",   "default": lambda: 6,    "min": 1,    "max": 168,  "label": "同一類告警最短間隔(小時,避免壞掉時每輪都寄)"},
     "smtp_from_email": {"starred": True, "group": "email", "type": "text", "default": lambda: settings.SMTP_FROM_EMAIL, "min": None, "max": None, "maxlen": 254, "text_kind": "email", "label": "寄件者地址(使用者在信箱裡看到的寄件人)"},
     "rag_chat_model":           {"starred": True, "group": "assistant", "type": "choice", "default": lambda: settings.RAG_CHAT_MODEL,             "min": None, "max": None, "label": "小基回應用的模型"},
@@ -1674,6 +1679,11 @@ def get_all_settings(db: Session) -> list:
             "min": spec["min"],
             "max": spec["max"],
             "overridden": raw not in (None, ""),
+            # ZH: v3.8 —— 文字型旋鈕的「子型別」。前端據此決定怎麼畫：
+            #     `emails` 會畫成一列一個地址的清單編輯器，不用管理者自己打逗號。
+            #     由後端給是刻意的 —— 前端自己維護一份「哪些 key 是信箱清單」的話，
+            #     新增旋鈕時一定會忘記更新，而那個欄位只會安靜地退回普通文字框。
+            "text_kind": spec.get("text_kind"),
         }
         # ZH: 下拉型的旋鈕要把選項一起送 —— 前端不該自己去猜有哪些值。
         if spec["type"] == "choice":

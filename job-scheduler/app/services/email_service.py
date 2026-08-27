@@ -80,8 +80,33 @@ def _smtp():
                 "password": settings.SMTP_PASSWORD}
 
 
-def send_email(to_email: str, subject: str, html_content: str,
-               kind: str = None, username: str = None, user_id: str = None):
+def _addr_list(v) -> list:
+    """
+    ZH: 把「字串 / 逗號分隔字串 / 清單 / None」統一成去重後的地址清單（保持順序）。
+
+    ZH: 去重是必要的：同一個地址同時出現在 To 與 CC，對方會收到兩封，
+        而且 email_log 會多一筆對不到退信的紀錄。
+        大小寫不同視為同一個地址（網域必然不分大小寫；本地部分理論上可分，
+        實務上沒有信箱這樣設定）。
+
+    @node job-scheduler/app/services/email_service.py::_addr_list
+    """
+    if v is None:
+        return []
+    parts = v if isinstance(v, (list, tuple, set)) else str(v).split(",")
+    out, seen = [], set()
+    for raw in parts:
+        a = str(raw).strip()
+        if not a or a.lower() in seen:
+            continue
+        seen.add(a.lower())
+        out.append(a)
+    return out
+
+
+def send_email(to_email, subject: str, html_content: str,
+               kind: str = None, username: str = None, user_id: str = None,
+               cc=None):
     """
     ZH: 寄送電子郵件的核心方法。
 
@@ -111,27 +136,41 @@ def send_email(to_email: str, subject: str, html_content: str,
     #     真的往 xxx@example.com 寄了信，全數退回寄件信箱（2026-08-15，約 35 封）。
     #     測試端的防線（設定 SMTP_SERVER="" 走 mock）有效，但那是**外部**防線，
     #     改壞了就破功；這一道在寄信路徑內，任何呼叫端都繞不過去。
-    if is_undeliverable_by_spec(to_email):
-        logger.warning("拒寄：%s 是 RFC 2606/6761 保留網域，規範上不可投遞", to_email)
-        _record(to_email, subject, "blocked", "reserved domain (RFC 2606/6761)",
+    # ZH: v3.8 —— to_email 可以是字串或清單，cc 同理；單一收件人的行為維持不變。
+    #     正規化放在閘門之前：保留網域要**逐個地址**過濾，不能只看第一個。
+    to_list = _addr_list(to_email)
+    cc_list = [a for a in _addr_list(cc) if a.lower() not in {x.lower() for x in to_list}]
+
+    blocked = [a for a in (to_list + cc_list) if is_undeliverable_by_spec(a)]
+    for addr in blocked:
+        logger.warning("拒寄：%s 是 RFC 2606/6761 保留網域，規範上不可投遞", addr)
+        _record(addr, subject, "blocked", "reserved domain (RFC 2606/6761)",
                 kind, username, user_id, msg_id)
-        return
+    to_list = [a for a in to_list if a not in blocked]
+    cc_list = [a for a in cc_list if a not in blocked]
+    if not to_list and not cc_list:
+        return                      # ZH: 全部被擋 → 沒有人可寄；紀錄上面已經寫了
 
     if not cfg["server"]:
         logger.info(f"========== [MOCK EMAIL] ==========")
-        logger.info(f"To: {to_email}")
+        logger.info(f"To: {', '.join(to_list)}")
+        if cc_list:
+            logger.info(f"Cc: {', '.join(cc_list)}")
         logger.info(f"Subject: {subject}")
         logger.info(f"Content: \n{html_content}")
         logger.info(f"==================================")
-        _record(to_email, subject, "mock", "SMTP 主機未設定，未實際寄出",
-                kind, username, user_id, msg_id)
+        for addr in to_list + cc_list:
+            _record(addr, subject, "mock", "SMTP 主機未設定，未實際寄出",
+                    kind, username, user_id, msg_id)
         return
 
     try:
         msg = MIMEMultipart("alternative")
         msg["Subject"] = subject
         msg["From"] = cfg["from_email"]
-        msg["To"] = to_email
+        msg["To"] = ", ".join(to_list)
+        if cc_list:
+            msg["Cc"] = ", ".join(cc_list)
         msg["Message-ID"] = msg_id
 
         part = MIMEText(html_content, "html")
@@ -145,27 +184,39 @@ def send_email(to_email: str, subject: str, html_content: str,
                 server.login(cfg["username"], cfg["password"])
 
             # ZH: sendmail 回傳 dict = 「部分收件人被拒」（其餘仍送出）；原本這個回傳值被丟掉
-            refused = server.sendmail(cfg["from_email"], to_email, msg.as_string())
+            # ZH: 信封收件人**必須含 CC** —— Cc 標頭只是顯示用，
+            #     沒放進 sendmail 的收件人清單的話，CC 的人根本收不到（而且不會報錯）。
+            refused = server.sendmail(cfg["from_email"], to_list + cc_list, msg.as_string())
         finally:
             try:
                 server.quit()
             except Exception:  # noqa: BLE001 - 關閉失敗不影響已送出的信
                 pass
 
+        # ZH: v3.8 —— 逐個收件人記狀態。一封信同時寄給多人時，
+        #     `sendmail` 回傳的 dict 只含**被拒的那幾個**，其餘是照常送出的。
+        #     整封記成同一個狀態的話，一個地址被拒會讓其他人也顯示成失敗（反之亦然）。
+        refused_map = {k.lower(): v for k, v in (refused or {}).items()}
         if refused:
-            logger.warning(f"收件人被拒 {to_email}: {refused}")
-            _record(to_email, subject, "refused", str(refused)[:400], kind, username, user_id, msg_id)
+            logger.warning(f"部分收件人被拒: {refused}")
         else:
             # ZH: 措辭刻意不用「successfully sent」——那會讓人誤以為已送達
-            logger.info(f"已交付 SMTP 伺服器（不代表已送達）: {to_email}")
-            _record(to_email, subject, "sent", None, kind, username, user_id, msg_id)
+            logger.info(f"已交付 SMTP 伺服器（不代表已送達）: {', '.join(to_list + cc_list)}")
+        for addr in to_list + cc_list:
+            hit = refused_map.get(addr.lower())
+            if hit is not None:
+                _record(addr, subject, "refused", str(hit)[:400], kind, username, user_id, msg_id)
+            else:
+                _record(addr, subject, "sent", None, kind, username, user_id, msg_id)
 
     except smtplib.SMTPRecipientsRefused as e:
-        logger.warning(f"收件人全部被拒 {to_email}: {e.recipients}")
-        _record(to_email, subject, "refused", str(e.recipients)[:400], kind, username, user_id, msg_id)
+        logger.warning(f"收件人全部被拒: {e.recipients}")
+        for addr in to_list + cc_list:
+            _record(addr, subject, "refused", str(e.recipients)[:400], kind, username, user_id, msg_id)
     except Exception as e:
-        logger.error(f"寄信失敗 {to_email}: {e}")
-        _record(to_email, subject, "failed", str(e)[:400], kind, username, user_id, msg_id)
+        logger.error(f"寄信失敗 {', '.join(to_list + cc_list)}: {e}")
+        for addr in to_list + cc_list:
+            _record(addr, subject, "failed", str(e)[:400], kind, username, user_id, msg_id)
 
 ALERT_KIND_PREFIX = "alert:"
 
@@ -229,10 +280,14 @@ def send_admin_alert(kind: str, subject: str, html_content: str) -> int:
         from .. import crud
         db = SessionLocal()
         try:
-            raw = crud.get_setting(db, "admin_alert_emails") or ""
-            recipients = [x.strip() for x in raw.split(",") if x.strip()]
-            if not recipients:
+            to_addrs = _addr_list(crud.get_setting(db, "admin_alert_emails"))
+            cc_addrs = _addr_list(crud.get_setting(db, "admin_alert_cc_emails"))
+            if not to_addrs and not cc_addrs:
                 return 0
+            # ZH: To 留空但有 CC 時，把 CC 升成 To —— 一封沒有 To 的信會被
+            #     不少郵件伺服器判成垃圾信，而管理員多半只是把地址填錯欄位。
+            if not to_addrs:
+                to_addrs, cc_addrs = cc_addrs, []
             hours = crud.get_setting(db, "admin_alert_min_hours")
             if _alert_recent(db, kind, hours):
                 logger.info("告警 %s 在 %s 小時內已寄過,這次略過", kind, hours)
@@ -243,14 +298,18 @@ def send_admin_alert(kind: str, subject: str, html_content: str) -> int:
         logger.warning("讀取告警設定失敗,不寄告警：%s", e)
         return 0
 
-    sent = 0
-    for addr in recipients:
-        try:
-            send_email(addr, subject, html_content, kind=ALERT_KIND_PREFIX + kind)
-            sent += 1
-        except Exception as e:  # noqa: BLE001
-            logger.warning("告警信寄給 %s 失敗：%s", addr, e)
-    return sent
+    # ZH: v3.8 —— 改成**一封信**，To 是「該處理的人」、CC 是「知道就好的人」。
+    #     v3.7 以前是逐一寄（一人一封），好處是彼此看不到對方的信箱；
+    #     擁有者 2026-08-27 裁定要 To/CC —— 讓收件人看得出誰也收到了，
+    #     才不會三個人同時去處理同一件事、或三個人都以為別人會處理。
+    try:
+        send_email(to_addrs, subject, html_content,
+                   kind=ALERT_KIND_PREFIX + kind, cc=cc_addrs)
+    except Exception as e:  # noqa: BLE001
+        logger.warning("告警信寄送失敗：%s", e)
+        return 0
+    # ZH: 回傳「交給 send_email 的收件人數」——語意與改版前一致（不是送達數）。
+    return len(to_addrs) + len(cc_addrs)
 
 
 def send_login_alert(to_email: str, username: str, ip_address: str):

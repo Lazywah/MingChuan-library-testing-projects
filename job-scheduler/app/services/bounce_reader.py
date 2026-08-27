@@ -260,8 +260,24 @@ def apply_bounce(db: Session, parsed: dict) -> int:
     for rec in parsed["recipients"]:
         row = None
         if mid:
-            row = (db.query(models.EmailLog)
-                     .filter(models.EmailLog.message_id == mid).first())
+            # ZH: 🔴 v3.8 —— 一個 Message-ID 現在可能對到**多筆**紀錄
+            #     （管理員告警改成一封信 To + CC，每個收件人各一列）。
+            #     原本是 `.first()`：C 的退信會落到 A 的那一列上 ——
+            #     A 明明寄成功卻被標成退信，而且沒有任何錯誤訊息。
+            #     所以多筆時一律再用收件地址對；對不到就**不回填**（見下方 log），
+            #     寧可少記一筆，也不要把退信記到不相干的人身上。
+            rows = (db.query(models.EmailLog)
+                      .filter(models.EmailLog.message_id == mid).all())
+            if len(rows) == 1:
+                row = rows[0]                      # ZH: 單收件人 —— 與改版前完全一樣
+            elif rows and rec.get("recipient"):
+                want = rec["recipient"].strip().lower()
+                row = next((r for r in rows
+                            if (r.to_email or "").strip().lower() == want), None)
+                if row is None:
+                    logger.info(
+                        "退信的 Message-ID 對到 %d 筆紀錄，但收件地址 %s 都對不上（不回填）",
+                        len(rows), rec.get("recipient"))
         guessed = False
         if row is None and rec.get("recipient"):
             row = (db.query(models.EmailLog)

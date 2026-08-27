@@ -11,7 +11,7 @@
 
     <link rel="stylesheet" href="tokens.css?v=ff9cecda">
     <link rel="stylesheet" href="styles.css?v=4bd632c4">
-    <link rel="stylesheet" href="admin.css?v=fa87fc05">
+    <link rel="stylesheet" href="admin.css?v=3d45d601">
 </head>
 <body>
 
@@ -71,6 +71,25 @@
         </div>
         <div id="settings" aria-live="polite"><span class="skeleton skeleton--line"></span></div>
         <div class="inline-error" id="s-msg" hidden></div>
+    </section>
+
+    <!-- ZH: 告警信的收件人。刻意**不放在營運設定那張表裡** ——
+             那張表是「設定／值／預設／範圍」四欄的統一格式，
+             而收件人要回答的是「這封信會從哪寄、寄給誰」，那是一封信的樣子，不是一個值。
+         ZH: 這一格同時就是**預覽**：寄件人是誰、主旨長什麼樣，都在這裡看得到。
+             寄件人現在是從 SMTP 設定來的（可能還是個人信箱），
+             把它放在最上面一行，改設定的人才會注意到。 -->
+    <section class="adm-sec" data-view="platform" aria-labelledby="h-alertmail">
+        <div class="adm-sec__head">
+            <h2 id="h-alertmail" data-i18n="pf_am_title">告警信</h2>
+            <span class="topbar__spacer"></span>
+            <button class="btn btn--minor" type="button" id="am-edit" data-i18n="pf_edit">編輯設定</button>
+            <button class="btn btn--minor" type="button" id="am-cancel" data-i18n="pf_cancel" hidden>取消</button>
+            <button class="btn btn--primary" type="button" id="am-save" data-i18n="pf_save" hidden>儲存設定</button>
+        </div>
+        <p class="footnote" data-i18n="pf_am_why">系統自己出事的時候（同步失敗、退信回收停掉）會寄這封信。收件人全部留空＝完全不寄。</p>
+        <div id="alertmail" aria-live="polite"><span class="skeleton skeleton--line"></span></div>
+        <div class="inline-error" id="am-msg" hidden></div>
     </section>
 
     <section class="adm-sec" data-view="platform" aria-labelledby="h-models">
@@ -161,9 +180,9 @@
 <script src="tz.js?v=2e214a8b"></script>
 <!-- ⚠ ZH: 順序不能動 —— i18n-admin 在 i18n 之後、prefs 之前。 -->
 <script src="i18n.js?v=d36d89a7"></script>
-<script src="i18n-admin.js?v=c6d71f98"></script>
+<script src="i18n-admin.js?v=df4a9f98"></script>
 <script src="prefs.js?v=a25a96d6"></script>
 <script src="admin-chrome.js?v=7d8e9370"></script>
-<script src="platform.js?v=07f38b63"></script>
+<script src="platform.js?v=034771a0"></script>
 </body>
 </html>

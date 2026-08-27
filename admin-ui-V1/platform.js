@@ -132,6 +132,22 @@
             + ' value="' + esc(value == null ? '' : value) + '"></td>';
     }
 
+    // ZH: 這兩個旋鈕由「告警信」那一格負責，**不畫進營運設定表**。
+    //     同一個值有兩個編輯處的話，兩邊會顯示不同的內容（一邊改完另一邊沒重讀），
+    //     而使用者不知道該信哪一個。
+    // ZH: ⚠ 從表格移除的東西必須**確定有別的地方畫它**。這裡兩者在同一頁、
+    //     同一個檢視（platform）、同一次 loadSettings 之後渲染，所以不會發生
+    //     「從表格拿掉了、新區塊又沒出現」那種安靜消失。
+    var ALERT_MAIL_KEYS = ['admin_alert_emails', 'admin_alert_cc_emails'];
+
+    // ZH: 逗號分隔字串 → 陣列。空白與空項目一律丟掉。
+    //     `null` / 空字串會得到空陣列（不是 [""]）—— 那會讓畫面出現一個空白列。
+    function splitAddrs(v) {
+        return String(v == null ? '' : v).split(',')
+            .map(function (x) { return x.trim(); })
+            .filter(function (x) { return x.length > 0; });
+    }
+
     // ZH: list 可以是字串陣列，也可以是 {value,label}。
     function cellSelect(f, list, value, o) {
         o = o || {};
@@ -290,6 +306,203 @@
             return;
         }
         renderSettings();
+        renderAlertMail();
+    }
+
+    // ══════════════════════════════════════════════════════════════════════
+    // ZH: 「告警信」—— 收件人設定畫成一封信的樣子（寄件人／收件人／副本／主旨）。
+    //
+    // ZH: 為什麼不留在營運設定那張表：那張表是四欄的統一格式，
+    //     而這幾個值要回答的是「這封信會從哪寄、寄給誰、長什麼樣」——
+    //     那是一封信，不是一個值。放進表格就只是兩列看不出關係的字串。
+    //
+    // ZH: 這一格同時是**預覽**。告警是安靜的（沒填收件人就完全不寄），
+    //     所以「它到底會寄給誰、從哪個地址寄」必須一眼看得到，
+    //     不能要人自己把三個設定欄位在腦裡兜起來。
+    // ══════════════════════════════════════════════════════════════════════
+    var AM_EDITING = false;
+
+    function settingByKey(k) {
+        return SETTINGS.filter(function (x) { return x.key === k; })[0] || null;
+    }
+
+    // ZH: 取生效值。找不到就回空字串 —— 後端還沒有這個旋鈕時（前後端版本不同步）
+    //     這一格要照樣畫得出來，而不是整段炸掉。
+    function amValue(k) {
+        var s = settingByKey(k);
+        return s ? String(s.value == null ? '' : s.value) : '';
+    }
+
+    function amRowHtml(labelKey, labelZh, hint, body) {
+        return '<div class="am-row">'
+            + '<div class="am-row__label">' + esc(T(labelKey, labelZh))
+            + (hint ? ' <span class="am-row__hint">' + esc(hint) + '</span>' : '')
+            + '</div>'
+            + '<div class="am-row__body">' + body + '</div></div>';
+    }
+
+    // ZH: chip = 一個地址。刪除鈕有 aria-label，而且 chip 本身可以聚焦後按
+    //     Backspace/Delete 刪掉 —— 只能用滑鼠點 × 的介面對鍵盤使用者是死路。
+    //
+    // ZH: 🔴 唯讀時**不畫 ×，也不給 tabindex**。
+    //     第一版兩種模式共用同一段 HTML，於是唯讀的 chip 上也有一顆 ×，
+    //     但那顆鈕沒有接任何行為 —— 看起來能點、點下去沒反應，
+    //     而且鍵盤會停在一個什麼都不能做的 chip 上。
+    //     （在真實頁面上截圖才看到的；DOM 測試只驗了編輯模式。）
+    function amChipHtml(addr, editable) {
+        return '<span class="am-chip"' + (editable ? ' tabindex="0" data-chip="1"' : '')
+            + ' role="listitem">'
+            + '<span class="am-chip__t">' + esc(addr) + '</span>'
+            + (editable
+                ? '<button class="am-chip__x" type="button" data-delchip="1" tabindex="-1"'
+                    + ' aria-label="' + esc(T('pf_am_remove', '移除 {a}').replace('{a}', addr))
+                    + '">×</button>'
+                : '')
+            + '</span>';
+    }
+
+    function amFieldHtml(key, labelKey, labelZh) {
+        var addrs = splitAddrs(amValue(key));
+        if (!AM_EDITING) {
+            return amRowHtml(labelKey, labelZh, '', addrs.length
+                // ZH: ⚠ 不能寫成 `addrs.map(amChipHtml)` —— map 會把**索引**
+                //     當成第二個參數傳進去，於是第 0 個是唯讀樣子、其餘都可編輯。
+                ? '<span class="am-chips" role="list">'
+                    + addrs.map(function (a) { return amChipHtml(a, false); }).join('') + '</span>'
+                : '<span class="footnote">' + esc(T('pf_am_none', '（沒有人）')) + '</span>');
+        }
+        return amRowHtml(labelKey, labelZh, '', ''
+            + '<div class="am-chips am-chips--edit" data-am="' + esc(key) + '" role="list">'
+            + addrs.map(function (a) { return amChipHtml(a, true); }).join('')
+            + '<input class="am-chips__in" type="email" data-aminput="1"'
+            + ' aria-label="' + esc(T(labelKey, labelZh)) + '"'
+            + ' placeholder="' + esc(T('pf_am_add', '輸入信箱後按 Enter')) + '">'
+            + '</div>');
+    }
+
+    function renderAlertMail() {
+        var box = $('alertmail');
+        if (!box) return;                       // ZH: 舊版 HTML 還在快取時不要整頁炸掉
+
+        var from = amValue('smtp_from_email');
+        var hours = amValue('admin_alert_min_hours');
+
+        // ZH: 主旨用真的格式（scheduler._alert 組的那個），後面接一個實際會出現的標題。
+        //     寫死一句假的「範例主旨」沒有意義 —— 那不會讓人看出信長什麼樣。
+        var subject = '[AI Base 告警 | Alert] '
+            + T('pf_am_subj_eg', 'MYAI 自動同步失敗 | MYAI sync failed');
+
+        box.innerHTML = '<div class="am-draft">'
+            // ZH: 提示放在**值後面**，不放在標籤裡。放標籤裡會把那一欄撐成兩行
+            //     （量過：50px vs 其他三列的 27px），四個標籤高度不一樣就不像信件抬頭了。
+            + amRowHtml('pf_am_from', '寄件人', '',
+                (from
+                    ? '<span class="am-from">' + esc(from) + '</span>'
+                    : '<span class="footnote">'
+                        + esc(T('pf_am_no_from', '（尚未設定寄件地址）')) + '</span>')
+                + ' <span class="am-row__hint">'
+                + esc(T('pf_am_from_hint', '（跟著 SMTP 設定走）')) + '</span>')
+            + amFieldHtml('admin_alert_emails', 'pf_am_to', '收件人')
+            + amFieldHtml('admin_alert_cc_emails', 'pf_am_cc', '副本')
+            + amRowHtml('pf_am_subject', '主旨', '',
+                '<span class="am-subject">' + esc(subject) + '</span>')
+            + '</div>'
+            + '<p class="footnote">'
+            + esc(T('pf_am_throttle', '同一類告警最少隔 {h} 小時才會再寄一次。')
+                .replace('{h}', hours))
+            + '</p>';
+
+        $('am-edit').hidden = AM_EDITING;
+        $('am-cancel').hidden = !AM_EDITING;
+        $('am-save').hidden = !AM_EDITING;
+        if (AM_EDITING) wireAlertMail();
+    }
+
+    function wireAlertMail() {
+        $('alertmail').querySelectorAll('[data-am]').forEach(function (box) {
+            var input = box.querySelector('[data-aminput]');
+
+            function commit() {
+                // ZH: 一次可以貼進多個（從別的地方複製一串逗號分隔的地址是常見動作）。
+                var added = splitAddrs(input.value);
+                if (!added.length) { input.value = ''; return; }
+                var have = {};
+                box.querySelectorAll('[data-chip] .am-chip__t').forEach(function (t) {
+                    have[t.textContent.trim().toLowerCase()] = true;
+                });
+                added.forEach(function (a) {
+                    if (have[a.toLowerCase()]) return;   // ZH: 已經有了就不重複加
+                    have[a.toLowerCase()] = true;
+                    input.insertAdjacentHTML('beforebegin', amChipHtml(a, true));
+                });
+                input.value = '';
+            }
+
+            input.addEventListener('keydown', function (ev) {
+                if (ev.key === 'Enter' || ev.key === ',') { ev.preventDefault(); commit(); return; }
+                // ZH: 空輸入框按 Backspace → 刪掉前一個 chip（信件收件人欄的通用行為）。
+                if (ev.key === 'Backspace' && !input.value) {
+                    var chips = box.querySelectorAll('[data-chip]');
+                    if (chips.length) chips[chips.length - 1].remove();
+                }
+            });
+            // ZH: 🔴 打完沒按 Enter 就直接按「儲存設定」是**最常見的操作**。
+            //     沒有這一行的話，那個地址會安靜地不見 —— 使用者以為存好了。
+            input.addEventListener('blur', commit);
+
+            box.addEventListener('click', function (ev) {
+                var x = ev.target.closest('[data-delchip]');
+                if (x) { x.closest('[data-chip]').remove(); input.focus(); return; }
+                // ZH: 點空白處就聚焦輸入框 —— 整格看起來像一個欄位，點哪裡都該能打字。
+                if (ev.target === box) input.focus();
+            });
+
+            // ZH: chip 聚焦後按 Backspace/Delete 刪掉自己。只有滑鼠能刪的話，
+            //     用鍵盤的人根本移不掉任何一個地址。
+            box.addEventListener('keydown', function (ev) {
+                var chip = ev.target.closest('[data-chip]');
+                if (!chip) return;
+                if (ev.key === 'Backspace' || ev.key === 'Delete') {
+                    ev.preventDefault();
+                    chip.remove();
+                    input.focus();
+                }
+            });
+        });
+    }
+
+    function readAlertMail() {
+        var payload = {};
+        $('alertmail').querySelectorAll('[data-am]').forEach(function (box) {
+            // ZH: 先把還停在輸入框裡的那一個收進來（blur 沒觸發的情況，例如直接按 Enter 送出表單）
+            var input = box.querySelector('[data-aminput]');
+            var pending = input ? splitAddrs(input.value) : [];
+            var addrs = [];
+            box.querySelectorAll('[data-chip] .am-chip__t').forEach(function (t) {
+                addrs.push(t.textContent.trim());
+            });
+            pending.forEach(function (a) {
+                if (addrs.map(function (x) { return x.toLowerCase(); })
+                        .indexOf(a.toLowerCase()) < 0) addrs.push(a);
+            });
+            payload[box.dataset.am] = addrs.join(', ');
+        });
+        return payload;
+    }
+
+    async function saveAlertMail() {
+        try {
+            await api('/admin/system-settings', {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(readAlertMail()),
+            });
+            flash('am-msg', T('pf_saved', '已儲存'));
+            AM_EDITING = false;
+            await loadSettings();      // ZH: 重讀 —— 後端會正規化，畫面要顯示真正存進去的
+        } catch (e) {
+            say('am-msg', T('pf_save_fail', '存不起來（{w}）').replace('{w}', e.message));
+        }
     }
 
     function settingValueLabel(s) {
@@ -385,7 +598,9 @@
         var leftover = SETTINGS.filter(function (x) { return !known[x.group]; });
 
         var blocks = shown.map(function (g) {
-            var rows = SETTINGS.filter(function (x) { return x.group === g.key; });
+            var rows = SETTINGS.filter(function (x) {
+                return x.group === g.key && ALERT_MAIL_KEYS.indexOf(x.key) < 0;
+            });
             if (!rows.length) return '';        // 空的分組不畫標題
             return '<h3 class="adm-subhead">' + esc(g.label) + '</h3>'
                  + tableHtml(cols, rows.map(rowHtml).join(''));
@@ -982,6 +1197,20 @@
         renderSettings();
     });
     $('s-save').addEventListener('click', function () { saveSettings(null); });
+
+    // ZH: 告警信那一格。與其他區同一套：唯讀 → 編輯 → 就地改 → 一次儲存。
+    //     取消是從 SETTINGS 重畫（那份資料沒有被編輯過），所以改動自然被丟掉。
+    $('am-edit').addEventListener('click', function () {
+        AM_EDITING = true;
+        say('am-msg', '');
+        renderAlertMail();
+    });
+    $('am-cancel').addEventListener('click', function () {
+        AM_EDITING = false;
+        say('am-msg', '');
+        renderAlertMail();
+    });
+    $('am-save').addEventListener('click', function () { saveAlertMail(); });
     $('m-edit').addEventListener('click', function () {
         MODELS_EDIT = true;
         say('m-msg', '');

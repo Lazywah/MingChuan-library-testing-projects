@@ -176,15 +176,25 @@ class TestAdminAlert:
         assert email_service.send_admin_alert("myai_sync", "主旨", "<p>x</p>") == 0
         assert sent == []
 
-    def test_sends_one_mail_per_recipient(self, shared_db, monkeypatch):
-        """ZH: 逐一寄 —— 一個地址被拒不連累其他人,收件人也看不到彼此。"""
+    def test_sends_one_mail_addressed_to_everyone(self, shared_db, monkeypatch):
+        """
+        ZH: 一封信、To 帶全部收件人。
+
+        ZH: ⚠ v3.7 以前這裡釘的是**相反的行為**（逐一寄，一人一封，
+            好處是收件人彼此看不到對方的信箱）。擁有者 2026-08-27 裁定改成 To/CC ——
+            要讓收件人看得出誰也收到了，才不會三個人同時處理同一件事、
+            或三個人都以為別人會處理。
+            這個測試是**跟著決定改的**，不是壞掉之後被放寬的。
+            CC 的行為另外守在 tests/test_admin_alert_cc.py。
+        """
         crud.set_settings(shared_db, {"admin_alert_emails":
                                       "a@mcu.edu.tw, b@mcu.edu.tw, c@mcu.edu.tw"})
-        to = []
+        calls = []
         monkeypatch.setattr(email_service, "send_email",
-                            lambda addr, *a, **k: to.append(addr))
+                            lambda addr, *a, **k: calls.append((addr, k.get("cc"))))
         assert email_service.send_admin_alert("myai_sync", "主旨", "<p>x</p>") == 3
-        assert to == ["a@mcu.edu.tw", "b@mcu.edu.tw", "c@mcu.edu.tw"]
+        assert len(calls) == 1, "應該只寄一封（To 帶全部），不是逐一寄"
+        assert calls[0] == (["a@mcu.edu.tw", "b@mcu.edu.tw", "c@mcu.edu.tw"], [])
 
     def test_same_kind_is_throttled_within_the_window(self, shared_db, monkeypatch):
         """
@@ -235,6 +245,14 @@ class TestAdminAlertRecipientValidation:
         """ZH: 不能只存好的那幾個 —— 那會變成「安靜地少寄給一個人」。"""
         with pytest.raises(ValueError) as e:
             crud.set_settings(db, {"admin_alert_emails": "ok@mcu.edu.tw, 壞掉的"})
+        assert "壞掉的" in str(e.value)
+
+    def test_cc_list_is_validated_the_same_way(self, db):
+        """ZH: CC 與 To 走同一套驗證（text_kind="emails"）—— 不能只驗其中一邊。"""
+        crud.set_settings(db, {"admin_alert_cc_emails": " a@mcu.edu.tw ,b@mcu.edu.tw "})
+        assert crud.get_setting(db, "admin_alert_cc_emails") == "a@mcu.edu.tw, b@mcu.edu.tw"
+        with pytest.raises(ValueError) as e:
+            crud.set_settings(db, {"admin_alert_cc_emails": "ok@mcu.edu.tw, 壞掉的"})
         assert "壞掉的" in str(e.value)
 
 

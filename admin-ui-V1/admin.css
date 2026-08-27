@@ -1192,3 +1192,116 @@ textarea.field__input {
  * ZH: 用 !important 的理由同 `[hidden]`：作者寫的任何 display 宣告
  *     都會贏過沒有 !important 的規則,於是「該隱藏卻看得見」。 */
 [data-view-off] { display: none !important; }
+
+/* ── 告警信：草稿樣式（v3.8）───────────────────────────────────────
+ * ZH: 收件人設定原本是營運設定表裡的兩列字串。改成信件抬頭的樣子，
+ *     是因為這幾個值要回答的是「這封信會從哪寄、寄給誰、長什麼樣」——
+ *     那是一封信，不是一個值。
+ * ZH: 這一格同時是預覽：告警是安靜的（沒填收件人就完全不寄），
+ *     所以「會寄給誰、從哪個地址寄」必須一眼看得到。
+ * ─────────────────────────────────────────────────────────────── */
+.am-draft {
+    border: 1px solid var(--hairline);
+    border-radius: var(--radius-sm);
+    /* ZH: 白底 —— 這一格是在模擬一封信，信是白的。
+     *     用 --surface-2 的話它看起來像「頁面上的一塊面板」，不像一封信。 */
+    background-color: var(--surface);
+    padding: var(--space-3);
+}
+
+/* ZH: 一列 = 標籤 + 內容。標籤欄固定寬，四列的冒號才會對齊 ——
+ *     沒對齊的話它看起來就不像信件抬頭，只像四行普通文字。 */
+.am-row {
+    display: grid;
+    grid-template-columns: 7.5rem 1fr;
+    gap: var(--space-2) var(--space-3);
+    align-items: start;
+    padding-block: var(--space-2);
+}
+.am-row + .am-row { border-top: 1px solid var(--hairline); }
+
+.am-row__label {
+    color: var(--text-muted);
+    font-size: 0.9rem;
+    /* ZH: 標籤與右邊第一行文字對齊。chip 有自己的高度，
+     *     不給一點 padding 的話標籤會比 chip 高半行。 */
+    padding-top: 3px;
+}
+.am-row__hint { font-size: 0.8rem; }
+
+/* ZH: 寄件人與主旨是唯讀的事實，用等寬字讓它看起來像「信件內容」
+ *     而不是「可以改的欄位」—— 形狀本身就在說明它不能編輯。 */
+.am-from,
+.am-subject {
+    /* ZH: 這個專案沒有等寬字的 token，所以直接寫堆疊 ——
+     *     寫成 var(--font-mono, …) 會讓下一個人以為有那個 token。 */
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 0.9rem;
+    word-break: break-all;
+}
+
+/* ── 收件人 chip ─────────────────────────────────────────────── */
+.am-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-2);
+    align-items: center;
+}
+
+/* ZH: 編輯時整格看起來像一個輸入框（點哪裡都能打字），
+ *     所以外框畫在容器上，裡面的 input 自己不畫框。 */
+.am-chips--edit {
+    border: 1px solid var(--hairline);
+    border-radius: var(--radius-sm);
+    background-color: var(--surface);
+    padding: var(--space-2);
+    min-height: 2.4rem;
+    cursor: text;
+}
+.am-chips--edit:focus-within { border-color: var(--accent); }
+
+.am-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px var(--space-2);
+    border: 1px solid var(--hairline);
+    border-radius: 999px;
+    /* ZH: 草稿底是白的，chip 就得比它深一階 ——
+     *     兩個都白的話只剩一條 1px 邊框在撐，遠看是一片白。 */
+    background-color: var(--surface-2);
+    font-size: 0.85rem;
+    max-width: 100%;
+}
+.am-chip__t { overflow-wrap: anywhere; }
+
+/* ZH: chip 可以聚焦（按 Backspace/Delete 刪掉自己）——
+ *     只能用滑鼠點 × 的話，用鍵盤的人移不掉任何一個地址。
+ *     所以焦點框要看得見，不能 outline:none。 */
+.am-chip:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 1px;
+}
+
+.am-chip__x {
+    border: 0;
+    background: none;
+    cursor: pointer;
+    padding: 0 2px;
+    line-height: 1;
+    color: var(--text-muted);
+    font-size: 1rem;
+}
+.am-chip__x:hover { color: var(--error); }
+
+/* ZH: 輸入框融進 chip 那一排 —— 有自己的框線會變成「兩個欄位」。 */
+.am-chips__in {
+    flex: 1 1 8rem;
+    min-width: 8rem;
+    border: 0;
+    background: none;
+    color: inherit;
+    font: inherit;
+    padding: 2px;
+}
+.am-chips__in:focus { outline: none; }   /* 焦點訊號由容器的 :focus-within 給 */
