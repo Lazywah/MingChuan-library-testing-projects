@@ -287,6 +287,37 @@ app.add_middleware(
 
 
 # ==============================================================================
+# ZH: v3.8 — API 回應一律不可快取
+# ==============================================================================
+@app.middleware("http")
+async def _no_store_api(request, call_next):
+    """
+    ZH: 給所有 `/api/` 的回應加上 `Cache-Control: no-store`。
+
+    ZH: 🔴 為什麼需要：稽核時實測 API 回應**一個快取標頭都沒有**
+        （只有 content-type）。而我抓到一次 `/api/v1/reports/mine`
+        回傳的是**一頁 HTML**——那是瀏覽器從快取拿的舊東西，
+        `fetch(..., {cache:'no-store'})` 再打一次就正常了。
+        症狀非常會騙人：畫面顯示「讀不到」而後端好好的、直連 curl 也正常。
+
+    ZH: 這裡的每一個端點回的都是**跟人有關的即時資料**（我的額度、我的任務、
+        我的問題回報），沒有一個是可以共用快取的，所以一律 no-store，
+        不做例外清單——例外清單遲早會有人忘記維護。
+
+    ZH: 為什麼放在後端而不是 nginx：nginx 有 **13 個** `/api/v1/...` 的
+        location 區塊，逐一加 `add_header` 就是 13 個會漏的地方，
+        而這個專案已經漏掛過兩次 location（一次 405、一次 502）。
+        API 的可快取性應該由 API 自己宣告。
+
+    @node job-scheduler/app/main.py::_no_store_api
+    """
+    response = await call_next(request)
+    if request.url.path.startswith("/api/"):
+        response.headers["Cache-Control"] = "no-store"
+    return response
+
+
+# ==============================================================================
 # ZH: 掛載路由 (積木式 - 註解掉即可移除功能)
 # EN: Mount routes (building-block - comment out to remove features)
 # ==============================================================================
