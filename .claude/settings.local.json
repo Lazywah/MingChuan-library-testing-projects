@@ -1,0 +1,38 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"C:/Users/User/AppData/Local/Programs/Python/Python313/python.exe\" \"C:/Users/User/Desktop/code/APM/apm.py\" hook",
+            "timeout": 10
+          }
+        ],
+        "matcher": "Edit|Write|NotebookEdit|Bash|PowerShell|Read|Grep|Glob|WebSearch|WebFetch"
+      }
+    ],
+    "SubagentStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"C:/Users/User/AppData/Local/Programs/Python/Python313/python.exe\" \"C:/Users/User/Desktop/code/APM/apm.py\" hook",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "SubagentStop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"C:/Users/User/AppData/Local/Programs/Python/Python313/python.exe\" \"C:/Users/User/Desktop/code/APM/apm.py\" hook",
+            "timeout": 10
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -1433,8 +1433,30 @@
         var el = $('h-nodes');
         if (!el) return;
         scrolled = true;
-        // ZH: 等一次 rAF 讓版面確定就位再量位置。
-        requestAnimationFrame(function () { el.scrollIntoView({ block: 'start' }); });
+
+        // ZH: 🔴 原本是「等一次 rAF 再捲」—— 實測**完全不會捲**（scrollY 全程 0）。
+        //     這是旧缺陷，不是檢視滑條造成的：我用 git stash 退回上一個 commit
+        //     量過，那邊也是 0。
+        //
+        // ZH: 兩個都說得通的原因，而且**同一個修法對兩者都成立**：
+        //       a. rAF 那一刻版面還在長（各區塊剛換掉骷架），
+        //          scrollIntoView 算出來的目標就是 0。
+        //       b. history.scrollRestoration 是 'auto'，重新整理時瀏覽器會在
+        //          我們捲完**之後**把位置還原成 0。
+        //
+        // ZH: 所以改成「捲了再確認」：位置還在變就再捲一次，
+        //     穩下來就停。次數有上限 —— 不要寫成沒有出口的迴圈，
+        //     那會變成使用者捲不動頁面（比沒捲到更糟）。
+        var tries = 0;
+        var lastY = -1;
+        (function settle() {
+            el.scrollIntoView({ block: 'start' });
+            var y = Math.round(window.scrollY);
+            if (++tries < 6 && y !== lastY) {
+                lastY = y;
+                setTimeout(settle, 120);
+            }
+        })();
     }
 
     async function loadAll() {
