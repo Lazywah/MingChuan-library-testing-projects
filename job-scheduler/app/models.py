@@ -76,6 +76,15 @@ class User(Base):
     #     就給 teacher」—— 學號不是 8 碼純數字的學生會安靜地拿到 teacher。
     #     沒有這一欄的話,「誰是自動升的」與「誰是管理者確認過的」完全分不出來。
     role_source = Column(String, nullable=True)                               # ZH: sso_email / admin / NULL
+    # ZH: v3.8 **身分與權限拆開**（擁有者裁定 2026-08-27）。
+    #     role 是「你是誰」（學生／教師／職員／訪客）,is_admin 是「你能做什麼」。
+    #     合成一個欄位時,一個學生兼系統管理員只能二選一 ——
+    #     選 admin 的話他在「依身分」統計裡會被算成管理員,汙染自己的報表。
+    # ZH: 🔴 **使用者端絕對碰不到這個欄位**：它只出現在 AdminUserUpdate,
+    #     使用者端的 UserUpdate 連表達它的能力都沒有,而 crud.update_user
+    #     是逐欄位明寫、不是 setattr 掃過去。要加使用者可改的欄位時,
+    #     務必維持這個形狀 —— 改成通用的 setattr 迴圈就等於開了提權後門。
+    is_admin = Column(Integer, default=0, nullable=False)                     # ZH: 管理權限（與 role 無關）
     is_active = Column(Integer, default=1)                                    # ZH: 啟用狀態 | EN: Active status
     last_login_time = Column(DateTime, nullable=True)                         # ZH: 最後登入時間 | EN: Last login time
     last_login_ip = Column(String, nullable=True)                             # ZH: 最後登入IP | EN: Last login IP

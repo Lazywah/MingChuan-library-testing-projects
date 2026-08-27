@@ -464,6 +464,14 @@
                     + esc(T('role_' + r, r)) + '</option>';
             }).join('')
             + '</select></label>'
+            // ZH: v3.8 **管理權限與身分分開**。同一個人可以是「學生 + 管理權限」——
+            //     合成一個欄位時他只能二選一,而選了管理員之後,
+            //     數據頁的「依身分」就會把這個學生算成管理員。
+            // ZH: `admin` 這個角色留在上面的下拉裡是為了既有資料（v3.8 之前建的）,
+            //     新的設定請用身分 + 這個勾選框。
+            + '<label class="field field--check">'
+            + '<input type="checkbox" id="f-is-admin"' + (u.is_admin ? ' checked' : '') + '>'
+            + '<span>' + esc(T('pp_c_is_admin', '管理權限（可進管理端）')) + '</span></label>'
             + field('f-pw', T('pp_new_pw', '新密碼'), '', 'password')
             + '<p class="footnote">' + esc(T('pp_pw_hint', '留空就不改密碼')) + '</p>'
             // ZH: 儲存前的第二次確認。與解鎖那次是**分開的兩個欄位**——
@@ -629,6 +637,9 @@
                 email: $('f-email').value.trim() || null,
                 department: $('f-dept').value.trim() || null,
                 role: $('f-role').value,
+                // ZH: v3.8 管理權限。勾選框沒帶上的話,畫面勾了但存不進去 ——
+                //     而且畫面重讀後會變回原狀,看起來像「存檔壞了」。
+                is_admin: $('f-is-admin') && $('f-is-admin').checked ? 1 : 0,
             };
             // ZH: 密碼留空 = 不改。送空字串會**把密碼設成空的**。
             var pw = $('f-pw').value;

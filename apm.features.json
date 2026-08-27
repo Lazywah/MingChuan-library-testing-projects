@@ -396,6 +396,19 @@
       "tests": [
         "tests/test_onboarding.py"
       ]
+    },
+    {
+      "id": "admin-flag",
+      "name": "身分與管理權限拆開（role vs is_admin），使用者無法自行取得",
+      "claimed": false,
+      "files": [
+        "job-scheduler/app/auth.py",
+        "job-scheduler/app/models.py",
+        "job-scheduler/app/schemas.py"
+      ],
+      "tests": [
+        "tests/test_admin_flag.py"
+      ]
     }
   ]
 }

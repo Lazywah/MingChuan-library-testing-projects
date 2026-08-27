@@ -1112,6 +1112,9 @@ def live_usage_quadrants(db: Session, usage_minutes: int = USAGE_WINDOW_MINUTES,
         (using_active if _online(u) else using_offplat).append(item)
 
     # ZH: 在平台但近期沒動 MYAI（只列非 admin，admin 開著後台不算「使用者在用」）
+    # ZH: ⚠️ v3.8 身分與權限拆開後這裡**刻意仍看 `role`** ——
+    #     它排除的是「純粹在開後台的系統操作者帳號」,不是在做權限判定。
+    #     改成 is_admin 的話,一個學生兼管理員的**真實學生用量**也會被排除掉。
     online_idle = []
     for u in db.query(models.User).filter(models.User.role != "admin").all():
         if u.id in used_user_ids or not _online(u):

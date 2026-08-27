@@ -121,7 +121,8 @@ async def lifespan(app: FastAPI):
     try:
         _db = _SL()
         try:
-            _has_admin = _db.query(_m.User).filter(_m.User.role == "admin").first() is not None
+            # ZH: v3.8 看 is_admin 旗標不看 role —— 管理者的身分可能是學生。
+            _has_admin = _db.query(_m.User).filter(_m.User.is_admin == 1).first() is not None
             _pw = (settings.BOOTSTRAP_ADMIN_PASSWORD or "").strip()
             if _has_admin:
                 pass                      # 已有管理員 → 什麼都不做
@@ -136,6 +137,10 @@ async def lifespan(app: FastAPI):
                     email=(settings.BOOTSTRAP_ADMIN_EMAIL or "admin@local"),
                     hashed_password=_c.get_password_hash(_pw),
                     role="admin",
+                    # ZH: 🔴 v3.8 起管理權限看的是 is_admin 不是 role ——
+                    #     漏了這一行,全新部署自動建的第一個管理員會**進不去管理端**,
+                    #     而且畫面上只會顯示「這個帳號不是管理員」,看不出是建帳號時漏設。
+                    is_admin=1,
                     is_active=1,
                 )
                 _db.add(_admin)

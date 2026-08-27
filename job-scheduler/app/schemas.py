@@ -104,7 +104,12 @@ class AdminUserUpdate(BaseModel):
     """ZH: 管理員更新使用者請求 | EN: Admin user update request"""
     email: Optional[EmailStr] = None
     password: Optional[str] = None                   # ZH: 留空則不變更 | EN: Empty = no change
-    role: Optional[str] = None                       # ZH: student/teacher/admin
+    role: Optional[str] = None                       # ZH: student/teacher/staff/guest（身分）
+    # ZH: v3.8 管理權限。🔴 **刻意只在這份 schema 出現** ——
+    #     使用者端的 UserUpdate 沒有這個欄位,所以 PUT /auth/me 根本表達不出它。
+    #     要加使用者可改的欄位時務必維持這個形狀:兩份 schema、逐欄位明寫,
+    #     不要改成通用的 setattr 迴圈（那等於開提權後門）。
+    is_admin: Optional[int] = None                   # ZH: 0/1，與 role 無關
     is_active: Optional[int] = None                  # ZH: 0=停用 1=啟用 | EN: 0=disabled 1=enabled
     tokens_limit: Optional[int] = None               # ZH: Token 月度上限 | EN: Monthly token limit
     department: Optional[str] = None                 # ZH: 學系資訊 | EN: Department
@@ -312,6 +317,8 @@ class UserResponse(BaseModel):
     #     所以 /auth/me 會**明確填它**（ORM 模式帶不出關聯表的值,不填會永遠是空陣列）。
     unit: Optional[str] = None
     campuses: List[str] = []
+    # ZH: v3.8 管理權限。這是**回應** schema —— 使用者看得到自己有沒有,但改不了。
+    is_admin: int = 0
     onboarded_at: Optional[UtcDatetime] = None
     login_count: int = 0
     lifetime_tokens_used: int = 0
@@ -554,6 +561,7 @@ class AdminUserListItem(BaseModel):
     role: str
     # ZH: v3.8 這個 role 怎麼來的 —— sso_email(自動判) / admin(管理者設) / None(不知道)
     role_source: Optional[str] = None
+    is_admin: int = 0
     is_active: int
     online_status: Optional[int] = 0
     last_login_time: Optional[UtcDatetime] = None

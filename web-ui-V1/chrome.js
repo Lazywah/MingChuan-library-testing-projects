@@ -482,7 +482,8 @@
         report.href = 'report.html';
         menu.appendChild(item(report, 'acct_report', '問題回報'));
 
-        if (me.role === 'admin') {
+        // ZH: v3.8 看 is_admin 旗標不看 role —— 管理者的身分可能是學生。
+        if (me.is_admin) {
             // ZH: 管理端在同主機 port 8888。
             //
             // ZH: 🔴 路徑要帶 `/V1/`。`:8888/` 只是導向，而舊版在 /V0/ ——

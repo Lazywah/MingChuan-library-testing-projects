@@ -41,7 +41,7 @@ import json
 import logging
 
 from .. import models, schemas, crud
-from ..auth import get_current_user
+from ..auth import get_current_user, require_admin as _require_admin
 from ..config import SSO_POLICY, settings
 from ..database import get_db
 from ..services import email_service
@@ -56,14 +56,10 @@ router = APIRouter(tags=["管理員 Admin"])
 # EN: Admin auth Depends (replaces plain function to stay within FastAPI DI chain)
 # ==============================================================================
 
-def require_admin(current_user: models.User = Depends(get_current_user)) -> models.User:
-    """ZH: 確保呼叫者為 admin，否則拋出 403 | EN: Ensure caller is admin, raise 403 otherwise
-
-    @node job-scheduler/app/routers/admin.py::require_admin
-    """
-    if current_user.role != "admin":
-        raise HTTPException(status_code=403, detail="ZH: 這個功能只有管理員能用 | EN: Forbidden: Admins only")
-    return current_user
+# ZH: v3.8 判定搬到 auth.py 並改看 `is_admin` 旗標（身分與權限拆開）。
+#     這裡保留同名的重新匯出 —— 本檔有 40+ 個端點 Depends 它,
+#     全部改成 auth.require_admin 只是製造一個大 diff 而沒有任何好處。
+require_admin = _require_admin
 
 
 # ==============================================================================
@@ -184,7 +180,7 @@ def bootstrap_admin_status(
     if not pw:
         return {"using_initial_password": False, "username": None}
     user = crud.get_user_by_username(db, "admin")
-    if not user or user.role != "admin":
+    if not user or not user.is_admin:
         return {"using_initial_password": False, "username": None}
     try:
         still = crud.verify_password(pw, user.hashed_password)
@@ -245,6 +241,8 @@ def _compute_online(user: models.User) -> Optional[int]:
 
     @node job-scheduler/app/routers/admin.py::_compute_online
     """
+    # ZH: ⚠️ v3.8 拆開身分與權限後這裡**刻意仍看 `role`** ——
+    #     講的是「只用後台、從沒進過前台的系統帳號」,不是權限。
     if user.role == "admin" and user.last_login_time is None:
         return None
     last = getattr(user, "last_activity", None)
@@ -324,6 +322,7 @@ def get_all_users(
                 email=u.email,
                 role=u.role,
                 role_source=getattr(u, "role_source", None),
+                is_admin=int(getattr(u, "is_admin", 0) or 0),
                 is_active=u.is_active,
                 online_status=_compute_online(u),  # v2.1: 動態計算
                 last_login_time=u.last_login_time,
@@ -357,6 +356,7 @@ _EXPORT_COLUMNS = {
     # ZH: v3.8 讓管理者用匯出就能複查「哪些人的角色是自動判的」——
     #     自動判定的依據是我們自己組出來的信箱,不是學校給的權威資料。
     "role_source":         ("角色來源", lambda u, t: getattr(u, "role_source", None) or "未記錄"),
+    "is_admin":            ("管理權限", lambda u, t: bool(getattr(u, "is_admin", 0))),
     "auth_source":         ("登入來源", lambda u, t: getattr(u, "auth_source", "local") or "local"),
     "is_active":           ("是否啟用", lambda u, t: bool(u.is_active)),
     "department":          ("學系", lambda u, t: u.department or ""),
@@ -583,6 +583,10 @@ def admin_update_user(
 
     if update_data.email is not None:
         db_user.email = update_data.email
+    if update_data.is_admin is not None:
+        # ZH: v3.8 管理權限與身分分開設。這是**唯一**能寫這個欄位的地方 ——
+        #     使用者端的 UserUpdate 沒有這個欄位,PUT /auth/me 表達不出它。
+        db_user.is_admin = 1 if update_data.is_admin else 0
     if update_data.role is not None:
         db_user.role = update_data.role
         # ZH: v3.8 管理者改過就不再是「自動判定」—— 複查清單要把他排除,

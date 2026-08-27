@@ -276,6 +276,14 @@ def init_db():
                 conn.execute(text("ALTER TABLE users ADD COLUMN onboarded_at DATETIME"))
                 conn.execute(text("UPDATE users SET onboarded_at = CURRENT_TIMESTAMP"))
             except Exception: pass
+            # --- v3.8 管理權限旗標（與 role 拆開）---
+            # ZH: 回填同樣放在 ADD COLUMN 的 try 裡 —— 只跑第一次。
+            #     既有的 role='admin' 帳號轉成 is_admin=1;**role 本身不動**,
+            #     那個帳號的實際身分是什麼只有擁有者知道,不該由我猜。
+            try:
+                conn.execute(text("ALTER TABLE users ADD COLUMN is_admin INTEGER DEFAULT 0 NOT NULL"))
+                conn.execute(text("UPDATE users SET is_admin = 1 WHERE role = 'admin'"))
+            except Exception: pass
             # --- v3.8 role 的來源（自動判定 vs 管理者設定）---
             try: conn.execute(text("ALTER TABLE users ADD COLUMN role_source VARCHAR"))
             except Exception: pass

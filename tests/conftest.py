@@ -191,6 +191,12 @@ def make_user(db, username="testuser", email="test@example.com",
     user = crud.create_user(db, user_in)
     if role != "student":
         user.role = role
+        # ZH: v3.8 管理權限看 is_admin 不看 role。`role="admin"` 在 v3.8 之前
+        #     就是「這個人是管理員」的意思,所以這裡比照正式環境的一次性遷移
+        #     （database.py 的 UPDATE users SET is_admin=1 WHERE role='admin'）。
+        #     不這樣做的話,66 個既有測試會全部 403,而失敗訊息完全不提 is_admin。
+        if role == "admin":
+            user.is_admin = 1
         db.commit()
         db.refresh(user)
     return user

@@ -190,6 +190,31 @@ async def get_current_user(
     return user
 
 
+def require_admin(current_user: models.User = Depends(get_current_user)) -> models.User:
+    """
+    ZH: 管理權限檢查 —— **看 `is_admin` 旗標，不看 `role`**（v3.8 起）。
+
+    ZH: 拆開的理由：`role` 是「你是誰」（學生／教師／職員／訪客）,
+        `is_admin` 是「你能做什麼」。合成一個欄位時,一個學生兼系統管理員
+        只能二選一 —— 選 admin 的話他在「依身分」統計裡會被算成管理員。
+
+    ZH: 這裡讀的是**資料庫**的值不是 JWT 的 claim,所以取消權限**立刻生效**,
+        不需要等舊 token 過期。
+
+    ZH: 🔴 這是全站唯一的管理權限判定點。要加新的管理端功能就 Depends 它,
+        不要自己寫 `if user.role == "admin"` —— 那種散在各處的判定
+        正是 v3.8 之前要改一次得找四個地方的原因。
+
+    @node job-scheduler/app/auth.py::require_admin
+    """
+    if not getattr(current_user, "is_admin", 0):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="ZH: 這個功能只有管理員能用 | EN: Forbidden: Admins only",
+        )
+    return current_user
+
+
 def require_role(*allowed_roles: str):
     """
     ZH: 角色權限檢查裝飾器 (積木式可組合)

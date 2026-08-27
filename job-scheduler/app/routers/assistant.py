@@ -280,8 +280,9 @@ async def reindex(
 
     @node job-scheduler/app/routers/assistant.py::reindex
     """
-    if current_user.role != "admin":
-        from fastapi import HTTPException
-        raise HTTPException(status_code=403, detail="ZH: 這個功能只有管理員能用 | EN: Forbidden: Admins only")
+    # ZH: v3.8 看 is_admin 旗標不看 role（身分與權限拆開）。
+    #     直接用 auth.require_admin 判,不要在這裡再寫一份。
+    from ..auth import require_admin as _ra
+    _ra(current_user)
     result = await rag_service.ingest_knowledge_base(db, force=True)
     return result

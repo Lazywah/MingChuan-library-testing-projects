@@ -58,7 +58,8 @@
                 headers: { Authorization: 'Bearer ' + tok },
             });
             var user = me.ok ? await me.json() : null;
-            if (!user || user.role !== 'admin') {
+            // ZH: v3.8 看 is_admin 旗標不看 role（身分與權限拆開）。
+            if (!user || !user.is_admin) {
                 // ZH: 這一句**可以**講得具體：他已經證明自己是這個帳號的主人了，
                 //     告訴他「你不是管理員」不會洩漏任何他不知道的事。
                 showError(T('adm_login_not_admin', '這個帳號不是管理員。'));

@@ -202,14 +202,10 @@ def _ranked_models(model_agg: dict, consumed: int, peer: dict):
     return rows
 
 
-def require_admin(current_user: models.User = Depends(get_current_user)) -> models.User:
-    """ZH: 確保呼叫者為 admin | EN: Ensure caller is admin
-
-    @node job-scheduler/app/routers/external_ai.py::require_admin
-    """
-    if current_user.role != "admin":
-        raise HTTPException(status_code=403, detail="ZH: 這個功能只有管理員能用 | EN: Forbidden: Admins only")
-    return current_user
+# ZH: v3.8 這裡原本是**全站第三份** require_admin 的複製實作,
+#     三份都寫著 `role != "admin"` —— 身分與權限拆開時要改三個地方才算改完。
+#     改成重新匯出共用那支（auth.require_admin，看 is_admin 旗標）。
+from ..auth import require_admin  # noqa: E402  ZH: 位置貼著原本的定義,讓 diff 看得出取代關係
 
 
 # ==============================================================================

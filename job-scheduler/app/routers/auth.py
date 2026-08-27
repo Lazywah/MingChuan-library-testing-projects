@@ -31,7 +31,8 @@ from datetime import datetime, timezone
 import hmac as _hmac
 
 from .. import crud, schemas, models
-from ..auth import authenticate_user, create_access_token, get_current_user, require_role
+from ..auth import (authenticate_user, create_access_token, get_current_user,
+                    require_admin, require_role)
 from ..database import get_db
 from ..services import email_service
 from ..rate_limit import limiter
@@ -413,7 +414,7 @@ def increment_token_usage(
     request: schemas.TokenIncrementRequest,
     # C-3: ZH: 限制為 admin 角色，防止一般使用者自行操控 Token 計數
     # EN: Restrict to admin role — prevents students from self-manipulating counters
-    current_user: models.User = Depends(require_role("admin")),
+    current_user: models.User = Depends(require_admin),
     db: Session = Depends(get_db)
 ):
     """

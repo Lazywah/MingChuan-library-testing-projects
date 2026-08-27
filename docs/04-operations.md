@@ -222,6 +222,25 @@ docker volume prune -f         # 移除 dangling volume
 >
 > 要讓某個人重新設定：把他的 `users.onboarded_at` 設成 NULL。
 
+> **身分與管理權限是兩件事（v3.8）**：`users.role` 是「你是誰」（student／teacher／staff／guest），
+> `users.is_admin` 是「你能做什麼」。一個學生兼系統管理員設成 `role=student` + `is_admin=1` ——
+> 合成一個欄位時他只能二選一，而選了管理員之後，數據頁的「依身分」會把這個學生算成管理員。
+>
+> 🔴 **使用者無法自行取得管理權限**，防線在型別層：使用者端的 `UserUpdate` schema
+> **沒有 `is_admin` 也沒有 `role` 欄位**，`PUT /auth/me` 根本表達不出它；
+> `crud.update_user` 是逐欄位明寫、不是 `setattr` 掃過去。
+> ⚠️ 之後要加使用者可改的欄位時務必維持這個形狀 —— 改成通用的 setattr 迴圈就是開後門。
+>
+> 判定集中在 `auth.require_admin` **一支**（v3.8 之前有三份複製實作），
+> 而且讀資料庫不是讀 JWT，**取消權限立刻生效**。
+>
+> ⚠️ `myai_sync` 的使用統計與 `_compute_online` **刻意仍看 `role == "admin"`** ——
+> 那兩處講的是「純粹在開後台的系統操作者帳號」，不是權限判定。
+> 改成 `is_admin` 會把學生兼管理員的**真實學生用量**也排除掉。
+>
+> 既有 `role='admin'` 的帳號在升級時自動拿到 `is_admin=1`，**`role` 不動**（那個帳號的
+> 實際身分只有你知道）。管理端使用者編輯有「管理權限」勾選框可以分開設。
+
 > **角色依信箱自動判定（v3.8）**：SSO **首次登入建帳號時**依信箱網域決定角色 ——
 > `@me.mcu.edu.tw` → `student`、`@mail.mcu.edu.tw` → `teacher`、
 > **其他任何可解析的網域 → `guest`（訪客）**、沒有可用地址 → `student`。
@@ -229,9 +248,11 @@ docker volume prune -f         # 移除 dangling volume
 >
 > 訪客刻意**不用「已知公開信箱清單」**判定（那種清單會過期，漏掉一個 hotmail
 > 就把人當成校內學生），而是反過來問「它是不是校內網域」。
-> ⚠️ 副作用：**`@mcu.edu.tw` 主網域也會被判成訪客** ——
-> `sso_policy.yaml` 的 `email_rules` 只列了 `me.` 與 `mail.` 兩個子網域。
-> 要涵蓋主網域請加進那份 yaml，不要在程式裡特判。
+> **`@mcu.edu.tw` 主網域算訪客，這是刻意的**（擁有者裁定 2026-08-27）：
+> 校內身分只認 `me.mcu.edu.tw`（學生）與 `mail.mcu.edu.tw`（教職員）兩個子網域，
+> 兩者都列在 `sso_policy.yaml` 的 `email_rules`。
+> 之後若要把主網域或其他子網域納為校內，改那份 yaml 就好 —— **不要在程式裡特判**，
+> 特判會讓「校內網域到底有哪些」變成兩個地方。
 >
 > 🔴 **要知道這個判定的依據是什麼**：MCU 的 userinfo 只回 `{"sub": 學號}`，**沒有 email**。
 > 那個信箱是平台依 `sub` 的長相自己組出來的（8 碼純數字→學生網域、英文開頭→教職員網域）。
