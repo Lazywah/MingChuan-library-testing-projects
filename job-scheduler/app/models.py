@@ -69,6 +69,13 @@ class User(Base):
     email = Column(String, unique=True, index=True, nullable=False)           # ZH: 電子郵件 | EN: Email
     hashed_password = Column(String, nullable=False)                          # ZH: 雜湊密碼 | EN: Hashed password
     role = Column(String, nullable=False, default="student")                  # ZH: 角色 | EN: Role
+    # ZH: v3.8 這個 role 是怎麼來的 —— `sso_email`(依信箱網域自動判) / `admin`(管理者設)
+    #     / NULL(v3.8 之前建的,不知道)。
+    # ZH: 為什麼要記：自動判定的依據是**我們自己組出來的信箱**（MCU 的 userinfo
+    #     只回 sub,email 是依 sub 的長相推的）。所以實際規則是「sub 開頭是英文字母
+    #     就給 teacher」—— 學號不是 8 碼純數字的學生會安靜地拿到 teacher。
+    #     沒有這一欄的話,「誰是自動升的」與「誰是管理者確認過的」完全分不出來。
+    role_source = Column(String, nullable=True)                               # ZH: sso_email / admin / NULL
     is_active = Column(Integer, default=1)                                    # ZH: 啟用狀態 | EN: Active status
     last_login_time = Column(DateTime, nullable=True)                         # ZH: 最後登入時間 | EN: Last login time
     last_login_ip = Column(String, nullable=True)                             # ZH: 最後登入IP | EN: Last login IP

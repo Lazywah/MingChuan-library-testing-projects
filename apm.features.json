@@ -370,6 +370,19 @@
       "tests": [
         "tests/test_org_lookup.py"
       ]
+    },
+    {
+      "id": "role-from-email",
+      "name": "SSO 建帳號時依信箱網域判角色，並記錄 role_source 供複查",
+      "claimed": false,
+      "files": [
+        "job-scheduler/app/crud.py",
+        "job-scheduler/app/routers/sso.py",
+        "job-scheduler/app/routers/admin.py"
+      ],
+      "tests": [
+        "tests/test_role_from_email.py"
+      ]
     }
   ]
 }

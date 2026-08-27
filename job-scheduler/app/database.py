@@ -265,6 +265,9 @@ def init_db():
             try: conn.execute(text("ALTER TABLE users ADD COLUMN temp_purpose VARCHAR"))
             except Exception: pass
             # --- v3.8 組織欄位：行政單位與校區（學院由 org_departments 推導，不存欄位）---
+            # --- v3.8 role 的來源（自動判定 vs 管理者設定）---
+            try: conn.execute(text("ALTER TABLE users ADD COLUMN role_source VARCHAR"))
+            except Exception: pass
             try: conn.execute(text("ALTER TABLE users ADD COLUMN unit VARCHAR"))
             except Exception: pass
             # ZH: campus 同一天內從單一欄位改成 user_campuses 關聯表（教職員可多校區）。

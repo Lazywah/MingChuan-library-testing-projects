@@ -459,7 +459,7 @@
             // ZH: 順序照實際人數：學生 > 教師 > 職員 > 管理員。
             //     職員是 v3.8 新增（擁有者裁定）—— 數據頁的「依身分」圓餅圖
             //     是直接照 users.role 聚合的，所以這裡加了它就會自己出現。
-            + ['student', 'teacher', 'staff', 'admin'].map(function (r) {
+            + ['student', 'teacher', 'staff', 'guest', 'admin'].map(function (r) {
                 return '<option value="' + r + '"' + (u.role === r ? ' selected' : '') + '>'
                     + esc(T('role_' + r, r)) + '</option>';
             }).join('')
@@ -1077,7 +1077,7 @@
                 }))
 
             + blockTable('pp_bx_staff', '信箱看起來是教職員，角色還是學生',
-                'pp_bx_staff_why', '只是提示，不會自動改角色——網域不等於身分，改權限要人決定。',
+                'pp_bx_staff_why', 'v3.8 起新帳號會依信箱網域自動判角色；這裡列的是 v3.8 之前建立、或被改回學生的帳號。',
                 [C_ACC, C_MAIL, ['pp_bx_c_domain', '網域']],
                 (pv.staff_pending || []).map(function (r) {
                     return [{ t: r.username }, { t: r.email || '—' }, { t: r.domain || '—' }];

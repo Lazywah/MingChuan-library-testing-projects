@@ -212,6 +212,26 @@ docker volume prune -f         # 移除 dangling volume
 | 場景 | 動作 |
 |---|---|
 | **學生**忘記密碼（SSO 帳號）| 平台無法重設 → 請他到學校中央入口 <https://www1.mcu.edu.tw/ForgetPassword.aspx>（學號＋身分證字號）|
+> **角色依信箱自動判定（v3.8）**：SSO **首次登入建帳號時**依信箱網域決定角色 ——
+> `@me.mcu.edu.tw` → `student`、`@mail.mcu.edu.tw` → `teacher`、
+> **其他任何可解析的網域 → `guest`（訪客）**、沒有可用地址 → `student`。
+> `staff` 與 `admin` **一律由管理者手動指定**。既有帳號**不會**被重新判定。
+>
+> 訪客刻意**不用「已知公開信箱清單」**判定（那種清單會過期，漏掉一個 hotmail
+> 就把人當成校內學生），而是反過來問「它是不是校內網域」。
+> ⚠️ 副作用：**`@mcu.edu.tw` 主網域也會被判成訪客** ——
+> `sso_policy.yaml` 的 `email_rules` 只列了 `me.` 與 `mail.` 兩個子網域。
+> 要涵蓋主網域請加進那份 yaml，不要在程式裡特判。
+>
+> 🔴 **要知道這個判定的依據是什麼**：MCU 的 userinfo 只回 `{"sub": 學號}`，**沒有 email**。
+> 那個信箱是平台依 `sub` 的長相自己組出來的（8 碼純數字→學生網域、英文開頭→教職員網域）。
+> 所以實際規則是「**sub 開頭是英文字母就給 teacher**」——
+> 學號不是 8 碼純數字的學生會安靜地拿到 teacher。
+>
+> 因此每個帳號都記 `role_source`（`sso_email` 自動判 / `admin` 管理者設 / 空白 = v3.8 前建的）。
+> **複查方式**：管理端使用者匯出勾「角色來源」欄，篩 `role_source=sso_email` 且 `role≠student`。
+> 管理者一改角色就會轉成 `admin`，複查清單不會重複出現同一個人。
+
 > **Lab 資料銷毀前的提醒（v3.8）**：刪帳號後 Lab volume 原地封存 `lab_archive_days`（預設 30）天，
 > 逾期由每日 03:00 的背景任務真正銷毀（v3.3 就在跑）。v3.8 在銷毀前寄兩封信給
 > **封存時快照下來的信箱**：剩 `lab_purge_first_days`（預設 30）天一封、剩

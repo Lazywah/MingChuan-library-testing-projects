@@ -1220,7 +1220,9 @@ def staff_pending(db: Session) -> list[dict]:
     """
     ZH: 疑似教職員清單 —— **信箱網域**屬於教職員域、但平台角色仍是 student 的 SSO 帳號。
         判定只看網域（不看使用者名稱，那是可自由更改的欄位）。
-        **不自動升權**：網域不是權威授權來源，誤升等於送出過大權限 → 只列出來給管理者確認。
+        ⚠️ **v3.8 起這句話變了**：建帳號時已經會依網域自動判角色（crud.role_from_email）,
+        所以這張清單現在列的是「**v3.8 之前建立的**,或被管理者改回 student 的」帳號 ——
+        也就是需要回填的那一批,不是「等待人工升權」的那一批。
     EN: SSO users whose mail DOMAIN says staff but whose platform role is still student.
         Domain-based only (never the mutable username). Never auto-promoted.
 

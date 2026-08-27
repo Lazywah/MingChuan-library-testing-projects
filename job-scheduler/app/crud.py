@@ -1729,6 +1729,62 @@ def seed_org_tables(db: Session) -> dict:
     return out
 
 
+# ZH: v3.8 依信箱網域判角色（擁有者裁定 2026-08-27）。
+#     這是**唯一實作點** —— 判定規則散成兩份的話,兩邊遲早不一致,
+#     而不一致的表現是「同一個人在不同入口拿到不同角色」。
+#
+# ZH: 🔴 **命名陷阱**：sso_policy.yaml 的 email_rules 用 label `"staff"` 標
+#     `mail.mcu.edu.tw`,那個 label 的意思是「**教職員**」（faculty + staff 合稱）。
+#     而平台的 role `"staff"` 指的是**職員**,是另一件事。
+#     擁有者裁定：教職員網域一律先給 **teacher**,要改成 staff 由管理者手動。
+#     所以下面這張表是 label → role,不是 label → 同名的 role。
+_EMAIL_LABEL_TO_ROLE = {
+    "student": "student",   # me.mcu.edu.tw
+    "staff":   "teacher",   # mail.mcu.edu.tw —— 見上,先給 teacher 不是 staff
+}
+
+
+def role_from_email(email: Optional[str]) -> str:
+    """
+    ZH: 由信箱網域推角色。
+
+    ZH: 規則：
+          `@me.mcu.edu.tw`    → student
+          `@mail.mcu.edu.tw`  → teacher（要改成 staff 由管理者手動）
+          **其他任何可解析的網域** → guest（訪客：gmail、yahoo、外部單位…）
+          沒有可用的地址      → student
+
+    ZH: 🔴 **訪客不用「已知的公開信箱清單」判定。** 列 gmail / yahoo / outlook 那種清單
+        一定會過期 —— 漏掉一個 `hotmail.com`,那個人就會被當成校內學生。
+        改成反過來問：**它是不是校內網域？不是就是訪客。** 白名單只有兩個值、
+        來自 sso_policy.yaml,而且新增校內網域時只要改那一份。
+
+    ZH: 🔴 **「沒有地址」給 student 而不是 guest。** 那是 SSO 完全取不到信箱時的情況
+        （`@unknown`）—— 那個人是**走學校 SSO 進來的**,他就是校內的人,
+        只是我們推不出他的信箱。判成訪客會把真實學生鎖在較低的權限裡,
+        而且他自己完全不知道為什麼。⚠️ 這一條是我的判斷,不是擁有者明講的。
+
+    ZH: ⚠️ 這個判定的**輸入是我們自己組出來的信箱**,不是 IdP 給的。
+        MCU 的 userinfo 只回 `{"sub": 學號}`,email 是依 sub 的長相推的
+        （8 碼純數字→學生網域,英文開頭→教職員網域）。
+        所以真實規則是「sub 開頭是英文字母就給 teacher」——
+        學號不是 8 碼純數字的學生會落到這一邊。因此建帳號時要記 role_source,
+        管理者才複查得到（見 models.User.role_source）。
+
+    ZH: admin 與 staff 永遠不會由這裡產生 —— 那兩個一律手動。
+
+    @node job-scheduler/app/crud.py::role_from_email
+    """
+    from .services.myai_sync import classify_email
+    info = classify_email(email or "")
+    label = info.get("label")
+    if label in _EMAIL_LABEL_TO_ROLE:
+        return _EMAIL_LABEL_TO_ROLE[label]
+    # ZH: classify_email 對 `@unknown`／空值／沒有 @ 的字串一律回 domain=""。
+    #     有網域 = 外部信箱 = 訪客；沒有網域 = 推不出來 = 見上,給 student。
+    return "guest" if info.get("domain") else "student"
+
+
 def campuses_of(db: Session, user_id: str) -> list:
     """ZH: 這個人所屬的校區（可能多個）。順序照 org_seed.CAMPUSES,不是插入順序。
 

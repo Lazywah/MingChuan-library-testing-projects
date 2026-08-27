@@ -323,6 +323,7 @@ def get_all_users(
                 username=u.username,
                 email=u.email,
                 role=u.role,
+                role_source=getattr(u, "role_source", None),
                 is_active=u.is_active,
                 online_status=_compute_online(u),  # v2.1: 動態計算
                 last_login_time=u.last_login_time,
@@ -353,6 +354,9 @@ _EXPORT_COLUMNS = {
     "username":            ("帳號名稱", lambda u, t: u.username),
     "email":               ("Email", lambda u, t: u.email),
     "role":                ("角色", lambda u, t: u.role),
+    # ZH: v3.8 讓管理者用匯出就能複查「哪些人的角色是自動判的」——
+    #     自動判定的依據是我們自己組出來的信箱,不是學校給的權威資料。
+    "role_source":         ("角色來源", lambda u, t: getattr(u, "role_source", None) or "未記錄"),
     "auth_source":         ("登入來源", lambda u, t: getattr(u, "auth_source", "local") or "local"),
     "is_active":           ("是否啟用", lambda u, t: bool(u.is_active)),
     "department":          ("學系", lambda u, t: u.department or ""),
@@ -581,6 +585,9 @@ def admin_update_user(
         db_user.email = update_data.email
     if update_data.role is not None:
         db_user.role = update_data.role
+        # ZH: v3.8 管理者改過就不再是「自動判定」—— 複查清單要把他排除,
+        #     否則每次複查都會再看到同一個已經確認過的人。
+        db_user.role_source = "admin"
     if update_data.is_active is not None:
         db_user.is_active = update_data.is_active
     if update_data.department is not None:

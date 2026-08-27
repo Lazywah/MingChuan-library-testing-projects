@@ -26,6 +26,7 @@ from fastapi.responses import RedirectResponse, HTMLResponse
 from sqlalchemy.orm import Session
 
 from ..database import get_db
+from .. import crud
 from ..crud import (
     get_user_by_username,
     get_user_by_email,
@@ -82,26 +83,35 @@ def _finalize_sso_login(db: Session, user_info: dict, request: Request = None) -
 
     if user is None:
         # 首次登入：建新 SSO 帳號
+        # ZH: v3.8 角色依**信箱網域**判定（擁有者裁定 2026-08-27）：
+        #       me.mcu.edu.tw   → student
+        #       mail.mcu.edu.tw → teacher（要改成 staff 由管理者手動）
+        #       推不出來        → student（往低權限的方向猜）
+        #     admin 永遠手動。規則只有 crud.role_from_email 一份實作。
+        email = user_info.get("email") or f"{username}@unknown"
+        role = crud.role_from_email(email)
         user = create_sso_user(
             db,
             username=username,
-            email=user_info.get("email") or f"{username}@unknown",
-            role=user_info.get("role", "student"),
+            email=email,
+            role=role,
             auth_source=auth_source,
             external_id=external_id,
         )
-        logger.info(f"SSO 首次登入，建立帳號 username={username} auth_source={auth_source}")
-        # ZH: v3.4 教職員標記 —— 依**信箱網域**判定為教職員時只記錄、**不自動升權**。
-        #     網域不是權威授權來源，誤升等於送出過大權限 → 留給管理者在
-        #     「MYAI 待開通清單」的「疑似教職員」區確認後手動調整。
-        try:
-            from ..services.myai_sync import classify_email
-            if classify_email(user.email)["label"] == "staff":
-                logger.info(
-                    "帳號 %s 的信箱網域（%s）屬教職員域，角色仍建為 %s；"
-                    "如需升為教師請由管理端手動調整。", username, user.email, user.role)
-        except Exception as e:  # noqa: BLE001  分類只是提示，不該擋登入
-            logger.debug("教職員網域判定略過：%s", e)
+        # ZH: 記下「這個 role 是自動判的」—— 判定依據是我們自己組出來的信箱，
+        #     所以管理者必須能把自動判定與人工確認過的分開來看。
+        user.role_source = "sso_email"
+        db.commit()
+        logger.info("SSO 首次登入，建立帳號 username=%s auth_source=%s role=%s(自動依信箱)",
+                    username, auth_source, role)
+        if role != "student":
+            # ZH: 自動給出非學生角色是要被看見的事,用 warning 不是 info。
+            logger.warning("帳號 %s 依信箱網域自動建為 %s（email=%s）——"
+                           "如需調整請由管理端手動改", username, role, email)
+        # ZH: v3.4 這裡原本是「判定為教職員時只記錄、**不自動升權**」,
+        #     理由是「網域不是權威授權來源」。**2026-08-27 擁有者裁定改為自動給 teacher**,
+        #     判定已移到上面的 crud.role_from_email。原本的顧慮沒有消失,
+        #     改用 role_source 欄位讓它可複查（見 models.User.role_source）。
     elif user.auth_source == "local":
         # 既有 local 帳號首次走 SSO → 升級為 SSO（含寫入 external_id）
         logger.warning(

@@ -547,6 +547,8 @@ class AdminUserListItem(BaseModel):
     username: str
     email: str
     role: str
+    # ZH: v3.8 這個 role 怎麼來的 —— sso_email(自動判) / admin(管理者設) / None(不知道)
+    role_source: Optional[str] = None
     is_active: int
     online_status: Optional[int] = 0
     last_login_time: Optional[UtcDatetime] = None

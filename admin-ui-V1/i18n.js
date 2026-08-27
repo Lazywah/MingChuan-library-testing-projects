@@ -57,6 +57,7 @@
             role_student: '學生',
             role_teacher: '教師',
             role_staff: '職員',
+            role_guest: '訪客',
             role_admin: '管理員',
 
             // ── 顯示設定 ─────────────────────────────────────────
@@ -444,6 +445,7 @@
             role_student: 'Student',
             role_teacher: 'Teacher',
             role_staff: 'Staff',
+            role_guest: 'Guest',
             role_admin: 'Administrator',
 
             // ── Display settings ─────────────────────────────────
