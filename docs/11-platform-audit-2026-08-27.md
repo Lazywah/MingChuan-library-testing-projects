@@ -485,6 +485,41 @@ asyncio 只持弱參照，不留可能被 GC 掉而且不會有錯誤訊息）�
 **已還原**：`smtp_server` / `smtp_port` 的覆寫已清除，生效值回到 `.env` 的
 `smtp.gmail.com:587`（用與管理端 UI 相同的「空字串＝清除覆寫」語意）。
 
+### T20 — 🔴 「版型變了」的偵測器自己也會安靜壞掉（同一場 29 天事故的另一條路）
+
+程式碼審查時追「吞掉例外又回假成功」的模式，在 `myai_sync.py` 找到這個：
+
+```python
+seen = tx_row_count(html)     # ← HTML 解不開時回 0（安靜）
+if seen and not rows:         # ← 0 → 條件不成立
+    raise MyaiSyncError(...)  # ← 不拋錯，只印 fetched=0
+```
+
+`tx_row_count` 是 2026-08 那場事故之後加的**獨立偵測器**
+（廠商把交易頁從 `kbx-grid` 改成 `<table>`，parser 一列都解不出來，
+流程只印 `fetched=0`，同步靜靜死了 29 天、漏 201 筆）。
+
+但它自己也是 `except: return 0` —— **偵測器跟它要偵測的東西用同一種方式壞掉**。
+頁面解不開時 `seen=0, rows=[]`，看起來就是「沒有新資料」，
+於是又回到事故當時一模一樣的畫面。
+
+**最實際的觸發點是空回應**：session 過期被導向、gateway 打嗝、廠商回 204 ——
+`lxml` 對空文件會拋 `ParserError`。
+
+**已修**：`tx_row_count` 解不開時拋 `MyaiSyncError`，不再回 0。
+
+**補測試**：`tests/test_myai_tx_parsing.py`（8 條）—— 這一整段
+**先前完全沒有測試覆蓋**（記憶裡寫著「已改雙版型 parser + 有列卻解出 0 筆就拋錯」，
+做了，但沒測）。測試涵蓋：
+- 兩種版型都解得出來（v2 `<table>` 與 v1 `kbx-grid`）
+- 空／空白／None → 拋錯
+- **合法但沒有資料的頁面不可以拋錯**（否則每次真的沒新交易就會炸）
+- 「有列卻解出 0 筆」的條件成立
+
+> 我在寫 v1 版型的測試資料時第一次寫成扁平結構，解出 0 筆 ——
+> 差一點把「我的測試資料寫錯」誤判成「fallback parser 壞了」。
+> 實際結構是 `kbx-row > kbx-grid > (kbx-time + 多個 kbx-cell kbx-dt)`。
+
 ---
 
 ## 3. 發現的問題

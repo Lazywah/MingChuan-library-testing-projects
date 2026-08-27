@@ -395,13 +395,29 @@ def tx_row_count(html: str) -> int:
     """ZH: 頁面上「看起來有幾列交易」——與解析無關，只數 DOM。
            用來偵測「頁面有資料但一列都解不出來」＝版型又變了（見 sync_transactions）。
 
+    ZH: 🔴 v3.8 —— **解不開的頁面要拋錯，不能回 0。**
+
+    ZH: 這支是「解析失敗」的偵測器。但它原本在 HTML 解不開時
+        `except: return 0` —— 而它要偵測的那些 parser 失敗時也回空清單。
+        於是 `seen=0, rows=[]`，`if seen and not rows` 不成立、不拋錯，
+        流程只印 `fetched=0`，讀起來就是「沒有新資料」。
+
+    ZH: **這正是 2026-08 那場 29 天 / 201 筆事故的失敗模式**，
+        只是觸發原因不同（那次是版型變了，這條是頁面根本解不開）。
+        偵測器跟它要偵測的東西用同一種方式壞掉，等於沒有偵測器。
+
+    ZH: 空字串是最實際的觸發點：session 過期被導向、gateway 打嗝、
+        廠商回 204 —— `lxml` 對空文件會拋 `ParserError`。
+
     @node job-scheduler/app/services/myai_sync.py::tx_row_count
     """
     from lxml import html as lxml_html
     try:
         doc = lxml_html.fromstring(html)
-    except Exception:  # noqa: BLE001
-        return 0
+    except Exception as e:  # noqa: BLE001
+        raise MyaiSyncError(
+            f"交易日誌頁面解不開（長度 {len(html or '')}）：{e}"
+        ) from e
     n = len(doc.xpath("//tbody/tr"))
     n += len(doc.xpath("//div[contains(concat(' ', normalize-space(@class), ' '), ' kbx-row ')]"))
     return n
