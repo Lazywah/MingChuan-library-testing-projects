@@ -32,6 +32,14 @@
     //     0 在 Python 是 falsy，會被當成沒給值。
     var DAYS = 30;
 
+    // ZH: 起訖日期。两個都空 = 沒在用，走上面的 DAYS。
+    // ZH: 🔴 日期直接送字串，**不在前端換算成天數** ——
+    //     廠商的 occurred_at 是當地時間，換算一定會在月初月末差一天，
+    //     而那種差异在畫面上看不出來（只會覺得數字好像不太對）。
+    var RANGE = { start: '', end: '' };
+
+    function rangeOn() { return !!(RANGE.start || RANGE.end); }
+
     // ZH: 「用量」有兩種量法，看的是不同的事：
     //       次數 = 被叫了幾次（便宜的模型可能次數很高）
     //       點數 = 花掉多少廠商計費單位（貴的模型叫兩次就很可觀）
@@ -119,7 +127,18 @@
     function fillDays(series) {
         var byDate = {}, start, end;
         (series || []).forEach(function (r) { byDate[r.date] = Number(r.consumed) || 0; });
-        if (DAYS > 0) {
+        if (rangeOn()) {
+            // ZH: 🔴 用起訖日期當軸的範圍。**不能沿用下面的 DAYS 分支** ——
+            //     DAYS 還停在上一次選的快選值（預設 30），於是軸會畫到「今天」，
+            //     選了 7 月卻看到一條拖到 8 月底的線。數字是對的、圖是錯的，
+            //     而且不會報錯（實測：選 7/1–7/31，軸是 7/02–8/27）。
+            // ZH: 只給一邊時，另一邊退回資料本身的邊界。
+            var first = (series && series.length) ? dnum(series[0].date) : null;
+            var last = (series && series.length) ? dnum(series[series.length - 1].date) : null;
+            start = RANGE.start ? dnum(RANGE.start) : first;
+            end = RANGE.end ? dnum(RANGE.end) : last;
+            if (start == null || end == null) return [];
+        } else if (DAYS > 0) {
             end = dnum(TW.date(new Date()));
             start = end - (DAYS - 1) * DAY;
         } else {
@@ -717,24 +736,50 @@
 
     // ── 期間 ──────────────────────────────────────────────────────────────
     function renderPeriods() {
+        // ZH: 用起訖日期時，快選一律不反白（見 analytics.html 的說明）。
+        var presetOn = !rangeOn();
         $('periods').innerHTML = PERIODS.map(function (p) {
-            return '<button class="btn btn--minor' + (DAYS === p[0] ? ' is-current' : '') + '"'
+            var on = presetOn && DAYS === p[0];
+            return '<button class="btn btn--minor' + (on ? ' is-current' : '') + '"'
                 + ' type="button" data-days="' + p[0] + '"'
-                + (DAYS === p[0] ? ' aria-current="true"' : '') + '>'
+                + (on ? ' aria-current="true"' : '') + '>'
                 + esc(T(p[1], p[2])) + '</button>';
         }).join('');
         $('periods').querySelectorAll('[data-days]').forEach(function (b) {
             b.addEventListener('click', function () {
                 DAYS = parseInt(b.dataset.days, 10);
+                // ZH: 按了快選就把起訖清掉 —— 否則下一次請求還是帶著日期，
+                //     畫面反白的是「近 30 天」而資料是 7 月，而且**不會報錯**。
+                RANGE.start = RANGE.end = '';
+                $('r-from').value = ''; $('r-to').value = '';
                 load();
             });
+        });
+        $('r-clear').hidden = !rangeOn();
+    }
+
+    // ZH: 套用起訖。兩個都空就當作清除。
+    function wireRange() {
+        $('r-go').addEventListener('click', function () {
+            RANGE.start = $('r-from').value;
+            RANGE.end = $('r-to').value;
+            load();
+        });
+        $('r-clear').addEventListener('click', function () {
+            RANGE.start = RANGE.end = '';
+            $('r-from').value = ''; $('r-to').value = '';
+            load();
         });
     }
 
     async function load() {
         renderPeriods();
         var out = await Promise.all([
-            safe(get('/external-ai/admin/consumption?days=' + DAYS)),
+            safe(get('/external-ai/admin/consumption?'
+                + (rangeOn()
+                    ? 'start=' + encodeURIComponent(RANGE.start)
+                      + '&end=' + encodeURIComponent(RANGE.end)
+                    : 'days=' + DAYS))),
             safe(get('/admin/jobs?limit=500')),
             safe(get('/admin/analytics')),
         ]);
@@ -744,6 +789,7 @@
     }
 
     $('sync').addEventListener('click', syncNow);
+    wireRange();
 
     load();
     document.addEventListener('prefs:langchanged', load);

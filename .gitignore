@@ -64,3 +64,6 @@ docs/dev
 
 # apm：.apm/ 含有對話摘錄（你的指令 + AI 的思路），不進版控
 .apm/
+
+# apm：.claude/settings.local.json 是本機設定（apm 的 hook 指令帶絕對路徑）
+.claude/settings.local.json

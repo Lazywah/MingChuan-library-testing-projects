@@ -18,7 +18,7 @@ EN: Purpose: Temporarily route non-admin users to a partner vendor (myai168)
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
-from typing import Any
+from typing import Any, Optional
 import csv
 import io
 import re
@@ -799,6 +799,8 @@ def admin_live_usage(
 @router.get("/admin/consumption")
 def consumption_analytics(
     days: int = 30,
+    start: Optional[str] = None,
+    end: Optional[str] = None,
     db: Session = Depends(get_db),
     _: models.User = Depends(require_admin),
 ) -> Any:
@@ -808,14 +810,48 @@ def consumption_analytics(
 
     @node job-scheduler/app/routers/external_ai.py::consumption_analytics
     """
-    from datetime import datetime, timedelta
+    from datetime import datetime, timedelta, time as dtime
     # ZH: 不能用 `days or 30` —— 0 在 Python 是 falsy，前端「全部」送的正是 0，
     #     會被悄悄換成 30，導致「全部」實際只看近 30 天（同頁的「個人查詢」
     #     用 `days or 0` 反而是對的，兩個面板同一個詞卻不同行為）。
     #     days<=0 代表「全部」(不設下界，即從最早一筆起)
     days = 30 if days is None else int(days)
     q = db.query(models.MyaiTransaction).filter(models.MyaiTransaction.occurred_at.isnot(None))
-    if days > 0:
+
+    # ==================================================================
+    # ZH: v3.8 起訖日期。理由：想看「整個 7 月」的話，
+    #     「近 N 天」只有在 8/1 當天操作才對得上。
+    #
+    # ZH: 🔴 `occurred_at` 是**廠商的當地時間（naive）**，不是 UTC。
+    #     所以這裡直接用 naive datetime 比對，**絕對不要轉成 UTC** ——
+    #     轉了會整整差八小時，而那種錯位在月初月末最明顯：
+    #     7/1 凌晨的交易會被算進 6 月。（見本檔上方同一個注記。）
+    #
+    # ZH: 🔴 `end` 是**含當天**：選 7/31 意思是「包含 7/31 一整天」。
+    #     用 `<= end 00:00` 的話會掉掉最後一天的所有資料，
+    #     而使用者看不出來（只會覺得數字「好像少一點」）。
+    #
+    # ZH: 起訖日期**優先於 days** —— 兩者都給時以起訖為準。
+    # ==================================================================
+    def _day(v):
+        """ZH: 'YYYY-MM-DD' → date；格式不對就回 None（當作沒給）。"""
+        try:
+            return datetime.strptime((v or "").strip(), "%Y-%m-%d").date()
+        except (ValueError, TypeError):
+            return None
+
+    d_start, d_end = _day(start), _day(end)
+    if d_start and d_end and d_start > d_end:
+        d_start, d_end = d_end, d_start     # ZH: 選反了就幫他換過來，不要回一張空表
+
+    if d_start or d_end:
+        if d_start:
+            q = q.filter(models.MyaiTransaction.occurred_at
+                         >= datetime.combine(d_start, dtime.min))
+        if d_end:
+            q = q.filter(models.MyaiTransaction.occurred_at
+                         <= datetime.combine(d_end, dtime.max))
+    elif days > 0:
         days = min(days, 3650)
         since = datetime.now() - timedelta(days=days)   # ZH: occurred_at 為廠商當地時間(naive)
         q = q.filter(models.MyaiTransaction.occurred_at >= since)
@@ -899,6 +935,11 @@ def consumption_analytics(
         "by_role": by_role,
         "by_department": by_department,
         "series": series,
+        # ZH: 回傳**實際生效**的區間，不是前端送來的——
+        #     前後端對日期的解讀若有出入（例如選反被換過來），
+        #     這裡會看得出來；只回送來的值等於自己跟自己對帳。
+        "range_start": d_start.isoformat() if d_start else None,
+        "range_end": d_end.isoformat() if d_end else None,
     }
 
 

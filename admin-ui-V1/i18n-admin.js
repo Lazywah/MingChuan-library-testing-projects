@@ -417,6 +417,12 @@
 
         // ── 數據 ─────────────────────────────────────────────
         an_period: '期間',
+        an_from: '起',
+        an_to: '訖',
+        an_from_aria: '起始日期',
+        an_to_aria: '結束日期',
+        an_apply: '套用',
+        an_clear: '清除',
         an_d7: '近 7 天',
         an_d30: '近 30 天',
         an_d90: '近 90 天',
@@ -859,6 +865,12 @@
 
 
         an_period: 'Period',
+        an_from: 'From',
+        an_to: 'To',
+        an_from_aria: 'Start date',
+        an_to_aria: 'End date',
+        an_apply: 'Apply',
+        an_clear: 'Clear',
         an_d7: 'Last 7 days',
         an_d30: 'Last 30 days',
         an_d90: 'Last 90 days',
