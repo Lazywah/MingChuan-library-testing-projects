@@ -503,6 +503,87 @@
         }
     }
 
+    // ==================================================================
+    // ZH: 檢視切換（平台 / MYAI）—— 與「平台設定」「數據」同一個元件。
+    //
+    // ZH: 它是**篩選**不是分頁：兩邊講的都是同一批帳號,
+    //     只是「平台這邊的資料」與「廠商那邊的對應」。
+    // ==================================================================
+    var VIEWS = ['platform', 'myai'];
+
+    function viewFromHash() {
+        var h = (location.hash || '').replace('#', '');
+        return VIEWS.indexOf(h) >= 0 ? h : 'platform';
+    }
+
+    var VIEW = viewFromHash();
+
+    function applyView(next) {
+        if (next) VIEW = next;
+        // ZH: 🔴 **不要動 `hidden` 屬性。** 這一頁有元素自己在管 hidden
+        //     （#temp-box 預設收著,按「建立臨時帳號」才打開）——
+        //     檢視篩選去寫同一個屬性的話,切到平台檢視就把它**強制打開**,
+        //     畫面上會多出一個空的、有外框的盒子,看起來像搜尋框上面多一條線。
+        //     （實測踩到過。）
+        //     用獨立的屬性,兩套顯示邏輯就不會互相覆蓋。
+        document.querySelectorAll('[data-view]').forEach(function (el) {
+            var on = el.dataset.view === 'both' || el.dataset.view === VIEW;
+            el.toggleAttribute('data-view-off', !on);
+        });
+        // ZH: 🔴 只在 hash 是空的或是我們自己的檢視名時才動它。
+        //     無條件 replaceState 會洗掉別人放的 hash（平台設定那邊就踩過:
+        //     `#node-<id>` 的深層連結被洗掉,從別處連過來就不會捲到那個節點）。
+        var cur = (location.hash || '').replace('#', '');
+        if (cur === '' || VIEWS.indexOf(cur) >= 0) {
+            try {
+                history.replaceState(null, '',
+                    location.pathname + (VIEW === 'platform' ? '' : '#' + VIEW));
+            } catch (e) { /* 某些情境不給改網址，不影響功能 */ }
+        }
+    }
+
+    function wireViewSeg() {
+        var seg = $('view-seg');
+        if (!seg) return;
+        var thumb = seg.querySelector('.adm-seg__thumb');
+        var opts = [].slice.call(seg.querySelectorAll('[data-view-opt]'));
+
+        function pick(i, focus) {
+            if (i < 0 || i >= opts.length) return;
+            thumb.style.transform = 'translateX(' + (i * 100) + '%)';
+            opts.forEach(function (o, k) {
+                var on = k === i;
+                o.classList.toggle('is-current', on);
+                o.setAttribute('aria-checked', on ? 'true' : 'false');
+                o.setAttribute('tabindex', on ? '0' : '-1');
+            });
+            if (focus) opts[i].focus();
+            applyView(opts[i].dataset.viewOpt);
+        }
+
+        opts.forEach(function (o, i) {
+            o.addEventListener('click', function () { pick(i, false); });
+        });
+        // ZH: radiogroup 的慣例是左右鍵換選項（群組本身只佔一個 Tab 位）。
+        seg.addEventListener('keydown', function (e) {
+            var d = e.key === 'ArrowRight' ? 1 : e.key === 'ArrowLeft' ? -1 : 0;
+            if (!d) return;
+            e.preventDefault();
+            pick((VIEWS.indexOf(VIEW) + d + opts.length) % opts.length, true);
+        });
+
+        // ZH: 網址帶 #myai 進來時,滑塊與選取狀態要跟著對 ——
+        //     只設 VIEW 而不動 DOM 的話,內容是 MYAI 但滑塊停在「平台」。
+        pick(VIEWS.indexOf(VIEW), false);
+
+        // ZH: 🔴 **只改 hash 不會重新載入頁面**,模組頂層那行 `var VIEW = ...`
+        //     只跑一次。沒有這個監聽,從別處連進來的 hash 變化不會反映在畫面上。
+        window.addEventListener('hashchange', function () {
+            var want = viewFromHash();
+            if (want !== VIEW) pick(VIEWS.indexOf(want), false);
+        });
+    }
+
     function renderDetail() {
         var box = $('detail');
         if (!CURRENT) {
@@ -513,7 +594,14 @@
         box.innerHTML =
             '<div class="adm-sec__head"><h2>'
             + esc(T('pp_detail', '{name} 的資料').replace('{name}', u.username)) + '</h2>'
-            + '<span class="footnote mono">' + esc(u.id) + '</span></div>'
+            + '<span class="footnote mono">' + esc(u.id) + '</span>'
+            // ZH: 關閉預覽。這一區很長（基本資料 + 額度 + 實驗室 + 危險操作）,
+            //     看完之後它會一直卡在清單下面,要往回捲很久才回得到清單。
+            //     🔴 只清 CURRENT 不重畫清單 —— 清單的「選中」樣式也要跟著收掉,
+            //     不然畫面上還反白著一列,但下面已經沒有它的資料了。
+            + '<span class="topbar__spacer"></span>'
+            + '<button class="btn btn--minor" type="button" id="detail-close">'
+            + esc(T('pp_close', '關閉')) + '</button></div>'
 
             + '<div class="adm-cols">'
             + basicCard(u)
@@ -1221,6 +1309,11 @@
     });
     $('bx-import').addEventListener('click', importCsv);
 
+    // ZH: 檢視滑條要在讀資料**之前**接好 —— 帶 #myai 進來時,
+    //     滑塊與 hidden 狀態要在第一次畫面出現時就是對的,
+    //     不然使用者會看到平台那一邊閃一下才切過去。
+    wireViewSeg();
+
     loadBatch();
 
     (async function () {
@@ -1233,6 +1326,15 @@
                 + esc(T('pp_fail', '讀不到使用者清單（{w}）。').replace('{w}', e.message)) + '</p>';
         }
     })();
+
+    // ZH: 用事件委派而不是在 renderDetail 裡綁 —— #detail 的內容每次都整個重畫,
+    //     直接綁在按鈕上的話,每重畫一次就要記得重綁一次,漏一次就變成「按了沒反應」。
+    document.addEventListener('click', function (e) {
+        if (!e.target.closest || !e.target.closest('#detail-close')) return;
+        CURRENT = null;
+        renderDetail();
+        renderList();      // ZH: 清單的反白也要收掉,不然還亮著一列但下面沒東西了
+    });
 
     document.addEventListener('prefs:langchanged', function () {
         renderList();

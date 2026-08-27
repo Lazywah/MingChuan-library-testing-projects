@@ -1132,3 +1132,10 @@ textarea.field__input {
  *     蓋掉,而症狀是「規則明明寫了卻沒有效果」,在 devtools 裡才看得出被劃掉。
  * ─────────────────────────────────────────────────────────────── */
 .adm-sec__head > * { margin-block: 0; }
+
+/* ZH: 檢視滑條篩掉的區塊。**刻意不用 `hidden` 屬性** ——
+ *     這一頁有元素自己在管 hidden（#temp-box 預設收著）,
+ *     兩套邏輯共用同一個屬性時,後跑的那個會把前一個的決定蓋掉。
+ * ZH: 用 !important 的理由同 `[hidden]`：作者寫的任何 display 宣告
+ *     都會贏過沒有 !important 的規則,於是「該隱藏卻看得見」。 */
+[data-view-off] { display: none !important; }

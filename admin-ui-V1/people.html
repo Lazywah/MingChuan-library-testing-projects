@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title data-i18n="adm_t_people">人 · MCU AI Base 管理端</title>
+    <title data-i18n="adm_t_people">帳號 · MCU AI Base 管理端</title>
 
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -11,7 +11,7 @@
 
     <link rel="stylesheet" href="tokens.css?v=ff9cecda">
     <link rel="stylesheet" href="styles.css?v=d63a1c9e">
-    <link rel="stylesheet" href="admin.css?v=b5ed924f">
+    <link rel="stylesheet" href="admin.css?v=3f0a3792">
 </head>
 <body>
 
@@ -22,18 +22,33 @@
     <!-- ZH: 入口是**搜尋**不是瀏覽 —— 打開這一頁的時候，你已經知道要找誰了。
              （總覽那頁才是「不知道要找什麼、先看一眼」。） -->
     <div class="adm-sec__head">
-        <h1 class="hero__title" data-i18n="adm_nav_people">人</h1>
+        <h1 class="hero__title" data-i18n="adm_nav_people">帳號</h1>
         <span class="topbar__spacer"></span>
-        <span class="footnote" id="count"></span>
+        <span class="footnote" id="count" data-view="platform"></span>
         <!-- ZH: 建立臨時帳號放在這一頁而不是另開一頁 ——
                  它跟「處理某一個人」是同一件事的兩端（開帳號 / 管帳號）。 -->
-        <button class="btn btn--minor" type="button" id="new-temp" data-i18n="tmp_new">建立臨時帳號</button>
+        <button class="btn btn--minor" type="button" id="new-temp" data-view="platform"
+                data-i18n="tmp_new">建立臨時帳號</button>
+        <!-- ZH: 檢視滑條。與「平台設定」「數據」同一個元件 ——
+                 它是**篩選**不是分頁：兩邊講的都是同一批帳號,
+                 只是「平台這邊的資料」與「廠商那邊的對應」。
+             ZH: 滑塊位置由 people.js 寫 inline transform。 -->
+        <div class="adm-seg" id="view-seg" role="radiogroup"
+             aria-label="要看哪一部分的帳號資料" data-i18n-aria="pp_view_group">
+            <span class="adm-seg__thumb" aria-hidden="true" style="transform:translateX(0%)"></span>
+            <button type="button" class="adm-seg__opt is-current" role="radio"
+                    aria-checked="true" tabindex="0" data-view-opt="platform"
+                    data-i18n="pf_view_platform">平台</button>
+            <button type="button" class="adm-seg__opt" role="radio"
+                    aria-checked="false" tabindex="-1" data-view-opt="myai"
+                    data-i18n="pf_view_myai">MYAI</button>
+        </div>
     </div>
 
     <!-- ZH: 預設收著。這是例外用途，不該佔掉每天都會看的版面。 -->
-    <section class="adm-card adm-card--temp adm-sec" id="temp-box" hidden></section>
+    <section class="adm-card adm-card--temp adm-sec" id="temp-box" data-view="platform" hidden></section>
 
-    <label class="field">
+    <label class="field" data-view="platform">
         <!-- ZH: 標籤用**短的**，長句留給 placeholder ——
                  兩邊寫同一句話時畫面上會看到重複的兩行。
                  （標籤不能省：placeholder 一打字就消失，
@@ -43,19 +58,19 @@
                data-i18n-placeholder="pp_search" placeholder="搜尋帳號、Email、學系…">
     </label>
 
-    <section class="adm-sec" id="list" aria-live="polite">
+    <section class="adm-sec" id="list" data-view="platform" aria-live="polite">
         <span class="skeleton skeleton--line"></span>
     </section>
 
     <!-- ZH: 選中的人的**所有東西**都在這裡：基本資料、額度、實驗室、危險操作。
              舊版把這些散在「帳號管理」與「Lab 管理」兩個分頁，
              處理一個人要跳來跳去、而且兩邊各有一份搜尋。 -->
-    <section class="adm-sec" id="detail" aria-live="polite"></section>
+    <section class="adm-sec" id="detail" data-view="platform" aria-live="polite"></section>
 
     <!-- ZH: 廠商帳號的維運工作。**數字與動作常駐** —— 有幾個人對不上、
              有幾個等著開通，正是你該注意到的事；收起來就等於沒有人會看到。
              很少用的 CSV 匯入才收進 fold。 -->
-    <section class="adm-sec" aria-labelledby="h-batch">
+    <section class="adm-sec" data-view="myai" aria-labelledby="h-batch">
         <div class="adm-sec__head">
             <h2 id="h-batch" data-i18n="pp_bx">廠商帳號對應</h2>
             <span class="topbar__spacer"></span>
@@ -89,9 +104,9 @@
 <script src="tz.js?v=2e214a8b"></script>
 <!-- ⚠ ZH: 順序不能動 —— i18n-admin 在 i18n 之後、prefs 之前。 -->
 <script src="i18n.js?v=94ba0495"></script>
-<script src="i18n-admin.js?v=47aa1a18"></script>
+<script src="i18n-admin.js?v=4a0f2be5"></script>
 <script src="prefs.js?v=a25a96d6"></script>
-<script src="admin-chrome.js?v=ca5eba9c"></script>
-<script src="people.js?v=3ca18bee"></script>
+<script src="admin-chrome.js?v=7d8e9370"></script>
+<script src="people.js?v=8ec79eaf"></script>
 </body>
 </html>

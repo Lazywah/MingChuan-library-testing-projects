@@ -28,7 +28,7 @@
     //     順序＝設計文件第 1 節推導的使用時機：先「看有沒有出事」，最後才是「查數字」。
     var NAV = [
         { file: 'index.html',     key: 'adm_nav_overview',  zh: '總覽' },
-        { file: 'people.html',    key: 'adm_nav_people',    zh: '人' },
+        { file: 'people.html',    key: 'adm_nav_people',    zh: '帳號' },
         { file: 'platform.html',  key: 'adm_nav_platform',  zh: '平台設定' },
         { file: 'reports.html',   key: 'adm_nav_msg',       zh: '訊息' },
         { file: 'analytics.html', key: 'adm_nav_analytics', zh: '數據' },
