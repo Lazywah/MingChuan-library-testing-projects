@@ -15,7 +15,7 @@
 |---|---|
 | 測試對象 | **正在跑的正式堆疊**（不是另開的測試環境） |
 | 服務 | nginx（:80 使用者端 / :8888 管理端）、job-scheduler（:8002） |
-| 未啟動 | registry、ollama、portkey、open-webui（image 都在本機，需要時啟動） |
+| 未啟動（開始時） | registry、ollama、portkey、open-webui —— **稽核中已啟動後三者**（image 都在本機，不需下載），registry 維持 opt-in |
 | GPU worker | `gpu-node-01` 最後心跳 **2026-08-26 13:56** → 目前離線 |
 | 既有資料 | 使用者 4 筆、訓練任務 0 筆 |
 
@@ -37,11 +37,15 @@
 
 | 時間 | 變更 | 還原方式 | 狀態 |
 |---|---|---|---|
-| 08-27 夜 | `smtp_server` → `127.0.0.1`、`smtp_port` → `1` | 兩鍵設空字串（清除覆寫） | ⬜ 待還原 |
+| 08-27 17:02 | `smtp_server` → `127.0.0.1`、`smtp_port` → `1`（阻斷寄信） | 兩鍵設空字串（清除覆寫） | ✅ **已還原**（生效值回到 `smtp.gmail.com:587`）|
+| 08-27 夜 | 啟動 ollama / portkey / open-webui | `docker compose -f docker-compose.ai-models.yml down` | ⬜ 保持啟動（見 §4 問題 6）|
+| 08-27 夜 | 清空知識庫 40 片段（測全新安裝路徑） | 背景匯入自動重建 | ✅ **已回到 40 片段** |
+| 08-27 夜 | 送出一筆測試問題回報（id=1） | 管理端標為已解決或忽略 | ⬜ 留給擁有者 |
+| 08-27 夜 | 啟動又停止 Lab、上傳又刪除資料集、送出又取消一筆訓練 | —— | ✅ 已清理（任務留一筆 `cancelled` 紀錄，那是正常保留） |
 
 ---
 
-## 1. 功能清單（來源：`apm.features.json` 39 項 + 路由 128 個端點 + 前端 18 頁）
+## 1. 功能清單（來源：`apm.features.json` 39 項 + 路由 **141** 個端點 + 前端 18 頁）
 
 狀態欄的意思：
 - ✅ 測過可用
@@ -52,67 +56,69 @@
 
 ### 1.1 帳號與權限
 
-| # | 功能 | 狀態 | 備註 |
+| # | 功能 | 狀態 | 依據 |
 |---|---|---|---|
-| 1 | `auth` 登入與權限（JWT、admin DI 鏈） | ⬜ | |
-| 2 | `sso` 單一登入（mock／OIDC） | ⬜ | |
-| 3 | `admin-flag` role 與 is_admin 拆開 | ⬜ | |
-| 4 | `role-from-email` 依信箱網域判角色 | ⬜ | |
-| 5 | `onboarding-modal` 初次登入設定彈窗 | ⬜ | |
-| 6 | `profile-unlock` 組織資料上鎖 + 一次性解鎖 | ⬜ | |
-| 7 | `org-lookup` 組織對照（系→院、單位、校區） | ⬜ | |
-| 8 | `delete-audit` 刪帳號留稽核 | ⬜ | |
-| 9 | `quota` 配額與提權審計 | ⬜ | |
+| 1 | `auth` 登入與權限（JWT、admin DI 鏈） | ✅ | 實測：學生 session 可用；27 個管理端端點全數 403（T2） |
+| 2 | `sso` 單一登入 | ⚠️ 部分 | `/sso/providers` 回 `["oidc"]`、OIDC discovery 載入成功（日誌可見）。**完整登入流程需要真的 IdP 往返，未測** |
+| 3 | `admin-flag` role 與 is_admin 拆開 | ✅ | 實測：學生 `PUT /auth/me` 帶 `is_admin:1` **無法提權**（T12） |
+| 4 | `role-from-email` 依信箱判角色 | ⛔ | 需建帳號才測得到，我不建帳號。測試套件有覆蓋 |
+| 5 | `onboarding-modal` 初次登入彈窗 | ⛔ | 只對新帳號出現 |
+| 6 | `profile-unlock` 一次性解鎖 | ⛔ | 需管理端核可，session 已失效 |
+| 7 | `org-lookup` 組織對照 | ✅ | `/system/org-options` 回 5 校區 + 學系含學院對照 |
+| 8 | `delete-audit` 刪帳號留稽核 | ⛔ | 不對既有帳號做破壞性操作 |
+| 9 | `quota` 配額與提權審計 | ✅ | `/auth/usage` 正確（34000/5000000，重置日 2026-09-01） |
 
 ### 1.2 AI 功能
 
-| # | 功能 | 狀態 | 備註 |
+| # | 功能 | 狀態 | 依據 |
 |---|---|---|---|
-| 10 | `chat` AI 助手串流 proxy | ⬜ | 需要 portkey/ollama |
-| 11 | `external-ai` 外部 AI 供應商接入 | ⬜ | |
-| 12 | `myai-sync` MYAI 廠商同步 | ⬜ | 需連外 |
-| 13 | `myai-balance-two-stage` 點數兩段提醒 | ⬜ | 今天剛做 |
-| 14 | `rag` 小基知識庫 | ⬜ | 需要 ollama |
-| 15 | `token-accounting` Token 記帳 | ⬜ | |
+| 10 | `chat` AI 助手串流 | ✅ | 實測 SSE 串流、llama3、10.9 秒（T18） |
+| 11 | `external-ai` 外部 AI 接入 | ✅ | `/external-ai/me`、`my-provision`、`my-balance`、`my-consumption` 全通 |
+| 12 | `myai-sync` 廠商同步 | ⛔ | 需連廠商網站，未觸發 |
+| 13 | `myai-balance-two-stage` 點數兩段提醒 | ✅ | 正式環境回 `state:"ok"`，新欄位運作正確 |
+| 14 | `rag` 小基知識庫 | ✅ | Ollama 啟動後答得出來；未啟動時誠實報錯（T10） |
+| 15 | `token-accounting` Token 記帳 | ⚠️ | 端點正常，但擁有者已說明平台自身 token 系統**完全停用** |
 
 ### 1.3 運算與儲存
 
-| # | 功能 | 狀態 | 備註 |
+| # | 功能 | 狀態 | 依據 |
 |---|---|---|---|
-| 16 | `jobs` GPU 訓練任務排程 | ⬜ | |
-| 17 | `worker` GPU Worker 與心跳 | ⬜ | 節點離線 |
-| 18 | `lab` 瀏覽器內 VS Code | ⬜ | |
-| 19 | `datasets` 資料集與訓練管線 | ⬜ | |
-| 20 | `models` 模型與產出物 | ⬜ | |
-| 21 | `secrets` 使用者密鑰（AES-256-GCM） | ⬜ | |
-| 22 | `storage-lifecycle` 儲存四階段生命週期 | ⬜ | 已知：多為標籤 |
-| 23 | `agent-dispatch` Agent 派工 | ⬜ | |
-| 24 | `vscode-ext` VS Code 擴充 | ⬜ | |
+| 16 | `jobs` 訓練任務排程 | ✅ | 送出 201 → pending → 取消 → cancelled（T18） |
+| 17 | `worker` GPU Worker 與心跳 | ⛔ | 節點自 2026-08-26 離線，無法測派工 |
+| 18 | `lab` 瀏覽器內 VS Code | ✅ | **端對端**：啟動 2 秒 → 瀏覽器開得起來 → 停止後容器移除、volume 保留（T11） |
+| 19 | `datasets` 資料集與管線 | ✅ | 真的上傳 zip、被引用時刪除正確擋下 409（T18） |
+| 20 | `models` 模型管理 | ✅ | `/models` 回 llama3 |
+| 21 | `secrets` 使用者密鑰 | ✅ | 建立→遮罩顯示→刪除全通（T18） |
+| 22 | `storage-lifecycle` 四階段生命週期 | 🔴 已知 | 先前已查明多為標籤（`freeze`/`archive` 是 TODO + `return True`）。本次未重測 |
+| 23 | `agent-dispatch` Agent 派工 | ⛔ | 需 worker |
+| 24 | `vscode-ext` VS Code 擴充 | ⛔ | 需在 VS Code 內操作 |
 
 ### 1.4 溝通與營運
 
-| # | 功能 | 狀態 | 備註 |
+| # | 功能 | 狀態 | 依據 |
 |---|---|---|---|
-| 25 | `email` 寄信與退信處理 | ⬜ | |
-| 26 | `admin-alert-mail` 管理員告警信 To/CC | ⬜ | 今天剛做 |
-| 27 | `lab-purge-reminder` Lab 銷毀提醒信 | ⬜ | |
-| 28 | `announcements` 公告 | ⬜ | |
-| 29 | `reports` 報表 | ⬜ | |
-| 30 | 問題回報 | ⬜ | |
-| 31 | `system-settings` 系統設定 | ⬜ | |
-| 32 | `public-settings` 前台唯讀營運設定 | ⬜ | |
-| 33 | `smtp-admin-config` SMTP 管理端可設 | ⬜ | |
-| 34 | `analytics-grouping` 數據頁分組 | ⬜ | |
-| 35 | `admin` 管理端 API | ⬜ | 47 個端點 |
+| 25 | `email` 寄信與退信 | ⚠️ | 寄信路徑正常；**IMAP 現在沒設定**、**admin 信箱網域不存在**（T19） |
+| 26 | `admin-alert-mail` 告警信 To/CC | ⚠️ | 程式與測試都在，但**收件人是空的 → 一封都不會寄**（設計如此） |
+| 27 | `lab-purge-reminder` 銷毀提醒信 | ⛔ | 需要有待銷毀的封存 |
+| 28 | `announcements` 公告 | ✅ | 前台讀取正常（3 則，含置頂）；管理端 CRUD 未測 |
+| 29 | `reports` 報表 | ⛔ | 管理端 |
+| 30 | 問題回報 | ✅ | **端對端**：送出 201 → 讀得到 → 空白內容 422（T8） |
+| 31 | `system-settings` 系統設定 | ✅ | 讀寫都實測過（我改了 SMTP 又還原） |
+| 32 | `public-settings` 前台唯讀設定 | ✅ | 三個旋鈕都回得出來 |
+| 33 | `smtp-admin-config` SMTP 管理端可設 | ✅ | 實測改寫與「空字串＝清除覆寫」的語意 |
+| 34 | `analytics-grouping` 數據頁分組 | ⛔ | 管理端 |
+| 35 | `admin` 管理端 API（47 端點） | ⚠️ | **權限邊界已驗**（學生全數 403）；**功能面未測**（session 失效，見問題 1） |
 
 ### 1.5 介面與基礎設施
 
-| # | 功能 | 狀態 | 備註 |
+| # | 功能 | 狀態 | 依據 |
 |---|---|---|---|
-| 36 | `web-ui-v2` 使用者介面 V1（12 頁） | ⬜ | |
-| 37 | `admin-ui-v1` 管理端介面 V1（6 頁） | ⬜ | |
-| 38 | `web-ui-v1` / `web-ui-v1_5` 舊版仍在服務 | ⬜ | |
-| 39 | `infra` 部署編排 | ⬜ | |
+| 36 | `web-ui-v2` 使用者介面 V1（12 頁） | ✅ | 12 頁全載入；1 頁原本壞著已修（T6/T7） |
+| 37 | `admin-ui-v1` 管理端介面 V1 | ⚠️ | 頁面載得起來，功能面未測（session） |
+| 38 | 舊版 V0 / V0.5 | ✅ | 都活著且讀得到即時資料（T14） |
+| 39 | `infra` 部署編排 | ✅ 已改善 | 新增 `docker-compose.full.yml`；修了兩個會讓平台整個掛掉的問題（T16/T17） |
+
+**統計**：✅ 可用 21 項 ｜ ⚠️ 有保留 7 項 ｜ 🔴 已知問題 1 項 ｜ ⛔ 環境所限未測 10 項
 
 ---
 
@@ -120,8 +126,17 @@
 
 ### T1 — 端點盤點（靜態）
 
-從 `main.py` 的 `include_router` 前綴 + 各 router 的裝飾器推出完整端點表：
-**132 個端點**，其中 GET 且無路徑參數的有 54 個（可直接掃）。
+從 `main.py` 的 `include_router` 前綴 + 各 router 的裝飾器推出完整端點表。
+
+⚠️ **這個腳本我改了兩次才對，兩次都是「數字看起來很合理」**：
+1. 第一版用 `@router.` 硬抓 → 128 個且前綴全錯（`announcements.py`／`reports.py`
+   各有兩個 router 物件掛在不同前綴）。
+2. 第二版 132 個 —— 仍然漏了 **9 個**：正則寫成 `["']([^"']+)`，
+   要求引號內至少一個字元，於是 `@router.get("")` 這種**掛在 router 根路徑**的
+   端點全被跳過（建立任務、列公告、送出問題回報都是這種）。
+   我是在「jobs 沒有 POST 端點」這個荒謬結論出現時才發現的。
+
+**最終：141 個端點。** 盤點工具本身也會有 bug，而它的 bug 會安靜地少報 —— 數字要對得起常識才算數。
 
 > ⚠️ 第一版腳本用 `@router.` 硬抓，得到 128 個且前綴全錯 ——
 > 因為 `announcements.py` 與 `reports.py` 各有兩個 router 物件
@@ -175,7 +190,7 @@
 | `/external-ai/my-consumption` | `bound=true`，30 天內用了 689 點 / 1 次 |
 | `/jobs/pool-availability` | 兩個池都 `available=false, next_open=null` ← 沒有節點在線，符合現況 |
 | `/lab/status` | `stopped`，限制值讀得到（閒置 30 / 硬上限 90 / 每日 360 分） |
-| `/assistant/status` | **`ready=true, chunks=40`** —— 小基的知識庫是活的 |
+| `/assistant/status` | `ready=true, chunks=40` —— ⚠️ 這個 `ready` 後來證實是**騙人的**（Ollama 根本沒跑，見 T10）|
 
 ### T5 — 🔴 一個「不存在的 bug」與一個真的 bug（兩次假發現的紀錄）
 
@@ -418,6 +433,57 @@ asyncio 只持弱參照，不留可能被 GC 掉而且不會有錯誤訊息）�
 
 > ⚠️ 我在過程中**清空過正式的知識庫**（40 片段），並在測完後由背景匯入自動重建，
 > 已確認回到 40 片段。內容來源是 `job-scheduler/knowledge/*.md`，可重建。
+
+### T18 — 其餘使用者端功能
+
+| 功能 | 測法 | 結果 |
+|---|---|---|
+| 密鑰 `secrets` | PUT 建立 → GET → DELETE | ✅ 全通，值有遮罩（`dum********udit`） |
+| 資料集上傳 | 手工組一個真的 zip（兩類各一張 PNG）POST `/datasets/upload` | ✅ 200，回 dataset_id + 建議設定 |
+| 送出訓練 | POST `/jobs`（`job_name` + `dataset_id` + `model_name`） | ✅ 201，狀態 `pending`（無 worker 在線 → 正確行為） |
+| 取消訓練 | DELETE `/jobs/{job_id}` | ✅ 200 → `cancelled` |
+| 刪資料集（有任務在用） | DELETE | ✅ **409 正確擋下** |
+| 刪資料集（任務取消後） | DELETE | ✅ 200，已用空間回到 0 |
+| AI 對話 `chat` | POST `/chat/completions`（`model_id`） | ✅ 200 SSE 串流，llama3，10.9 秒 |
+| 公告 / 模型清單 | GET | ✅ 都正常 |
+| 輸入驗證 | 缺欄位 / 空白 / 錯欄位名 | ✅ 一律 422 並指出缺哪個欄位 |
+
+> 我自己在這一輪犯了三次「欄位名猜錯」（`message`/`body`、`model`/`model_id`、`id`/`job_id`），
+> 每次都得到明確的 422 或 404 —— **API 的錯誤訊息是好的**，
+> 但也說明前端與 API 的欄位命名不一致（`id` vs `job_id` vs `dataset_id`）。
+
+### T19 — 寄信與退信（含一個我先前判斷錯的地方）
+
+**修正我在 §0 的說法**：我先前寫「IMAP 沒設定 → 退信回收沒在跑」。
+「現在沒在跑」是對的（scheduler 每 10 分鐘記一次
+`退信回收未執行（設定或連線問題）: IMAP 未設定`），
+但**不能說它從來沒跑過** —— `email_log` 裡有兩筆 `bounced`，
+帶著完整的 Gmail DSN，回填時間是今天 13:44 與 15:46。
+所以它今天稍早是通的，之後設定不見了。
+
+**🔴 新發現：管理員帳號的信箱是不存在的網域。**
+
+```
+[5.1.2] smtp; DNS Error: DNS type 'mx' lookup of school.edu.tw
+        responded with code NXDOMAIN — Domain name not found
+```
+
+`admin@school.edu.tw` 每次管理員登入都會收到一封 `login_alert`，
+而那個網域**根本不存在** → **每一次登入都製造一封必退信件**。
+這正是記憶裡「誤寄事故」的同一族問題，只是這次是持續發生的。
+
+**建議**（未修，屬於帳號資料）：把 bootstrap admin 的 email 改成真實信箱，
+或改成 RFC 保留網域（`admin@example.com`）讓 `send_email` 直接擋下。
+
+**稽核期間的寄信情況**（我阻斷 SMTP 之前 vs 之後）：
+
+| 時間 | 狀態 | 說明 |
+|---|---|---|
+| 16:49 ×2、16:58 ×1 | `sent` | 擁有者自己登入觸發的，在我阻斷之前 |
+| 17:02 之後 | `failed` | ✅ 我的阻斷生效，一封都沒出去 |
+
+**已還原**：`smtp_server` / `smtp_port` 的覆寫已清除，生效值回到 `.env` 的
+`smtp.gmail.com:587`（用與管理端 UI 相同的「空字串＝清除覆寫」語意）。
 
 ---
 
