@@ -65,6 +65,19 @@
 
     function applyLang(lang) {
         document.documentElement.lang = lang === 'en' ? 'en' : 'zh-Hant';
+
+        // ZH: 頂部列的中/英切換鈕。做法與 applyTheme 一致：
+        //     按鈕只負責標 data-set-lang，狀態一律在這裡重畫 ——
+        //     兩個介面各寫一份的話，改了其中一邊就會漂開。
+        //
+        // ZH: ⚠ **放在下面那個 early return 之前**。按鈕該亮哪一顆跟
+        //     字典有沒有載到無關；放在後面的話，缺字典時按鈕會
+        //     停在上一個語言，看起來像「按了沒反應」。
+        var l = lang === 'en' ? 'en' : 'zh';
+        document.querySelectorAll('[data-set-lang]').forEach(function (b) {
+            b.setAttribute('aria-pressed', String(b.dataset.setLang === l));
+        });
+
         var dict = (global.I18N && global.I18N[lang]) || null;
         if (!dict) return;                 // ZH: 沒有字典就維持原文，不要清空畫面
         document.querySelectorAll('[data-i18n]').forEach(function (el) {
@@ -192,8 +205,13 @@
     // ZH: 色系鈕的處理也集中在這裡（九頁各寫一份就是這次的 bug）。
     //     用委派而不是逐一綁定：chrome.js 之後才建的按鈕也接得到。
     document.addEventListener('click', function (ev) {
-        var b = ev.target && ev.target.closest && ev.target.closest('[data-set-theme]');
-        if (b) set({ ui_theme: b.dataset.setTheme });
+        if (!ev.target || !ev.target.closest) return;
+        var t = ev.target.closest('[data-set-theme]');
+        if (t) { set({ ui_theme: t.dataset.setTheme }); return; }
+        // ZH: 語言也走同一條委派 —— 頂部列的切換鈕是 chrome.js
+        //     後來才建的，逐一綁定接不到。
+        var l = ev.target.closest('[data-set-lang]');
+        if (l) set({ ui_lang: l.dataset.setLang });
     });
     if (document.readyState === 'loading') {
         document.addEventListener('DOMContentLoaded', apply);

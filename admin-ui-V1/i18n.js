@@ -64,7 +64,8 @@
             prefs_font_smaller: '縮小字級',
             prefs_font_bigger: '放大字級',
             prefs_font_reset: '還原為 100%',
-            prefs_lang: '語言',
+            prefs_lang_zh: '切換成中文',
+            prefs_lang_en: '切換成英文',
             prefs_theme: '顏色',
             prefs_saved_local_only: '已在這台機器上套用，但沒有存回帳號（稍後再試）。',
 
@@ -446,7 +447,8 @@
             prefs_font_smaller: 'Smaller text',
             prefs_font_bigger: 'Larger text',
             prefs_font_reset: 'Reset to 100%',
-            prefs_lang: 'Language',
+            prefs_lang_zh: 'Switch to Chinese',
+            prefs_lang_en: 'Switch to English',
             prefs_theme: 'Colour',
             prefs_saved_local_only: 'Applied on this device, but not saved to your account. Try again later.',
 

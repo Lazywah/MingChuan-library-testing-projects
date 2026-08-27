@@ -411,6 +411,48 @@ body {
     color: var(--text-muted);
 }
 
+/* ── 頂部列 · 中／英切換 ──────────────────────────────────────────
+ * ZH: 放在頂部列而不是帳號選單裡（擁有者裁定）——切語言是**當下就想做**的事，
+ *     不該先開一層選單。字級與顏色留在選單裡：那兩個設定一次就好。
+ *
+ * ZH: 兩顆都常駐、目前的那顆反白。不做「按一下切換到另一個語言」的單顆按鈕——
+ *     那種按鈕上的文字到底是「現在是什麼」還是「按了會變成什麼」永遠講不清楚。
+ *
+ * ZH: 狀態（aria-pressed）由 prefs.js 的 applyLang 統一重畫，這裡只管外觀。
+ * ──────────────────────────────────────────────────────────────── */
+.lang-switch {
+    display: inline-flex;
+    align-items: center;
+    flex: none;
+    margin-right: var(--space-2);
+    border: 1px solid var(--hairline);
+    border-radius: var(--radius-pill);
+    overflow: hidden;
+    background-color: var(--surface);
+}
+.lang-switch button {
+    /* ZH: 頂部列很擠，所以比 --tap-min 小。可點高度靠上下 padding 撐到 32px，
+           而它旁邊的帳號鈕本來就是同一個量級 —— 這一列整體是密集工具列，
+           不是主要動作區。 */
+    min-height: 32px;
+    padding: 0 var(--space-3);
+    border: 0;
+    background: none;
+    font: inherit;
+    font-size: 0.8125rem;
+    font-weight: 600;
+    color: var(--text-muted);
+    cursor: pointer;
+    white-space: nowrap;
+}
+.lang-switch button + button { border-left: 1px solid var(--hairline); }
+.lang-switch button:hover { background-color: var(--surface-2); color: var(--text-strong); }
+.lang-switch button[aria-pressed="true"] {
+    background-color: var(--accent);
+    color: var(--on-accent);          /* ⚠ 黃底＝深字、藍底＝白字，由 token 決定 */
+}
+.lang-switch button:focus-visible { outline: var(--focus-ring); outline-offset: -2px; }
+
 /* ── 錯誤區塊（部分失敗不整頁死）──────────────────────────────── */
 .inline-error {
     font-size: 0.875rem;

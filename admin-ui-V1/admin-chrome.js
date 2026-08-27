@@ -71,6 +71,15 @@
             }).join('')
             + '</nav>'
 
+            // ZH: 中／英切換，放在帳號鈕左邊（與使用者端同一個位置與同一份樣式）。
+            //     不接事件 —— prefs.js 的委派負責點擊與 aria-pressed。
+            + '<div class="lang-switch">'
+            + '  <button type="button" data-set-lang="zh" aria-pressed="true"'
+            + '          data-i18n-aria="prefs_lang_zh" aria-label="切換成中文">中</button>'
+            + '  <button type="button" data-set-lang="en" aria-pressed="false"'
+            + '          data-i18n-aria="prefs_lang_en" aria-label="切換成英文">EN</button>'
+            + '</div>'
+
             // ZH: 帳號選單。class 沿用共用 styles.css 的 .account* ——
             //     那一套是使用者端在用的，兩邊共用同一份樣式就不會漂開。
             + '<div class="account">'
@@ -186,30 +195,6 @@
         fontRow.appendChild(group);
         box.appendChild(fontRow);
 
-        // 語言
-        var langRow = document.createElement('div');
-        langRow.className = 'account__prefs-row';
-        var langLabel = document.createElement('span');
-        langLabel.setAttribute('data-i18n', 'prefs_lang');
-        langLabel.textContent = T('prefs_lang', '語言');
-        langRow.appendChild(langLabel);
-        var langGroup = document.createElement('div');
-        langGroup.className = 'account__seg';
-        var cur = window.Prefs.get().ui_lang;
-        [['zh', '中文'], ['en', 'English']].forEach(function (pair) {
-            var b = document.createElement('button');
-            b.type = 'button';
-            b.textContent = pair[1];
-            b.dataset.lang = pair[0];
-            b.setAttribute('aria-pressed', String(pair[0] === cur));
-            b.addEventListener('click', function (ev) {
-                ev.stopPropagation();
-                window.Prefs.set({ ui_lang: pair[0] });
-            });
-            langGroup.appendChild(b);
-        });
-        langRow.appendChild(langGroup);
-        box.appendChild(langRow);
 
         // 顏色
         //

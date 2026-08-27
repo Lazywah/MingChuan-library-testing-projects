@@ -153,6 +153,16 @@
         menu.hidden = true;
         acc.appendChild(toggle);
         acc.appendChild(menu);
+
+        // ZH: 中／英切換。**放在帳號鈕的左邊**（擁有者裁定）——
+        //     切語言是當下就想做的事，不該先開一層選單。
+        //     字級與顏色留在選單裡：那兩個設定一次就好。
+        // ZH: 不接任何事件 —— prefs.js 有 document 層的委派（data-set-lang），
+        //     aria-pressed 也由它在 applyLang 統一重畫。
+        var langBox = document.createElement('div');
+        langBox.innerHTML = '<div class="lang-switch"><button type="button" data-set-lang="zh" aria-pressed="true" data-i18n-aria="prefs_lang_zh" aria-label="切換成中文">中</button><button type="button" data-set-lang="en" aria-pressed="false" data-i18n-aria="prefs_lang_en" aria-label="切換成英文">EN</button></div>';
+        bar.appendChild(langBox.firstChild);
+
         bar.appendChild(acc);
 
         wireToggle(toggle, menu);
@@ -259,28 +269,6 @@
         fontRow.appendChild(group);
         box.appendChild(fontRow);
 
-        // 語言
-        var langRow = document.createElement('div');
-        langRow.className = 'account__prefs-row';
-        var langLabel = document.createElement('span');
-        langLabel.setAttribute('data-i18n', 'prefs_lang');
-        langLabel.textContent = T('prefs_lang', '語言');
-        langRow.appendChild(langLabel);
-        var langGroup = document.createElement('div');
-        langGroup.className = 'account__seg';
-        [['zh', '中文'], ['en', 'English']].forEach(function (pair) {
-            var b = document.createElement('button');
-            b.type = 'button';
-            b.textContent = pair[1];
-            b.dataset.lang = pair[0];
-            b.addEventListener('click', function (ev) {
-                ev.stopPropagation();
-                savePrefs({ ui_lang: pair[0] });
-            });
-            langGroup.appendChild(b);
-        });
-        langRow.appendChild(langGroup);
-        box.appendChild(langRow);
 
         // 顏色
         //
