@@ -1438,8 +1438,8 @@ _GROUP_KEYS = {g["key"] for g in SETTING_GROUPS}
 
 SYSTEM_SETTINGS = {
     "monthly_token_limit":      {"starred": True, "group": "platform", "type": "int",   "default": lambda: settings.DEFAULT_MONTHLY_TOKEN_LIMIT, "min": 0,   "max": None, "label": "每月 Token 額度(新帳號預設；改既有帳號用批量設定)"},
-    "token_reset_day":          {"starred": True, "group": "platform", "type": "int",   "default": lambda: settings.TOKEN_RESET_DAY,             "min": 1,   "max": 28,   "label": "額度重置日(每月第幾天)"},
-    "job_timeout_minutes":      {"starred": True, "group": "platform", "type": "int",   "default": lambda: settings.JOB_TIMEOUT_MINUTES,         "min": 1,   "max": None, "label": "任務逾時(分鐘)"},
+    "token_reset_day":          {"starred": True, "public": True, "group": "platform", "type": "int",   "default": lambda: settings.TOKEN_RESET_DAY,             "min": 1,   "max": 28,   "label": "額度重置日(每月第幾天)"},
+    "job_timeout_minutes":      {"starred": True, "public": True, "group": "platform", "type": "int",   "default": lambda: settings.JOB_TIMEOUT_MINUTES,         "min": 1,   "max": None, "label": "任務逾時(分鐘)"},
     "myai_sync_interval_hours": {"group": "myai", "type": "int",   "default": lambda: settings.MYAI_SYNC_INTERVAL_HOURS,    "min": 0,   "max": 168,  "label": "MYAI 同步間隔(小時, 0=關閉)"},
     "rag_top_k":                {"group": "assistant", "type": "int",   "default": lambda: settings.RAG_TOP_K,                   "min": 1,   "max": 20,   "label": "小基 RAG 取回片段數"},
     "rag_min_score":            {"group": "assistant", "type": "float", "default": lambda: settings.RAG_MIN_SCORE,               "min": 0.0, "max": 1.0,  "label": "小基 RAG 相似度門檻"},
@@ -1449,7 +1449,7 @@ SYSTEM_SETTINGS = {
     "myai_init_pwd_days":       {"starred": True, "group": "myai", "type": "int",   "default": lambda: 30,                                   "min": 1,   "max": 180,  "label": "MYAI 初始密碼保存天數(逾期自動清除)"},
     "myai_initial_credit":      {"starred": True, "group": "myai", "type": "int",   "default": lambda: 0,                                    "min": 0,   "max": None, "label": "MYAI 新帳號初始點數(0=不發放)"},
     # v3.3 刪除使用者後 Lab volume 的封存保留天數（逾期背景任務真正刪除）
-    "lab_archive_days":         {"starred": True, "group": "platform", "type": "int",   "default": lambda: 30,                                   "min": 1,   "max": 365,  "label": "刪除帳號後 Lab 資料封存天數(逾期銷毀)"},
+    "lab_archive_days":         {"starred": True, "public": True, "group": "platform", "type": "int",   "default": lambda: 30,                                   "min": 1,   "max": 365,  "label": "刪除帳號後 Lab 資料封存天數(逾期銷毀)"},
     # v3.4 有使用者在線時的 MYAI 輪詢間隔（無人在線會完全跳過，不受此值影響）
     "myai_active_poll_minutes": {"group": "myai", "type": "int",   "default": lambda: 3,                                    "min": 1,   "max": 60,   "label": "MYAI 輪詢間隔(分, 僅有人在線時; 無人時自動休息)"},
     "myai_usage_window_min":    {"group": "myai", "type": "int",   "default": lambda: 15,                                   "min": 1,   "max": 180,  "label": "判定「正在使用 MYAI」的時間窗(分)"},
@@ -1548,6 +1548,17 @@ if _missing:
         "SYSTEM_SETTINGS 裡這些旋鈕沒有合法的 group：%s"
         "（可用：%s）" % (_missing, sorted(_GROUP_KEYS)))
 
+# ZH: public（前台唯讀端點會送出去的白名單）必須同時是 starred。
+#     星號的定義就是「值使用者看得到 **或** 改之前應先公告」——
+#     一個旋鈕被前台讀走，它就**必然**滿足前半句。兩邊不一致代表有人只改了一邊，
+#     而不一致的表現是：管理者在設定頁看不到星號，卻不知道改下去使用者當場就看得到。
+_public_unstarred = [k for k, v in SYSTEM_SETTINGS.items()
+                     if v.get("public") and not v.get("starred")]
+if _public_unstarred:
+    raise RuntimeError(
+        "SYSTEM_SETTINGS 裡這些旋鈕標了 public 卻沒有 starred：%s"
+        "（前台看得到的值一定要標星號）" % _public_unstarred)
+
 # ZH: 同理，分組也要有合法的 view —— 漏標的話那一組在兩個檢視下都不會出現。
 _bad_view = [g["key"] for g in SETTING_GROUPS if g.get("view") not in _VIEW_KEYS]
 if _bad_view:
@@ -1581,6 +1592,27 @@ def get_all_settings(db: Session) -> list:
             item["choices"] = rag_model_choices(db)
         out.append(item)
     return out
+
+
+def get_public_settings(db: Session) -> dict:
+    """
+    ZH: 給**前台**的唯讀白名單 —— 只回 `public` 為真的旋鈕，只回 key 與生效值。
+
+    ZH: 為什麼不共用 get_all_settings 再讓前端過濾：那樣**整張表都已經送到瀏覽器了**，
+        過濾只是視覺上的。白名單必須在後端成立，前端過濾不算數。
+
+    ZH: 為什麼不回 label：admin 的 label 是給管理者看的（例如「額度重置日(每月第幾天)」
+        括號裡在解釋語意），前台要的是完整句子而且要中英兩版。
+        文案留在 i18n.js 由前端組，後端只負責「值是多少」。
+
+    ZH: 🔴 `monthly_token_limit` **刻意不在白名單裡**（擁有者 2026-08-27 裁定）——
+        那個值只是**新帳號**的預設，既有使用者的額度各自不同。
+        把它寫在前台，對絕大多數人都是**錯的數字**，而且錯得很有說服力。
+
+    @node job-scheduler/app/crud.py::get_public_settings
+    """
+    return {k: get_setting(db, k)
+            for k, spec in SYSTEM_SETTINGS.items() if spec.get("public")}
 
 
 def set_settings(db: Session, updates: dict) -> list:

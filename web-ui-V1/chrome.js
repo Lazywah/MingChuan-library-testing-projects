@@ -496,9 +496,33 @@
         menu.appendChild(item(out, 'acct_logout', '登出'));
     }
 
+    // ── 前台可見的營運設定（v3.8）────────────────────────────────────
+    // ZH: 使用量／訓練／實驗室三頁都要講出「額度什麼時候重置」「任務跑多久會被砍」
+    //     「檔案封存幾天」。在此之前前台**完全沒有管道讀到這些值**，
+    //     所以那三句話要嘛不存在，要嘛是寫死在 HTML 裡的數字——
+    //     而寫死的數字在管理者調過旋鈕之後就是**錯的，且不會有人發現**。
+    //
+    // ZH: 放這裡而不是三頁各寫一份：理由同這個檔案開頭那段——
+    //     三份複製一定會漂掉。三頁共用取值，但**句子各自寫**
+    //     （文案在 i18n.js，中英兩版）。
+    //
+    // ⚠ 回傳的是**快取起來的 Promise**，同一頁重複呼叫不會重打 API。
+    //   失敗時回空物件而不是拋錯：這三句話都是補充說明，
+    //   讀不到就不顯示，不該讓整頁的主要功能跟著壞掉。
+    var _settingsPromise = null;
+    function publicSettings() {
+        if (!_settingsPromise) {
+            _settingsPromise = fetch(API + '/system/public-settings', { headers: authHeaders() })
+                .then(function (r) { return r.ok ? r.json() : { settings: {} }; })
+                .then(function (j) { return (j && j.settings) || {}; })
+                .catch(function () { return {}; });
+        }
+        return _settingsPromise;
+    }
+
     // ZH: 對外只暴露 logout —— 其他頁面若要做「登出」都該走同一份實作。
     //     （goMyai 已搬回 app.js：MYAI 改成回首頁之後，只剩首頁那顆按鈕在用它。）
-    window.Chrome = { logout: logout };
+    window.Chrome = { logout: logout, publicSettings: publicSettings };
 
     if (document.readyState === 'loading') {
         document.addEventListener('DOMContentLoaded', build);

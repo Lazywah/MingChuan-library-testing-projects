@@ -328,3 +328,27 @@ $('ws-new').addEventListener('click', async () => {
 
 loadSessions();
 document.addEventListener('prefs:langchanged', () => loadSessions());
+
+
+/* ── 營運設定的補充說明（v3.8）──────────────────────────────────────
+ * ZH: 這個數字是**管理者可以在營運設定裡改的**，所以不能寫死在 HTML ——
+ *     寫死的話管理者調過之後，畫面上就是一個錯的數字，而且不會有人回報。
+ *     值一律現取（Chrome.publicSettings 會在同一頁內快取）。
+ *
+ * ZH: 讀不到就**維持隱藏**，不要顯示「—」或 0。
+ *     這是一句補充說明，缺了不影響這一頁本來要做的事；
+ *     顯示一個假的 0 反而會被當成真的。
+ * ------------------------------------------------------------------ */
+function renderArchiveNote(s) {
+    const el = $('archive-note');
+    if (!el) return;
+    const v = s && s['lab_archive_days'];
+    if (v == null) { el.hidden = true; return; }
+    el.textContent = T('lab_archive_note', '如果帳號被刪除，這些存檔會先封存保留 {d} 天，逾期才真的銷毀。').replace('{d}', v);
+    el.hidden = false;
+}
+
+let PUB_SETTINGS = null;
+Chrome.publicSettings().then((s) => { PUB_SETTINGS = s; renderArchiveNote(s); });
+// ZH: 文案是 JS 組出來的，沒有 data-i18n，字典掃描換不掉它 —— 語言改變時要自己重畫。
+document.addEventListener('prefs:langchanged', () => renderArchiveNote(PUB_SETTINGS));

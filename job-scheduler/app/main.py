@@ -302,6 +302,7 @@ from .routers import models as models_router
 from .routers import external_ai
 from .routers import assistant
 from .routers import reports
+from .routers import system
 app.include_router(chat.router,      prefix="/api/v1/chat")
 app.include_router(admin.router,     prefix="/api/v1/admin")
 # ZH: 動態模型清單（各 AI 工具的下拉依 tool_type 抓取）| EN: Dynamic model list per tool
@@ -327,6 +328,9 @@ app.include_router(assistant.router,            prefix="/api/v1/assistant")
 # EN: v3.4 issue reports (user submits & reads own history; admin lists & replies)
 app.include_router(reports.router,              prefix="/api/v1/reports")
 app.include_router(reports.admin_router,        prefix="/api/v1/admin/reports")
+# ZH: v3.8 前台唯讀的營運設定白名單（額度重置日／任務逾時／Lab 封存天數）
+# EN: v3.8 whitelisted read-only operational settings for the user-facing site
+app.include_router(system.router,               prefix="/api/v1/system")
 
 
 # ==============================================================================
