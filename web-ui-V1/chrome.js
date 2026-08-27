@@ -203,7 +203,8 @@
         return (window.Prefs && window.Prefs.t(key, fallback)) || fallback;
     }
     function roleLabel(role) {
-        return T('role_' + role, { student: '學生', teacher: '教師', admin: '管理員' }[role] || role || '');
+        return T('role_' + role, { student: '學生', teacher: '教師',
+                                   staff: '職員', admin: '管理員' }[role] || role || '');
     }
 
     function item(el, key, fallback) {

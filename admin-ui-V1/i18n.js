@@ -56,6 +56,7 @@
             acct_unavailable: '暫時讀不到',
             role_student: '學生',
             role_teacher: '教師',
+            role_staff: '職員',
             role_admin: '管理員',
 
             // ── 顯示設定 ─────────────────────────────────────────
@@ -439,6 +440,7 @@
             acct_unavailable: 'Unavailable',
             role_student: 'Student',
             role_teacher: 'Teacher',
+            role_staff: 'Staff',
             role_admin: 'Administrator',
 
             // ── Display settings ─────────────────────────────────

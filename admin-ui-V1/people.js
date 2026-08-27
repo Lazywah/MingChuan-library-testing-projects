@@ -456,7 +456,10 @@
             + '<label class="field"><span class="field__label" for="f-role">'
             + esc(T('pp_c_role', '角色')) + '</span>'
             + '<select class="field__input" id="f-role">'
-            + ['student', 'teacher', 'admin'].map(function (r) {
+            // ZH: 順序照實際人數：學生 > 教師 > 職員 > 管理員。
+            //     職員是 v3.8 新增（擁有者裁定）—— 數據頁的「依身分」圓餅圖
+            //     是直接照 users.role 聚合的，所以這裡加了它就會自己出現。
+            + ['student', 'teacher', 'staff', 'admin'].map(function (r) {
                 return '<option value="' + r + '"' + (u.role === r ? ' selected' : '') + '>'
                     + esc(T('role_' + r, r)) + '</option>';
             }).join('')
