@@ -36,9 +36,12 @@ EXTERNAL_AI_LOGOUT_KEY = "external_ai_logout_url"
 DEFAULT_MYAI_LOGOUT_URL = "https://www.myai168.com/mcu/ai/user/logout_info"
 
 # ZH: v2.8 低點數提醒設定（存 SystemConfig，admin 可調）
-MYAI_LOW_BALANCE_KEY = "myai_low_balance_threshold"   # 低於此絕對點數 → 提醒學生
+# ZH: 🔴 v3.8 —— 設定鍵與預設值的**正本在 crud**,這裡只是別名。
+#     寫入端（存設定）與讀取端（畫面／排程寄信）曾經各拿一份字串常數,
+#     改其中一邊不會有任何錯誤,只會變成「存進 A 鍵、讀 B 鍵」→ 設定看起來沒生效。
+MYAI_LOW_BALANCE_KEY = crud.MYAI_LOW_BALANCE_KEY
 MYAI_APPLY_GUIDE_KEY = "myai_apply_guide_url"          # 申請教學連結（可空，之後再設定）
-DEFAULT_LOW_BALANCE = 500
+DEFAULT_LOW_BALANCE = crud.DEFAULT_LOW_BALANCE
 
 
 class AlertConfig(BaseModel):
@@ -47,11 +50,11 @@ class AlertConfig(BaseModel):
 
 
 def _low_balance_threshold(db: Session) -> int:
-    """@node job-scheduler/app/routers/external_ai.py::_low_balance_threshold"""
-    try:
-        return int(crud.get_system_config(db, MYAI_LOW_BALANCE_KEY, str(DEFAULT_LOW_BALANCE)) or DEFAULT_LOW_BALANCE)
-    except (TypeError, ValueError):
-        return DEFAULT_LOW_BALANCE
+    """ZH: 門檻的唯一定義在 crud（排程寄信也要用同一份）,此處只是舊呼叫端的入口。
+
+    @node job-scheduler/app/routers/external_ai.py::_low_balance_threshold
+    """
+    return crud.myai_low_balance_threshold(db)
 
 
 def _current_myai_account(db: Session, current_user: models.User):
@@ -318,7 +321,12 @@ def get_my_balance(
     return {
         "points": points,
         "threshold": threshold,
-        "below": (points is not None and points < threshold),
+        # ZH: v3.8 #9 —— 兩段式。`below` 分不出「快用完」與「已經用完」,
+        #     而那是兩件不同的事：前者要提醒他去申請,後者是他現在就用不了。
+        #     判定集中在 crud.myai_balance_state,寄信與畫面共用同一份規則 ——
+        #     兩邊各判一次的話,信裡說「已用完」而畫面說「偏低」是遲早的事。
+        "state": crud.myai_balance_state(points, threshold),
+        "below": (points is not None and points < threshold),   # ZH: 保留給既有呼叫端
         "apply_guide_url": (guide or None),
     }
 

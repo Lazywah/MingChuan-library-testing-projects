@@ -1458,6 +1458,11 @@ SYSTEM_SETTINGS = {
     "lab_archive_days":         {"starred": True, "public": True, "group": "platform", "type": "int",   "default": lambda: 30,                                   "min": 1,   "max": 365,  "label": "刪除帳號後 Lab 資料封存天數(逾期銷毀)"},
     # v3.4 有使用者在線時的 MYAI 輪詢間隔（無人在線會完全跳過，不受此值影響）
     "myai_active_poll_minutes": {"group": "myai", "type": "int",   "default": lambda: 3,                                    "min": 1,   "max": 60,   "label": "MYAI 輪詢間隔(分, 僅有人在線時; 無人時自動休息)"},
+    # ZH: v3.8 #9 —— MYAI 點數的兩段提醒（快用完／已用完）寄信的最短間隔。
+    #     0 = 不寄信（畫面提示仍在）。值會影響使用者收到幾封信,所以標星號。
+    # ZH: 🔴 為什麼要有這個：點數低會**持續好幾天**,不節流的話每輪輪詢都寄一封。
+    #     收件人第二天就會把規則設成全部丟垃圾桶,於是真的用完時反而沒人看到。
+    "myai_balance_alert_days":  {"starred": True, "group": "myai", "type": "int", "default": lambda: 7, "min": 0, "max": 90, "label": "MYAI 點數提醒的最短間隔(天; 0=不寄信)"},
     "myai_usage_window_min":    {"group": "myai", "type": "int",   "default": lambda: 15,                                   "min": 1,   "max": 180,  "label": "判定「正在使用 MYAI」的時間窗(分)"},
     "bounce_scan_minutes":      {"group": "platform", "type": "int",   "default": lambda: 30,                                   "min": 0,   "max": 1440, "label": "退信回收掃描間隔(分, 0=停用)"},
     # ZH: v3.7 小基要用哪個模型回答。值是**模型登錄表裡的 api_model_id**，
@@ -1743,6 +1748,50 @@ _EMAIL_LABEL_TO_ROLE = {
     "student": "student",   # me.mcu.edu.tw
     "staff":   "teacher",   # mail.mcu.edu.tw —— 見上,先給 teacher 不是 staff
 }
+
+
+MYAI_LOW_BALANCE_KEY = "myai_low_balance_threshold"   # ZH: 低於此絕對點數 → 提醒
+DEFAULT_LOW_BALANCE  = 500
+
+
+def myai_low_balance_threshold(db: Session) -> int:
+    """
+    ZH: 「快用完」的門檻點數。
+
+    ZH: 🔴 放在 crud 而不是 router,是因為**畫面與排程寄信都要用它**。
+        留在 router 的話,服務層要嘛 import router（方向相反）,要嘛自己再讀一次設定 ——
+        後者會在管理員改門檻時產生「信裡的門檻」與「畫面上的門檻」不一致。
+
+    @node job-scheduler/app/crud.py::myai_low_balance_threshold
+    """
+    try:
+        return int(get_system_config(db, MYAI_LOW_BALANCE_KEY, str(DEFAULT_LOW_BALANCE)) or DEFAULT_LOW_BALANCE)
+    except (TypeError, ValueError):
+        return DEFAULT_LOW_BALANCE
+
+
+def myai_balance_state(points, threshold) -> str:
+    """
+    ZH: MYAI 點數落在哪一段：`unknown` / `empty` / `low` / `ok`。
+
+    ZH: 🔴 **全站唯一的判定點。** 畫面與寄信共用它 ——
+        兩邊各判一次的話,信裡說「已用完」而畫面說「偏低」是遲早的事,
+        而那種不一致沒有任何錯誤訊息,只會讓人不信任這兩個提示。
+
+    ZH: `points is None` 代表**還沒綁定廠商帳號**,不是 0 —— 那個人根本還沒開始用,
+        提醒他「額度用完」是錯的。所以獨立成 unknown。
+
+    ZH: 用完的判準是 `<= 0` 不是 `== 0`：廠商回過負數（扣到透支）。
+
+    @node job-scheduler/app/crud.py::myai_balance_state
+    """
+    if points is None:
+        return "unknown"
+    if points <= 0:
+        return "empty"
+    if threshold and points < threshold:
+        return "low"
+    return "ok"
 
 
 def role_from_email(email: Optional[str]) -> str:

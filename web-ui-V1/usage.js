@@ -60,17 +60,46 @@ function showMsg(text) {
 }
 
 // ── 層級 1：額度（與首頁同一套語彙）────────────────────────────────────
-function renderBalance(acc) {
+// ZH: v3.8 #9 —— 這一頁在此之前**完全沒有低額度提示**。
+//     使用者是「看著首頁的警示」點進來的，結果進來反而看不到警示，
+//     只剩一個中性的數字 —— 等於警示在他最想弄清楚的那一步消失了。
+// ZH: bal 可能是 null（那支 API 掛了）→ 只是不畫提示，額度數字照常顯示。
+function renderBalance(acc, bal) {
+    const card = document.querySelector('.primary-card');
     const pts = acc && acc.points;
     if (pts == null) {
         $('bal-value').textContent = '—';
         $('bal-unit').hidden = true;
         $('bal-meta').textContent = T('usage_bal_fail', '暫時取不到額度，不影響以下統計');
+        if (card) card.dataset.low = '0';
         return;
     }
     $('bal-value').textContent = num(pts);
     $('bal-unit').hidden = false;
-    $('bal-meta').textContent = acc.expiry ? T('usage_valid_until', '有效至 {d}').replace('{d}', acc.expiry) : '';
+
+    // ZH: 狀態一律由後端算（crud.myai_balance_state），前端不自己比門檻 ——
+    //     首頁、這一頁、寄出去的信共用同一份規則，才不會三個地方講不同的話。
+    const stage = bal ? (bal.state || (bal.below ? 'low' : 'ok')) : 'ok';
+    if (card) card.dataset.low = stage === 'empty' ? '2' : stage === 'low' ? '1' : '0';
+
+    const parts = [];
+    if (stage === 'empty') {
+        parts.push(T('idx_no_balance', '額度已用完'));
+    } else if (stage === 'low') {
+        parts.push(T('idx_low_balance', '額度偏低（低於 {n}）')
+            .replace('{n}', ((bal && bal.threshold) || 0).toLocaleString('en-US')));
+    }
+    if (stage !== 'ok' && bal && bal.apply_guide_url) {
+        const guide = window.Chrome.safeUrl(bal.apply_guide_url);
+        if (guide) {
+            parts.push(`<a href="${guide}" target="_blank" rel="noopener noreferrer">`
+                       + `${T('idx_apply_more', '如何申請額度')}</a>`);
+        }
+    }
+    if (acc.expiry) parts.push(T('usage_valid_until', '有效至 {d}').replace('{d}', acc.expiry));
+    // ZH: 這裡改用 innerHTML 是因為要放連結；除了 safeUrl 過的網址之外，
+    //     其餘都是字典裡的固定字串與數字，沒有資料庫來的自由文字。
+    $('bal-meta').innerHTML = parts.join(' · ');
 }
 
 // ── 三個數字 ─────────────────────────────────────────────────────────
@@ -179,16 +208,28 @@ async function load() {
 
     try {
         let d;
+        let bal = null;
         if (FORCED) {
             d = mock(FORCED);
+            bal = mockBalance(FORCED, d);
+            // ZH: 讓卡片上的數字跟狀態對得起來 —— 顯示 4820 卻寫「額度偏低」,
+            //     檢視的人會以為是判斷寫錯了,而不是假資料沒對齊。
+            if (bal.state !== 'ok') d.account = { ...d.account, points: bal.points };
         } else {
             const r = await fetch(`${API}/external-ai/my-consumption?days=${DAYS}`,
                                   { headers: { Accept: 'application/json', ...authHeaders() } });
             if (!r.ok) throw new Error(`HTTP ${r.status}`);
             d = await r.json();
+            // ZH: 額度狀態另外拿（消耗那支不含門檻與申請連結）。
+            //     🔴 用 catch 吞掉失敗是刻意的：這一頁的本體是使用紀錄，
+            //     提示只是附加 —— 提示掛了不該讓整頁變成錯誤畫面。
+            bal = await fetch(`${API}/external-ai/my-balance`,
+                              { headers: { Accept: 'application/json', ...authHeaders() } })
+                .then((x) => (x.ok ? x.json() : null))
+                .catch(() => null);
         }
 
-        renderBalance(d.account);
+        renderBalance(d.account, bal);
 
         if (!d.bound) {
             return showMsg(T('usage_unbound', '你的 AI 帳號還沒綁定，所以還沒有使用紀錄。第一次前往 MYAI 使用後，這裡就會有資料。'));
@@ -206,13 +247,26 @@ async function load() {
         drawCharts(d);
     } catch (e) {
         // ZH: 額度區照常顯示（部分失敗不整頁死，與首頁同一條規則）。
-        renderBalance(null);
+        renderBalance(null, null);
         showMsg(T('usage_fail', '暫時取不到使用紀錄') + `（${e.message || e}）。`
             + T('retry_refresh', '可以重新整理再試一次。'));
     }
 }
 
 // ── 假資料：供四狀態檢視 ──────────────────────────────────────────────
+// ZH: 額度狀態的假資料。`?state=lowbal` / `?state=nobal` 可以直接看到兩段提示長什麼樣 ——
+//     這兩種狀態在真實環境**很難重現**（要真的把某個人的點數用到見底），
+//     沒有假資料就只能靠想像，而想像不會發現顏色對比不夠。
+// ZH: ⚠ 名字刻意**不叫 `empty`** —— 這一頁的 `?state=empty` 早就是
+//     「沒有使用紀錄」的意思。同一個字兩種意思，看的人會以為自己看到的是另一種狀態。
+function mockBalance(kind, d) {
+    const pts = (d && d.account && d.account.points) || 0;
+    if (kind === 'lowbal') return { points: 120, threshold: 500, state: 'low',
+                                    apply_guide_url: 'https://example.com/apply' };
+    if (kind === 'nobal')  return { points: 0, threshold: 500, state: 'empty',
+                                    apply_guide_url: 'https://example.com/apply' };
+    return { points: pts, threshold: 500, state: 'ok', apply_guide_url: null };
+}
 function mock(kind) {
     const days = 14;
     const series = Array.from({ length: days }, (_, i) => ({

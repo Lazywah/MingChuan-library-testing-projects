@@ -207,6 +207,19 @@
             .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
     }
 
+    // ZH: 把「管理端設定的連結」變成可以安全放進 href 的字串。
+    // ZH: 🔴 只跳脫引號是不夠的 —— `javascript:alert(1)` 完全沒有引號,
+    //     跳脫完照樣是一個按下去就執行的連結。所以先擋通訊協定,再處理引號。
+    //     這些 URL 來自管理端的自由文字欄位,不是常數。
+    // ZH: 不合格回空字串,呼叫端據此**整個不畫這個連結** ——
+    //     畫一個壞掉的連結比不畫更糟:使用者會以為是自己按錯。
+    function safeUrl(raw) {
+        const v = String(raw == null ? '' : raw).trim();
+        if (!/^https?:\/\//i.test(v)) return '';
+        return v.replace(/&/g, '&amp;').replace(/"/g, '&quot;')
+                .replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    }
+
     // ZH: 取文案。字典裡沒有就用 fallback（＝原本的中文），**不清空**。
     function T(key, fallback) {
         return (window.Prefs && window.Prefs.t(key, fallback)) || fallback;
@@ -782,7 +795,9 @@
 
     // ZH: 對外只暴露 logout —— 其他頁面若要做「登出」都該走同一份實作。
     //     （goMyai 已搬回 app.js：MYAI 改成回首頁之後，只剩首頁那顆按鈕在用它。）
-    window.Chrome = { logout: logout, publicSettings: publicSettings };
+    // ZH: safeUrl 對外開放是因為 app.js / usage.js 都要畫「申請額度」那個連結。
+    //     兩邊各寫一份的話,只有一邊會被記得補上 javascript: 的防線。
+    window.Chrome = { logout: logout, publicSettings: publicSettings, safeUrl: safeUrl };
 
     if (document.readyState === 'loading') {
         document.addEventListener('DOMContentLoaded', build);

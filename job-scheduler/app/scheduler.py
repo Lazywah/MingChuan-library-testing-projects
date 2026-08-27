@@ -266,11 +266,13 @@ def _alert(kind: str, title: str, detail: str) -> None:
     try:
         from .services import email_service
         html = (f"<p><b>{title}</b></p>"
-                f"<p>時間（UTC）：{datetime.now(timezone.utc):%Y-%m-%d %H:%M:%S}</p>"
+                f"<p>時間 / Time (UTC)：{datetime.now(timezone.utc):%Y-%m-%d %H:%M:%S}</p>"
                 f"<pre>{detail[:1000]}</pre>"
                 f"<p>這封信由平台自動寄出。要調整收件人或間隔："
-                f"管理端 → 平台設定 → 寄信（SMTP）。</p>")
-        email_service.send_admin_alert(kind, f"[AI Base 告警] {title}", html)
+                f"管理端 → 平台設定 → 寄信（SMTP）。</p>"
+                f"<p>Sent automatically by the platform. To change the recipients or "
+                f"the minimum interval, go to Admin → Platform settings → Email (SMTP).</p>")
+        email_service.send_admin_alert(kind, f"[AI Base 告警 | Alert] {title}", html)
     except Exception as e:  # noqa: BLE001
         logger.warning("寄送管理員告警失敗（不影響背景迴圈）：%s", e)
 
@@ -312,7 +314,7 @@ async def _myai_sync_loop():
                     # ZH: v3.8 這一行以前只寫 log。2026-08-16 廠商改版讓同步靜默失效
                     #     **29 天、漏 201 筆**,而錯誤就在這個位置被吞掉 ——
                     #     沒有人會去翻容器日誌。收件人沒設定就不會寄,所以是安全的。
-                    _alert("myai_sync", "MYAI 自動同步失敗", str(e))
+                    _alert("myai_sync", "MYAI 自動同步失敗 | MYAI sync failed", str(e))
                 sleep_s = interval_hours * 3600
         finally:
             db.close()
@@ -367,6 +369,21 @@ async def _myai_balance_loop():
                     res = await myai_sync.sync_transactions(db, days=days)
                     logger.debug(f"ZH: MYAI 餘額輪詢: {res}")
                     sleep_s = max(60, int(active_min) * 60)
+                    # ZH: v3.8 #9 —— 點數剛更新完,順手看看有沒有人該收提醒。
+                    #     放在這裡而不是另開迴圈:這是本輪剛抓回來的數字,
+                    #     另開迴圈只會拿到同一份 DB 資料,卻多一組排程要顧。
+                    # ZH: 沒人在線就整輪跳過（上面的 if）→ 提醒也不會寄。
+                    #     這是可以接受的:離線的人點數不會變,狀態在他最後一次
+                    #     在線時就已經判過了。
+                    try:
+                        sent = myai_sync.notify_balance_alerts(db)
+                        if sent.get("sent"):
+                            logger.info(f"ZH: MYAI 點數提醒寄出 {sent['sent']} 封")
+                    except Exception as e:  # noqa: BLE001
+                        # ZH: 寄信壞掉不該讓餘額同步跟著停 —— 同步是本體,提醒是附加。
+                        logger.warning(f"ZH: MYAI 點數提醒失敗（不影響同步）: {e}")
+                        _alert("myai_balance_alert",
+                               "MYAI 點數提醒寄送失敗 | MYAI balance alert failed", str(e))
             finally:
                 db.close()
         except Exception as e:  # noqa: BLE001
@@ -416,10 +433,10 @@ async def _bounce_scan_loop():
             logger.warning(f"ZH: 退信回收未執行（設定或連線問題）: {e}")
             # ZH: 這條是「沒設定或連不上」,不是程式壞了 —— 但結果一樣是
             #     **退信全部收不到而畫面上一切正常**,所以照樣要讓人知道。
-            _alert("bounce_scan", "退信回收未執行", str(e))
+            _alert("bounce_scan", "退信回收未執行 | Bounce scan did not run", str(e))
         except Exception as e:  # noqa: BLE001
             logger.warning(f"ZH: 退信回收錯誤（略過本輪）: {e}")
-            _alert("bounce_scan", "退信回收發生錯誤", str(e))
+            _alert("bounce_scan", "退信回收發生錯誤 | Bounce scan error", str(e))
         try:
             await asyncio.sleep(sleep_s)
         except asyncio.CancelledError:

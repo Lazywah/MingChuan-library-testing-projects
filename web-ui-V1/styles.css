@@ -179,8 +179,15 @@ body {
 
 /* ZH: 低於門檻（/my-balance 的 below 旗標）——視覺上必須不一樣。
        這不是新機制，是用後端已經算好的判定。 */
+/* ZH: v3.8 #9 —— 額度有兩段:1=快用完(警示黃), 2=已用完(錯誤紅)。
+ *     兩段給不同顏色是因為它們要求的行動不同:一個是「該去申請了」,
+ *     一個是「你現在用不了」。同一個黃色會讓後者看起來還有得撐。
+ *     ⚠ 顏色只是次要訊號 —— 文案本身已經說明是哪一段（WCAG 1.4.1）。
+ *     對比:--error 對 --error-soft = 5.72,小字 AA(4.5) 過。(算的,不是估的) */
 .primary-card[data-low="1"] { border-color: var(--warn); background-color: var(--warn-soft); }
 .primary-card[data-low="1"] .balance__value { color: var(--warn); }
+.primary-card[data-low="2"] { border-color: var(--error); background-color: var(--error-soft); }
+.primary-card[data-low="2"] .balance__value { color: var(--error); }
 
 /* 骨架（載入中）——保留高度，避免版面跳動 */
 .skeleton {
@@ -1012,9 +1019,13 @@ textarea.field__input { resize: vertical; min-height: 6rem; }
 
 /* 問題回報：狀態徽章與管理者回覆（v3.4）*/
 /* ZH: 狀態的主要訊號是**文字**（未處理／處理中／已解決），顏色只是次要強調
- *     —— WCAG 1.4.1。這裡沒有用 --warn 當文字色：實測 --warn 對 --warn-soft
- *     只有 3.72，小字不到 AA 的 4.5。改用 --text-strong（14.35）。
- *     ⚠ 這個數字是算出來的不是估的（上一次估錯過 6.31 vs 實際 5.37）。 */
+ *     —— WCAG 1.4.1。文字色用 --text-strong 對 --warn-soft＝14.35。
+ *     ⚠ 這些數字是算出來的不是估的（上一次估錯過 6.31 vs 實際 5.37）。
+ *     ⚠ 2026-08-27 更正：這裡原本寫「--warn 對 --warn-soft 只有 3.72，
+ *       小字不到 AA 的 4.5」，那是**舊的 --warn（#a8730c）**的值。
+ *       748dd84 為了過 AA 已把它調深成 #8f620a，現在是 4.87 —— 小字 AA 過。
+ *       也就是說「不能拿 --warn 當文字色」這個限制已經不存在了；
+ *       維持 --text-strong 是因為沒有理由為此動視覺，不是因為對比不足。 */
 .rep-badge {
     font-size: 0.7rem;
     font-weight: 600;
@@ -1025,7 +1036,7 @@ textarea.field__input { resize: vertical; min-height: 6rem; }
     background-color: var(--surface-2);
 }
 /* ZH: 只有「未處理」給強調 —— 它是唯一代表「還在等」的狀態。
- *     邊框 --warn 對 --warn-soft 是 3.72，圖形元件門檻 3.0，過。
+ *     邊框 --warn 對 --warn-soft 是 4.87，圖形元件門檻 3.0，過。
  *     不靠底色區分 open/in_progress：黃色系下 warn-050 與 yellow-050
  *     幾乎同色，看起來會像同一個狀態。 */
 .rep-badge[data-status="open"] {

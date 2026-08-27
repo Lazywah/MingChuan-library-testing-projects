@@ -260,20 +260,24 @@ def send_login_alert(to_email: str, username: str, ip_address: str):
 
     @node job-scheduler/app/services/email_service.py::send_login_alert
     """
-    subject = "AI Platform - New Login Alert"
+    subject = "圖書館 AI 基地 - 新的登入通知 | New login alert"
     time_str = datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S UTC')
     html = f"""
     <html>
         <body>
-            <h2>Hello {username},</h2>
-            <p>We noticed a new login to your AI Platform account.</p>
+            <h2>{username} 你好 / Hello {username},</h2>
+            <p>你的帳號剛剛有一次新的登入。</p>
             <ul>
-                <li><strong>IP Address:</strong> {ip_address}</li>
-                <li><strong>Time:</strong> {time_str}</li>
+                <li><strong>IP 位址 / IP address:</strong> {ip_address}</li>
+                <li><strong>時間 / Time:</strong> {time_str}</li>
             </ul>
-            <p>If this was you, you can ignore this message. If not, please contact your administrator immediately and change your password.</p>
+            <p>如果是你本人,可以忽略這封信；如果不是,請立刻聯絡管理員並更改密碼。</p>
+            <hr>
+            <p>We noticed a new login to your account. If this was you, ignore this
+               message. If not, contact your administrator immediately and change
+               your password.</p>
             <br>
-            <p>Best regards,<br>AI Platform Team</p>
+            <p>圖書館 AI 基地 / MCU AI Base</p>
         </body>
     </html>
     """
@@ -286,17 +290,20 @@ def send_password_change_alert(to_email: str, username: str):
 
     @node job-scheduler/app/services/email_service.py::send_password_change_alert
     """
-    subject = "AI Platform - Password Changed Successfully"
+    subject = "圖書館 AI 基地 - 密碼已變更 | Your password was changed"
     time_str = datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S UTC')
     html = f"""
     <html>
         <body>
-            <h2>Hello {username},</h2>
-            <p>The password for your AI Platform account has been successfully changed.</p>
-            <p><strong>Time:</strong> {time_str}</p>
-            <p>If you did not make this change, please contact your administrator immediately to secure your account.</p>
+            <h2>{username} 你好 / Hello {username},</h2>
+            <p>你的帳號密碼已成功變更。</p>
+            <p><strong>時間 / Time:</strong> {time_str}</p>
+            <p>如果這不是你做的,請立刻聯絡管理員。</p>
+            <hr>
+            <p>The password for your account has been changed. If you did not make
+               this change, contact your administrator immediately.</p>
             <br>
-            <p>Best regards,<br>AI Platform Team</p>
+            <p>圖書館 AI 基地 / MCU AI Base</p>
         </body>
     </html>
     """
@@ -309,16 +316,24 @@ def send_temp_password(to_email: str, username: str, temp_password: str, is_new_
 
     @node job-scheduler/app/services/email_service.py::send_temp_password
     """
-    subject = "AI Platform - Account Provisioned" if is_new_account else "AI Platform - Password Reset"
+    subject = ("圖書館 AI 基地 - 帳號已開通 | Your account is ready" if is_new_account
+               else "圖書館 AI 基地 - 密碼已重設 | Your password was reset")
+    zh_lead = "管理員已為你開通帳號。" if is_new_account else "你的密碼已重設。"
+    en_lead = ("An account has been provisioned for you."
+               if is_new_account else "Your password has been reset.")
     html = f"""
     <html>
         <body>
-            <h2>Hello {username},</h2>
-            <p>{'An account has been provisioned for you' if is_new_account else 'Your password has been reset'} on the AI Platform.</p>
-            <p>Your temporary password is: <strong style="font-size: 18px; color: #10b981;">{temp_password}</strong></p>
-            <p>Please log in and change your password immediately in the settings panel.</p>
+            <h2>{username} 你好 / Hello {username},</h2>
+            <p>{zh_lead}</p>
+            <p>臨時密碼 / Temporary password:
+               <strong style="font-size: 18px; color: #10b981;">{temp_password}</strong></p>
+            <p>請盡快登入,並到設定頁自行更改密碼。</p>
+            <hr>
+            <p>{en_lead} Please log in and change this password in the settings panel
+               as soon as possible.</p>
             <br>
-            <p>Best regards,<br>AI Platform Team</p>
+            <p>圖書館 AI 基地 / MCU AI Base</p>
         </body>
     </html>
     """
@@ -370,9 +385,66 @@ def send_lab_purge_reminder(to_email: str, username: str, days_left: int,
     </html>
     """
     send_email(to_email,
-               f"{zh_head}程式實驗室檔案將於 {expires_on} 銷毀 / "
+               f"{zh_head}程式實驗室檔案將於 {expires_on} 銷毀 | "
                f"{en_head}Code Lab files will be deleted on {expires_on}",
                html, kind=LAB_PURGE_KIND_PREFIX + stage, username=username)
+
+
+MYAI_BALANCE_KIND_PREFIX = "myai_balance:"
+
+_MYAI_BALANCE_TEXT = {
+    "low": (
+        "你的 AI 額度快用完了",
+        "目前剩下 <b>{points}</b> 點（低於 {threshold} 點就會提醒）。",
+        "Your AI credits are running low",
+        "You have <b>{points}</b> credits left (we warn below {threshold}).",
+    ),
+    "empty": (
+        "你的 AI 額度已經用完",
+        "目前剩下 <b>{points}</b> 點，暫時無法使用外部 AI。",
+        "Your AI credits are used up",
+        "You have <b>{points}</b> credits left and cannot use the external AI for now.",
+    ),
+}
+
+
+def send_myai_balance_alert(to_email: str, username: str, user_id: str,
+                            stage: str, points: int, threshold: int,
+                            guide_url: str = ""):
+    """
+    ZH: MYAI 點數的兩段提醒。stage ∈ low / empty。
+
+    ZH: 🔴 **一定要附「怎麼申請」的連結。** 只說「額度快用完了」是一句沒有下一步的話 ——
+        他知道了,然後呢？那個連結管理端本來就設定得了（申請教學連結）,
+        但在此之前**前後台都沒有任何地方顯示它**。
+
+    ZH: 節流由呼叫端負責（見 myai_sync.notify_balance_alerts）——
+        點數低會持續好幾天,每輪輪詢都寄的話,收件人第二天就會把規則設成
+        全部丟垃圾桶,於是真的用完時反而沒人看到。
+
+    @node job-scheduler/app/services/email_service.py::send_myai_balance_alert
+    """
+    zh_sub, zh_body, en_sub, en_body = _MYAI_BALANCE_TEXT[stage]
+    fmt = {"points": f"{points:,}", "threshold": f"{threshold:,}"}
+    link = (f'<p><a href="{guide_url}">如何申請更多額度 / How to request more credits</a></p>'
+            if guide_url else
+            '<p>需要更多額度請聯絡管理員。 / Contact an administrator for more credits.</p>')
+    html = f"""
+    <html>
+        <body>
+            <h2>{username} 你好 / Hello {username},</h2>
+            <p>{zh_body.format(**fmt)}</p>
+            <hr>
+            <p>{en_body.format(**fmt)}</p>
+            {link}
+            <br>
+            <p>MCU AI Base</p>
+        </body>
+    </html>
+    """
+    send_email(to_email, f"{zh_sub} | {en_sub}", html,
+               kind=MYAI_BALANCE_KIND_PREFIX + stage,
+               username=username, user_id=user_id)
 
 
 def send_myai_provisioned(to_email: str, username: str, platform_url: str = ""):
@@ -401,9 +473,15 @@ def send_myai_provisioned(to_email: str, username: str, platform_url: str = ""):
                <strong>{to_email}</strong></p>
             <p><strong>初始密碼請登入本平台查看</strong>（基於安全考量不放在信件中）。
                登入後在「AI 助手」頁面即可看到，並請盡快自行修改密碼。</p>
+            <hr>
+            <p>Your <strong>MYAI</strong> account is ready. The account name is this
+               address: <strong>{to_email}</strong></p>
+            <p><strong>The initial password is shown in the platform</strong>, not in
+               this email — sign in and open the “AI Assistant” page to see it, then
+               change it as soon as you can.</p>
             {link}
             <br>
-            <p>圖書館 AI 基地</p>
+            <p>圖書館 AI 基地 / MCU AI Base</p>
         </body>
     </html>
     """

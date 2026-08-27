@@ -30,8 +30,9 @@ from datetime import datetime, timedelta, timezone
 import httpx
 from sqlalchemy.orm import Session
 
-from .. import models
+from .. import crud, models
 from ..config import settings, SSO_POLICY
+from . import email_service
 
 logger = logging.getLogger(__name__)
 
@@ -1166,6 +1167,105 @@ def has_online_users(db: Session, online_minutes: int = ONLINE_WINDOW_MINUTES) -
 #     因此判定從嚴：只有 IdP 直接給的、或規則明確命中的，才允許建號。
 # ==============================================================================
 TRUSTED_EMAIL_SOURCES = ("idp",)      # ZH: 規則命中的另外用 startswith("rule:") 判斷
+
+
+def account_for_user(db: Session, user):
+    """
+    ZH: 取某位平台使用者對應的 MYAI 帳號列（綁定 sn 優先 → 廠商帳號 → email）；無則 None。
+
+    ZH: 🔴 **全站唯一的對照邏輯。** 原本住在 routers/external_ai.py,
+        但排程寄信也需要同一份 —— 服務層不能反向 import router,
+        於是搬到這裡,router 改成呼叫它。
+
+    ZH: 三段退路的順序是有意義的：`vendor_sn` 是廠商那邊的穩定鍵（改名改信箱都不變）,
+        email 比對只是最後手段 —— 廠商後台的信箱欄位使用者自己改得動。
+
+    @node job-scheduler/app/services/myai_sync.py::account_for_user
+    """
+    acc = crud.get_external_account_by_user_id(db, user.id)
+    row = None
+    if acc:
+        if acc.myai_vendor_sn:
+            row = db.query(models.MyaiAccount).filter(
+                models.MyaiAccount.vendor_sn == acc.myai_vendor_sn).first()
+        if not row and acc.vendor_username:
+            row = db.query(models.MyaiAccount).filter(
+                models.MyaiAccount.email.ilike(acc.vendor_username)).first()
+    if not row and user.email:
+        row = db.query(models.MyaiAccount).filter(
+            models.MyaiAccount.email.ilike(user.email)).first()
+    return row
+
+
+def _alerted_recently(db: Session, user_id: str, stage: str, days: int) -> bool:
+    """
+    ZH: 這位使用者的這個階段,近 `days` 天內是否已經寄過。
+
+    ZH: 🔴 節流是**分人又分階段**的：
+          · 不分人 → 一天只寄得出一封,第二個人永遠收不到。
+          · 不分階段 → 昨天寄了「快用完」,今天真的用完了卻被當成重複而不寄 ——
+            那正是最需要通知的一刻。
+        兩個階段各自獨立計時,所以「快用完 → 用完」一定寄得出兩封。
+
+    ZH: 用 email_log 當節流狀態,不另開表：它本來就記了 kind/user_id/時間,
+        而且**寄失敗也會留紀錄** —— 這是刻意的,SMTP 掛掉時不該把人的信箱洗版。
+
+    @node job-scheduler/app/services/myai_sync.py::_alerted_recently
+    """
+    since = datetime.now(timezone.utc) - timedelta(days=days)
+    return db.query(models.EmailLog).filter(
+        models.EmailLog.user_id == user_id,
+        models.EmailLog.kind == email_service.MYAI_BALANCE_KIND_PREFIX + stage,
+        models.EmailLog.created_at >= since,
+    ).first() is not None
+
+
+def notify_balance_alerts(db: Session) -> dict:
+    """
+    ZH: MYAI 點數的兩段提醒（快用完／已用完）—— 寄信的部分。畫面提示走 /external-ai/my-balance。
+
+    ZH: 只寄給**啟用中、有信箱、且真的綁得到 MYAI 帳號**的人。
+        `state == "unknown"`（沒綁帳號）不寄 —— 那個人根本還沒開始用,
+        提醒他「額度用完」是錯的。
+
+    ZH: 回傳計數而不是 None,是為了讓排程的日誌看得出「跑了但沒寄」與「根本沒跑」的差別。
+
+    @node job-scheduler/app/services/myai_sync.py::notify_balance_alerts
+    """
+    days = crud.get_setting(db, "myai_balance_alert_days")
+    if not days or int(days) <= 0:
+        return {"sent": 0, "skipped": 0, "disabled": True}      # ZH: 0 = 管理員關掉寄信（畫面提示仍在）
+
+    days = int(days)
+    threshold = crud.myai_low_balance_threshold(db)
+    guide = crud.get_system_config(db, "myai_apply_guide_url", "")
+    sent = skipped = 0
+
+    users = db.query(models.User).filter(
+        models.User.is_active == True,           # noqa: E712
+        models.User.email.isnot(None),
+    ).all()
+
+    for u in users:
+        row = account_for_user(db, u)
+        if row is None:
+            continue
+        stage = crud.myai_balance_state(row.points, threshold)
+        if stage not in ("low", "empty"):
+            continue
+        if _alerted_recently(db, u.id, stage, days):
+            skipped += 1
+            continue
+        try:
+            email_service.send_myai_balance_alert(
+                u.email, u.username or u.email, u.id, stage,
+                int(row.points or 0), threshold, guide or "")
+            sent += 1
+        except Exception as e:
+            # ZH: 一個人寄失敗不該讓其餘的人收不到 —— 這是批次,不是交易。
+            logger.warning(f"MYAI balance alert failed for {u.id}: {e}")
+
+    return {"sent": sent, "skipped": skipped, "disabled": False}
 
 
 def classify_email(email: str) -> dict:

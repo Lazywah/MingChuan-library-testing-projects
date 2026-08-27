@@ -359,6 +359,22 @@
       ]
     },
     {
+      "id": "myai-balance-two-stage",
+      "name": "MYAI 點數兩段提醒（快用完／已用完；畫面 + 寄信）",
+      "claimed": false,
+      "files": [
+        "job-scheduler/app/crud.py",
+        "job-scheduler/app/services/myai_sync.py",
+        "job-scheduler/app/services/email_service.py",
+        "job-scheduler/app/routers/external_ai.py",
+        "web-ui-V1/app.js",
+        "web-ui-V1/usage.js"
+      ],
+      "tests": [
+        "tests/test_myai_balance_alerts.py"
+      ]
+    },
+    {
       "id": "org-lookup",
       "name": "組織對照（學系→學院、行政單位、校區；學院為推導不存欄位）",
       "claimed": false,

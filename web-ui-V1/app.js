@@ -82,16 +82,34 @@ async function loadBalance() {
                 + ` · <a href="provision.html">${T('idx_see_pw', '查看初始密碼')}</a>`;
         }
         // ZH: Token 即基準（Decision Log #15）——不換算成「約可再問 N 次」。
-        //     但「低於門檻」要看得出來，用的是後端已回傳的 below 旗標。
-        card.dataset.low = bal.below ? '1' : '0';
+        // ZH: v3.8 #9 —— 兩段提醒:1=快用完, 2=已用完。狀態由後端算（crud.myai_balance_state），
+        //     前端不自己比門檻 —— 兩邊各判一次的話，信裡說「已用完」而畫面說「偏低」
+        //     是遲早的事，而那種不一致沒有任何錯誤訊息。
+        const stage = bal.state || (bal.below ? 'low' : 'ok');   // ZH: 舊版後端沒有 state 時的退路
+        card.dataset.low = stage === 'empty' ? '2' : stage === 'low' ? '1' : '0';
         // ZH: 一般狀態**不再**掛「使用量明細」——底部次要區與帳號選單都已經有了，
         //     同一頁三個入口通往同一個地方，是雜訊不是方便（擁有者裁定 2026-08-21）。
         // ZH: 但低額度時保留「看用在哪」：那不是導覽項，是**掛在警示上的行動點**，
         //     回答的是「為什麼變低」。把它一起拿掉會讓警示變成一句沒有下一步的話。
-        meta.innerHTML = bal.below
-            ? T('idx_low_balance', '額度偏低（低於 {n}）').replace('{n}', bal.threshold.toLocaleString('en-US'))
-              + ` · <a href="#" id="link-usage-inline">${T('idx_see_where', '看用在哪')}</a>`
-            : '';
+        // ZH: 🔴 申請連結：管理端本來就設定得了，但在 v3.8 之前**前後台都沒有地方顯示它** ——
+        //     一個設定好卻永遠看不到的連結。已用完的人最需要的就是這個下一步。
+        if (stage === 'ok') {
+            meta.innerHTML = '';
+        } else {
+            const parts = [
+                stage === 'empty'
+                    ? T('idx_no_balance', '額度已用完')
+                    : T('idx_low_balance', '額度偏低（低於 {n}）')
+                          .replace('{n}', (bal.threshold || 0).toLocaleString('en-US')),
+                `<a href="#" id="link-usage-inline">${T('idx_see_where', '看用在哪')}</a>`,
+            ];
+            const guide = window.Chrome.safeUrl(bal.apply_guide_url);
+            if (guide) {
+                parts.push(`<a href="${guide}" target="_blank" rel="noopener noreferrer">`
+                           + `${T('idx_apply_more', '如何申請額度')}</a>`);
+            }
+            meta.innerHTML = parts.join(' · ');
+        }
         wireUsageLink();
     } catch (e) {
         // ZH: 額度掛掉不該讓引導流程一起消失 —— 給一個保守值讓它照樣畫出來。
