@@ -1,0 +1,70 @@
+# ==============================================================================
+# ZH: 完整服務層 —— 一個指令把平台跑起來
+# EN: Full service layer — bring the whole platform up with one command
+#
+#   docker compose -f docker-compose.full.yml up -d
+#
+# ==============================================================================
+# ZH: 為什麼需要這一份：平台原本拆成兩個 compose 檔，
+#     只跑 `docker-compose.yml` 的話**看起來是好的**（登入、頁面、API 都正常），
+#     但有兩件事會壞，而且都不會有明顯的錯誤訊息：
+#
+#       1. 🔴 **打錯網址會回 502**，不是 404。
+#          nginx 的 catch-all（`location /`）指向 Open WebUI，
+#          它沒跑的時候，任何未匹配的路徑都變成「502 Bad Gateway」——
+#          看起來像整個平台掛了。
+#          （更麻煩的是這會掩蓋路由問題：`nginx.conf` 的註解說
+#            「漏掛 location 的症狀是 405」，那是 Open WebUI 有跑的時候。）
+#
+#       2. 🔴 **小基（RAG 助手）答不出來**。`/assistant/status` 只檢查知識庫，
+#          Ollama 沒跑它照樣回 `kb_ready: true`，要真的問一題才會看到
+#          「AI 服務尚未啟動」。
+#
+#     這兩件事在 2026-08-27 的全功能稽核裡都實際踩到了
+#     （見 docs/11-platform-audit-2026-08-27.md 的 T10 與 T13）。
+#
+# ==============================================================================
+# ZH: 這一份**只是把兩個既有檔案合起來**，不重複定義任何服務 ——
+#     服務的內容仍然只有一個真相來源，改設定去改原本那兩個檔。
+#     用 Compose 的 `include:`（需要 Compose v2.20+，本機實測 v2.39 可用）。
+#
+# ZH: ⚠ `include:` **不能覆寫被匯入的服務**（會報 `conflicts with imported resource`）。
+#     我原本想在這裡幫 `job-scheduler` 補一條 `depends_on: ollama`，因為
+#     docs/00 的部署指南警告「順序顛倒會讓 nginx 起不來」
+#     （scheduler 等 Ollama 逾時 93 秒 > healthcheck 的 70 秒視窗）。
+#     結果是**不需要也做不到**：
+#       · 做不到 —— include 不允許。
+#       · 不需要 —— 冷啟動實測（2026-08-27，`down` 之後單一 `up -d`）
+#         **7 秒**全部起來、nginx 正常。指南警告的是「只跑核心層、
+#         完全沒有 Ollama」那個情境；同時啟動時 Ollama 幾秒內就可連線。
+#
+# ZH: ⚠ 唯一還沒被這次實測覆蓋的情況：**全新安裝（知識庫是空的）**。
+#     我測的時候 DB 裡已經有 40 個片段，所以 scheduler 直接
+#     「skip ingest」而沒有真的去連 Ollama。全新機器上第一次啟動仍然建議
+#     照 docs/00 的步驟順序走；或啟動後補一次：
+#         curl -X POST .../api/v1/assistant/reindex   （需 admin token）
+#
+# ZH: ⚠ 不在這裡的東西，以及為什麼：
+#
+#   · `registry`（在 docker-compose.yml 裡）—— 它掛著 `profiles: ["registry"]`，
+#     是**刻意**不預設啟動的。要用的時候：
+#         docker compose -f docker-compose.full.yml --profile registry up -d
+#     它的用途是台北校區的映像前哨快取（單張映像 20G × 30 台的頻寬問題）。
+#
+#   · `gpu-worker`（在 gpu-worker/docker-compose.yml 裡）—— 那是跑在
+#     **GPU 主機**上的，不是服務層。worker 是純拉取式，服務層不需要知道它在哪。
+#
+#   · GPU 版的 Ollama —— 若這台機器有 NVIDIA GPU，改用：
+#         docker compose -f docker-compose.full.yml \
+#                        -f docker-compose.ai-models.gpu.yml up -d
+#     （那一份只覆寫 ollama 服務，加上 GPU device 保留。）
+# ==============================================================================
+
+include:
+  # ZH: 核心 —— nginx（:80 使用者端 / :8888 管理端）、job-scheduler API、
+  #     registry（profile）。
+  - path: docker-compose.yml
+
+  # ZH: AI 模型層 —— ollama（本機模型）、portkey（gateway）、open-webui。
+  #     ⚠ 這一份不是「加值選項」：少了它首頁的 catch-all 會 502（見上）。
+  - path: docker-compose.ai-models.yml

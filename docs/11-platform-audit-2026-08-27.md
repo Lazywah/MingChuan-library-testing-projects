@@ -333,6 +333,92 @@ image 都在本機不用下載）。502 消失。
 兩個都還活著，而且讀得到即時資料（點數 2,033,236、有效至 2027-06-27）。
 ✅ 沒有壞掉。
 
+### T15 — 完整平台 compose（交付物）
+
+新增 `docker-compose.full.yml`，用 Compose 的 `include:` 把兩個既有檔合起來，
+**不重複定義任何服務**（設定仍然只有一個真相來源）：
+
+```bash
+docker compose -f docker-compose.full.yml up -d
+```
+
+驗證（都是實際跑出來的，不是推測）：
+
+| 檢查 | 結果 |
+|---|---|
+| `config --services` | ✅ 5 個（nginx / job-scheduler / ollama / portkey / open-webui） |
+| `--profile registry` | ✅ 6 個（registry 仍是 opt-in，沒被我改成預設啟動） |
+| 對已在跑的堆疊執行 | ✅ 全部「Running」，**沒有重建任何容器** |
+| 冷啟動（`down` 後單一 `up -d`） | ✅ **7 秒**，5 個服務全起，nginx 正常 |
+| 冷啟動後冒煙 | ✅ 使用者端 200 / 管理端 200 / API 401 / 打錯網址 200（不再 502） |
+
+**過程中被推翻的一個假設**：我原本要在這份檔案裡幫 `job-scheduler` 補
+`depends_on: ollama`，因為 `docs/01` 警告順序顛倒會讓 nginx 起不來。結果：
+- **做不到** —— `include:` 不允許覆寫被匯入的服務（`conflicts with imported resource`）。
+- **不需要** —— 冷啟動實測 7 秒過關；指南警告的是「完全沒有 Ollama」那個情境。
+
+### T16 — 🔴🔴 最嚴重的發現：重啟 job-scheduler 會讓整個 API 全掛
+
+**這是我在測別的東西時意外重現的，不是推理出來的。**
+
+`nginx.conf` 用 `upstream job_scheduler { server job-scheduler:8000; }`。
+nginx 對 `upstream` 裡的主機名**只在啟動時解析一次**。
+容器一旦換 IP，nginx 還在打舊的：
+
+```
+connect() failed (111: Connection refused) while connecting to upstream,
+upstream: "http://172.21.0.3:8000/api/v1/auth/me"     ← nginx 記著的
+（容器實際在 172.21.0.2）
+```
+
+症狀：**所有 API 端點、兩個 port、全部 502**，靜態頁卻正常
+（因為那是 nginx 自己送的）—— 看起來像「後端死了」，但後端好好的，
+`curl :8002` 直連 200、從 nginx 容器內 `wget job-scheduler:8000/health` 也 200。
+
+**這不是理論問題**：`docs/00` 第 291 行教維運人員用
+`docker compose up -d job-scheduler` 重載設定 —— 照做就會把整個平台打掛。
+
+**已修**：把後端位址放進變數（`set $scheduler "http://job-scheduler:8000";`），
+nginx 就會每次請求經由 `resolver 127.0.0.11` 重新解析。
+**這套做法檔案裡本來就有**（`set $open_webui`），只是一直沒套用到後端 API。
+共改 19 處 proxy_pass（16 處帶 `$request_uri`、1 處不帶、2 處固定路徑）。
+
+**驗證（含陽性對照）**：單純 `restart` 時 Docker 會把同一個 IP 給回來，
+所以那樣測**測不到**。我起了一個佔位容器搶走 `172.21.0.2`，
+讓 scheduler 拿到 `172.21.0.7`，然後**完全不動 nginx**：
+
+| | 修之前 | 修之後 |
+|---|---|---|
+| `/api/v1/assistant/status` | 502 | **200** ✅ |
+| `/api/v1/sso/providers` | 502 | **200** ✅ |
+| `:8888` 管理端 API | 502 | **200** ✅ |
+| nginx 錯誤日誌 | `connection refused` | 無 ✅ |
+
+`scripts/check_nginx_routes.py` 仍然 rc=0。
+
+### T17 — 知識庫匯入搬到背景，拿掉 93 秒的啟動地雷
+
+`docs/01` §5 有一整段紅字警告：「兩層有先後，AI 推理層要先起，
+否則第一次 `up` 一定失敗」。原因是 `job-scheduler` 啟動時
+**在開始聽埠之前**同步匯入知識庫，Ollama 不在時 40 個片段各等一次
+DNS 逾時（~2.3 秒）≈ 93 秒 > healthcheck 的 70 秒 → nginx 的
+`depends_on: service_healthy` 直接放棄。
+
+**已修**：改成 `asyncio.create_task(...)` 背景執行（並留住 task 參照 ——
+asyncio 只持弱參照，不留可能被 GC 掉而且不會有錯誤訊息）。
+
+**實測**（清空知識庫 + 停掉 Ollama，重現「全新安裝」）：
+
+| | 修之前（文件記載） | 修之後（實測） |
+|---|---|---|
+| `/health` 回 200 | ~93 秒後才會 healthy | **1.28 秒** |
+| nginx | 起不來 | ✅ 正常，首頁 200 |
+| 知識庫狀態 | —— | `kb_ready: false`（誠實回報，剛好接上 T10 的改動）|
+| Ollama 開回來後 | —— | ✅ 背景匯入自己補回 40 片段 |
+
+> ⚠️ 我在過程中**清空過正式的知識庫**（40 片段），並在測完後由背景匯入自動重建，
+> 已確認回到 40 片段。內容來源是 `job-scheduler/knowledge/*.md`，可重建。
+
 ---
 
 ## 3. 發現的問題

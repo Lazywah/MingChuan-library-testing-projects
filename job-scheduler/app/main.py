@@ -33,6 +33,7 @@ EN: Modular design (building-block assembly):
 ==============================================================================
 """
 
+import asyncio
 import os
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
@@ -206,21 +207,47 @@ async def lifespan(app: FastAPI):
     import os
     os.makedirs("/data/datasets", exist_ok=True)
 
-    # ZH: v2.6 客服助手 — 知識庫若為空則嘗試匯入（需 Ollama 已就緒；失敗不影響啟動）
-    # EN: v2.6 support assistant — ingest KB if empty (needs Ollama; non-fatal on failure)
-    try:
-        from .services import rag_service
-        db = SessionLocal()
+    # ==========================================================================
+    # ZH: v2.6 客服助手 — 知識庫若為空則匯入。
+    #
+    # ZH: 🔴 v3.8 改成**背景執行，不擋啟動**。
+    #     原本是在這裡 `await`，而這一段在服務開始聽埠**之前** ——
+    #     知識庫是空的（全新安裝）而 Ollama 又還沒起來時，
+    #     40 個片段各等一次 DNS 逾時（實測 ~2.3 秒）≈ **93 秒**，
+    #     而 healthcheck 約 70 秒就判死，於是 nginx 的
+    #     `depends_on: service_healthy` 直接放棄：
+    #         dependency failed to start: container ai-platform-scheduler is unhealthy
+    #     整個平台起不來，而根本原因只是「一個附加功能的資料還沒準備好」。
+    #     docs/01-quick-start.md §5 為此寫了一整段「兩層有先後」的警告。
+    #
+    # ZH: 搬到背景之後：服務照常在幾秒內就緒，知識庫自己慢慢補。
+    #     期間 `/assistant/status` 會如實回 `kb_ready: false`
+    #     （那個欄位在 v3.8 一併改成不再宣稱「服務可用」），
+    #     所以「還沒好」是**看得到的**，不是安靜的。
+    #
+    # ZH: ⚠ 一定要留住 task 的參照。asyncio 只持有弱參照，
+    #     不留的話 task 可能在跑到一半時被 GC 掉 —— 而且不會有任何錯誤訊息。
+    # EN: v3.8 KB ingest moved off the startup path (was blocking for ~93s on a
+    #     fresh install with Ollama down, which failed nginx's health gate).
+    # ==========================================================================
+    async def _ingest_kb_in_background():
+        """@node job-scheduler/app/main.py::lifespan.<nested>._ingest_kb_in_background"""
         try:
-            result = await rag_service.ingest_knowledge_base(db, force=False)
-            logger.info("ZH: 知識庫狀態 | EN: KB status: %s", result)
-        finally:
-            db.close()
-    except Exception as e:
-        logger.warning(
-            "ZH: 知識庫匯入略過（Ollama 未就緒？可稍後由 admin 呼叫 /assistant/reindex）"
-            " | EN: KB ingest skipped (Ollama not ready? admin can call /assistant/reindex later): %s", e
-        )
+            from .services import rag_service
+            db = SessionLocal()
+            try:
+                result = await rag_service.ingest_knowledge_base(db, force=False)
+                logger.info("ZH: 知識庫狀態 | EN: KB status: %s", result)
+            finally:
+                db.close()
+        except Exception as e:  # noqa: BLE001 - 附加功能失敗絕不影響服務本身
+            logger.warning(
+                "ZH: 知識庫匯入略過（Ollama 未就緒？可稍後由 admin 呼叫 /assistant/reindex）"
+                " | EN: KB ingest skipped (Ollama not ready? admin can call /assistant/reindex later): %s", e
+            )
+
+    _kb_task = asyncio.create_task(_ingest_kb_in_background())
+    app.state.kb_ingest_task = _kb_task        # ZH: 留參照，見上面的 ⚠
 
     sched_config = SCHEDULER_POLICY.get("scheduling", {})
     logger.info(
