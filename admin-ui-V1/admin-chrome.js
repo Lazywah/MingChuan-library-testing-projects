@@ -18,6 +18,47 @@
  * ⚠ 登出**不論成敗都導回登入頁**：後端掛掉時若停在原地，
  *   使用者會以為自己還登著，而畫面上的資料其實已經是舊的。
  * ========================================================================== */
+/* ──────────────────────────────────────────────────────────────────────────
+ * ZH: v3.8 — API 請求一律繞過瀏覽器快取。
+ *
+ * ZH: 🔴 這不是「效能微調」，是修一個**看起來像後端壞掉**的故障。
+ *     2026-08-27 稽核實測：問題回報頁顯示「暫時讀不到歷史回報」，
+ *     而後端完全正常（直連 curl、經 nginx 都回 200 JSON）。
+ *     原因是瀏覽器快取裡存著一份 **HTML**：
+ *       nginx 若少掛某條 `/api/v1/...` 的 location，GET 會落到 catch-all
+ *       (Open WebUI)，拿到它的 SPA 首頁 —— **200 而且可快取**。
+ *       之後 nginx 補好了，瀏覽器仍然繼續給那份舊 HTML，
+ *       前端 JSON.parse 失敗 → 顯示「讀不到」。
+ *
+ * ZH: 後端已經加了 `Cache-Control: no-store`（main.py 的 middleware），
+ *     但那**只防未來** —— 已經存在使用者瀏覽器裡的那一筆不會自己消失。
+ *     這一層讓已中招的人下次開頁面就恢復正常。
+ *
+ * ZH: 為什麼包 window.fetch 而不是逐一改：管理端每一頁各自有自己的 `api()` helper（people/platform/reports 三份）,
+ *     加上散落的 fetch，逐一改就是 34 個會漏的地方，而且新寫的程式還會再漏。
+ *     只對「同源 + /api/ 開頭」動手，其他請求原封不動。
+ * ────────────────────────────────────────────────────────────────────────── */
+(function () {
+    'use strict';
+    var _fetch = window.fetch;
+    if (!_fetch || _fetch.__noStorePatched) return;
+    function patched(input, init) {
+        try {
+            var url = (typeof input === 'string') ? input : (input && input.url) || '';
+            // ZH: 只認同源的 /api/ —— 相對路徑，或絕對路徑但 origin 相同。
+            var isApi = url.indexOf('/api/') === 0
+                || url.indexOf(location.origin + '/api/') === 0;
+            // ZH: 呼叫端已經指定 cache 的話不覆蓋（例如刻意要用快取的地方）。
+            if (isApi && !(init && init.cache)) {
+                init = Object.assign({}, init, { cache: 'no-store' });
+            }
+        } catch (e) { /* ZH: 這一層絕不能讓請求本身失敗 —— 出事就照原樣送出 */ }
+        return _fetch.call(this, input, init);
+    }
+    patched.__noStorePatched = true;
+    window.fetch = patched;
+})();
+
 (function () {
     'use strict';
 

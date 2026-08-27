@@ -41,7 +41,9 @@ function diagnostics() {
         // ZH: 標明台灣時間 —— 這一行會被貼給管理者，對方不該去猜是哪個時區。
         [T('diag_time', '時間'), TW.full(new Date()) + T('diag_tw', '（台灣時間）')],
         [T('diag_user', '使用者'), ME ? `${ME.username || '?'}（${ME.id || '?'}）` : T('diag_no_user', '（未取得，可能未登入）')],
-        [T('diag_ui', '介面版本'), 'v2'],
+        // ZH: 2026-08-22 的 `1cf0b3b` 把 web-ui-v2 改名成 web-ui-V1，這裡漏改。
+        //     診斷資訊寫錯版本會讓看回報的人對著不存在的版本查問題。
+        [T('diag_ui', '介面版本'), 'V1'],
         [T('diag_ref', '來源頁'), document.referrer || T('diag_direct', '（直接開啟）')],
         [T('diag_url', '網址'), location.href],
         [T('diag_ua', '瀏覽器'), nav.userAgent || '?'],
