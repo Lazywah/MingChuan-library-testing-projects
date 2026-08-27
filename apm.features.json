@@ -383,6 +383,19 @@
       "tests": [
         "tests/test_role_from_email.py"
       ]
+    },
+    {
+      "id": "onboarding-modal",
+      "name": "初次登入設定彈窗（校區 + 學系／行政單位，只對新帳號）",
+      "claimed": false,
+      "files": [
+        "job-scheduler/app/crud.py",
+        "job-scheduler/app/routers/system.py",
+        "web-ui-V1/chrome.js"
+      ],
+      "tests": [
+        "tests/test_onboarding.py"
+      ]
     }
   ]
 }

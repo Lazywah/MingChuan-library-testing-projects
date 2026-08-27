@@ -198,13 +198,22 @@
         });
     }
 
+    // ZH: 這支原本不需要跳脫（選單文字都是字典裡的固定字串），
+    //     v3.8 的初次設定彈窗開始把**資料庫來的名稱**（系所、單位）拼進 innerHTML，
+    //     那些是管理者可編輯的自由文字 —— 沒有跳脫就是一個 XSS 入口。
+    function esc(v) {
+        return String(v == null ? '' : v)
+            .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+    }
+
     // ZH: 取文案。字典裡沒有就用 fallback（＝原本的中文），**不清空**。
     function T(key, fallback) {
         return (window.Prefs && window.Prefs.t(key, fallback)) || fallback;
     }
     function roleLabel(role) {
-        return T('role_' + role, { student: '學生', teacher: '教師',
-                                   staff: '職員', admin: '管理員' }[role] || role || '');
+        return T('role_' + role, { student: '學生', teacher: '教師', staff: '職員',
+                                   guest: '訪客', admin: '管理員' }[role] || role || '');
     }
 
     function item(el, key, fallback) {
@@ -391,6 +400,12 @@
         //     ⚠ syncFrom 會觸發 prefs:applied → render()，所以要先存 _me。
         _me = me;
         if (me && window.Prefs) window.Prefs.syncFrom(me);
+
+        // ZH: v3.8 初次登入設定。接在這裡是因為 `me` 已經在手上 ——
+        //     另外打一次 /auth/me 只為了看一個欄位不划算。
+        //     不 await：彈窗要不要跳跟頂部列畫不畫完沒有關係,
+        //     等它會讓 topbar 在慢網路下多空白一段時間。
+        if (me) maybeShowOnboarding(me);
         render(toggle, menu, me);
     }
 
@@ -518,6 +533,138 @@
                 .catch(function () { return {}; });
         }
         return _settingsPromise;
+    }
+
+    // ── 初次登入設定（v3.8）────────────────────────────────────────────
+    // ZH: 帳號從來沒設定過校區/學系時跳一次。**沒有關閉鈕、點背景也不關** ——
+    //     那兩項是分組統計的基礎資料,能跳過的話永遠會有一堆「未分類」。
+    //
+    // ZH: 放在 chrome.js 而不是某一頁：使用者 SSO 進來會落在 /train/,
+    //     但他也可能直接開書籤到別頁。寫在單一頁面的話,從別的入口進來就不會跳。
+    //
+    // ZH: 只在**登入後**的頁面出現 —— login.html 不載入這支。
+    var CAMPUS_ONLY_ROLES = { guest: 1 };     // ZH: 訪客不屬於任何系所/單位,只問校區
+
+    function onbFieldFor(role) {
+        if (CAMPUS_ONLY_ROLES[role]) return null;
+        return (role === 'staff' || role === 'admin') ? 'unit' : 'department';
+    }
+
+    async function maybeShowOnboarding(me) {
+        if (!me || me.onboarded_at) return;          // ZH: 設定過就不再問
+        var opts;
+        try {
+            var r = await fetch(API + '/system/org-options', { headers: authHeaders() });
+            if (!r.ok) return;                       // ZH: 讀不到選項就不要擋住人
+            opts = await r.json();
+        } catch (e) { return; }
+        buildOnboarding(me, opts);
+    }
+
+    function buildOnboarding(me, opts) {
+        var field = onbFieldFor(me.role);
+        var box = document.createElement('div');
+        box.className = 'onb';
+        box.setAttribute('role', 'dialog');
+        box.setAttribute('aria-modal', 'true');
+        box.setAttribute('aria-labelledby', 'onb-title');
+
+        // ZH: 學生只能選一個校區（後端 set_user_campuses 也擋,這裡只是別讓他白選）。
+        var multi = me.role !== 'student';
+        var campusOpts = opts.campuses.map(function (c) {
+            return '<option value="' + esc(c) + '">' + esc(c) + '</option>';
+        }).join('');
+
+        var orgHtml = '';
+        if (field === 'department') {
+            // ZH: 依學院分組,51 個系直接平鋪很難找。
+            var byCollege = {};
+            opts.departments.forEach(function (d) {
+                (byCollege[d.college] = byCollege[d.college] || []).push(d.name);
+            });
+            orgHtml = '<optgroup label="' + '請選擇' + '"></optgroup>';
+            orgHtml = Object.keys(byCollege).map(function (c) {
+                return '<optgroup label="' + esc(c) + '">'
+                    + byCollege[c].map(function (n) {
+                        return '<option value="' + esc(n) + '">' + esc(n) + '</option>';
+                    }).join('') + '</optgroup>';
+            }).join('');
+        } else if (field === 'unit') {
+            // ZH: 97 個單位,依上層處室分組。頂層單位自成一組。
+            var tops = opts.units.filter(function (u) { return !u.parent; });
+            orgHtml = tops.map(function (t) {
+                var kids = opts.units.filter(function (u) { return u.parent === t.name; });
+                var self = '<option value="' + esc(t.path) + '">' + esc(t.name) + '</option>';
+                if (!kids.length) return self;
+                return '<optgroup label="' + esc(t.name) + '">' + self
+                    + kids.map(function (k) {
+                        return '<option value="' + esc(k.path) + '">' + esc(k.name) + '</option>';
+                    }).join('') + '</optgroup>';
+            }).join('');
+        }
+
+        box.innerHTML =
+            '<div class="onb__box">'
+            + '<h2 class="onb__title" id="onb-title">' + esc(T('onb_title', '先完成基本設定')) + '</h2>'
+            + '<p class="onb__sub">' + esc(T('onb_sub', '這些資料用來做統計分組，只需要設定一次。')) + '</p>'
+            + '<p class="onb__err" id="onb-err" hidden></p>'
+            + '<div class="onb__field">'
+            +   '<label class="onb__label" for="onb-campus">' + esc(T('onb_campus', '校區')) + '</label>'
+            +   '<select class="onb__select" id="onb-campus"' + (multi ? ' multiple size="5"' : '') + '>'
+            +     (multi ? '' : '<option value="">' + esc(T('onb_pick', '請選擇')) + '</option>')
+            +     campusOpts + '</select>'
+            +   (multi ? '<span class="onb__hint">' + esc(T('onb_campus_multi', '可以選多個（按住 Ctrl／⌘）。')) + '</span>' : '')
+            + '</div>'
+            + (field
+                ? '<div class="onb__field">'
+                  + '<label class="onb__label" for="onb-org">'
+                  + esc(field === 'unit' ? T('onb_unit', '行政單位') : T('onb_dept', '學系'))
+                  + '</label>'
+                  + '<select class="onb__select" id="onb-org">'
+                  + '<option value="">' + esc(T('onb_pick', '請選擇')) + '</option>'
+                  + orgHtml + '</select></div>'
+                : '')
+            + '<button class="btn btn--primary btn--block" type="button" id="onb-go">'
+            + esc(T('onb_save', '完成設定')) + '</button>'
+            + '</div>';
+
+        document.body.appendChild(box);
+        box.querySelector('#onb-go').addEventListener('click', function () {
+            submitOnboarding(box, multi, field);
+        });
+    }
+
+    async function submitOnboarding(box, multi, field) {
+        var sel = box.querySelector('#onb-campus');
+        var campuses = multi
+            ? Array.prototype.slice.call(sel.selectedOptions).map(function (o) { return o.value; })
+            : (sel.value ? [sel.value] : []);
+        var orgEl = box.querySelector('#onb-org');
+        var btn = box.querySelector('#onb-go');
+        var err = box.querySelector('#onb-err');
+
+        btn.disabled = true;
+        try {
+            var r = await fetch(API + '/system/onboarding', {
+                method: 'POST',
+                headers: Object.assign({ 'Content-Type': 'application/json' }, authHeaders()),
+                body: JSON.stringify({ campuses: campuses,
+                                       org_value: orgEl ? orgEl.value : null }),
+            });
+            if (!r.ok) {
+                // ZH: 後端的訊息是給人看的（「請選擇校區」「沒有這個學系」）,直接顯示。
+                var body = await r.json().catch(function () { return {}; });
+                err.textContent = body.detail || ('HTTP ' + r.status);
+                err.hidden = false;
+                btn.disabled = false;
+                return;
+            }
+            box.remove();
+        } catch (e) {
+            err.textContent = T('onb_net', '存不起來，請檢查連線後再試一次。');
+            err.hidden = false;
+            btn.disabled = false;
+        }
     }
 
     // ZH: 對外只暴露 logout —— 其他頁面若要做「登出」都該走同一份實作。

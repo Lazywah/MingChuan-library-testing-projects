@@ -98,6 +98,10 @@ class User(Base):
     #   登入路徑也會即時擋（不能只靠排程，那中間有最多一天的空窗）。
     expires_at   = Column(DateTime, nullable=True, index=True)                # ZH: 臨時帳號的到期時間（None=永久）
     temp_purpose = Column(String, nullable=True)                              # ZH: 為什麼開這個帳號（臨時帳號必填）
+    # ZH: v3.8 初次登入設定（校區 / 學系 or 行政單位）完成的時間。NULL = 還沒設定過。
+    # ZH: 🔴 **刻意不沿用 tutorial_dismissed** —— 那是「不再顯示教學」,語意不同。
+    #     混用之後：關掉教學的人會被當成已完成設定,而完成設定的人再也看不到教學。
+    onboarded_at = Column(DateTime, nullable=True)
     tutorial_dismissed = Column(Integer, default=0)                           # ZH: 是否不再顯示教學 (0:否, 1:是) | EN: Tutorial dismissed (0:no, 1:yes)
     department = Column(String, nullable=True)                                # ZH: 學系資訊 | EN: Department
     # ZH: v3.8 組織欄位。學院**不在這裡** —— 由 department 經 org_departments 推導。

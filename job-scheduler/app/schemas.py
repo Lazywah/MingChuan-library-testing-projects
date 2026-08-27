@@ -308,6 +308,11 @@ class UserResponse(BaseModel):
     online_status: Optional[int] = 0
     tutorial_dismissed: int = 0
     department: Optional[str] = None
+    # ZH: v3.8 組織欄位。`campuses` 來自 user_campuses 關聯表,不是 users 的欄位 ——
+    #     所以 /auth/me 會**明確填它**（ORM 模式帶不出關聯表的值,不填會永遠是空陣列）。
+    unit: Optional[str] = None
+    campuses: List[str] = []
+    onboarded_at: Optional[UtcDatetime] = None
     login_count: int = 0
     lifetime_tokens_used: int = 0
     last_login_ip: Optional[str] = None

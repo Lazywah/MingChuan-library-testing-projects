@@ -15,7 +15,7 @@
 #     settings so the user-facing pages can state the values instead of guessing.
 # ==============================================================================
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Body, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from .. import crud, models
@@ -62,3 +62,29 @@ def get_org_options(
     @node job-scheduler/app/routers/system.py::get_org_options
     """
     return crud.org_options(db)
+
+
+@router.post("/onboarding", summary="送出初次登入設定（校區 + 學系／行政單位）")
+def submit_onboarding(
+    payload: dict = Body(..., description='{"campuses": ["台北"], "org_value": "資訊工程學系"}'),
+    db: Session = Depends(get_db),
+    user: models.User = Depends(get_current_user),
+):
+    """
+    ZH: 使用者自己送出初次設定。
+
+    ZH: **允許重送** —— 已經完成過的人再送一次只是更新值。不擋的理由：
+        擋了的話,前端在網路不穩重試時會拿到錯誤，而使用者看到的是「存不起來」。
+        真正要限制「之後不能自己改」的是**單次解鎖**那條路（另一項工作），
+        不是在這裡用 onboarded_at 當鎖 —— 那會讓兩個功能糾纏在一起。
+
+    @node job-scheduler/app/routers/system.py::submit_onboarding
+    """
+    try:
+        u = crud.complete_onboarding(db, user,
+                                     payload.get("campuses") or [],
+                                     payload.get("org_value"))
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    return {"onboarded_at": u.onboarded_at, "campuses": crud.campuses_of(db, u.id),
+            "department": u.department, "unit": u.unit}

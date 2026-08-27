@@ -1785,6 +1785,68 @@ def role_from_email(email: Optional[str]) -> str:
     return "guest" if info.get("domain") else "student"
 
 
+# ZH: v3.8 初次登入設定要問哪些欄位 —— 依角色決定。
+#     擁有者只指定了「學生問學系、職員問行政單位」,其餘是實作時的判斷：
+#       teacher —— 也問學系（老師隸屬於系所）
+#       admin   —— 比照職員問行政單位
+#       guest   —— **只問校區**（訪客不屬於任何系所或單位,硬問會逼他亂填）
+ONBOARDING_FIELDS = {
+    "student": "department",
+    "teacher": "department",
+    "staff":   "unit",
+    "admin":   "unit",
+    "guest":   None,
+}
+
+
+def onboarding_spec(role: str) -> dict:
+    """ZH: 這個角色的初次設定要問什麼。校區一律要問。
+
+    @node job-scheduler/app/crud.py::onboarding_spec
+    """
+    return {"campus": True, "org_field": ONBOARDING_FIELDS.get(role, "department")}
+
+
+def complete_onboarding(db: Session, user: models.User,
+                        campuses: list, org_value: Optional[str]) -> models.User:
+    """
+    ZH: 收下初次設定並標記完成。
+
+    ZH: **驗證比照管理端**：校區走 set_user_campuses（含「學生只能一個」的規則）,
+        學系要在 org_departments 裡、行政單位要在 org_units 裡 ——
+        自由文字會讓分組統計長出一堆打錯字的類別,而且不會報錯。
+
+    ZH: 校區**必填**（擁有者裁定彈窗不可跳過）。組織欄位對 guest 不問,所以不強制。
+
+    @node job-scheduler/app/crud.py::complete_onboarding
+    """
+    spec = onboarding_spec(user.role)
+    if not campuses:
+        raise ValueError("請選擇校區")
+    set_user_campuses(db, user, campuses)
+
+    field = spec["org_field"]
+    if field:
+        v = (org_value or "").strip()
+        if not v:
+            raise ValueError("請選擇學系" if field == "department" else "請選擇行政單位")
+        if field == "department":
+            if not db.query(models.OrgDepartment).filter(
+                    models.OrgDepartment.name == v).first():
+                raise ValueError(f"沒有這個學系：{v}")
+            user.department = v
+        else:
+            if not db.query(models.OrgUnit).filter(
+                    models.OrgUnit.path == v).first():
+                raise ValueError(f"沒有這個行政單位：{v}")
+            user.unit = v
+
+    user.onboarded_at = datetime.now(timezone.utc)
+    db.commit()
+    db.refresh(user)
+    return user
+
+
 def campuses_of(db: Session, user_id: str) -> list:
     """ZH: 這個人所屬的校區（可能多個）。順序照 org_seed.CAMPUSES,不是插入順序。
 

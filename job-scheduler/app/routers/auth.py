@@ -299,14 +299,21 @@ def logout(
 # EN: GET /me - Get current user info
 # ==============================================================================
 @router.get("/me", response_model=schemas.UserResponse)
-def read_users_me(current_user: models.User = Depends(get_current_user)):
+def read_users_me(current_user: models.User = Depends(get_current_user),
+                  db: Session = Depends(get_db)):
     """
     ZH: 取得已登入使用者的個人資訊
-    EN: Get logged-in user's profile info
+
+    ZH: `campuses` 來自 user_campuses 關聯表,**不是 users 的欄位** ——
+        直接回 ORM 物件的話 pydantic 找不到那個屬性,會靜靜地永遠回空陣列
+        （schema 加了欄位卻永遠是空值,是這個專案踩過三次的形狀）。
+        所以這裡明確組一次。
 
     @node job-scheduler/app/routers/auth.py::read_users_me
     """
-    return current_user
+    out = schemas.UserResponse.model_validate(current_user)
+    out.campuses = crud.campuses_of(db, current_user.id)
+    return out
 
 # ==============================================================================
 # ZH: PATCH /me/preferences - 介面偏好（字級 / 語言），跟帳號走

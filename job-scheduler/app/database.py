@@ -265,6 +265,17 @@ def init_db():
             try: conn.execute(text("ALTER TABLE users ADD COLUMN temp_purpose VARCHAR"))
             except Exception: pass
             # --- v3.8 組織欄位：行政單位與校區（學院由 org_departments 推導，不存欄位）---
+            # --- v3.8 初次登入設定完成時間 ---
+            # ZH: 🔴 **回填放在同一個 try 裡是刻意的。** ADD COLUMN 只有第一次會成功,
+            #     第二次起會拋錯 → 下面那行 UPDATE 就不會跑。
+            #     所以「把既有帳號一次標成已完成」剛好只執行一次。
+            #     把 UPDATE 拆到外面的話,每次重啟都會把新帳號也標成已完成,
+            #     於是**彈窗永遠不會出現**,而且畫面上看不出哪裡壞了。
+            # ZH: 擁有者裁定：彈窗只對**新帳號**跳,現有帳號不跳。
+            try:
+                conn.execute(text("ALTER TABLE users ADD COLUMN onboarded_at DATETIME"))
+                conn.execute(text("UPDATE users SET onboarded_at = CURRENT_TIMESTAMP"))
+            except Exception: pass
             # --- v3.8 role 的來源（自動判定 vs 管理者設定）---
             try: conn.execute(text("ALTER TABLE users ADD COLUMN role_source VARCHAR"))
             except Exception: pass

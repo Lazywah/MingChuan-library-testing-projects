@@ -1121,3 +1121,48 @@ textarea.field__input { resize: vertical; min-height: 6rem; }
     /* ZH: 每輪結果在窄畫面自己捲，不要把頁面撐寬（頁面橫捲是版面壞掉的訊號）。 */
     #epochs-table { overflow-x: auto; }
 }
+
+/* ==========================================================================
+ * 初次登入設定（v3.8）
+ *
+ * ZH: 只在「這個帳號從來沒設定過」時出現一次。刻意**沒有關閉鈕、沒有點背景關閉**——
+ *     校區與學系是分組統計的基礎資料,能跳過的話永遠會有一堆「未分類」。
+ *
+ * ZH: 掛在 <body> 底下的頂層,不是塞進某個容器裡 ——
+ *     祖先只要有 transform / filter / overflow,fixed 定位就會以那個祖先為基準,
+ *     於是遮罩蓋不滿整頁而且捲動時會跑掉。
+ * ========================================================================== */
+.onb {
+    position: fixed;
+    inset: 0;
+    z-index: 1000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: var(--space-4);
+    background: rgb(31 35 40 / 55%);
+}
+.onb__box {
+    width: min(520px, 100%);
+    max-height: calc(100vh - var(--space-6));
+    overflow-y: auto;                 /* ZH: 內容比視窗高時捲內層,不要讓整頁捲 */
+    background: var(--surface);
+    border-radius: var(--radius-lg);
+    padding: var(--space-5);
+    box-shadow: 0 12px 32px rgb(31 35 40 / 24%);
+}
+.onb__title { margin: 0 0 var(--space-2); color: var(--text-strong); font-size: 1.25rem; }
+.onb__sub   { margin: 0 0 var(--space-4); color: var(--text-muted); font-size: 0.9rem; }
+.onb__field { margin-bottom: var(--space-4); }
+.onb__label { display: block; margin-bottom: var(--space-1); color: var(--text-strong); font-weight: 600; }
+.onb__hint  { display: block; margin-top: var(--space-1); color: var(--text-muted); font-size: 0.85rem; }
+.onb__select {
+    width: 100%;
+    padding: var(--space-2) var(--space-3);
+    border: 1px solid var(--hairline);
+    border-radius: var(--radius-sm);
+    background: var(--surface);
+    color: var(--text);
+    font: inherit;
+}
+.onb__err { margin: 0 0 var(--space-3); color: var(--mcu-error-600); font-size: 0.9rem; }
