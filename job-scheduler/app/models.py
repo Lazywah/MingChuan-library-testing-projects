@@ -73,7 +73,12 @@ class User(Base):
     last_login_time = Column(DateTime, nullable=True)                         # ZH: 最後登入時間 | EN: Last login time
     last_login_ip = Column(String, nullable=True)                             # ZH: 最後登入IP | EN: Last login IP
     last_activity = Column(DateTime, nullable=True, index=True)               # ZH: 最後活動時間 (v2.1 修正：取代 online_status) | EN: Last activity time (v2.1: supersedes online_status)
-    online_status = Column(Integer, default=0)                                # ZH: 已 deprecated，admin 端動態計算 | EN: Deprecated, computed dynamically
+    # ZH: 🔴 **這個欄位不要讀。** v2.1 起已 deprecated,而且沒有任何地方寫它 ——
+    #     所以它**永遠是 0**。讀了會得到「所有人都離線」這個錯誤但看起來很合理的答案。
+    #     線上狀態一律用 admin.py 的 _compute_online()（依 last_activity 當場算）。
+    #     API 回應裡仍有一個叫 online_status 的欄位,那是算出來的值,不是這一欄。
+    # ZH: 2026-08-27 擁有者裁定保留欄位（移除的好處不足以換取改結構的風險）。
+    online_status = Column(Integer, default=0)                                # ZH: 見上,不要讀 | EN: Deprecated, always 0 — never read
     is_test_account = Column(Integer, default=0)                              # ZH: 測試帳號標記 (0:否, 1:是) | EN: Test account flag
 
     # ZH: v3.7 臨時帳號（校外人士、長官視察、例外用途）

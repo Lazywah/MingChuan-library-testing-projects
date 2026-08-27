@@ -86,26 +86,24 @@ async def lifespan(app: FastAPI):
     # ZH: Module 2: 初始化資料庫 | EN: Module 2: Initialize database
     init_db()
 
-    # ZH: 啟動時清除所有測試帳號 | EN: Clean up all test accounts on startup
-    # ZH: 測試帳號為臨時用途，每次服務重啟時自動清除，無需定時排程
-    # EN: Test accounts are temporary; auto-cleaned on every restart, no scheduler needed
-    from .database import SessionLocal
-    from . import models
-    try:
-        db = SessionLocal()
-        test_users = db.query(models.User).filter(models.User.is_test_account == 1).all()
-        if test_users:
-            for u in test_users:
-                db.query(models.TokenUsage).filter(models.TokenUsage.user_id == u.id).delete()
-                db.delete(u)
-                logger.info(f"ZH: 啟動清除測試帳號: {u.username} | EN: Startup cleanup test account: {u.username}")
-            db.commit()
-            logger.info(f"ZH: 已清除 {len(test_users)} 個測試帳號 | EN: Cleaned up {len(test_users)} test accounts")
-        else:
-            logger.info("ZH: 無測試帳號需清除 | EN: No test accounts to clean up")
-        db.close()
-    except Exception as e:
-        logger.warning(f"ZH: 測試帳號清除失敗: {e} | EN: Test account cleanup failed: {e}")
+    # ==========================================================================
+    # ZH: v3.8 **開機清除測試帳號的機制已移除**（擁有者裁定 2026-08-27）。
+    #
+    # ZH: 原本這裡會在每次服務啟動時,把所有 is_test_account=1 的帳號直接刪掉。
+    #     移除的三個理由：
+    #       1. 全專案**沒有任何一行把那個旗標設成 1** —— 它從來沒有真的觸發過,
+    #          但一直上著膛：有人為了測試在 DB 裡手動設一次,下次重啟帳號就沒了。
+    #       2. 它 `db.delete(u)` **直接刪**,沒走正規刪除路徑 ——
+    #          不封存 Lab、不解 FK 參照、不清孤兒表。會留下孤兒 volume。
+    #       3. 它想解決的問題（臨時帳號）已經有更好的機制：`expires_at` +
+    #          `temp_purpose`,而且那條路徑刻意**只停用不刪帳號**。
+    #
+    # ZH: `is_test_account` 這個欄位**保留** —— auth.py 用它把測試帳號排除在
+    #     實體登入紀錄之外,那個用途是好的。只是不再有人會因為它被刪掉。
+    # EN: v3.8 startup deletion of test accounts removed; the flag itself is kept
+    #     (auth.py still uses it to exclude test accounts from the login log).
+    # ==========================================================================
+
 
     # ==========================================================================
     # ZH: v3.3 首次啟動自動建立管理員（跳板帳號）
