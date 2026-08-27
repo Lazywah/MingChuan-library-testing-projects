@@ -97,7 +97,10 @@ class UserUpdate(BaseModel):
     email: Optional[EmailStr] = None
     password: Optional[str] = None
     tutorial_dismissed: Optional[int] = None
-    department: Optional[str] = None
+    # ZH: 🔴 v3.8 `department` 從這裡**移除**。它原本讓使用者透過 PUT /auth/me
+    #     隨意改成任何自由文字 —— 那既繞過了組織對照表的驗證（打錯字的系名
+    #     會長成一個新的統計類別）,也讓「單次解鎖」形同虛設。
+    #     改組織欄位一律走 POST /system/onboarding,那裡會驗值也會檢查解鎖。
 
 
 class AdminUserUpdate(BaseModel):

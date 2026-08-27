@@ -335,6 +335,38 @@ class UserCampus(Base):
     campus  = Column(String, primary_key=True)
 
 
+class ProfileUnlock(Base):
+    """
+    ZH: v3.8 個人組織資料的**一次性解鎖**（擁有者裁定 2026-08-27）。
+
+    ZH: 校區／學系／行政單位在初次設定之後就上鎖 —— 那三項是分組統計的基礎,
+        讓人隨時自己改的話,報表會隨著人改資料而變動,而且看不出是誰改的。
+        要改就跟管理員說（用既有的「問題回報」送單即可,那邊本來就有
+        送出→管理端可見→回覆的完整流程）,管理員核可後開一次。
+
+    ZH: 🔴 **「用掉」的定義是「使用者成功存檔一次」,不是「過了多久」。**
+        給時間窗的話沒有人會記得回來收,那個帳號就長期開著 ——
+        而「長期開著的一次性權限」比不上鎖還糟,因為大家以為它是鎖著的。
+
+    ZH: 🔴 **可解鎖的欄位清單裡永遠沒有 role 與 is_admin。**
+        那條線是型別層擋的（使用者端的 schema 連表達的能力都沒有）,
+        這張表不能變成繞過它的後門。清單在 crud.UNLOCKABLE_FIELDS,有自檢擋著。
+
+    EN: v3.8 one-shot unlock for a user's own org fields. Consumed by a successful
+        save, never by elapsed time. Never covers role/is_admin.
+    """
+    __tablename__ = "profile_unlocks"
+
+    id         = Column(String, primary_key=True, default=generate_uuid)
+    user_id    = Column(String, ForeignKey("users.id", ondelete="CASCADE"),
+                        index=True, nullable=False)
+    fields     = Column(String, nullable=False)          # ZH: 逗號分隔:campus / department / unit
+    reason     = Column(Text, nullable=True)             # ZH: 管理者為什麼開（留給稽核看）
+    granted_by = Column(String, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    granted_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), index=True)
+    used_at    = Column(DateTime, nullable=True, index=True)   # ZH: NULL = 還沒用掉
+
+
 class OrgDepartment(Base):
     """
     ZH: v3.8 學系 → 學院對照。**主鍵就是學系全名** —— `users.department` 存的就是它，

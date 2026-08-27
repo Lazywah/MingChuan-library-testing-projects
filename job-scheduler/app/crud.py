@@ -195,8 +195,9 @@ def update_user(db: Session, db_user: models.User, update_data: schemas.UserUpda
         db_user.email = update_data.email
     if getattr(update_data, "tutorial_dismissed", None) is not None:
         db_user.tutorial_dismissed = update_data.tutorial_dismissed
-    if getattr(update_data, "department", None) is not None:
-        db_user.department = update_data.department
+    # ZH: v3.8 `department` 已從 UserUpdate 移除（唯一的呼叫者是 PUT /auth/me）——
+    #     所以這裡原本那個分支永遠不會成立,留著就是死碼。
+    #     組織欄位一律走 POST /system/onboarding（會驗值、會檢查一次性解鎖）。
     db.commit()
     db.refresh(db_user)
     return db_user
@@ -1799,6 +1800,68 @@ ONBOARDING_FIELDS = {
 }
 
 
+# ZH: v3.8 可以被一次性解鎖的欄位。
+#     🔴 **這裡永遠不會有 role 與 is_admin。** 使用者不能自己上管理員那條線
+#     是型別層擋的（使用者端 schema 連表達的能力都沒有）,
+#     解鎖機制不能變成繞過它的後門。下面有自檢。
+UNLOCKABLE_FIELDS = ("campus", "department", "unit")
+
+_FORBIDDEN_UNLOCK = {"role", "is_admin", "is_active", "email", "password"}
+_bad_unlock = _FORBIDDEN_UNLOCK & set(UNLOCKABLE_FIELDS)
+if _bad_unlock:
+    raise RuntimeError(
+        "UNLOCKABLE_FIELDS 含有絕不可由使用者自行變更的欄位：%s" % sorted(_bad_unlock))
+
+
+def grant_profile_unlock(db: Session, user: models.User, fields: list,
+                         admin: models.User, reason: str = "") -> models.ProfileUnlock:
+    """
+    ZH: 管理者核可一次性解鎖。
+
+    ZH: 同一個人已經有沒用掉的解鎖時**沿用那一筆並更新欄位**,不再開第二筆 ——
+        累積多筆的話「還剩幾次」會變成一個沒有人算得出來的數字。
+
+    @node job-scheduler/app/crud.py::grant_profile_unlock
+    """
+    want = []
+    for f in fields or []:
+        f = (f or "").strip()
+        if not f:
+            continue
+        if f not in UNLOCKABLE_FIELDS:
+            raise ValueError(f"這個欄位不可解鎖：{f}（可解鎖：{'、'.join(UNLOCKABLE_FIELDS)}）")
+        if f not in want:
+            want.append(f)
+    if not want:
+        raise ValueError("請指定要解鎖哪些欄位")
+
+    row = (db.query(models.ProfileUnlock)
+           .filter(models.ProfileUnlock.user_id == user.id,
+                   models.ProfileUnlock.used_at.is_(None)).first())
+    if row is None:
+        row = models.ProfileUnlock(user_id=user.id)
+        db.add(row)
+    row.fields = ",".join(want)
+    row.reason = (reason or "").strip() or None
+    row.granted_by = admin.id
+    row.granted_at = datetime.now(timezone.utc)
+    row.used_at = None
+    db.commit()
+    db.refresh(row)
+    return row
+
+
+def active_unlock(db: Session, user_id: str) -> Optional[models.ProfileUnlock]:
+    """ZH: 這個人現在有沒有還沒用掉的解鎖。
+
+    @node job-scheduler/app/crud.py::active_unlock
+    """
+    return (db.query(models.ProfileUnlock)
+            .filter(models.ProfileUnlock.user_id == user_id,
+                    models.ProfileUnlock.used_at.is_(None))
+            .order_by(models.ProfileUnlock.granted_at.desc()).first())
+
+
 def onboarding_spec(role: str) -> dict:
     """ZH: 這個角色的初次設定要問什麼。校區一律要問。
 
@@ -1810,38 +1873,80 @@ def onboarding_spec(role: str) -> dict:
 def complete_onboarding(db: Session, user: models.User,
                         campuses: list, org_value: Optional[str]) -> models.User:
     """
-    ZH: 收下初次設定並標記完成。
+    ZH: 收下組織資料。這支函式有**兩種模式**,不要混在一起看：
 
-    ZH: **驗證比照管理端**：校區走 set_user_campuses（含「學生只能一個」的規則）,
-        學系要在 org_departments 裡、行政單位要在 org_units 裡 ——
-        自由文字會讓分組統計長出一堆打錯字的類別,而且不會報錯。
+          第一次（`onboarded_at` 是 NULL）——「初次設定」。校區與組織欄位**都必填**,
+              因為那是彈窗,而彈窗不可跳過。
 
-    ZH: 校區**必填**（擁有者裁定彈窗不可跳過）。組織欄位對 guest 不問,所以不強制。
+          之後 ——「解鎖後的修改」。必須有管理者核可的一次性解鎖,
+              而且**只能改核可範圍內的欄位**。沒送的欄位保持原值,不強制重填 ——
+              核可「改校區」卻要求他連學系一起重選,他就得再確認一次自己的系,
+              而那正是最容易點錯的時候。
+
+    ZH: 🔴 檢查全部做在寫入之前。混著做的話,驗證失敗的那幾次會先改掉一半再拋錯。
+
+    ZH: 🔴 解鎖在**成功存檔的當下**用掉,不是核可後開始倒數。時間窗沒有人會回來收,
+        而「長期開著的一次性權限」比不上鎖還糟 —— 大家以為它是鎖著的。
 
     @node job-scheduler/app/crud.py::complete_onboarding
     """
     spec = onboarding_spec(user.role)
-    if not campuses:
-        raise ValueError("請選擇校區")
-    set_user_campuses(db, user, campuses)
-
     field = spec["org_field"]
-    if field:
-        v = (org_value or "").strip()
-        if not v:
+    first_time = user.onboarded_at is None
+
+    want_campus = bool(campuses)
+    want_org = bool((org_value or "").strip())
+
+    unlock = None
+    if not first_time:
+        unlock = active_unlock(db, user.id)
+        if unlock is None:
+            raise ValueError(
+                "個人資料已鎖定。要修改請用「問題回報」跟管理員說明，"
+                "核可後會開放一次修改。")
+        allowed = {f for f in unlock.fields.split(",") if f}
+        asked = set()
+        if want_campus:
+            asked.add("campus")
+        if want_org and field:
+            asked.add(field)
+        extra = asked - allowed
+        if extra:
+            raise ValueError(
+                f"這次核可的範圍不包含：{'、'.join(sorted(extra))}"
+                f"（可改：{'、'.join(sorted(allowed))}）")
+        if not asked:
+            raise ValueError("沒有要修改的內容")
+    else:
+        # ZH: 初次設定是彈窗,兩項都必填（訪客沒有組織欄位,所以只檢查校區）。
+        if not want_campus:
+            raise ValueError("請選擇校區")
+        if field and not want_org:
             raise ValueError("請選擇學系" if field == "department" else "請選擇行政單位")
+
+    # ZH: 先把值都驗過再寫 —— 驗到一半才失敗的話,前面已經改掉的救不回來。
+    if want_org and field:
+        v = (org_value or "").strip()
         if field == "department":
             if not db.query(models.OrgDepartment).filter(
                     models.OrgDepartment.name == v).first():
                 raise ValueError(f"沒有這個學系：{v}")
-            user.department = v
         else:
             if not db.query(models.OrgUnit).filter(
                     models.OrgUnit.path == v).first():
                 raise ValueError(f"沒有這個行政單位：{v}")
-            user.unit = v
+
+    if want_campus:
+        set_user_campuses(db, user, campuses)      # ZH: 學生限一個的規則在這支裡
+    if want_org and field:
+        # ZH: 這個 setattr **安全** —— `field` 來自伺服器端的 ONBOARDING_FIELDS 常數
+        #     （只會是 "department" 或 "unit"）,不是使用者送來的值。
+        #     ⚠️ 別把它改成「照 payload 的鍵去 setattr」—— 那才是提權後門的形狀。
+        setattr(user, field, (org_value or "").strip())
 
     user.onboarded_at = datetime.now(timezone.utc)
+    if unlock is not None:
+        unlock.used_at = datetime.now(timezone.utc)
     db.commit()
     db.refresh(user)
     return user

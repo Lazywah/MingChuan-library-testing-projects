@@ -409,6 +409,19 @@
       "tests": [
         "tests/test_admin_flag.py"
       ]
+    },
+    {
+      "id": "profile-unlock",
+      "name": "個人組織資料上鎖 + 管理者核可的一次性解鎖",
+      "claimed": false,
+      "files": [
+        "job-scheduler/app/models.py",
+        "job-scheduler/app/crud.py",
+        "job-scheduler/app/routers/admin.py"
+      ],
+      "tests": [
+        "tests/test_profile_unlock.py"
+      ]
     }
   ]
 }

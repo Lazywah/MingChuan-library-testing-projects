@@ -99,6 +99,50 @@ def put_system_settings(
 # ZH: v3.2 GPU 節點管理 — 可排程時段/開關/池別 + 狀態總覽
 # EN: v3.2 GPU node management — schedule windows/switch/pool + status overview
 # ==============================================================================
+# ==============================================================================
+# ZH: v3.8 個人組織資料的一次性解鎖
+# EN: v3.8 one-shot unlock for a user's own org fields
+# ==============================================================================
+@router.post("/users/{user_id}/profile-unlock", summary="核可一次性修改個人組織資料")
+def grant_profile_unlock(
+    user_id: str,
+    payload: dict = Body(..., description='{"fields": ["campus"], "reason": "轉系"}'),
+    db: Session = Depends(get_db),
+    admin: models.User = Depends(require_admin),
+):
+    """
+    ZH: 開放某位使用者修改一次自己的校區／學系／行政單位。
+
+    ZH: **申請入口刻意不另外做** —— 使用者用既有的「問題回報」送單即可,
+        那邊本來就有送出→管理端可見→回覆的完整流程。多做一套申請單
+        只會讓使用者有兩個地方可以送、而管理者有兩個地方要看。
+
+    ZH: 解鎖在使用者**成功存檔一次**的當下用掉,不是過多久自動失效。
+
+    @node job-scheduler/app/routers/admin.py::grant_profile_unlock
+    """
+    user = crud.get_user_by_id(db, user_id) if hasattr(crud, "get_user_by_id") else         db.query(models.User).filter(models.User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="找不到這個使用者")
+    try:
+        row = crud.grant_profile_unlock(db, user, payload.get("fields") or [],
+                                        admin, payload.get("reason") or "")
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    # ZH: 稽核。本檔沒有 _log_admin_action 這個 helper（那支在 storage_lifecycle）,
+    #     直接寫 AdminAction —— 與本檔其他三處一致。
+    db.add(models.AdminAction(
+        admin_id=admin.id,
+        target_user=user.id,
+        action="grant_profile_unlock",
+        payload=json.dumps({"fields": row.fields, "reason": row.reason},
+                            ensure_ascii=False),
+    ))
+    db.commit()
+    return {"fields": row.fields.split(","), "granted_at": row.granted_at,
+            "used_at": row.used_at}
+
+
 @router.get("/email-log", summary="寄信紀錄（誰、何時、結果）")
 def get_email_log(
     limit: int = Query(200, ge=1, le=1000),
