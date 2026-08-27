@@ -21,13 +21,32 @@
 
     <div class="adm-sec__head">
         <h1 class="hero__title" data-i18n="adm_nav_platform">平台設定</h1>
+        <span class="topbar__spacer"></span>
+
+        <!-- ZH: 檢視切換。沒有「全部」那一格 —— 這一頁本來就太長，
+                 多一個「全部」只會讓它回到改之前的樣子。
+             ZH: 用 radiogroup 而不是 tablist：「營運設定」兩邊都會出現
+                 （只是裡面的分組不同），tab ↔ tabpanel 的一對一關係對不上。
+                 它實際上是一個**篩選**，不是分頁。
+             ZH: 滑塊的位置由 platform.js 寫 inline transform，與數據頁同一個元件。 -->
+        <div class="adm-seg" id="view-seg" role="radiogroup"
+             aria-label="要看哪一部分的設定" data-i18n-aria="pf_view_group">
+            <span class="adm-seg__thumb" aria-hidden="true" style="transform:translateX(0%)"></span>
+            <button type="button" class="adm-seg__opt is-current" role="radio"
+                    aria-checked="true" tabindex="0" data-view-opt="platform"
+                    data-i18n="pf_view_platform">平台</button>
+            <button type="button" class="adm-seg__opt" role="radio"
+                    aria-checked="false" tabindex="-1" data-view-opt="myai"
+                    data-i18n="pf_view_myai">MYAI</button>
+        </div>
     </div>
 
     <!-- ZH: 都是「調完就走」的東西。
              ZH: 外部 AI 的 23 個端點只有這裡收下的 8 個是**設定**；
                  帳號對應與同步那 12 個是營運動作，在「人」那一頁。 -->
 
-    <section class="adm-sec" aria-labelledby="h-settings">
+    <!-- ZH: 營運設定兩個檢視都要出現，裡面顯示哪幾組由 platform.js 決定。 -->
+    <section class="adm-sec" data-view="both" aria-labelledby="h-settings">
         <div class="adm-sec__head">
             <h2 id="h-settings" data-i18n="pf_settings">營運設定</h2>
             <span class="topbar__spacer"></span>
@@ -50,7 +69,7 @@
         <div class="inline-error" id="s-msg" hidden></div>
     </section>
 
-    <section class="adm-sec" aria-labelledby="h-models">
+    <section class="adm-sec" data-view="platform" aria-labelledby="h-models">
         <div class="adm-sec__head">
             <h2 id="h-models" data-i18n="pf_models">模型</h2>
             <span class="topbar__spacer"></span>
@@ -66,7 +85,7 @@
         <div class="inline-error" id="m-msg" hidden></div>
     </section>
 
-    <section class="adm-sec" aria-labelledby="h-nodes">
+    <section class="adm-sec" data-view="platform" aria-labelledby="h-nodes">
         <div class="adm-sec__head">
             <h2 id="h-nodes" data-i18n="pf_nodes">GPU 節點</h2>
             <span class="topbar__spacer"></span>
@@ -99,7 +118,7 @@
              ⚠ 「模型」（上面那區）是平台自己的模型註冊表，
                這裡的「廠商模型代碼對應」是把廠商的原始代碼翻成看得懂的名字，
                兩者不同 —— 刻意隔開放，名稱也刻意不同。 -->
-    <section class="adm-sec" aria-labelledby="h-ext">
+    <section class="adm-sec" data-view="myai" aria-labelledby="h-ext">
         <div class="adm-sec__head">
             <h2 id="h-ext" data-i18n="pf_ext">外部 AI（MYAI）</h2>
         </div>
@@ -138,9 +157,9 @@
 <script src="tz.js?v=2e214a8b"></script>
 <!-- ⚠ ZH: 順序不能動 —— i18n-admin 在 i18n 之後、prefs 之前。 -->
 <script src="i18n.js?v=aab570a3"></script>
-<script src="i18n-admin.js?v=bd181138"></script>
+<script src="i18n-admin.js?v=b98d2172"></script>
 <script src="prefs.js?v=8b7b4277"></script>
 <script src="admin-chrome.js?v=d344c467"></script>
-<script src="platform.js?v=02b2e056"></script>
+<script src="platform.js?v=7bcdd547"></script>
 </body>
 </html>

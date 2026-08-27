@@ -181,6 +181,102 @@
 
     var GROUPS = [];
 
+    // ==================================================================
+    // ZH: 「平台 / MYAI」檢視。
+    //
+    // ZH: 狀態放在**網址 hash**，不放 storage：
+    //       - 重新整理不會跳回去（管理者常常改完就 F5）
+    //       - 可以把 `platform.html#myai` 直接貼給別人
+    //       - 不留任何跨工作階段的殘留（這是檢視偏好，不是帳號設定）
+    //     用 replaceState 而不是設 location.hash —— 後者每切一次就多一筆
+    //     瀏覽紀錄，按上一頁會在兩個檢視之間來回彈。
+    //
+    // ZH: 🔴 「營運設定」那一區**兩個檢視都會出現**（data-view="both"），
+    //     只是裡面顯示的分組不同。所以切換時**一定要重畫它** ——
+    //     只做 section 的顯示/隱藏的話，它會一直停在上一個檢視的分組。
+    // ==================================================================
+    var VIEWS = ['platform', 'myai'];
+
+    // ZH: hash → 要顯示哪個檢視。
+    //
+    // ZH: 🔴 `#node-<id>` 是 GPU 節點的深層連結（見 scrollToHash）。那一區在
+    //     「平台」這一邊 —— 不特別處理的話，人在 MYAI 檢視時點到節點連結，
+    //     **會被帶到一個看不見那個區塊的畫面**，而且沒有任何錯誤訊息。
+    function viewFromHash() {
+        var h = (location.hash || '').replace('#', '');
+        if (h.indexOf('node-') === 0) return 'platform';
+        return VIEWS.indexOf(h) >= 0 ? h : 'platform';
+    }
+
+    var VIEW = viewFromHash();
+
+    function applyView(next) {
+        if (next) VIEW = next;
+        document.querySelectorAll('[data-view]').forEach(function (el) {
+            var v = el.dataset.view;
+            el.hidden = !(v === 'both' || v === VIEW);
+        });
+        // ZH: 見上面 🔴 —— 分組是依 VIEW 篩的，換檢視就得重畫。
+        if (SETTINGS.length) renderSettings();
+        // ZH: 🔴 **只動我們自己的 hash**。這一頁還有 `#node-<id>` 的深層連結
+        //     （GPU 節點，見 scrollToHash）—— 無條件 replaceState 會在載入時
+        //     把它洗掉，於是從別處連過來就不會捲到那個節點了，
+        //     而且畫面上完全看不出哪裡不對。
+        var cur = (location.hash || '').replace('#', '');
+        if (cur === '' || VIEWS.indexOf(cur) >= 0) {
+            try {
+                history.replaceState(null, '',
+                    location.pathname + (VIEW === 'platform' ? '' : '#' + VIEW));
+            } catch (e) { /* 某些情境下不給改網址，不影響功能 */ }
+        }
+    }
+
+    function wireViewSeg() {
+        var seg = $('view-seg');
+        if (!seg) return;
+        var thumb = seg.querySelector('.adm-seg__thumb');
+        var opts = [].slice.call(seg.querySelectorAll('[data-view-opt]'));
+
+        function pick(i, focus) {
+            if (i < 0 || i >= opts.length) return;
+            var v = opts[i].dataset.viewOpt;
+            thumb.style.transform = 'translateX(' + (i * 100) + '%)';
+            opts.forEach(function (o, k) {
+                var on = k === i;
+                o.classList.toggle('is-current', on);
+                o.setAttribute('aria-checked', on ? 'true' : 'false');
+                o.setAttribute('tabindex', on ? '0' : '-1');
+            });
+            if (focus) opts[i].focus();
+            applyView(v);
+        }
+
+        opts.forEach(function (o, i) {
+            o.addEventListener('click', function () { pick(i, false); });
+        });
+        // ZH: radiogroup 的慣例是左右鍵換選項（群組本身只佔一個 Tab 位）。
+        seg.addEventListener('keydown', function (e) {
+            var d = e.key === 'ArrowRight' ? 1 : e.key === 'ArrowLeft' ? -1 : 0;
+            if (!d) return;
+            e.preventDefault();
+            var cur = VIEWS.indexOf(VIEW);
+            pick((cur + d + opts.length) % opts.length, true);
+        });
+
+        // ZH: 網址帶 #myai 進來時，滑塊與選取狀態要跟著對 ——
+        //     只設 VIEW 而不動 DOM 的話，內容是 MYAI 但滑塊停在「平台」。
+        pick(VIEWS.indexOf(VIEW), false);
+
+        // ZH: 🔴 **只改 hash 不會重新載入頁面**，模組頂層那行 `var VIEW = ...`
+        //     只跑一次。沒有這個監聽的話，從 `#myai` 連到 `#node-xxx`
+        //     會停在 MYAI 檢視，而使用者要看的 GPU 節點是隱藏的。
+        //     （實測過：view 停在 MYAI、gpuSectionVisible=false。）
+        window.addEventListener('hashchange', function () {
+            var want = viewFromHash();
+            if (want !== VIEW) pick(VIEWS.indexOf(want), false);
+        });
+    }
+
     async function loadSettings() {
         try {
             var r = await api('/admin/system-settings');
@@ -270,9 +366,16 @@
         //     所以這裡兵分兩路：有分組就按分組，剩下的一律掃進最後一區。
         var known = {};
         GROUPS.forEach(function (g) { known[g.key] = true; });
+
+        // ZH: 只畫屬於目前檢視的分組。view 由後端給（見 crud.SETTING_GROUPS）。
+        var shown = GROUPS.filter(function (g) { return g.view === VIEW; });
+
+        // ZH: 不屬於任何**已知分組**的旋鈕才進「其他」；已知但不屬於這個檢視的
+        //     不算漏接（它在另一邊）。這兩件事分清楚，否則切到平台時
+        //     MYAI 的六個旋鈕會全部跑進「其他」。
         var leftover = SETTINGS.filter(function (x) { return !known[x.group]; });
 
-        var blocks = GROUPS.map(function (g) {
+        var blocks = shown.map(function (g) {
             var rows = SETTINGS.filter(function (x) { return x.group === g.key; });
             if (!rows.length) return '';        // 空的分組不畫標題
             return '<h3 class="adm-subhead">' + esc(g.label) + '</h3>'
@@ -1339,6 +1442,9 @@
         scrollToHash();
     }
 
+    // ZH: 滑條要先接、且**在 loadAll 之前** —— 它會把不屬於目前檢視的區塊收起來。
+    //     放後面的話，畫面會先閃過「全部區塊都在」再收合。
+    wireViewSeg();
     loadAll();
     document.addEventListener('prefs:langchanged', loadAll);
 })();

@@ -1416,11 +1416,15 @@ def set_system_config(db: Session, key: str, value: str, description: Optional[s
 #     （下面有自檢會擋），所以加設定的人一定會想「這屬於哪一區」。
 #     放前端的話，前端那份對照表遲早漏掉新的 key，而漏掉的表現是
 #     那個旋鈕**安靜地從畫面上消失**（它不屬於任何一區）。
+# ZH: `view` 是「平台設定」頁面上那個兩格滑條要把這一組放哪一邊。
+#     分組（group）是「這是什麼」，檢視（view）是「管理者何時會來看它」——
+#     兩者不一對一：小基自己是一組，但它跟平台一起看。
 SETTING_GROUPS = [
-    {"key": "platform",  "label": "平台營運"},
-    {"key": "myai",      "label": "MYAI 廠商整合"},
-    {"key": "assistant", "label": "小基（RAG 助手）"},
+    {"key": "platform",  "view": "platform", "label": "平台營運"},
+    {"key": "myai",      "view": "myai",     "label": "MYAI 廠商整合"},
+    {"key": "assistant", "view": "platform", "label": "小基（RAG 助手）"},
 ]
+_VIEW_KEYS = {"platform", "myai"}
 _GROUP_KEYS = {g["key"] for g in SETTING_GROUPS}
 
 
@@ -1535,6 +1539,13 @@ if _missing:
     raise RuntimeError(
         "SYSTEM_SETTINGS 裡這些旋鈕沒有合法的 group：%s"
         "（可用：%s）" % (_missing, sorted(_GROUP_KEYS)))
+
+# ZH: 同理，分組也要有合法的 view —— 漏標的話那一組在兩個檢視下都不會出現。
+_bad_view = [g["key"] for g in SETTING_GROUPS if g.get("view") not in _VIEW_KEYS]
+if _bad_view:
+    raise RuntimeError(
+        "SETTING_GROUPS 裡這些分組沒有合法的 view：%s"
+        "（可用：%s）" % (_bad_view, sorted(_VIEW_KEYS)))
 
 
 def get_all_settings(db: Session) -> list:
