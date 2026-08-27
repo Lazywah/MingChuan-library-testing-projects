@@ -1,0 +1,312 @@
+{
+  "_comment": [
+    "由 Claude 從這個專案自己的結構與文件抽出的**候選清單**。",
+    "來源：job-scheduler/app/routers/ 與 services/ 的模組界線、tests/ 的檔名、",
+    "      docs/08-status-and-roadmap.md、docs/09-ui-version-comparison.md。",
+    "",
+    "⚠️ claimed 全部是 false —— 那個欄位的意思是「我宣稱這個做完了」，",
+    "   而 apm 的立場是不得讓 AI 在功能清單上打勾（讓被驗證者填寫驗證的",
+    "   輸入就是循環論證）。請自己逐條看過再把做完的改成 true。",
+    "",
+    "⚠️ docs/08 §2 已經寫著「11 個 AI Hub 功能為 Coming Soon」、",
+    "   「真實 CAS SSO 未實作」、「聊天模組無整合測試」——",
+    "   那幾條就是不該打勾的候選。",
+    "",
+    "⚠️ 舊版 UI（V0／V0.5）**刻意留在清單裡**：docker-compose.yml 還在把它們",
+    "   掛進 nginx，三版同時對外服務、共用同一個後端。把還在跑的東西",
+    "   排除掉，數字會好看，但那正是這個工具存在的理由所要防的事。",
+    "   要下線的話是 docs/09 那份盤點的決定，不是這裡。"
+  ],
+  "features": [
+    {
+      "id": "auth",
+      "name": "登入與權限（本機帳號、JWT、admin DI 鏈）",
+      "claimed": false,
+      "files": [
+        "job-scheduler/app/routers/auth.py",
+        "job-scheduler/app/auth.py"
+      ],
+      "tests": [
+        "tests/test_api.py"
+      ]
+    },
+    {
+      "id": "sso",
+      "name": "SSO 單一登入（mock／CAS 框架／OIDC）",
+      "claimed": false,
+      "files": [
+        "job-scheduler/app/routers/sso.py",
+        "job-scheduler/app/sso_client.py",
+        "job-scheduler/app/sso_policy.yaml"
+      ],
+      "tests": [
+        "tests/test_myai_provision.py",
+        "tests/test_email_guard.py"
+      ]
+    },
+    {
+      "id": "chat",
+      "name": "AI 助手：串流 proxy 到 Portkey",
+      "claimed": false,
+      "files": [
+        "job-scheduler/app/routers/chat.py",
+        "job-scheduler/app/routers/assistant.py"
+      ],
+      "tests": [
+        "tests/test_chat.py",
+        "tests/test_assistant_model.py"
+      ]
+    },
+    {
+      "id": "external-ai",
+      "name": "外部 AI 供應商接入",
+      "claimed": false,
+      "files": [
+        "job-scheduler/app/routers/external_ai.py"
+      ],
+      "tests": []
+    },
+    {
+      "id": "jobs",
+      "name": "GPU 訓練任務排程",
+      "claimed": false,
+      "files": [
+        "job-scheduler/app/routers/jobs.py",
+        "job-scheduler/app/scheduler.py",
+        "job-scheduler/app/gpu_schedule.py",
+        "job-scheduler/app/scheduler_policy.yaml"
+      ],
+      "tests": [
+        "tests/test_api.py"
+      ]
+    },
+    {
+      "id": "worker",
+      "name": "GPU Worker 與心跳",
+      "claimed": false,
+      "files": [
+        "job-scheduler/app/routers/worker.py",
+        "gpu-worker"
+      ],
+      "tests": []
+    },
+    {
+      "id": "lab",
+      "name": "Lab：瀏覽器內 VS Code（code-server）",
+      "claimed": false,
+      "files": [
+        "job-scheduler/app/routers/lab.py",
+        "job-scheduler/app/services/lab_manager.py"
+      ],
+      "tests": [
+        "tests/test_lab_workspaces.py",
+        "tests/test_lab_colocation.py",
+        "tests/test_env_isolation.py"
+      ]
+    },
+    {
+      "id": "secrets",
+      "name": "使用者密鑰（AES-256-GCM，提交 Job 自動注入）",
+      "claimed": false,
+      "files": [
+        "job-scheduler/app/routers/secrets.py",
+        "job-scheduler/app/services/secrets_service.py"
+      ],
+      "tests": []
+    },
+    {
+      "id": "quota",
+      "name": "配額與提權審計",
+      "claimed": false,
+      "files": [
+        "job-scheduler/app/services/quota_service.py"
+      ],
+      "tests": [
+        "tests/test_quota.py",
+        "tests/test_audit_names.py"
+      ]
+    },
+    {
+      "id": "storage-lifecycle",
+      "name": "使用者儲存的四階段生命週期與回收",
+      "claimed": false,
+      "files": [
+        "job-scheduler/app/services/storage_lifecycle.py"
+      ],
+      "tests": [
+        "tests/test_storage_reaper.py"
+      ]
+    },
+    {
+      "id": "datasets",
+      "name": "資料集與訓練管線",
+      "claimed": false,
+      "files": [
+        "job-scheduler/app/routers/datasets.py"
+      ],
+      "tests": [
+        "tests/test_datasets.py",
+        "tests/test_dataset_training.py"
+      ]
+    },
+    {
+      "id": "models",
+      "name": "模型與產出物管理",
+      "claimed": false,
+      "files": [
+        "job-scheduler/app/routers/models.py"
+      ],
+      "tests": [
+        "tests/test_model_artifact.py"
+      ]
+    },
+    {
+      "id": "rag",
+      "name": "RAG 知識庫",
+      "claimed": false,
+      "files": [
+        "job-scheduler/app/services/rag_service.py"
+      ],
+      "tests": [
+        "tests/test_rag_service.py"
+      ]
+    },
+    {
+      "id": "reports",
+      "name": "報表",
+      "claimed": false,
+      "files": [
+        "job-scheduler/app/routers/reports.py",
+        "job-scheduler/app/services/document_generator.py"
+      ],
+      "tests": [
+        "tests/test_reports.py"
+      ]
+    },
+    {
+      "id": "admin",
+      "name": "管理端 API（獨立 port 8888）",
+      "claimed": false,
+      "files": [
+        "job-scheduler/app/routers/admin.py"
+      ],
+      "tests": [
+        "tests/test_admin.py"
+      ]
+    },
+    {
+      "id": "announcements",
+      "name": "公告",
+      "claimed": false,
+      "files": [
+        "job-scheduler/app/routers/announcements.py"
+      ],
+      "tests": []
+    },
+    {
+      "id": "system-settings",
+      "name": "系統設定",
+      "claimed": false,
+      "files": [
+        "job-scheduler/app/routers/system.py"
+      ],
+      "tests": []
+    },
+    {
+      "id": "email",
+      "name": "寄信與退信處理",
+      "claimed": false,
+      "files": [
+        "job-scheduler/app/services/email_service.py",
+        "job-scheduler/app/services/bounce_reader.py"
+      ],
+      "tests": []
+    },
+    {
+      "id": "myai-sync",
+      "name": "MYAI 廠商同步",
+      "claimed": false,
+      "files": [
+        "job-scheduler/app/services/myai_sync.py"
+      ],
+      "tests": [
+        "tests/test_myai_provision.py"
+      ]
+    },
+    {
+      "id": "agent-dispatch",
+      "name": "Agent 派工",
+      "claimed": false,
+      "files": [
+        "job-scheduler/app/services/agent_dispatcher.py"
+      ],
+      "tests": []
+    },
+    {
+      "id": "token-accounting",
+      "name": "Token 記帳",
+      "claimed": false,
+      "files": [
+        "job-scheduler/app/crud.py"
+      ],
+      "tests": [
+        "tests/test_token_accounting.py"
+      ]
+    },
+    {
+      "id": "vscode-ext",
+      "name": "VS Code 擴充 aibase-runner：右鍵 Run on GPU",
+      "claimed": false,
+      "files": [
+        "vscode-extension"
+      ],
+      "tests": []
+    },
+    {
+      "id": "web-ui-v2",
+      "name": "使用者介面 v2（對外 /V1/，11 個頁面）",
+      "claimed": false,
+      "files": [
+        "web-ui-V1"
+      ],
+      "tests": []
+    },
+    {
+      "id": "web-ui-v1",
+      "name": "使用者介面 v1（對外 /V0/，單頁式，仍在服務）",
+      "claimed": false,
+      "files": [
+        "web-ui-V0"
+      ],
+      "tests": []
+    },
+    {
+      "id": "web-ui-v1_5",
+      "name": "使用者介面 v1.5（對外 /V0.5/，仍在服務）",
+      "claimed": false,
+      "files": [
+        "web-ui-V0.5"
+      ],
+      "tests": []
+    },
+    {
+      "id": "admin-ui-v1",
+      "name": "管理端介面 V1",
+      "claimed": false,
+      "files": [
+        "admin-ui-V1"
+      ],
+      "tests": []
+    },
+    {
+      "id": "infra",
+      "name": "部署編排（docker-compose、nginx、base images）",
+      "claimed": false,
+      "files": [
+        "docker-compose.yml",
+        "infrastructure"
+      ],
+      "tests": []
+    }
+  ]
+}

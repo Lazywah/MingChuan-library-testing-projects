@@ -41,6 +41,17 @@
             <button class="btn btn--minor" type="button" id="r-clear" hidden
                     data-i18n="an_clear">清除</button>
         </div>
+
+        <!-- ZH: 匯出。篩選條件跟畫面完全一致 —— 後端呼叫的是同一支函式。
+             ZH: 兩種格式的內容**不一樣**，所以不做成下拉選單：
+                 Excel 有七張分頁，CSV 只有帳號明細（CSV 沒有分頁這回事）。
+                 兩顆按鈕各自講清楚，比選完才發現少東西好。 -->
+        <div class="adm-inline" id="export">
+            <button class="btn btn--minor" type="button" id="x-xlsx"
+                    data-i18n="an_export_xlsx">匯出 Excel</button>
+            <button class="btn btn--minor" type="button" id="x-csv"
+                    data-i18n="an_export_csv">匯出 CSV</button>
+        </div>
     </div>
 
     <!-- ZH: 🔴 圖表全部自繪，**不引入 chart.js**。
@@ -77,9 +88,9 @@
 <script src="tz.js?v=2e214a8b"></script>
 <!-- ⚠ ZH: 順序不能動 —— i18n-admin 在 i18n 之後、prefs 之前。 -->
 <script src="i18n.js?v=893f8ae0"></script>
-<script src="i18n-admin.js?v=00a9d021"></script>
+<script src="i18n-admin.js?v=b2651745"></script>
 <script src="prefs.js?v=a25a96d6"></script>
 <script src="admin-chrome.js?v=ca5eba9c"></script>
-<script src="analytics.js?v=6c5bc8ac"></script>
+<script src="analytics.js?v=62f0af9f"></script>
 </body>
 </html>

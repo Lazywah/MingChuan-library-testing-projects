@@ -943,6 +943,133 @@ def consumption_analytics(
     }
 
 
+# ==============================================================================
+# ZH: v3.8 數據匯出
+# ------------------------------------------------------------------------------
+# ZH: 直接**呼叫** consumption_analytics，不把那 90 行聚合邏輯再寫一份。
+#     拄一份的話兩邊遲早會分岔，而分岔的症狀是「匯出的數字跟畫面不一樣」——
+#     那種錯沒有人會馬上發現，發現了也不知道該信哪一邊。
+#
+# ZH: CSV 只有「帳號明細」一張表 —— CSV 本來就沒有分頁。
+#     把好幾張表用空行串在同一個檔裡的話，試算表匯入時欄位會全部對不齊。
+#     要完整分頁就選 Excel（介面上有寫）。
+#
+# ZH: CSV 加 UTF-8 BOM —— 沒加的話 Excel 開起來中文全是亂碼。
+#     （與 admin.py 的使用者匯出同一個做法。）
+# ==============================================================================
+
+# ZH: 分頁定義：(分頁名, 資料鍵, 欄位[(標題, 資料鍵)])
+#     第一張是「帳號明細」—— CSV 只匯出它。
+_EXPORT_SHEETS = [
+    ("\u5e33號明細", "accounts", [
+        ("名稱", "name"), ("Email", "email"), ("廠商帳號", "vendor_sn"),
+        ("消耗點數", "consumed"), ("使用次數", "uses"), ("登入次數", "logins"),
+    ]),
+    ("每日趨勢", "series", [("日期", "date"), ("消耗點數", "consumed")]),
+    ("依模型", "models", [
+        ("模型", "display_name"), ("代碼", "code"),
+        ("消耗點數", "consumed"), ("使用次數", "count"),
+    ]),
+    ("依類別", "by_category", [
+        ("類別", "category"), ("消耗點數", "consumed"), ("使用次數", "uses")]),
+    ("依供應者", "by_provider", [
+        ("供應者", "provider"), ("消耗點數", "consumed"), ("使用次數", "uses")]),
+    ("依身分", "by_role", [
+        ("身分", "role"), ("消耗點數", "consumed"), ("使用次數", "uses")]),
+    ("依學系", "by_department", [
+        ("學系", "department"), ("消耗點數", "consumed"), ("使用次數", "uses")]),
+]
+
+
+def _sheet_rows(data: dict, key: str, cols: list) -> list:
+    """ZH: 把一張分頁的資料持平成 list of list。
+
+    @node job-scheduler/app/routers/external_ai.py::_sheet_rows
+    """
+    out = []
+    for row in (data.get(key) or []):
+        out.append([row.get(c[1], "") for c in cols])
+    return out
+
+
+@router.get("/admin/consumption/export", summary="匯出消耗分析 (CSV / Excel)")
+def export_consumption(
+    fmt: str = "xlsx",
+    days: int = 30,
+    start: Optional[str] = None,
+    end: Optional[str] = None,
+    db: Session = Depends(get_db),
+    admin: models.User = Depends(require_admin),
+) -> Any:
+    """ZH: 匯出目前期間的消耗分析。篩選條件與畫面完全一致。
+
+    @node job-scheduler/app/routers/external_ai.py::export_consumption
+    """
+    from fastapi.responses import StreamingResponse
+    from datetime import datetime as _dt
+
+    if fmt not in ("csv", "xlsx"):
+        raise HTTPException(status_code=400, detail="ZH: fmt 只接受 csv 或 xlsx | EN: fmt must be csv or xlsx")
+
+    # ZH: 同一支函式、同一組參數 —— 匯出與畫面不可能分岔。
+    data = consumption_analytics(days=days, start=start, end=end, db=db, _=admin)
+
+    # ZH: 檔名帶上實際區間，下載了三個月還看得出來那份是哪一段。
+    if data.get("range_start") or data.get("range_end"):
+        span = "%s_%s" % (data.get("range_start") or "start", data.get("range_end") or "end")
+    else:
+        span = "last%dd" % days if days > 0 else "all"
+    stamp = _dt.now().strftime("%Y%m%d")
+    filename = "consumption-%s-%s.%s" % (span, stamp, fmt)
+
+    if fmt == "csv":
+        name, key, cols = _EXPORT_SHEETS[0]
+        buf = io.StringIO()
+        w = csv.writer(buf)
+        w.writerow([c[0] for c in cols])
+        w.writerows(_sheet_rows(data, key, cols))
+        # ZH: BOM —— 沒它 Excel 開起來中文是亂碼。
+        content = ("\ufeff" + buf.getvalue()).encode("utf-8")
+        return StreamingResponse(
+            io.BytesIO(content),
+            # ZH: 只寫 text/csv —— Starlette 會自己補 charset。
+            #     這裡再寫一次的話標頭會變成 charset 出現兩次（實測）。
+            media_type="text/csv",
+            headers={"Content-Disposition": 'attachment; filename="%s"' % filename},
+        )
+
+    try:
+        from openpyxl import Workbook
+        from openpyxl.styles import Font, PatternFill
+    except ImportError:
+        raise HTTPException(status_code=500,
+                            detail="ZH: openpyxl 未安裝 | EN: openpyxl not installed")
+
+    wb = Workbook()
+    wb.remove(wb.active)
+    for name, key, cols in _EXPORT_SHEETS:
+        ws = wb.create_sheet(title=name[:31])       # ZH: Excel 分頁名上限 31 字
+        ws.append([c[0] for c in cols])
+        for row in _sheet_rows(data, key, cols):
+            ws.append(row)
+        for cell in ws[1]:
+            cell.font = Font(bold=True)
+            cell.fill = PatternFill("solid", fgColor="DDEBF7")
+        ws.freeze_panes = "A2"
+        for i, c in enumerate(cols, start=1):
+            ws.column_dimensions[ws.cell(row=1, column=i).column_letter].width = \
+                min(max(len(str(c[0])) + 2, 12), 40)
+
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    return StreamingResponse(
+        buf,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": 'attachment; filename="%s"' % filename},
+    )
+
+
 @router.get("/admin/user-consumption")
 def user_consumption(
     q: str = "",

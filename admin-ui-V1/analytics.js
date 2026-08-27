@@ -788,6 +788,47 @@
         renderPlatform(out[2]);
     }
 
+    // ==================================================================
+    // ZH: 匯出。端點要 Authorization 標頭，所以**不能用 <a href> 直接下載**
+    //     （那樣帶不上 token，會拿到一個 401 的檔案）。
+    //     改成 fetch → blob → 臨時 <a download> —— 與 V0.5 使用者匯出同一個做法。
+    // ZH: 檔名優先取 Content-Disposition（後端已經把區間寫進去了）。
+    // ==================================================================
+    async function exportAs(fmt, btn) {
+        var qs = rangeOn()
+            ? 'start=' + encodeURIComponent(RANGE.start) + '&end=' + encodeURIComponent(RANGE.end)
+            : 'days=' + DAYS;
+        var old = btn.textContent;
+        btn.disabled = true;
+        btn.textContent = T('an_exporting', '匯出中…');
+        try {
+            var res = await fetch(API + '/external-ai/admin/consumption/export?fmt=' + fmt + '&' + qs,
+                                  { headers: { Authorization: 'Bearer ' + token() } });
+            if (!res.ok) throw new Error('HTTP ' + res.status);
+            var cd = res.headers.get('content-disposition') || '';
+            var m = cd.match(/filename="?([^";]+)"?/);
+            var name = m ? m[1] : 'consumption.' + fmt;
+            var blob = await res.blob();
+            var url = URL.createObjectURL(blob);
+            var a = document.createElement('a');
+            a.href = url; a.download = name;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        } catch (e) {
+            // ZH: 失敗要講 —— 下載沒發生時畫面上完全沒有痕跡，
+            //     使用者只會以為自己沒按到。
+            alert(T('an_export_fail', '匯出失敗（{w}）').replace('{w}', e.message));
+        } finally {
+            btn.disabled = false;
+            btn.textContent = old;
+        }
+    }
+
+    $('x-xlsx').addEventListener('click', function () { exportAs('xlsx', $('x-xlsx')); });
+    $('x-csv').addEventListener('click', function () { exportAs('csv', $('x-csv')); });
+
     $('sync').addEventListener('click', syncNow);
     wireRange();
 
