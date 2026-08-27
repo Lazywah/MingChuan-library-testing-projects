@@ -243,7 +243,15 @@ def status(db: Session = Depends(get_db)):
     """
     count = db.query(models.KnowledgeChunk).count()
     return {
-        "ready": count > 0,
+        # ZH: v3.8 —— 原本這個欄位叫 `ready`，值是「知識庫有沒有內容」。
+        #     它會騙人：2026-08-27 稽核時 Ollama 根本沒在跑，
+        #     這支端點照樣回 `ready: true`，而真的問一題會得到
+        #     「AI 服務尚未啟動」。我自己就被它誤導了一次。
+        # ZH: 改名成 `kb_ready`，語意與實際檢查的東西一致。
+        #     **刻意不在這裡探測 Ollama** —— 診斷端點不應該因為外部服務掛掉
+        #     就卡 5 秒（實測未啟動時連線逾時就是 5.1 秒）。
+        #     要知道「能不能問」的唯一可靠方法是真的問一題。
+        "kb_ready": count > 0,
         "chunks": count,
         "embed_model": settings.RAG_EMBED_MODEL,
         # ZH: 回**目前生效**的值，不是 .env 的預設 ——

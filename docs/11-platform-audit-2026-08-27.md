@@ -270,6 +270,69 @@ GET 會落到 catch-all（Open WebUI），拿到它的 SPA 首頁 —— **200 �
   就改名成 V1。看回報的人會對著一個不存在的版本查問題。已改成 `V1`。
   （全站掃過，沒有其他使用者可見的 `v2` 殘留。）
 
+### T10 — 小基（RAG 助手）
+
+| 情境 | 結果 |
+|---|---|
+| Ollama **未啟動**時問一題 | ✅ 誠實回「AI 服務尚未啟動，請聯絡管理員。\| AI service not available.」（雙語）耗時 5.1 秒（連線逾時） |
+| `/assistant/status` 在同一時間 | 🔴 回 `ready: true` —— **狀態端點在說謊**（見下） |
+| 送錯欄位（`question` 而非 `query`） | ⚠️ 回招呼語，不是 422（見 §3 問題 4） |
+| Ollama 啟動後問「實驗室檔案保留多久」 | ✅ 答得出來且內容正確，耗時 **24.7 秒** |
+
+**已修**：`/assistant/status` 的 `ready` 欄位改名為 `kb_ready`。
+它檢查的只是「知識庫片段數 > 0」，完全沒碰模型後端 ——
+我自己就被它誤導了一次（以為服務是好的，結果一問才發現 Ollama 沒開）。
+**刻意不在 status 裡探測 Ollama**：診斷端點不該因為外部服務掛掉就卡 5 秒。
+測試 `tests/test_assistant_model.py::test_status_does_not_claim_the_assistant_can_answer`
+（含陽性對照：清空知識庫後 `kb_ready` 必須變 False）。
+
+> 觀察（不是缺陷）：qwen2.5:7b 在 CPU 上約 25 秒一題，而且中文偶爾夾雜亂碼 token
+> （實測回答裡出現「增 Escorts更多配額」）。UI 是串流的，使用者感受到的是首字延遲
+> 而不是總時間，但 25 秒仍然偏長。要改善得靠 GPU 或換小一點的模型。
+
+### T11 — Lab（程式實驗室）端對端 ✅
+
+| 步驟 | 結果 |
+|---|---|
+| `POST /lab/start` | ✅ 2.0 秒，回 URL + container_name |
+| Docker 容器 | ✅ `cs-<uid>` 真的存在（`aibase/code-server:2026-spring`） |
+| Volume | ✅ `home_dfea61fa_...`（**底線**，與記憶裡修過的命名坑一致） |
+| 未帶憑證打 `/code/` | ✅ 401 |
+| 瀏覽器實際開啟 | ✅ VS Code 載入、專案資料夾、README、pytorch:2026-spring kernel |
+| `POST /lab/stop` | ✅ 容器**真的被移除**，**volume 保留**（檔案沒丟） |
+
+> 觀察：`/lab/start` 的回應 body 含 code-server 的明文 `password`。
+> 那是使用者自己的實驗室密碼，回給他自己的瀏覽器合理；
+> 但它會進 HTTP 回應體，在加上 `no-store` 之前有被快取的可能。現在已經不會了。
+
+### T12 — 權限與輸入驗證邊界 ✅
+
+| 測試 | 結果 |
+|---|---|
+| 學生 `PUT /auth/me` 帶 `is_admin:1, role:"admin"` | ✅ **沒有提權**：回 200 但 `is_admin`/`role`/`username`/`tokens_limit` 全部不變 |
+| 學生打 27 個管理端端點 | ✅ 全數 403（T2） |
+| 問題回報送空白內容 | ✅ 422 |
+| 問題回報欄位名寫錯 | ✅ 422 |
+| `GET /lab/status?user_id=<別人>` | ✅ 參數被忽略，回自己的 |
+
+### T13 — 🔴 :80 上任何未匹配的路徑都回 502
+
+`location /` 的 catch-all 指向 `$open_webui`，而 Open WebUI 當時**沒有啟動**
+→ 打錯網址的使用者看到「502 Bad Gateway」，看起來像整個平台掛了。
+
+更麻煩的是它**掩蓋路由問題**：`nginx.conf` 的註解說「漏掛 location 的症狀是 405」，
+那是 Open WebUI 有在跑的時候；它沒跑的時候症狀變成 502，
+照著註解去查會查錯方向。
+
+**已處理**：啟動 `docker-compose.ai-models.yml`（ollama / portkey / open-webui，
+image 都在本機不用下載）。502 消失。
+但**根本問題還在**：平台的 404 行為依賴一個外部服務活著。見 §4。
+
+### T14 — 舊版介面（V0 / V0.5）
+
+兩個都還活著，而且讀得到即時資料（點數 2,033,236、有效至 2027-06-27）。
+✅ 沒有壞掉。
+
 ---
 
 ## 3. 發現的問題
@@ -300,8 +363,56 @@ GET 會落到 catch-all（Open WebUI），拿到它的 SPA 首頁 —— **200 �
 
 ---
 
+### 問題 2 — 🔴 API 回應沒有任何快取標頭（已修）
+
+見 T5 / T7。使用者可見症狀：問題回報頁「暫時讀不到歷史回報」，而後端完全正常。
+兩層修法（後端 middleware + 前端 fetch 包一層）都已上，並有測試。
+
+### 問題 3 — ⚠️ `/assistant/status` 的 `ready` 名不副實（已修）
+
+改名 `kb_ready`，理由與測試見 T10。
+
+### 問題 4 — ⚠️ 送錯欄位不會報錯，會得到招呼語
+
+`POST /assistant/ask` 的 schema 對 `query` / `messages` 都有預設值，
+所以送 `{"question": "..."}`（欄位名寫錯）不會 422，
+而是走進「空查詢」分支回一句招呼語。
+
+**影響**：前端若哪天把欄位名寫錯，症狀會是「小基永遠只會打招呼」，
+沒有任何錯誤訊息，而且看起來像模型變笨了。
+
+**未修**（影響前端契約，留給擁有者）：建議在 `ask` 的 schema 加一條驗證 ——
+`query` 與 `messages` 至少要有一個非空，否則 422。
+招呼語應該由前端在開啟視窗時顯示，而不是由「空請求」觸發。
+
+### 問題 5 — ⚠️ `provision.html` 用錯誤樣式顯示正常狀態
+
+「目前沒有可顯示的初始密碼——你已經確認過，或是保留期已過」是**正常空狀態**，
+但它畫在 `.inline-error`（紅字）裡，看起來像出錯了。
+同一個模式在管理端也有（「已儲存」是紅字，見 `90244ee` 的紀錄）。
+
+**未修**：這是整站一致性的問題（`inline-error` 被當成通用訊息容器），
+要改就整站一起改，屬於影響大的變更。
+
+### 問題 6 — 🔴 平台的 404 行為依賴 Open WebUI 活著
+
+見 T13。`location /` catch-all 指向 Open WebUI，它沒跑的時候
+**任何打錯的網址都回 502**。
+
+**未修**（要改 nginx 設定並 reload，且牽涉「Open WebUI 算不算平台必要元件」的判斷）：
+建議 `location /` 加 `proxy_intercept_errors on;` + `error_page 502 503 504 = @fallback;`，
+`@fallback` 導到 `/V1/index.html` 或一個靜態的「找不到頁面」。
+這樣即使 Open WebUI 掛掉，平台本身仍然是可用的。
+
+---
+
 ## 4. 需要擁有者決定的事
 
 | # | 事項 | 為什麼要你決定 |
 |---|---|---|
 | 1 | cookie 隔離的修法（換 cookie 名 vs 換 hostname） | 會讓**所有現存 session 失效**，且方案 2 與 go-live 的正式主機名綁在一起 |
+| 2 | Open WebUI 算不算平台必要元件？ | 決定 §3 問題 6 要怎麼修，也決定「完整 compose」該包含什麼 |
+| 3 | `/assistant/ask` 空請求要不要改成 422 | 會改變前端契約（招呼語要移到前端） |
+| 4 | `.inline-error` 被當成通用訊息容器 | 整站一致性問題，要改就一起改 |
+| 5 | `myai_apply_guide_url` 目前是 `https://guide.example/apply` | `.example` 是保留 TLD，**使用者點下去連不到任何地方**。要填真的網址或清空 |
+| 6 | 我在正式 DB 留了一筆測試問題回報（id=1） | 你可以標成已解決或忽略 |

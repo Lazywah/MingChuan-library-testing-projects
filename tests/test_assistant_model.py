@@ -112,3 +112,29 @@ def test_assistant_status_reports_the_effective_model(client, db, admin_headers)
     crud.set_settings(db, {"rag_chat_model": "claude-3-5-sonnet"})
     body = client.get("/api/v1/assistant/status").json()
     assert body["chat_model"] == "claude-3-5-sonnet", body
+
+
+def test_status_does_not_claim_the_assistant_can_answer(client, db):
+    """
+    ZH: `/assistant/status` 只回報**知識庫**的狀態，不宣稱「可以問問題」。
+
+    ZH: 🔴 2026-08-27 稽核抓到的：這支端點原本的欄位叫 `ready`，
+        值是「知識庫片段數 > 0」。當時 Ollama 根本沒在跑，
+        它照樣回 `ready: true`，而真的問一題得到的是
+        「AI 服務尚未啟動，請聯絡管理員」。我因此誤判過一次。
+
+    ZH: 所以這裡釘兩件事：
+          1. 不可以再出現一個叫 `ready` 的欄位（那個名字就是在宣稱可用）
+          2. `kb_ready` 必須真的跟著知識庫內容走
+    """
+    body = client.get("/api/v1/assistant/status").json()
+
+    assert "ready" not in body, \
+        "status 不該有 `ready` —— 它檢查的只是知識庫，不是 AI 服務可不可用"
+    assert "kb_ready" in body and "chunks" in body
+
+    # ZH: 空知識庫 → kb_ready 必須是 False（陽性對照：證明它不是寫死的 True）
+    db.query(models.KnowledgeChunk).delete()
+    db.commit()
+    body2 = client.get("/api/v1/assistant/status").json()
+    assert body2["chunks"] == 0 and body2["kb_ready"] is False, body2
