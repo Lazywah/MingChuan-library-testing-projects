@@ -659,12 +659,24 @@ textarea.field__input {
     margin-top: var(--space-7);
 }
 
+/* ZH: 分段控制（.adm-seg）的高度。**只在這裡定義一次** ——
+ *     .adm-block__head 要拿它當 min-height,`.adm-seg` 也用它當 height。
+ *     兩邊各自寫死的話會漂開,而漂開的表現是「有滑條的區塊比隔壁矮 10px,
+ *     底下的圖跟著錯開」—— 沒有人會把那兩件事聯想在一起。 */
+:root { --seg-h: 35px; }
+
 .adm-block__head {
     display: flex;
-    align-items: baseline;
+    /* ZH: 2026-08-27 從 baseline 改成 center。標題列裡可能有滑條,
+     *     baseline 會讓文字與控制項各自停在不同高度（同 .adm-sec__head 那次）。 */
+    align-items: center;
     justify-content: space-between;
     gap: var(--space-3);
     margin-bottom: var(--space-2);
+    /* ZH: 🔴 **不管有沒有滑條,標題列都一樣高。**
+     *     沒有這一行的話:有滑條的 35px、沒有的 25px,
+     *     於是同一列的兩張圖起點差 10px —— 看起來就是「圖沒對齊」。 */
+    min-height: var(--seg-h);
 }
 .adm-block__title {
     margin: 0;
@@ -682,6 +694,8 @@ textarea.field__input {
     grid-auto-columns: 1fr;
     flex: none;
     padding: 2px;
+    /* ZH: 高度與 .adm-block__head 的 min-height 同源,見上面 --seg-h 的說明。 */
+    height: var(--seg-h);
     background-color: var(--surface-2);
     /* ZH: 2026-08-27 從 var(--border) 改成 var(--hairline) ——
      *     `--border` 這個變數**沒有定義**,所以這條外框一直是隱形的。
@@ -694,7 +708,11 @@ textarea.field__input {
     top: 2px;
     bottom: 2px;
     left: 2px;
-    width: calc((100% - 4px) / 2);
+    /* ZH: 🔴 原本寫死 `/ 2` —— 那是假設**只有兩個選項**。
+     *     三個選項時滑塊會是軌道的 1/2 寬,再 translateX(200%) 就整個衝出右邊。
+     *     改成由選項數量決定：容器用 inline style 設 --seg-n（見 orgToggle）。
+     *     預設仍是 2,所以既有的兩選項滑條完全不用改。 */
+    width: calc((100% - 4px) / var(--seg-n, 2));
     border-radius: var(--radius-pill);
     background-color: var(--surface);
     box-shadow: var(--shadow-1);

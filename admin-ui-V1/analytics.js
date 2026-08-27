@@ -591,11 +591,16 @@
             + block('an_by_category', '依類別', pie(d.by_category, 'category', 'consumed', pts))
             + block('an_by_provider', '依供應者', pie(d.by_provider, 'provider', 'consumed', pts))
             + block('an_by_role', '依身分', pie(byRole, 'role', 'consumed', pts))
-            + block('an_by_dept', '依學系', pie(d.by_department, 'department', 'consumed', pts))
+            // ZH: v3.8 #13 —— 學系／學院／單位共用一張圖 + 滑條。
+            //     學院由後端查對照表推導,前端不自己推（自己推的話對照表改了這裡還是舊的）。
+            //     行政單位只有職員有值,所以學生會全落在「未設定」—— 那是正確的。
+            + block('an_by_org', '依組織', '<div id="an-org">' + orgPie(d) + '</div>',
+                    orgToggle())
             + '</div>';
 
         wireLine($('myai'));
         wireMetric($('myai'));
+        wireOrg($('myai'));
         wirePie($('myai'));
     }
 
@@ -622,6 +627,87 @@
     //     `getComputedStyle` 會一直讀到起始值，看起來像「滑塊壞了不會動」，
     //     但 `document.visibilityState === 'hidden'` 才是原因。
     //     要量就用 `el.getAnimations()[0].finish()` 讓它跳到終點再量。
+    // ZH: v3.8 #13 —— 學系／學院／單位是**同一批人的三種切法**,
+    //     並排成三張圓餅會讓人以為是三組不同的資料。改成一張圖 + 滑條。
+    //     三份資料後端一次都給了,切換不必重打 API。
+    // ZH: 滑條的選項不加「依」—— 區塊標題已經是「依組織」,
+    //     選項再寫「依學系」會變成「依組織：依學系」。
+    var ORGS = [['department', 'an_by_dept', '學系'],
+                ['college', 'an_by_college', '學院'],
+                ['unit', 'an_by_unit', '單位']];
+    var ORG = 'department';
+
+    function orgKey() { return ORG; }
+
+    function orgPie(d) {
+        if (!d) return '';
+        var map = { department: [d.by_department, 'department'],
+                    college: [d.by_college, 'college'],
+                    unit: [d.by_unit, 'unit'] }[ORG];
+        // ZH: `pts` 是 renderMyai 裡的區域變數（單位文字「點」）,這裡拿不到 ——
+        //     自己取一次。第一版寫成 pts(d),那會在切換時直接炸,
+        //     而語法檢查抓不到（它是執行期錯誤）。
+        return pie(map[0], map[1], 'consumed', T('an_points', '點'));
+    }
+
+    function orgToggle() {
+        var at = 0;
+        ORGS.forEach(function (o, i) { if (o[0] === ORG) at = i; });
+        // ZH: `--seg-n` 告訴 CSS 這個滑條有幾格 —— 滑塊寬度由它算。
+        //     不設的話會沿用預設的 2,滑塊過寬而且切到第三格會衝出邊界。
+        return '<div class="adm-seg" role="radiogroup" style="--seg-n:' + ORGS.length + '"'
+            + ' aria-label="' + esc(T('an_org_group', '要依哪一種組織分群')) + '">'
+            + '<span class="adm-seg__thumb" aria-hidden="true"'
+            + ' style="transform:translateX(' + (at * 100) + '%)"></span>'
+            + ORGS.map(function (o) {
+                var on = ORG === o[0];
+                return '<button type="button" class="adm-seg__opt' + (on ? ' is-current' : '') + '"'
+                    + ' role="radio" aria-checked="' + (on ? 'true' : 'false') + '"'
+                    + ' tabindex="' + (on ? '0' : '-1') + '" data-org="' + o[0] + '">'
+                    + esc(T(o[1], o[2])) + '</button>';
+            }).join('')
+            + '</div>';
+    }
+
+    function wireOrg(root) {
+        var first = root.querySelector('[data-org]');
+        var seg = first && first.closest('.adm-seg');
+        if (!seg) return;
+        var thumb = seg.querySelector('.adm-seg__thumb');
+        var opts = [].slice.call(seg.querySelectorAll('[data-org]'));
+
+        function pick(i, focus) {
+            if (i < 0 || i >= opts.length || opts[i].dataset.org === ORG) return;
+            ORG = opts[i].dataset.org;
+            thumb.style.transform = 'translateX(' + (i * 100) + '%)';
+            opts.forEach(function (o, k) {
+                var on = k === i;
+                o.classList.toggle('is-current', on);
+                o.setAttribute('aria-checked', on ? 'true' : 'false');
+                o.setAttribute('tabindex', on ? '0' : '-1');
+            });
+            if (focus) opts[i].focus();
+            // ZH: 只換那張圖 —— 整個 renderMyai 重畫會把指標滑條也重設回預設。
+            var host = root.querySelector('#an-org');
+            if (host) {
+                host.innerHTML = orgPie(LAST);
+                wirePie(host);      // ZH: 重畫過的圖要重新接互動,不然滑過去沒反應
+            }
+        }
+
+        opts.forEach(function (o, i) {
+            o.addEventListener('click', function () { pick(i, false); });
+        });
+        seg.addEventListener('keydown', function (e) {
+            var d = e.key === 'ArrowRight' ? 1 : e.key === 'ArrowLeft' ? -1 : 0;
+            if (!d) return;
+            e.preventDefault();
+            var cur = 0;
+            opts.forEach(function (o, k) { if (o.dataset.org === ORG) cur = k; });
+            pick((cur + d + opts.length) % opts.length, true);
+        });
+    }
+
     function metricToggle() {
         var at = 0;
         METRICS.forEach(function (m, i) { if (m[0] === METRIC) at = i; });
@@ -654,7 +740,10 @@
     //     新元素從一開始就在新位置，CSS transition 沒有起點可以動，
     //     於是「滑動」變成瞬移。
     function wireMetric(root) {
-        var seg = root.querySelector('.adm-seg');
+        // ZH: 🔴 用 `[data-metric]` 反查它所屬的滑條,不要抓 `.adm-seg` 的第一個 ——
+        //     這一頁現在有兩個滑條（指標、組織維度）,抓第一個會接錯。
+        var first = root.querySelector('[data-metric]');
+        var seg = first && first.closest('.adm-seg');
         if (!seg) return;
         var thumb = seg.querySelector('.adm-seg__thumb');
         var opts = [].slice.call(seg.querySelectorAll('[data-metric]'));
@@ -716,7 +805,7 @@
 
     function groupHeadKey() {
         return { college: ['an_dept_college', '學院'],
-                 unit:    ['an_dept_unit', '行政單位'] }[groupBy()]
+                 unit:    ['an_dept_unit', '單位'] }[groupBy()]
             || ['an_dept', '學系'];
     }
 

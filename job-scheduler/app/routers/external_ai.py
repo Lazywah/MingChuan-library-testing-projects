@@ -855,11 +855,22 @@ def consumption_analytics(
     # ZH: email → 平台身分(role) / 學系(department)，用來分群 | email → role / department
     role_map: dict = {}
     dept_map: dict = {}
+    # ZH: v3.8 #13 —— 也依**學院**與**行政單位**分群。
+    #     學院不是 users 的欄位,由 department 經 org_departments 推 ——
+    #     查一次做成 dict,不要在下面的交易迴圈裡逐筆查（那是幾萬筆）。
+    college_of_dept = {d.name: d.college
+                       for d in db.query(models.OrgDepartment).all()}
+    college_map: dict = {}
+    unit_map: dict = {}
     for u in db.query(models.User).all():
         if u.email:
             k = u.email.strip().lower()
             role_map[k] = u.role or "unknown"
             dept_map[k] = u.department or None
+            # ZH: 對不到對照表就回 None（舊系名、打錯字）—— **不猜**,
+            #     下面會歸到「未設定」而不是硬塞一個學院。
+            college_map[k] = college_of_dept.get((u.department or "").strip()) or None
+            unit_map[k] = getattr(u, "unit", None) or None
     # ZH: v2.9 模型對應表（顯示時套用，不改寫原始交易）| EN: display-time model map
     mmap = {m.code: m for m in db.query(models.MyaiModelMap).all()}
     per: dict = {}      # ZH: sn → 每生統計
@@ -868,6 +879,8 @@ def consumption_analytics(
     prov_agg: dict = {}
     role_agg: dict = {}
     dept_agg: dict = {}
+    college_agg: dict = {}
+    unit_agg: dict = {}
     daily: dict = {}
     total = total_uses = total_logins = 0
     for t in txs:
@@ -903,9 +916,21 @@ def consumption_analytics(
                 ra = role_agg.setdefault(role, {"role": role, "consumed": 0, "uses": 0})
                 ra["consumed"] += c; ra["uses"] += 1
                 # 學系用量：email → 平台 department；無則「未綁定」
-                dept = dept_map.get(ek) or ("未設定" if ek in dept_map else "未綁定")
+                # ZH: 三個維度的「對不到」分兩種,不要混在一起：
+                #       未綁定 —— 這個 email 在平台上根本沒有帳號
+                #       未設定 —— 有帳號,但那個欄位是空的（或對不到對照表）
+                #     混成一種的話,「廠商那邊有人我們不認識」與
+                #     「我們的人資料沒填完」會長得一樣,而那是兩件要做的事。
+                known = ek in dept_map
+                dept = dept_map.get(ek) or ("未設定" if known else "未綁定")
                 da = dept_agg.setdefault(dept, {"department": dept, "consumed": 0, "uses": 0})
                 da["consumed"] += c; da["uses"] += 1
+                college = college_map.get(ek) or ("未設定" if known else "未綁定")
+                ca = college_agg.setdefault(college, {"college": college, "consumed": 0, "uses": 0})
+                ca["consumed"] += c; ca["uses"] += 1
+                unit = unit_map.get(ek) or ("未設定" if known else "未綁定")
+                ua = unit_agg.setdefault(unit, {"unit": unit, "consumed": 0, "uses": 0})
+                ua["consumed"] += c; ua["uses"] += 1
         elif t.event_type == "login":
             p["logins"] += 1; total_logins += 1
     accounts = sorted(per.values(), key=lambda x: x["consumed"], reverse=True)
@@ -914,6 +939,8 @@ def consumption_analytics(
     by_provider = sorted(prov_agg.values(), key=lambda x: x["consumed"], reverse=True)
     by_role = sorted(role_agg.values(), key=lambda x: x["consumed"], reverse=True)
     by_department = sorted(dept_agg.values(), key=lambda x: x["consumed"], reverse=True)
+    by_college = sorted(college_agg.values(), key=lambda x: x["consumed"], reverse=True)
+    by_unit = sorted(unit_agg.values(), key=lambda x: x["consumed"], reverse=True)
     series = [{"date": d, "consumed": daily[d]} for d in sorted(daily.keys())]
     return {
         "days": days,
@@ -929,6 +956,8 @@ def consumption_analytics(
         "by_provider": by_provider,
         "unmapped_models": sum(1 for m in model_list if not m["mapped"]),
         "by_role": by_role,
+        "by_college": by_college,
+        "by_unit": by_unit,
         "by_department": by_department,
         "series": series,
         # ZH: 回傳**實際生效**的區間，不是前端送來的——
@@ -974,6 +1003,11 @@ _EXPORT_SHEETS = [
         ("身分", "role"), ("消耗點數", "consumed"), ("使用次數", "uses")]),
     ("依學系", "by_department", [
         ("學系", "department"), ("消耗點數", "consumed"), ("使用次數", "uses")]),
+    # ZH: v3.8 #13 —— 學院由學系推導,行政單位只有職員有值。
+    ("依學院", "by_college", [
+        ("學院", "college"), ("消耗點數", "consumed"), ("使用次數", "uses")]),
+    ("依行政單位", "by_unit", [
+        ("行政單位", "unit"), ("消耗點數", "consumed"), ("使用次數", "uses")]),
 ]
 
 
