@@ -251,6 +251,18 @@ docker volume prune -f         # 移除 dangling volume
 >
 > 要讓某個人重新設定：把他的 `users.onboarded_at` 設成 NULL。
 
+> **刪除帳號會留稽核（v3.8）**：`admin_actions` 多一筆 `delete_user`，
+> payload 帶帳號名／email／角色／學系／建立時間／最後登入，以及**封存的 volume 名與到期日**
+> —— 逾期銷毀之前，那是唯一還救得回資料的線索。
+>
+> ⚠️ 這筆的 `target_user` **一定是 NULL**，不是漏填：它是外鍵，而它指向的帳號正要被刪除。
+> 同一個刪除流程也會把**先前**提到那個人的稽核紀錄 `target_user` 解成 NULL
+> （`admin_actions` 是 NO ACTION，不解會 IntegrityError）。
+> 所以「這個 target 是誰」只能靠 `delete_user` 那一筆的 payload 查。
+>
+> 🔴 v3.8 之前**完全沒有這筆** —— 刪帳號是管理端破壞性最強的動作，卻是唯一不留痕跡的。
+> 2026-08-27 開發機上一個帳號不見了，翻遍稽核查不到是誰刪的，才發現這個缺口。
+
 > **身分與管理權限是兩件事（v3.8）**：`users.role` 是「你是誰」（student／teacher／staff／guest），
 > `users.is_admin` 是「你能做什麼」。一個學生兼系統管理員設成 `role=student` + `is_admin=1` ——
 > 合成一個欄位時他只能二選一，而選了管理員之後，數據頁的「依身分」會把這個學生算成管理員。

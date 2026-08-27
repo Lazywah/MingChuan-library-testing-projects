@@ -435,6 +435,17 @@
       "tests": [
         "tests/test_analytics_grouping.py"
       ]
+    },
+    {
+      "id": "delete-audit",
+      "name": "刪除帳號留稽核（含身分與封存 volume 的快照）",
+      "claimed": false,
+      "files": [
+        "job-scheduler/app/routers/admin.py"
+      ],
+      "tests": [
+        "tests/test_delete_audit.py"
+      ]
     }
   ]
 }

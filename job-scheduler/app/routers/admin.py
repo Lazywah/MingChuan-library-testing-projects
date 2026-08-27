@@ -750,6 +750,43 @@ def admin_delete_user(
         db.query(models.TrainingJob).filter(models.TrainingJob.user_id == user_id).delete(synchronize_session=False)
         db.query(models.TokenUsage).filter(models.TokenUsage.user_id == user_id).delete(synchronize_session=False)
 
+        # ==================================================================
+        # ZH: v3.8 **刪除本身要留稽核。** 在此之前,刪帳號是管理端破壞性最強的
+        #     動作,卻是唯一完全不留痕跡的 —— 誰刪的、什麼時候、刪了誰,查不到。
+        #     而且上面那一步還會把先前提到這個人的稽核紀錄 target_user 洗成 NULL,
+        #     於是連間接的線索都沒有。（2026-08-27 實地發現:一個帳號不見了,
+        #     翻遍稽核只有 export_users / create_temp_account,沒有任何刪除紀錄。）
+        #
+        # ZH: 🔴 **target_user 必須留 NULL**：它是 FK,而這一列指向的使用者
+        #     下一行就要被刪掉了 —— 填了會直接 IntegrityError（NO ACTION）。
+        #     身分資訊全部放進 payload,那是 Text 欄位,不會被上面的解參照洗掉。
+        #
+        # ZH: 快照要**在刪之前取**,而且要夠完整 —— 刪完之後這些資訊
+        #     沒有任何地方查得到。含封存的 volume 名,因為那是唯一還能救回資料的線索。
+        # ==================================================================
+        db.add(models.AdminAction(
+            admin_id=current_user.id,
+            target_user=None,
+            action="delete_user",
+            payload=json.dumps({
+                "deleted_user_id": user_id,
+                "username": db_user.username,
+                "email": db_user.email,
+                "role": db_user.role,
+                "is_admin": int(getattr(db_user, "is_admin", 0) or 0),
+                "auth_source": getattr(db_user, "auth_source", None),
+                "department": db_user.department,
+                "unit": getattr(db_user, "unit", None),
+                "created_at": db_user.created_at.isoformat() if db_user.created_at else None,
+                "last_login_time": (db_user.last_login_time.isoformat()
+                                    if db_user.last_login_time else None),
+                # ZH: 封存的 volume 名 —— 逾期銷毀前這是唯一救得回資料的線索。
+                "lab_archive": (archived or {}).get("volume") if isinstance(archived, dict) else None,
+                "lab_archive_expires": ((archived or {}).get("expires_at")
+                                        if isinstance(archived, dict) else None),
+            }, ensure_ascii=False, default=str),
+        ))
+
         db.delete(db_user)
         db.commit()
     except IntegrityError as e:
