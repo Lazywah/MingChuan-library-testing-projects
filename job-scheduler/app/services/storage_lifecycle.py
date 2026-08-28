@@ -18,10 +18,10 @@ EN: Academic protection: academic_calendar in yaml controls archive/delete eligi
 from __future__ import annotations
 
 import logging
-import os
-import shutil
-import subprocess
-import tarfile
+# ZH: 2026-08-27 —— 這裡原本還匯入 os / shutil / subprocess / tarfile。
+#     全部**沒有任何一行在用**（`os` 是我把 archive 的假路徑拿掉後才變成沒用的，
+#     另外三個更早就沒用了）。留著它們會讓人以為這個模組真的在做打包與檔案操作 ——
+#     它現在完全沒有碰過檔案系統。真的要實作 archive 時再加回來。
 from datetime import datetime, timezone, timedelta
 from typing import Optional
 
@@ -116,13 +116,27 @@ def list_states(db: Session, filter_state: Optional[str] = None) -> list[dict]:
 def freeze(db: Session, user_id: str, admin_id: Optional[str] = None,
            reason: str = "manual") -> bool:
     """
-    ZH: 將使用者切到 frozen 狀態（唯讀模式）
-    EN: Move user to frozen state (read-only mode)
+    ZH: 把使用者的儲存狀態**標記**為 frozen。
 
-    觸發場景：
-        - 超過配額
-        - 90 天未登入
-        - admin 手動
+    ZH: 🔴 **它不會讓儲存真的變成唯讀。** 這一版做的事情只有三件：
+          1. `user_storage_state.state` 改成 `frozen`
+          2. 寫一筆管理稽核（有 admin_id 時）
+          3. 記一行 log
+        使用者**照樣讀寫**，容器不會被暫停，掛載也不會變唯讀。
+
+    ZH: ⚠️ 這個 docstring 原本寫的是「切到 frozen 狀態（**唯讀模式**）」——
+        那句話會讓管理者以為按下「凍結」就擋住了對方。實際上
+        `user_storage_state.state` 除了管理端的列表之外**沒有任何地方在讀**，
+        所以這個狀態目前是純粹的帳面紀錄。
+        （2026-08-27 稽核查證；擁有者尚未決定要不要真的實作。）
+
+    ZH: 回傳 True 代表「狀態已改」，**不代表「已經擋住了」**。
+
+    觸發場景：超過配額 / 90 天未登入 / admin 手動。
+    ⚠ 前兩者由每日排程自動呼叫,所以這支不能改成拋錯 —— 會把整個迴圈打斷。
+
+    EN: Marks the storage state as `frozen`. It does NOT make storage read-only;
+        nothing enforces the state today. Returns True = "state changed".
 
     @node job-scheduler/app/services/storage_lifecycle.py::freeze
     """
@@ -142,20 +156,42 @@ def freeze(db: Session, user_id: str, admin_id: Optional[str] = None,
     logger.info("User %s storage state: %s → frozen (reason=%s)",
                 user_id[:8], old_state, reason)
     # TODO: 實際暫停容器、移除寫入權限（v2.0 透過 Docker 重啟以唯讀掛載實現）
+    # ZH: ⚠ 上面那個 TODO 沒做之前,這個 True 的意思只有「狀態已改」——
+    #     呼叫端不可以據此宣稱使用者已被擋住（見 docstring）。
     return True
 
 
 def archive(db: Session, user_id: str, admin_id: Optional[str] = None,
             reason: str = "manual") -> bool:
     """
-    ZH: 將 frozen 使用者歸檔到 HDD（壓縮 tar.gz）
-    EN: Archive a frozen user to HDD as compressed tar.gz
+    ZH: 把 frozen 使用者歸檔到 HDD —— 🔴 **實際打包尚未實作，所以這支一律拒絕執行**。
 
-    學期中（semester_months）禁止執行此轉換
-    Not allowed during semester months
+    ZH: 為什麼是「拒絕」而不是「照舊回 True」：
+        `archived` 這個狀態的意思是「資料已經安全地放在 HDD 上」。
+        在真的打包出來之前，把使用者標成 archived 是**記錄一件沒有發生的事**。
+
+    ZH: 改之前它做的事（2026-08-27 稽核查證）：
+          · 算出 `archive_path = /data/archive/home_<uid>.tar.gz`
+          · 把那個路徑寫進 `user_storage_state.archive_path` **與管理稽核**
+          · log 印「User xxx archived → /data/archive/…」
+          · **從來沒有建立過那個檔案**
+        於是 DB 與稽核紀錄裡有一個指向不存在檔案的路徑。
+        真正的危險不是「沒備份」,是**有人相信那個備份存在**而去砍掉 volume。
+
+    ZH: ⚠️ 這支**只有管理員手動呼叫**（每日排程只會自動 freeze，不會 archive），
+        所以拒絕執行不會打斷任何背景迴圈。管理端會收到 409 與說明。
+
+    ZH: 要真的實作時，把下面的 `return False` 換成實際的打包
+        （`docker run --rm -v home_<uid>:/src -v archive:/dest alpine tar czf …`），
+        並且**先確認檔案存在再改狀態**。
+
+    EN: Archiving is NOT implemented, so this refuses instead of recording a state
+        that would mean "data is safely on HDD". It previously wrote a path to a
+        file that was never created — into the DB and the admin audit log.
 
     @node job-scheduler/app/services/storage_lifecycle.py::archive
     """
+    # ZH: 既有的兩道守衛照跑 —— 它們是對的，而且日誌要分得出是哪個原因擋下的。
     if not is_archival_allowed_today() and not admin_id:
         logger.info("Archive skipped for %s (in semester, no admin override)",
                     user_id[:8])
@@ -167,28 +203,23 @@ def archive(db: Session, user_id: str, admin_id: Optional[str] = None,
                        user_id[:8], state.state)
         return False
 
-    # ZH: 實際歸檔（v2.0 為 stub，需配合宿主機 archive 目錄）
-    # EN: Actual archival (v2.0 stub, requires host archive dir)
-    archive_dir = os.environ.get("AIBASE_ARCHIVE_DIR", "/data/archive")
-    try:
-        os.makedirs(archive_dir, exist_ok=True)
-    except OSError:
-        pass
-    archive_path = os.path.join(archive_dir, f"home_{user_id}.tar.gz")
-
-    state.state = "archived"
-    state.state_since = datetime.now(timezone.utc)
-    state.archive_path = archive_path
-    state.notes = f"archived ({reason}) → {archive_path}"
-
-    if admin_id:
-        _log_admin_action(db, admin_id, user_id, "archive",
-                          {"reason": reason, "archive_path": archive_path})
-
-    db.commit()
-    logger.info("User %s archived → %s", user_id[:8], archive_path)
-    # TODO: 實際 docker run --rm -v home_<uid>:/src -v archive:/dest alpine tar czf ...
-    return True
+    # ==========================================================================
+    # ZH: 🔴 到這裡「該歸檔」了，但**實際打包還沒實作** —— 所以停在這裡。
+    #
+    # ZH: 原本這裡會算出 archive_path、把它寫進 state 與管理稽核、log 印
+    #     「archived → …」然後 return True，而那個 tar.gz **從來沒有被建立過**。
+    #     那不是「沒做完」,是**記錄一件沒有發生的事**：
+    #     DB 與稽核裡有一個指向不存在檔案的路徑,
+    #     而真正的危險是有人相信那個備份存在、去砍掉 volume。
+    #
+    # ZH: 要實作時,把下面換成實際的打包，**先確認檔案存在再改狀態**：
+    #       docker run --rm -v home_<uid>:/src -v <archive_dir>:/dest alpine     #              tar czf /dest/home_<uid>.tar.gz -C /src .
+    #     然後才 state.state = "archived"、寫 archive_path、寫稽核、commit。
+    # ==========================================================================
+    logger.warning(
+        "Archive refused for %s: packing is not implemented — refusing rather than "
+        "recording a tar.gz path that does not exist", user_id[:8])
+    return False
 
 
 def restore(db: Session, user_id: str, admin_id: str) -> bool:

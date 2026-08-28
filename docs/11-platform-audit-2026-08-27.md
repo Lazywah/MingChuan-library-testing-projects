@@ -703,6 +703,52 @@ detail: reserved domain (RFC 2606/6761)
 > 這一條在管理端的寄信紀錄頁上看得到成效：改之前 `admin@school.edu.tw`
 > 從 8/27 10:57 一路退到 8/28 06:08，每次管理員登入一筆。
 
+### T25 — 儲存生命週期：改成誠實（不實作，但也不再說謊）
+
+擁有者先前對這一塊的指示是「先看它實際在做什麼再決定」，一直沒決定。
+2026-08-28 指示「依建議處理」，我做的是**讓它誠實**，不是實作四態生命週期。
+
+**查清楚的事實**：
+
+| 函式 | 實際做的 | docstring 說的 |
+|---|---|---|
+| `freeze()` | 改 `state='frozen'`、寫稽核、記 log | 「切到 frozen 狀態（**唯讀模式**）」 |
+| `archive()` | 算路徑 → 寫進 DB **與稽核** → log 印「archived →」→ `return True` | 「歸檔到 HDD（壓縮 tar.gz）」 |
+
+`archive()` 的 tar.gz **從來沒有被建立過**。
+真正的危險不是「沒備份」，是**有人相信那個備份存在**而去砍掉 volume。
+
+而且 `user_storage_state.state` 除了管理端的列表之外**沒有任何地方在讀** ——
+所以「凍結」對使用者完全沒有效果，他照樣讀寫。
+
+**🔴 還有一層獨立的謊**：管理端那四支端點（freeze / archive / restore /
+permanent_delete）**全部忽略回傳值**，一律回 `{"status": "…"}`。
+連函式明確拒絕的情況（不是 frozen 狀態、學期中不准歸檔）管理員看到的也是「成功」。
+
+**做了什麼**（行為改動刻意壓到最小）：
+
+1. **`freeze()` 行為不動**，只把 docstring 寫成實話 ——
+   它會被每日排程自動呼叫，改成拋錯會打斷整個迴圈。
+   回傳 True 的意思明講成「狀態已改」，不是「已經擋住了」。
+2. **`archive()` 改成拒絕執行**（`return False`）。
+   既有的兩道守衛（學期中、必須是 frozen）照跑，日誌分得出是哪個原因；
+   走到「該歸檔」那一步時停下來，**不改狀態、不寫路徑、不寫稽核**。
+   它只有管理員手動呼叫（每日排程只會自動 freeze），所以不影響任何背景迴圈。
+3. **四支端點改成使用回傳值**。archive 失敗回 **409** 並說明；
+   freeze 的回應多一個 `"enforced": false` 與說明句。
+4. 順手移除 4 個未使用的匯入（`os` / `shutil` / `subprocess` / `tarfile`）——
+   後三個**在我改之前就已經沒用了**。留著會讓人以為這個模組真的在做檔案操作，
+   它現在完全沒有碰過檔案系統。
+
+**測試**：`tests/test_storage_lifecycle_honesty.py`（7 條），包含
+- archive 被拒時**不留下任何痕跡**（狀態、路徑、稽核都不動）
+- freeze 重複呼叫時端點要回 `unchanged`（**陽性對照**：證明端點真的在看回傳值）
+- 一條會在「哪天真的有人開始讀 storage state」時失敗的守門 ——
+  提醒那時要連 `freeze()` 的說明一起改，而不是把測試刪掉
+
+**仍然待決**：要不要真的實作四態生命週期。現在的狀態是「誠實地沒做」，
+而不是先前的「假裝做完了」。
+
 ---
 
 ## 3. 發現的問題
@@ -784,7 +830,7 @@ detail: reserved domain (RFC 2606/6761)
 | 2 | Open WebUI 算不算平台必要元件？ | 決定 §3 問題 6 要怎麼修，也決定「完整 compose」該包含什麼 |
 | 3 | `/assistant/ask` 空請求要不要改成 422 | 會改變前端契約（招呼語要移到前端） |
 | 4 | `.inline-error` 被當成通用訊息容器 | 整站一致性問題，要改就一起改 |
-| 5 | `myai_apply_guide_url` 目前是 `https://guide.example/apply` | `.example` 是保留 TLD，**使用者點下去連不到任何地方**。要填真的網址或清空 |
+| ~~5~~ | ~~`myai_apply_guide_url` 是 `https://guide.example/apply`~~ | ✅ **已清空**（擁有者 2026-08-28 指示）。API 回 `null` → 不畫連結；信件改用「需要更多額度請聯絡管理員 / Contact an administrator」。有真的網址時填回去即可 |
 | 6 | 我在正式 DB 留了一筆測試問題回報（id=1） | 你可以標成已解決或忽略 |
 | ~~7~~ | ~~`admin` 帳號的 email 網域不存在~~ | ✅ **已處理**（擁有者 2026-08-28 指示）：改成 `admin@example.com`，並同步改 `.env` 的 `BOOTSTRAP_ADMIN_EMAIL`。詳見 T24 |
 | 8 | `.env` 缺 9 個範本 key（5 個 `IMAP_*` + 4 個 registry） | **不影響現況**（IMAP 靠推導、registry 是 opt-in），但 `deploy_check` 會一直黃燈。要補跑 `python scripts/setup_env.py --check` |

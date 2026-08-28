@@ -1768,6 +1768,17 @@ def get_user_quota(
 
 # ---- 儲存生命週期 ----
 
+# ==============================================================================
+# ZH: 儲存生命週期的四個動作 —— 🔴 回傳值一定要用
+#
+# ZH: 2026-08-27 稽核發現：這四支**全部忽略 `storage_lifecycle` 的回傳值**，
+#     不管實際發生什麼都回 `{"status": "…"}`。於是連函式明確拒絕的情況
+#     （不是 frozen 狀態、學期中不准歸檔）管理員看到的也是「成功」——
+#     他會以為處理好了，然後去做下一步。
+#
+# ZH: ⚠️ 更大的問題不在這一層：`freeze` 只改狀態**不會真的讓儲存變唯讀**，
+#     `archive` 只寫路徑**不會真的打包**。見 storage_lifecycle 各函式的 docstring。
+# ==============================================================================
 @router.post("/storage/freeze")
 def storage_freeze(
     payload: StorageStateActionRequest,
@@ -1779,8 +1790,12 @@ def storage_freeze(
 
     @node job-scheduler/app/routers/admin.py::storage_freeze
     """
-    storage_lifecycle.freeze(db, user_id=payload.user_id, admin_id=admin.id, reason=payload.reason)
-    return {"status": "frozen", "user_id": payload.user_id}
+    ok = storage_lifecycle.freeze(db, user_id=payload.user_id, admin_id=admin.id, reason=payload.reason)
+    # ZH: ⚠️ `frozen` 只是狀態標記 —— 使用者的儲存**不會真的變成唯讀**（尚未實作）。
+    #     回傳裡明講，管理者才不會以為已經擋住了。
+    return {"status": "frozen" if ok else "unchanged", "user_id": payload.user_id,
+            "enforced": False,
+            "note": "ZH: 狀態已標記，但唯讀限制尚未實作 | EN: state only; read-only is not enforced yet"}
 
 
 @router.post("/storage/archive")
@@ -1793,7 +1808,17 @@ def storage_archive(
 
     @node job-scheduler/app/routers/admin.py::storage_archive
     """
-    storage_lifecycle.archive(db, user_id=payload.user_id, admin_id=admin.id, reason=payload.reason)
+    ok = storage_lifecycle.archive(db, user_id=payload.user_id, admin_id=admin.id, reason=payload.reason)
+    if not ok:
+        # ZH: 拒絕的原因有三種（尚未實作打包／不是 frozen 狀態／學期中），
+        #     函式已寫進 log。這裡不猜是哪一種,只誠實說「沒有歸檔」。
+        # ZH: 用數字而不是 `status.HTTP_409_CONFLICT` —— 這個檔案沒有匯入 `status`，
+        #     而那種錯誤 py_compile 與 import 都抓不到（它在函式內才求值），
+        #     只有真的走到這條分支時才 NameError。全檔都用數字，跟著慣例走。
+        raise HTTPException(
+            status_code=409,
+            detail="ZH: 未歸檔（尚未實作實際打包，或狀態／時段不允許）—— 請看伺服器日誌 | "
+                   "EN: Not archived (packing not implemented, or state/season disallows it)")
     return {"status": "archived", "user_id": payload.user_id}
 
 
@@ -1807,8 +1832,8 @@ def storage_restore(
 
     @node job-scheduler/app/routers/admin.py::storage_restore
     """
-    storage_lifecycle.restore(db, user_id=payload.user_id, admin_id=admin.id, reason=payload.reason)
-    return {"status": "active", "user_id": payload.user_id}
+    ok = storage_lifecycle.restore(db, user_id=payload.user_id, admin_id=admin.id, reason=payload.reason)
+    return {"status": "active" if ok else "unchanged", "user_id": payload.user_id}
 
 
 @router.post("/storage/permanent-delete")
@@ -1825,8 +1850,8 @@ def storage_permanent_delete(
         raise HTTPException(400, "admin_password required for permanent delete")
     if not crud.verify_password(payload.admin_password, admin.hashed_password):
         raise HTTPException(403, "Admin password verification failed")
-    storage_lifecycle.permanent_delete(db, user_id=payload.user_id, admin_id=admin.id, reason=payload.reason)
-    return {"status": "deleted", "user_id": payload.user_id}
+    ok = storage_lifecycle.permanent_delete(db, user_id=payload.user_id, admin_id=admin.id, reason=payload.reason)
+    return {"status": "deleted" if ok else "unchanged", "user_id": payload.user_id}
 
 
 @router.get("/storage/states")
