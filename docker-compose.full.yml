@@ -9,19 +9,18 @@
 #     只跑 `docker-compose.yml` 的話**看起來是好的**（登入、頁面、API 都正常），
 #     但有兩件事會壞，而且都不會有明顯的錯誤訊息：
 #
-#       1. 🔴 **打錯網址會回 502**，不是 404。
-#          nginx 的 catch-all（`location /`）指向 Open WebUI，
-#          它沒跑的時候，任何未匹配的路徑都變成「502 Bad Gateway」——
-#          看起來像整個平台掛了。
-#          （更麻煩的是這會掩蓋路由問題：`nginx.conf` 的註解說
-#            「漏掛 location 的症狀是 405」，那是 Open WebUI 有跑的時候。）
-#
-#       2. 🔴 **小基（RAG 助手）答不出來**。`/assistant/status` 只檢查知識庫，
+#       1. 🔴 **小基（RAG 助手）答不出來**。`/assistant/status` 只檢查知識庫，
 #          Ollama 沒跑它照樣回 `kb_ready: true`，要真的問一題才會看到
 #          「AI 服務尚未啟動」。
 #
-#     這兩件事在 2026-08-27 的全功能稽核裡都實際踩到了
-#     （見 docs/11-platform-audit-2026-08-27.md 的 T10 與 T13）。
+#       2. 🔴 **AI 對話（/api/v1/chat）不能用** —— 那條路徑要經 portkey → ollama。
+#
+# ZH: ⚠ 2026-08-28 之前這裡還有第三條：「打錯網址會回 502」。
+#     那是因為 nginx 的 catch-all 指向 Open WebUI，它沒跑就 502。
+#     現在 catch-all 已改成誠實的 404，與 Open WebUI 無關了。
+#
+#     兩件事都在 2026-08-27 的全功能稽核裡實際踩到了
+#     （見 docs/11-platform-audit-2026-08-27.md 的 T10）。
 #
 # ==============================================================================
 # ZH: 這一份**只是把兩個既有檔案合起來**，不重複定義任何服務 ——
@@ -65,6 +64,10 @@ include:
   #     registry（profile）。
   - path: docker-compose.yml
 
-  # ZH: AI 模型層 —— ollama（本機模型）、portkey（gateway）、open-webui。
-  #     ⚠ 這一份不是「加值選項」：少了它首頁的 catch-all 會 502（見上）。
+  # ZH: AI 模型層 —— ollama（本機模型）、portkey（gateway）。
+  #     ⚠ 這一份不是「加值選項」：小基（RAG 助手）需要 ollama 才答得出來。
+  #
+  # ZH: open-webui 也定義在這一份，但 2026-08-28 起是 **opt-in profile**
+  #     （擁有者裁定：零使用、零連結、資料庫 0 筆）。要用的時候：
+  #         docker compose -f docker-compose.full.yml --profile webui up -d
   - path: docker-compose.ai-models.yml

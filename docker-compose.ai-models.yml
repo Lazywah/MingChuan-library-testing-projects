@@ -13,6 +13,20 @@
 
 services:
   open-webui:
+    # ZH: 🔴 2026-08-28 改為 **opt-in**（擁有者裁定）。與 registry 同一個模式。
+    #
+    # ZH: 依據（都是查證過的事實，不是印象）：
+    #       · 文件裡的定位是「備用聊天」「選用」，它有自己的 :3000
+    #       · 平台三個版本的 UI（V0 / V0.5 / V1）**都沒有任何連結指向它**
+    #       · 它的資料庫 user / chat / message **全部 0 筆**，最後修改 2026-05-07
+    #       · 它唯一的實際作用是接住 :80 的未匹配路徑 —— 而那已經改成 404 了
+    #         （見 nginx.conf 的 `location /`）
+    #
+    # ZH: 要用的時候：
+    #       docker compose -f docker-compose.full.yml --profile webui up -d
+    #     它與其他服務沒有相依（是它依賴 portkey，方向相反），
+    #     所以不啟動它不影響 ollama / portkey / 平台任何功能。
+    profiles: ["webui"]
     image: ghcr.io/open-webui/open-webui:main
     container_name: ai-platform-webui
     ports:

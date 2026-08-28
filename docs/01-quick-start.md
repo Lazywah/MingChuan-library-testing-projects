@@ -89,7 +89,11 @@ python scripts/setup_env.py
 >
 > 先起 Ollama 後同樣 40 次失敗變成秒回的 404，啟動降到 2 秒、冷啟動一次過（2026-08-22 實測）。
 
-### 5.1 先起 AI 推理層（Portkey + Open WebUI + Ollama）
+### 5.1 先起 AI 推理層（Portkey + Ollama）
+
+> ⚠ 2026-08-28 起 **Open WebUI 預設不啟動**（opt-in profile）——
+> 它是文件裡的「備用聊天」，平台三個版本的 UI 都沒有連結指向它，資料庫 0 筆。
+> 要用：`docker compose -f docker-compose.ai-models.yml --profile webui up -d`
 
 ```bash
 docker compose -f docker-compose.ai-models.yml up -d
