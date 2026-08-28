@@ -173,6 +173,34 @@
         <div id="mm-unmapped" aria-live="polite"></div>
         <div id="mm-list" aria-live="polite"><span class="skeleton skeleton--line"></span></div>
         <div class="inline-error" id="mm-msg" hidden></div>
+
+    </section>
+
+    <!-- ZH: 組織對照表是**平台層**的東西，不屬於 MYAI 檢視。
+             （第一版誤接在 MYAI 區塊尾端，於是只有切到 MYAI 才看得到。） -->
+    <section class="adm-sec" data-view="platform" aria-labelledby="h-org">
+        <div class="adm-sec__head">
+            <h3 id="h-org" data-i18n="pf_org">組織對照表</h3>
+            <span class="topbar__spacer"></span>
+            <button class="btn btn--minor" type="button" id="og-add" data-i18n="pf_org_add" hidden>新增一列</button>
+            <button class="btn btn--minor" type="button" id="og-edit" data-i18n="pf_edit">編輯設定</button>
+            <button class="btn btn--minor" type="button" id="og-cancel" data-i18n="pf_cancel" hidden>取消</button>
+            <button class="btn btn--primary" type="button" id="og-save" data-i18n="pf_save" hidden>儲存設定</button>
+        </div>
+        <p class="footnote" data-i18n="pf_org_why">「數據」那一頁依學院／學系／行政單位分群，靠的就是這張表。學院不存在使用者身上，改這裡全站立刻生效，不必回填任何人。</p>
+        <!-- ZH: 兩份清單分頁切換 —— 51 個系加 97 個單位放在同一張表會找不到東西。 -->
+        <div class="seg" role="radiogroup" aria-labelledby="h-org" id="og-tabs">
+            <button class="seg__opt" type="button" role="radio" aria-checked="true"
+                    data-og="dept" data-i18n="pf_org_dept">學系</button>
+            <button class="seg__opt" type="button" role="radio" aria-checked="false"
+                    data-og="unit" data-i18n="pf_org_unit">行政單位</button>
+        </div>
+        <p class="footnote" id="og-ro-hint" data-i18n="pf_readonly_hint">目前是唯讀。要改請按「編輯設定」。</p>
+        <!-- ZH: 這兩句是這一區最重要的說明 —— 停用與改名的後果不寫出來，
+                 管理者按下去之前無從判斷。 -->
+        <p class="footnote" id="og-edit-hint" hidden data-i18n="pf_org_edit_hint">改完按「儲存設定」才會送出。停用只是不進下拉，既有的人仍然對得上；改名會把填過舊名的人一起搬過去，存檔後會告訴你搬了幾個。沒有刪除。</p>
+        <div id="og-list" aria-live="polite"><span class="skeleton skeleton--line"></span></div>
+        <div class="inline-error" id="og-msg" hidden></div>
     </section>
 
 </main>
@@ -180,9 +208,9 @@
 <script src="tz.js?v=2e214a8b"></script>
 <!-- ⚠ ZH: 順序不能動 —— i18n-admin 在 i18n 之後、prefs 之前。 -->
 <script src="i18n.js?v=e51b67bd"></script>
-<script src="i18n-admin.js?v=764ae042"></script>
+<script src="i18n-admin.js?v=079c6b99"></script>
 <script src="prefs.js?v=a25a96d6"></script>
 <script src="admin-chrome.js?v=6d90183a"></script>
-<script src="platform.js?v=f27bbc6c"></script>
+<script src="platform.js?v=8acc4f8c"></script>
 </body>
 </html>

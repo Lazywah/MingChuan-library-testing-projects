@@ -358,7 +358,7 @@ app.include_router(jobs.router, prefix="/api/v1/jobs")
 # ZH: 新增聊天助理與管理員路由 | EN: Chat assistant and admin routes
 # ZH: Phase E 移除 notebooks router（v1 偽 Notebook 已被 v2.0 Lab 取代）
 # EN: Phase E removed notebooks router (v1 pseudo-Notebook replaced by v2.0 Lab)
-from .routers import chat, admin, datasets, worker, sso, lab, secrets, announcements
+from .routers import chat, admin, datasets, worker, sso, lab, secrets, announcements, org
 from .routers import models as models_router
 from .routers import external_ai
 from .routers import assistant
@@ -389,6 +389,8 @@ app.include_router(assistant.router,            prefix="/api/v1/assistant")
 # EN: v3.4 issue reports (user submits & reads own history; admin lists & replies)
 app.include_router(reports.router,              prefix="/api/v1/reports")
 app.include_router(reports.admin_router,        prefix="/api/v1/admin/reports")
+# ZH: v3.8 組織對照表的管理端編輯（學系→學院、行政單位、校區）。
+app.include_router(org.router,                  prefix="/api/v1/admin/org")
 # ZH: v3.8 前台唯讀的營運設定白名單（額度重置日／任務逾時／Lab 封存天數）
 # EN: v3.8 whitelisted read-only operational settings for the user-facing site
 app.include_router(system.router,               prefix="/api/v1/system")

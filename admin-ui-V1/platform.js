@@ -1707,8 +1707,184 @@
         })();
     }
 
+
+    // ══════════════════════════════════════════════════════════════════
+    // ZH: 組織對照表（v3.8）—— 學系→學院、行政單位。
+    //
+    // ZH: 🔴 這一區與別區最大的不同：**主鍵就是使用者身上存的那個字串**
+    //     （`users.department` 存系名、`users.unit` 存 path），而且沒有外鍵。
+    //     所以「改名」與「停用」的後果必須在畫面上講出來，不能只寫在後端。
+    //     人數欄就是為此而在 —— 按下去之前看得到影響幾個人。
+    //
+    // ZH: 沒有刪除鈕，是刻意的（見 routers/org.py 的檔頭）。
+    // ══════════════════════════════════════════════════════════════════
+    var ORG_TAB = 'dept';        // dept | unit
+    var ORG_EDIT = false;
+    var ORG = { dept: null, unit: null };
+    var ORG_NEW = [];            // ZH: 這次新增、還沒存的列
+
+    function orgBtns() {
+        $('og-add').hidden = !ORG_EDIT;
+        $('og-edit').hidden = ORG_EDIT;
+        $('og-cancel').hidden = !ORG_EDIT;
+        $('og-save').hidden = !ORG_EDIT;
+        $('og-ro-hint').hidden = ORG_EDIT;
+        $('og-edit-hint').hidden = !ORG_EDIT;
+    }
+
+    async function loadOrg() {
+        try {
+            var path = ORG_TAB === 'dept' ? '/admin/org/departments' : '/admin/org/units';
+            ORG[ORG_TAB] = await api(path);
+            renderOrg();
+        } catch (e) {
+            $('og-list').innerHTML = '<p class="footnote">'
+                + esc(T('pf_org_fail', '讀不到組織對照表') + '（' + (e.message || e) + '）。') + '</p>';
+        }
+    }
+
+    function orgCampusSelect(cur, campuses) {
+        return '<select data-f="campus">'
+            + '<option value="">' + esc(T('pf_org_blank', '（不指定）')) + '</option>'
+            + (campuses || []).map(function (c) {
+                return '<option value="' + esc(c) + '"' + (c === cur ? ' selected' : '')
+                    + '>' + esc(c) + '</option>';
+            }).join('') + '</select>';
+    }
+
+    function renderOrg() {
+        var d = ORG[ORG_TAB];
+        if (!d) return;
+        var isDept = ORG_TAB === 'dept';
+        var rows = (d.rows || []).concat(ORG_NEW);
+
+        var cols = isDept
+            ? [['pf_org_c_dept', '學系'], ['pf_org_c_college', '學院'],
+               ['pf_org_c_campus', '校區'], ['pf_org_c_on', '啟用'], ['pf_org_c_users', '人數']]
+            : [['pf_org_c_unit', '單位'], ['pf_org_c_parent', '上層'],
+               ['pf_org_c_campus', '校區'], ['pf_org_c_on', '啟用'], ['pf_org_c_users', '人數']];
+
+        $('og-list').innerHTML =
+            '<div class="adm-tablewrap"><table class="adm-table"><thead><tr>'
+            + cols.map(function (h) { return '<th>' + esc(T(h[0], h[1])) + '</th>'; }).join('')
+            + '</tr></thead><tbody>'
+            + rows.map(function (r, i) { return orgRow(r, i, isDept, d); }).join('')
+            + '</tbody></table></div>';
+    }
+
+    function orgRow(r, i, isDept, d) {
+        var key = isDept ? (r.name || '') : (r.path || '');
+        var isNew = !!r.__new;
+        // ZH: 人數 0 與「新增的列」要分得出來 —— 新列還沒有人，不是「沒人用」。
+        var users = isNew ? '<span class="footnote">—</span>' : esc(num(r.users || 0));
+
+        if (!ORG_EDIT) {
+            return '<tr>'
+                + '<td>' + esc(r.name || '') + '</td>'
+                + '<td>' + esc((isDept ? r.college : r.parent) || '—') + '</td>'
+                + '<td>' + esc(r.campus || '—') + '</td>'
+                + '<td>' + (r.active ? esc(T('pf_org_on', '啟用'))
+                    : '<span class="footnote">' + esc(T('pf_org_off', '停用')) + '</span>') + '</td>'
+                + '<td class="num">' + users + '</td>'
+                + '</tr>';
+        }
+
+        var second = isDept
+            ? '<input type="text" data-f="college" value="' + esc(r.college || '') + '">'
+            : '<input type="text" data-f="parent" value="' + esc(r.parent || '') + '">';
+
+        return '<tr data-row data-key="' + esc(isNew ? '' : key) + '" data-i="' + i + '">'
+            + '<td><input type="text" data-f="name" value="' + esc(r.name || '') + '"></td>'
+            + '<td>' + second + '</td>'
+            + '<td>' + orgCampusSelect(r.campus || '', d.campuses) + '</td>'
+            + '<td><select data-f="active">'
+            + '<option value="1"' + (r.active ? ' selected' : '') + '>' + esc(T('pf_org_on', '啟用')) + '</option>'
+            + '<option value="0"' + (r.active ? '' : ' selected') + '>' + esc(T('pf_org_off', '停用')) + '</option>'
+            + '</select></td>'
+            + '<td class="num">' + users + '</td>'
+            + '</tr>';
+    }
+
+    function collectOrg() {
+        var isDept = ORG_TAB === 'dept';
+        var out = [];
+        $('og-list').querySelectorAll('[data-row]').forEach(function (tr) {
+            var g = function (f) {
+                var el = tr.querySelector('[data-f="' + f + '"]');
+                return el ? el.value : '';
+            };
+            var row = { key: tr.dataset.key || null, name: g('name').trim(),
+                        campus: g('campus'), active: g('active') };
+            if (isDept) row.college = g('college').trim();
+            else row.parent = g('parent').trim();
+            out.push(row);
+        });
+        return out;
+    }
+
+    async function saveOrg() {
+        // ZH: 空白的新列直接丟掉 —— 按了「新增一列」又沒填的人很多，
+        //     送上去只會拿到一個 400。
+        var rows = collectOrg().filter(function (r) { return r.name; });
+        try {
+            var path = ORG_TAB === 'dept' ? '/admin/org/departments' : '/admin/org/units';
+            var res = await api(path, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ rows: rows }),
+            });
+            ORG_EDIT = false;
+            ORG_NEW = [];
+            orgBtns();
+            await loadOrg();
+            // ZH: 「搬了幾個人」一定要講出來 —— 改名會動到使用者，
+            //     不回報的話管理者不知道剛才影響了誰。
+            var msg = T('pf_org_saved', '存好了：新增 {a}、修改 {b}、改名 {c}。')
+                .replace('{a}', res.added).replace('{b}', res.updated).replace('{c}', res.renamed);
+            if (res.moved_users) {
+                msg += ' ' + T('pf_org_moved', '一併把 {n} 位使用者搬到新名稱。')
+                    .replace('{n}', res.moved_users);
+            }
+            flash('og-msg', msg, 8000);
+        } catch (e) {
+            say('og-msg', T('pf_org_fail_save', '存不起來（{w}）').replace('{w}', e.message));
+        }
+    }
+
+    (function wireOrg() {
+        var tabs = $('og-tabs');
+        if (!tabs) return;
+        tabs.querySelectorAll('[data-og]').forEach(function (b) {
+            b.addEventListener('click', function () {
+                // ZH: 編輯中換分頁會丟掉還沒存的東西，所以直接不給換。
+                if (ORG_EDIT) return;
+                ORG_TAB = b.dataset.og;
+                tabs.querySelectorAll('[data-og]').forEach(function (x) {
+                    x.setAttribute('aria-checked', String(x === b));
+                });
+                say('og-msg', '');
+                if (ORG[ORG_TAB]) renderOrg(); else loadOrg();
+            });
+        });
+        $('og-edit').addEventListener('click', function () {
+            ORG_EDIT = true; ORG_NEW = []; orgBtns(); renderOrg();
+        });
+        $('og-cancel').addEventListener('click', function () {
+            ORG_EDIT = false; ORG_NEW = []; orgBtns(); say('og-msg', ''); renderOrg();
+        });
+        $('og-add').addEventListener('click', function () {
+            ORG_NEW.push({ __new: true, name: '', college: '', parent: '',
+                           campus: '', active: 1, users: 0 });
+            renderOrg();
+            var last = $('og-list').querySelector('tr:last-child [data-f="name"]');
+            if (last) last.focus();
+        });
+        $('og-save').addEventListener('click', saveOrg);
+    })();
+
     async function loadAll() {
-        await Promise.all([loadSettings(), loadModels(), loadNodes(), loadExt(), loadMap()]);
+        await Promise.all([loadSettings(), loadModels(), loadNodes(), loadExt(), loadMap(),
+                           loadOrg()]);
         scrollToHash();
     }
 
