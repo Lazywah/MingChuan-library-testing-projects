@@ -27,7 +27,7 @@ import json
 import logging
 
 import httpx
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
@@ -108,16 +108,31 @@ async def ask(
     if history and history[-1]["role"] == "user":
         history = history[:-1]
 
+    # ==========================================================================
+    # ZH: 🔴 v3.8 —— 沒有問題就 422，**不要回一句招呼語**。
+    #
+    # ZH: 原本空 query 會回「你好，我是平台客服小基 🙂 有什麼平台操作上的問題嗎？」
+    #     並結束。那讓「欄位名寫錯」變成一個**看起來正常的 200 回應**：
+    #     2026-08-27 稽核時我送 `{"question": ...}`（正確是 `query`），
+    #     得到招呼語，一度以為是模型變笨了。
+    #     前端哪天把欄位名打錯，症狀會是「小基永遠只會打招呼」——
+    #     沒有錯誤訊息，而且看起來一切正常。
+    #
+    # ZH: 招呼語本來就**不需要後端**：三個版本的 widget（V0 / V0.5 / V1）
+    #     都是自己在本地渲染那句話（`showGreeting()`），
+    #     從來沒有人靠打一個空請求去拿它。查證過才拿掉的。
+    # EN: An empty question is a client bug, not a greeting request. All three
+    #     widgets render the greeting locally; nothing ever called this for it.
+    # ==========================================================================
+    if not query:
+        raise HTTPException(
+            status_code=422,
+            detail="ZH: 沒有問題內容 —— 請帶 `query`，或在 `messages` 裡放一則 user 訊息。"
+                   " | EN: Empty question — send `query`, or a user message in `messages`.",
+        )
+
     async def gen():
         """@node job-scheduler/app/routers/assistant.py::ask.<nested@102>.gen"""
-        if not query:
-            if body.mode == "code":
-                yield _delta("嗨，我是程式家教小基 👨‍🏫 你可以貼上程式碼、或附上 Lab 裡的檔，我陪你一起看。")
-            else:
-                yield _delta("你好，我是平台客服小基 🙂 有什麼平台操作上的問題嗎？")
-            yield "data: [DONE]\n\n"
-            return
-
         # ZH: 檢索（兩種模式都用 KB 接地操作類問題）| EN: retrieve (both modes use KB)
         try:
             ranked = await rag_service.retrieve(db, query)
@@ -129,7 +144,8 @@ async def ask(
             # ZH: 程式家教需登入（guide 維持公開）| EN: code-tutor requires login
             # ZH: 自行從 Authorization header 取 bearer（手動呼叫繞過 oauth2_scheme，
             #     _extract_token 只認注入值或 cookie，故 header 要自己拆）
-            from fastapi import HTTPException
+            # ZH: v3.8 —— HTTPException 已在模組層匯入（見 422 那條守衛），
+            #     這裡原本的區域 import 拿掉。
             _auth = request.headers.get("Authorization", "")
             _bearer = _auth[7:].strip() if _auth[:7].lower() == "bearer " else None
             try:
@@ -147,8 +163,9 @@ async def ask(
                     file_excerpt = res
                 else:
                     reason_msg = {
-                        "lab_not_started": "（讀不到附檔：你的 Lab 尚未啟動，請先到 Notebook 開啟 Lab）",
-                        "lab_not_running": "（讀不到附檔：你的 Lab 容器不在執行中，請先啟動）",
+                        # ZH: v3.8 —— 術語跟上 V1：Notebook 早在 `6e502de` 改名為「程式實驗室」。
+                        "lab_not_started": "（讀不到附檔：你的程式實驗室尚未啟動，請先開啟它）",
+                        "lab_not_running": "（讀不到附檔：你的程式實驗室不在執行中，請先啟動）",
                         "not_found": "（讀不到附檔：找不到這個檔案）",
                         "path_forbidden": "（附檔路徑不被允許）",
                     }.get(res.get("reason"), "（讀不到附檔，先就你的問題一般性回答）")

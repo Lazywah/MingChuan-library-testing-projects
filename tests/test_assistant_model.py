@@ -138,3 +138,48 @@ def test_status_does_not_claim_the_assistant_can_answer(client, db):
     db.commit()
     body2 = client.get("/api/v1/assistant/status").json()
     assert body2["chunks"] == 0 and body2["kb_ready"] is False, body2
+
+
+class TestEmptyQuestionIsAnError:
+    """
+    ZH: 空的提問要回 422，**不可以回一句招呼語**。
+
+    ZH: 🔴 這條的來歷（2026-08-27 稽核）：`/assistant/ask` 遇到空 query 時
+        會回「你好，我是平台客服小基 🙂 有什麼平台操作上的問題嗎？」並結束。
+        於是我送 `{"question": ...}`（正確的欄位名是 `query`）得到 **200 + 招呼語**，
+        一度以為是模型變笨了。
+
+    ZH: 真正的風險在前端：哪天欄位名打錯，症狀會是「小基永遠只會打招呼」——
+        沒有任何錯誤訊息，HTTP 200，看起來一切正常。
+
+    ZH: 拿掉招呼語是查證過的：三個版本的 widget（V0 / V0.5 / V1）都是
+        **自己在本地渲染**那句話（`showGreeting()`），從來沒有人靠空請求去拿它。
+    """
+
+    def test_wrong_field_name_is_rejected_not_greeted(self, client):
+        """ZH: 這就是稽核當時踩到的那一發。"""
+        r = client.post("/api/v1/assistant/ask", json={"question": "怎麼登入？"})
+        assert r.status_code == 422, f"欄位名寫錯卻沒被擋下：{r.status_code} {r.text[:120]}"
+        assert "沒有問題內容" in r.text
+
+    def test_empty_query_is_rejected(self, client):
+        for payload in ({"query": ""}, {"query": "   "}, {"messages": []}, {}):
+            r = client.post("/api/v1/assistant/ask", json=payload)
+            assert r.status_code == 422, f"{payload} → {r.status_code}"
+
+    def test_a_real_question_still_gets_through(self, client, monkeypatch):
+        """
+        ZH: **陽性對照。** 上面那些若是因為「所有請求都 422」而過，就守不住任何東西。
+            這條送一個正常的問題，確認它**不會**被那道守衛擋下。
+
+        ZH: 不需要真的有 Ollama —— 只要確認請求通過了守衛、進到串流階段即可
+            （沒有模型時串流內容會是「AI 服務尚未啟動」，那也是 200）。
+        """
+        r = client.post("/api/v1/assistant/ask", json={"query": "怎麼登入？"})
+        assert r.status_code == 200, r.text[:200]
+
+    def test_question_can_come_from_messages(self, client):
+        """ZH: 契約是「`query` 或 `messages` 至少一個」——後者也要能通過。"""
+        r = client.post("/api/v1/assistant/ask",
+                        json={"messages": [{"role": "user", "content": "怎麼登入？"}]})
+        assert r.status_code == 200, r.text[:200]
