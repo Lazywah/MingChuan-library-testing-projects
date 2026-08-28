@@ -670,6 +670,39 @@ token 存在**它自己 origin（:8888）的 storage**，key 是 `ai_hud_token`�
 而不是留著讓後續請求安靜地退回 cookie 認證 ——
 那會讓身分變成「另一個介面最後登入的那個人」，而畫面上看不出來。
 
+### T24 — 修掉 admin 帳號每次登入都退信的問題
+
+**擁有者指示**：把 `admin` 的 email 改成 `admin@example.com`。
+
+**做了兩件事**（只改一邊會留下復發路徑）：
+
+1. **現有帳號** —— 走管理端 API `PUT /admin/users/{id}`（不是直接改 DB，
+   那條路徑有驗證也會留稽核紀錄）。`is_admin` / `role` / `is_active` 都沒被動到。
+2. **`.env` 的 `BOOTSTRAP_ADMIN_EMAIL`** —— 原本是 `admin@local`。
+   ⚠️ 那個**一樣會退信**：`.local` 是 mDNS（RFC 6762），
+   **不在** `send_email` 的保留網域清單裡，照樣會嘗試投遞。
+   若哪天所有 admin 都不見了、bootstrap 重建帳號，問題就會原封不動回來。
+
+**閘門實測**：
+
+| 地址 | 會被擋下 |
+|---|---|
+| `admin@example.com` | ✅ True |
+| `admin@local` | ❌ False ← 原本 .env 的值 |
+| `admin@school.edu.tw` | ❌ False ← 原本帳號的值 |
+
+**端對端驗證**（走真實的 `send_login_alert`，不 mock）：
+
+```
+新紀錄: admin@example.com | kind=login_alert | status=blocked
+detail: reserved domain (RFC 2606/6761)
+```
+
+從 `sent → 稍後 bounced` 變成 **`blocked`（連投遞都不嘗試）**。
+
+> 這一條在管理端的寄信紀錄頁上看得到成效：改之前 `admin@school.edu.tw`
+> 從 8/27 10:57 一路退到 8/28 06:08，每次管理員登入一筆。
+
 ---
 
 ## 3. 發現的問題
@@ -753,5 +786,5 @@ token 存在**它自己 origin（:8888）的 storage**，key 是 `ai_hud_token`�
 | 4 | `.inline-error` 被當成通用訊息容器 | 整站一致性問題，要改就一起改 |
 | 5 | `myai_apply_guide_url` 目前是 `https://guide.example/apply` | `.example` 是保留 TLD，**使用者點下去連不到任何地方**。要填真的網址或清空 |
 | 6 | 我在正式 DB 留了一筆測試問題回報（id=1） | 你可以標成已解決或忽略 |
-| 7 | 🔴 **`admin` 帳號的 email 是 `admin@school.edu.tw`，網域不存在（NXDOMAIN）** | **每一次管理員登入都製造一封必退信件**，退信回到平台寄件信箱。改成真實信箱、或改成 `@example.com`（RFC 保留網域，`send_email` 會直接擋）。這是帳號資料，我不動 |
+| ~~7~~ | ~~`admin` 帳號的 email 網域不存在~~ | ✅ **已處理**（擁有者 2026-08-28 指示）：改成 `admin@example.com`，並同步改 `.env` 的 `BOOTSTRAP_ADMIN_EMAIL`。詳見 T24 |
 | 8 | `.env` 缺 9 個範本 key（5 個 `IMAP_*` + 4 個 registry） | **不影響現況**（IMAP 靠推導、registry 是 opt-in），但 `deploy_check` 會一直黃燈。要補跑 `python scripts/setup_env.py --check` |
