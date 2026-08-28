@@ -26,14 +26,27 @@ function authHeaders() {
 
 // ZH: stuck=true 時順便把「回報給我們」那一行打開。
 //     預設 false —— 「已確認／逾期」不是故障，給回報入口只會製造無效工單。
-function showMsg(text, stuck) {
+function paintMsg(text, cls, stuck) {
     var box = $('stuck');
     if (box) box.hidden = !stuck;
     $('msg').textContent = text;
+    $('msg').className = cls;
     $('msg').hidden = false;
     $('card').hidden = true;
     $('how').hidden = true;
 }
+
+// ZH: 錯誤（紅框）—— 這一頁只有「讀不到開通狀態」算錯誤。
+function showMsg(text, stuck) { paintMsg(text, 'inline-error', stuck); }
+
+// ZH: 正常狀態與成功 —— **不是紅的**。
+//     🔴 這一頁四種訊息裡有三種不是錯誤（還在開通中、已確認／逾期、已清除密碼），
+//     之前全部用錯誤樣式顯示。「你的帳號還在開通中」配紅底紅字，
+//     讀起來像是開通失敗了。
+//
+// ZH: ⚠ stuck 與顏色是**兩件不同的事**，不要合併：「還在開通中」不是錯誤
+//     （所以中性底），但使用者在這裡確實沒有下一步可走（所以要給回報入口）。
+function showNote(text, stuck) { paintMsg(text, 'inline-note', stuck); }
 
 // ── 載入 ─────────────────────────────────────────────────────────────
 async function load() {
@@ -57,12 +70,12 @@ async function load() {
     if (!d.provisioned) {
         // ZH: 首頁的「問 AI」在未開通時會把人帶到這裡（擁有者裁定 2026-08-24）。
         //     所以這一支不只是「沒密碼可看」，而是他**本來想問 AI 卻問不了**。
-        return showMsg(T('prov_pending', '你的 MYAI 帳號還在開通中，目前還沒有初始密碼。')
+        return showNote(T('prov_pending', '你的 MYAI 帳號還在開通中，目前還沒有初始密碼。')
             + T('prov_after', '開通完成後回到首頁就會看到提示。'), true);
     }
     if (!d.initial_password) {
         // ZH: 這兩種原因在後端是同一個結果（密碼為 null），前端**不要猜**是哪一種。
-        return showMsg(T('prov_none', '目前沒有可顯示的初始密碼——你已經確認過，或是保留期已過。')
+        return showNote(T('prov_none', '目前沒有可顯示的初始密碼——你已經確認過，或是保留期已過。')
             + T('prov_forgot', '若忘記密碼，請在 MYAI 平台用忘記密碼功能重設。'));
     }
 
@@ -104,7 +117,7 @@ $('ack').addEventListener('click', async () => {
                                   { method: 'POST', headers: authHeaders() });
             if (!r.ok) throw new Error(`HTTP ${r.status}`);
         }
-        showMsg(T('prov_cleared', '已清除暫存的初始密碼。之後這裡不會再顯示它。'));
+        showNote(T('prov_cleared', '已清除暫存的初始密碼。之後這裡不會再顯示它。'));
     } catch (e) {
         btn.disabled = false;
         btn.textContent = T('prov_ack', '我已經改好密碼了');

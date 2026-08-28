@@ -24,12 +24,20 @@ function authHeaders() {
     return t ? { Authorization: 'Bearer ' + t } : {};
 }
 
-function showMsg(text) {
+function paintMsg(text, cls) {
     $('msg').textContent = text;
+    $('msg').className = cls;
     $('msg').hidden = false;
     $('list').textContent = '';
     $('more').hidden = true;
 }
+
+// ZH: 錯誤（紅框）
+function showMsg(text) { paintMsg(text, 'inline-error'); }
+// ZH: 空狀態／正常狀態／成功 —— 與錯誤共用同一個框，但**不是紅的**。
+//     🔴 這兩支之前是同一支：「文件庫還沒有內容」「已清除暫存的初始密碼」
+//     都用錯誤樣式顯示，看起來像出事了。
+function showNote(text) { paintMsg(text, 'inline-note'); }
 
 // ZH: 時間一律走 tz.js（釘死 Asia/Taipei）——見該檔檔頭的兩個問題。
 function fmtDate(iso) {
@@ -100,7 +108,7 @@ async function load() {
             list = await r.json();
         }
         if (!Array.isArray(list) || !list.length) {
-            return showMsg(T('news_empty', '目前沒有公告。'));
+            return showNote(T('news_empty', '目前沒有公告。'));
         }
         render(list);
         $('msg').hidden = true;

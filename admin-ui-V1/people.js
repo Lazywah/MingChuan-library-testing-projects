@@ -661,6 +661,10 @@
     function say(id, text) {
         var el = $(id);
         el.textContent = text;
+        // ZH: 這個容器兩用 —— 預設回到錯誤樣式，成功訊息由 flash() 換過去。
+        //     每次都重設，否則上一則成功訊息的中性底會留給下一則錯誤訊息。
+        el.classList.remove('inline-note');
+        el.classList.add('inline-error');
         el.hidden = !text;
     }
 
@@ -673,6 +677,12 @@
     var _flashTimers = {};
     function flash(id, text, ms) {
         say(id, text);
+        // ZH: 成功訊息不要用紅底 —— say() 剛把它設成錯誤樣式，這裡換掉。
+        var okEl = $(id);
+        if (okEl) {
+            okEl.classList.remove('inline-error');
+            okEl.classList.add('inline-note');
+        }
         // ZH: 舊的計時器一定要取消。不取消的話，上一次的計時器會在幾秒後
         //     把**新的**訊息清掉——包含錯誤訊息。
         clearTimeout(_flashTimers[id]);

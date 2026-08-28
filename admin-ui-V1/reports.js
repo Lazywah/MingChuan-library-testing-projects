@@ -72,6 +72,10 @@
         var el = $(id);
         if (!el) return;
         el.textContent = text;
+        // ZH: 這個容器兩用 —— 預設回到錯誤樣式，成功訊息由 flash() 換過去。
+        //     每次都重設，否則上一則成功訊息的中性底會留給下一則錯誤訊息。
+        el.classList.remove('inline-note');
+        el.classList.add('inline-error');
         el.hidden = !text;
     }
 
@@ -79,6 +83,12 @@
     var _timers = {};
     function flash(id, text, ms) {
         say(id, text);
+        // ZH: 成功訊息不要用紅底 —— say() 剛把它設成錯誤樣式，這裡換掉。
+        var okEl = $(id);
+        if (okEl) {
+            okEl.classList.remove('inline-error');
+            okEl.classList.add('inline-note');
+        }
         clearTimeout(_timers[id]);
         _timers[id] = setTimeout(function () {
             var el = $(id);

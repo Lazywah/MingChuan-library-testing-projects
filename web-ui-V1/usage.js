@@ -53,11 +53,19 @@ function tok(name) {
 
 const num = (v) => Number(v || 0).toLocaleString();
 
-function showMsg(text) {
+function paintMsg(text, cls) {
     $('msg').textContent = text;
+    $('msg').className = cls;
     $('msg').hidden = false;
     $('content').hidden = true;
 }
+
+// ZH: 錯誤（紅框）
+function showMsg(text) { paintMsg(text, 'inline-error'); }
+// ZH: 空狀態／正常狀態／成功 —— 與錯誤共用同一個框，但**不是紅的**。
+//     🔴 這兩支之前是同一支：「文件庫還沒有內容」「已清除暫存的初始密碼」
+//     都用錯誤樣式顯示，看起來像出事了。
+function showNote(text) { paintMsg(text, 'inline-note'); }
 
 // ── 層級 1：額度（與首頁同一套語彙）────────────────────────────────────
 // ZH: v3.8 #9 —— 這一頁在此之前**完全沒有低額度提示**。
@@ -232,11 +240,11 @@ async function load() {
         renderBalance(d.account, bal);
 
         if (!d.bound) {
-            return showMsg(T('usage_unbound', '你的 AI 帳號還沒綁定，所以還沒有使用紀錄。第一次前往 MYAI 使用後，這裡就會有資料。'));
+            return showNote(T('usage_unbound', '你的 AI 帳號還沒綁定，所以還沒有使用紀錄。第一次前往 MYAI 使用後，這裡就會有資料。'));
         }
         const s = d.summary || {};
         if (!(s.uses > 0) && !(s.logins > 0)) {
-            return showMsg(DAYS === 0
+            return showNote(DAYS === 0
                 ? T('usage_none_ever', '目前還沒有任何使用紀錄。')
                 : T('usage_none_range', '近 {d} 天沒有使用紀錄。可以切到「全部」看看更早的。').replace('{d}', DAYS));
         }

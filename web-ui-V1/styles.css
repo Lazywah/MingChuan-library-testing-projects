@@ -477,14 +477,34 @@ body {
 }
 .lang-switch button:focus-visible { outline: var(--focus-ring); outline-offset: -2px; }
 
-/* ── 錯誤區塊（部分失敗不整頁死）──────────────────────────────── */
-.inline-error {
+/* ── 行內訊息區塊（部分失敗不整頁死）────────────────────────────
+   ZH: 兩個變體共用同一個框，只有顏色不同。**容器不換、只換 class** ——
+       `.inline-error` 出現在 40 個地方，換掉基底 class 要動那 40 處
+       而使用者看不出差別。
+
+   ZH: 🔴 2026-08-28 之前只有 `.inline-error` 一種，於是「已儲存」「已複製」
+       「目前沒有公告」這類**成功與空狀態訊息也是紅字紅底** —— 看起來像出事了。
+       管理端的 `flash()`（註解明寫「只給成功訊息用」）與使用者端的空狀態
+       全部中招，共 21 處。
+
+   ZH: 成功用 `--accent-soft` 而不是自己發明一個綠色：這份設計的語意色
+       只有 warn 與 error，調性是低飽和；accent-soft 是它自己的正向強調色，
+       而且會跟著色系切換。實算對比 `--text` 對黃 6.92、對藍 6.67，
+       都比錯誤樣式現有的 5.72 好。 */
+.inline-error,
+.inline-note {
     font-size: 0.875rem;
-    color: var(--error);
-    background-color: var(--error-soft);
     border-radius: var(--radius-sm);
     padding: var(--space-2) var(--space-3);
     margin-top: var(--space-2);
+}
+.inline-error {
+    color: var(--error);
+    background-color: var(--error-soft);
+}
+.inline-note {
+    color: var(--text);
+    background-color: var(--accent-soft);
 }
 
 /* ── 色系切換（開發期展示用；上線擇一後可移除）─────────────────── */
@@ -696,8 +716,11 @@ details[open] > .fold__summary::before { transform: rotate(90deg); }
 /* ZH: .hint 的字級 0.8rem 會被 .btn--minor 的 font:inherit 繼承下去，
  *     按鈕字會比別頁小一號。給它自己的字級，不跟著容器縮。 */
 .hint .btn--minor { font-size: 0.875rem; margin-top: var(--space-2); }
-/* ZH: 空狀態的引導按鈕（文件庫的 #msg 用 .inline-error）——補間距。 */
-.inline-error .btn--minor { margin-top: var(--space-3); }
+/* ZH: 空狀態的引導按鈕（文件庫的 #msg）——補間距。
+   ZH: ⚠ 兩個變體都要列 —— 文件庫的空狀態 2026-08-28 起是 `.inline-note`，
+       只寫 `.inline-error` 的話那顆按鈕會貼著上一行。 */
+.inline-error .btn--minor,
+.inline-note .btn--minor { margin-top: var(--space-3); }
 
 .hint {
     font-size: 0.8rem;
