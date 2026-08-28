@@ -48,6 +48,9 @@ logger = logging.getLogger(__name__)
 
 # ZH: IMAP 進度游標存 SystemConfig（跨重啟保留，避免每次重掃整個信箱）
 CURSOR_KEY = "bounce_imap_cursor"      # 格式 "<UIDVALIDITY>:<lastUID>"
+# ZH: v3.8 上次掃描的結果，給管理端顯示「它還活著」用。
+#     格式 "<ISO 時間>|<scanned>|<bounces>|<applied>"
+LAST_SCAN_KEY = "bounce_last_scan"
 
 # ZH: 常見的退信寄件者 local-part（大小寫不拘）
 _DAEMON_SENDERS = ("mailer-daemon", "postmaster", "mail-daemon", "mailerdaemon")
@@ -390,6 +393,15 @@ def scan_bounces(db: Session, max_messages: int = 200) -> dict:
 
         if max_seen > last_uid and uidvalidity:
             crud.set_system_config(db, CURSOR_KEY, f"{uidvalidity}:{max_seen}")
+
+        # ZH: v3.8 —— 記下這次掃描，讓管理端看得到「它還活著」。
+        # ZH: 🔴 **成功掃到 0 封也要寫**。只在有退信時才寫的話，
+        #     「一直沒有退信」與「根本沒在跑」在畫面上長得一模一樣 ——
+        #     而那正是 2026-08-27 稽核時它停了 40 分鐘沒人發現的原因。
+        crud.set_system_config(
+            db, LAST_SCAN_KEY,
+            f"{datetime.now(timezone.utc).isoformat()}|{scanned}|{bounces}|{applied}",
+        )
     finally:
         try:
             M.logout()

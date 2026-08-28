@@ -197,17 +197,47 @@
     }
 
     // ── 寄信紀錄 ──────────────────────────────────────────────────────────
+    // ZH: 把 "<ISO>|scanned|bounces|applied" 轉成一句人話。
+    //     空字串＝服務啟動後還沒掃過（與「掃過但沒東西」是兩件事，不能混）。
+    function bounceLine(b) {
+        if (!b) return '';
+        if (!b.enabled) {
+            return '<p class="footnote">' + esc(T('rp_bounce_off',
+                '退信回收：未啟用。寄給不存在信箱的信會永遠停在「已交付」，看不出來。'))
+                + '</p>';
+        }
+        var when = T('rp_bounce_never', '尚未掃描過');
+        if (b.last_scan) {
+            var p = String(b.last_scan).split('|');
+            when = (TW.when(p[0]) || p[0])
+                + '（' + T('rp_bounce_counts', '讀 {s} 封、退信 {b} 封、回填 {a} 筆')
+                    .replace('{s}', p[1] || 0).replace('{b}', p[2] || 0).replace('{a}', p[3] || 0) + '）';
+        }
+        return '<p class="footnote">'
+            + esc(T('rp_bounce_on', '退信回收：{h} · {f} · 每 {m} 分鐘 · 最後一次 {w}')
+                .replace('{h}', b.host).replace('{f}', b.folder)
+                .replace('{m}', b.interval_minutes).replace('{w}', when))
+            + '</p>';
+    }
+
     async function loadMail() {
-        var rows;
+        var data;
         try {
-            rows = await api('/admin/email-log?limit=50');
+            data = await api('/admin/email-log?limit=50');
         } catch (e) {
             $('mail').innerHTML = '<p class="footnote">'
                 + esc(T('ov_fail_part', '這一段暫時讀不到（{w}）').replace('{w}', e.message)) + '</p>';
             return;
         }
+        // ZH: 🔴 這支端點回的是**物件** `{counts, smtp_configured, from_email, bounce, logs}`，
+        //     不是陣列。原本直接對它做 `rows.length` —— undefined 恆為 falsy，
+        //     於是**不論有幾筆紀錄都顯示「沒有寄信紀錄。」**，而且不會有任何錯誤。
+        //     （端點在 `14fbddd` 就改成物件了，前端一直沒跟上。）
+        var rows = (data && data.logs) || [];
+        var head0 = bounceLine(data && data.bounce);
         if (!rows.length) {
-            $('mail').innerHTML = '<p class="footnote">' + esc(T('rp_mail_none', '沒有寄信紀錄。')) + '</p>';
+            $('mail').innerHTML = head0
+                + '<p class="footnote">' + esc(T('rp_mail_none', '沒有寄信紀錄。')) + '</p>';
             return;
         }
         var head = [
@@ -215,7 +245,8 @@
             ['rp_m_status', '結果'], ['rp_m_when', '時間'],
         ];
         $('mail').innerHTML =
-            '<p class="footnote">' + esc(T('rp_mail_hint', '')) + '</p>'
+            head0
+            + '<p class="footnote">' + esc(T('rp_mail_hint', '')) + '</p>'
             + '<div class="adm-tablewrap"><table class="adm-table"><thead><tr>'
             + head.map(function (h) { return '<th>' + esc(T(h[0], h[1])) + '</th>'; }).join('')
             + '</tr></thead><tbody>'

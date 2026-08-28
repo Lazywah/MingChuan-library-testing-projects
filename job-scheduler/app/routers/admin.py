@@ -207,6 +207,37 @@ def revoke_profile_unlock(
     return {"revoked": True, "fields": [f for f in (row.fields or "").split(",") if f]}
 
 
+def _bounce_status(db) -> dict:
+    """
+    ZH: 退信回收現在的狀態 —— 給管理端顯示用，**不做任何連線**。
+
+    ZH: 這裡刻意只回「設定推導出來的結果」與「上次掃描的紀錄」，
+        不當場去連 IMAP —— 一個顯示用的端點不該因為外部服務掛掉就卡住
+        （小基的 status 端點也是同一個原則）。
+
+    ZH: `host` 是空字串就代表**停用**。它預設由 SMTP 主機推導，
+        所以管理者改一次 SMTP 就可能連帶把退信回收關掉，而且完全不報錯 ——
+        這一行的存在就是為了讓那件事在畫面上看得見。
+
+    @node job-scheduler/app/routers/admin.py::_bounce_status
+    """
+    from ..services import bounce_reader
+    try:
+        cfg = bounce_reader.imap_config(db)
+    except Exception:  # noqa: BLE001 - 顯示用，取不到就當停用
+        cfg = {}
+    last = crud.get_system_config(db, "bounce_last_scan", "") or ""
+    return {
+        "host": cfg.get("host") or "",
+        "folder": cfg.get("folder") or "",
+        "enabled": bool(cfg.get("host") and cfg.get("user") and cfg.get("password")),
+        "interval_minutes": crud.get_setting(db, "bounce_scan_minutes"),
+        # ZH: 格式 "<ISO 時間>|<scanned>|<bounces>|<applied>"，由 scan_bounces 寫入。
+        #     空字串＝服務啟動後還沒掃過（不是「掃過但沒東西」——那兩件事要分得出來）。
+        "last_scan": last,
+    }
+
+
 @router.get("/email-log", summary="寄信紀錄（誰、何時、結果）")
 def get_email_log(
     limit: int = Query(200, ge=1, le=1000),
@@ -239,6 +270,16 @@ def get_email_log(
         #     顯示 .env 的舊值會讓他以為沒存到，然後再存一次。
         "smtp_configured": bool(_smtp_cfg["server"]),
         "from_email": _smtp_cfg["from_email"],
+        # ZH: v3.8 —— 退信回收的狀態。
+        #
+        # ZH: 為什麼要放在這一頁：退信回收是「這封信到底送到了沒」的**唯一事實來源**，
+        #     但它在介面上完全看不見。2026-08-27 稽核時它停了 40 分鐘
+        #     （SMTP 主機被改成推導不出 IMAP 的值），而我是靠翻容器日誌才發現的 ——
+        #     管理者不會去翻容器日誌。
+        #
+        # ZH: `host` 空字串＝停用。IMAP 主機**預設由 SMTP 推導**，
+        #     所以改了 SMTP 就可能連帶把它關掉，這一行讓那件事看得見。
+        "bounce": _bounce_status(db),
         "logs": [{
             "id": r.id, "to_email": r.to_email, "username": r.username,
             "kind": r.kind, "subject": r.subject, "status": r.status,

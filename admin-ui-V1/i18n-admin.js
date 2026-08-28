@@ -425,6 +425,10 @@
 
         rp_mail: '寄信紀錄',
         rp_mail_none: '沒有寄信紀錄。',
+        rp_bounce_on: '退信回收：{h} · {f} · 每 {m} 分鐘 · 最後一次 {w}',
+        rp_bounce_off: '退信回收：未啟用。寄給不存在信箱的信會永遠停在「已交付」，看不出來。',
+        rp_bounce_never: '尚未掃描過',
+        rp_bounce_counts: '讀 {s} 封、退信 {b} 封、回填 {a} 筆',
         rp_m_to: '收件者',
         rp_m_kind: '種類',
         rp_m_status: '結果',
@@ -917,6 +921,10 @@
 
         rp_mail: 'Mail log',
         rp_mail_none: 'No mail has been sent.',
+        rp_bounce_on: 'Bounce collection: {h} · {f} · every {m} min · last run {w}',
+        rp_bounce_off: 'Bounce collection: off. Mail to non-existent addresses will sit at "delivered" forever.',
+        rp_bounce_never: 'not scanned yet',
+        rp_bounce_counts: 'read {s}, bounces {b}, back-filled {a}',
         rp_m_to: 'To',
         rp_m_kind: 'Kind',
         rp_m_status: 'Result',

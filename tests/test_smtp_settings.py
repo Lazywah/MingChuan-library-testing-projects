@@ -264,3 +264,47 @@ class TestSchedulerAlertHelperNeverRaises:
             raise RuntimeError("寄信炸了")
         monkeypatch.setattr(email_service, "send_admin_alert", _boom)
         scheduler._alert("myai_sync", "標題", "細節")   # ZH: 不該拋出來
+
+
+class TestBounceStatusOnEmailLog:
+    """
+    ZH: `/admin/email-log` 要回報退信回收的狀態。
+
+    ZH: 🔴 為什麼：退信回收是「這封信到底送到了沒」的**唯一事實來源**，
+        但它在介面上完全看不見。2026-08-27 稽核時它停了 40 分鐘
+        （SMTP 主機被改成推導不出 IMAP 的值），是靠翻容器日誌才發現的 ——
+        管理者不會去翻容器日誌。
+    """
+
+    @pytest.fixture
+    def adm(self, client, db):
+        """ZH: 建一個管理員並登入 —— 這個檔原本沒有現成的管理員 fixture。"""
+        from conftest import make_user, auth_headers
+        make_user(db, username="admin", email="admin@example.com", role="admin")
+        return auth_headers(client, "admin", "password123")
+
+    def test_email_log_reports_bounce_status(self, client, adm):
+        body = client.get("/api/v1/admin/email-log?limit=1", headers=adm).json()
+        assert "bounce" in body, "寄信紀錄要一起回報退信回收的狀態"
+        b = body["bounce"]
+        for k in ("host", "folder", "enabled", "interval_minutes", "last_scan"):
+            assert k in b, f"缺少 {k}"
+
+    def test_bounce_is_reported_off_when_imap_cannot_be_derived(self, client, db, adm):
+        """
+        ZH: IMAP 主機**預設由 SMTP 推導**，所以管理者改一次 SMTP 就可能
+            連帶把退信回收關掉 —— 而且完全不報錯。這個測試釘住「關掉時要說」。
+
+        ZH: 這不是假設：稽核時我把 SMTP 改成 `127.0.0.1`（不是 `smtp.` 開頭），
+            退信回收就停了，而畫面上看不出來。
+        """
+        crud.set_settings(db, {"smtp_server": "127.0.0.1"})
+        body = client.get("/api/v1/admin/email-log?limit=1", headers=adm).json()
+        assert body["bounce"]["host"] == "", body["bounce"]
+        assert body["bounce"]["enabled"] is False
+
+    def test_bounce_is_reported_on_for_a_derivable_host(self, client, db, adm):
+        """ZH: **陽性對照** —— 上面那條若是因為「永遠回 off」而過，就證明不了什麼。"""
+        crud.set_settings(db, {"smtp_server": "smtp.example.com"})
+        body = client.get("/api/v1/admin/email-log?limit=1", headers=adm).json()
+        assert body["bounce"]["host"] == "imap.example.com", body["bounce"]
