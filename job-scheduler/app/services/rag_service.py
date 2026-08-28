@@ -169,9 +169,12 @@ GUIDE_SYSTEM_PROMPT = """你是「銘傳大學圖書館 AI 基地」平台的線
 
 # 回答規則
 1. 只根據下方「平台知識」內容回答。知識沒提到的，就誠實說「這部分我不確定，建議聯絡管理員或到問題回報」，不要編造。
-2. 用繁體中文、親切口語、條列步驟回答；操作類問題請給「一步一步」的指引。
-3. 回答精簡，先給結論/步驟，必要時再補充。不要長篇大論。
-4. 若使用者問的與本平台無關（例如寫作業、寫程式），禮貌說明你是平台客服，並引導他到對應功能（例如「AI 助手」分頁的文字聊天）。
+2. **用使用者提問的那個語言回答**（他用英文問就用英文答，日文問就用日文答）。
+   ⚠ 用中文回答時**一律繁體中文，不可以出現簡體字**。
+   知識庫是中文寫的，但那只是資料 —— 不要因為資料是中文就改用中文回答。
+3. 親切口語、條列步驟；操作類問題請給「一步一步」的指引。
+4. 回答精簡，先給結論/步驟，必要時再補充。不要長篇大論。
+5. 若使用者問的與本平台無關（例如寫作業、寫程式），禮貌說明你是平台客服，並引導他到對應功能（例如「AI 助手」分頁的文字聊天）。
 
 # 平台知識（檢索自官方文件，這是你唯一的事實來源）
 {context}
@@ -179,7 +182,8 @@ GUIDE_SYSTEM_PROMPT = """你是「銘傳大學圖書館 AI 基地」平台的線
 
 GUIDE_NO_CONTEXT_PROMPT = """你是「銘傳大學圖書館 AI 基地」平台的線上客服助手「小基」。
 目前知識庫尚未建立或查無相關資料。請禮貌告知使用者：你暫時找不到對應的說明，
-建議他到「問題回報」或聯絡管理員。用繁體中文、親切口語回答，不要編造平台功能。"""
+建議他到「問題回報」或聯絡管理員。不要編造平台功能。
+**用使用者提問的那個語言回答**；用中文時一律繁體，不可以出現簡體字。"""
 
 
 # ZH: v2.6 程式家教模式人格（用於 Notebook/Lab 的程式指導）。
@@ -192,7 +196,8 @@ CODE_TUTOR_SYSTEM_PROMPT = """你是「銘傳大學圖書館 AI 基地」的程�
 # 教學風格
 1. 像家教，不是答案機：先點出問題所在與「為什麼」，引導學生思考，再給可執行的修正。
 2. 看得到學生附上的程式碼時，針對該檔具體說明（指出行為、錯誤原因、改法）；附上修正後的關鍵片段即可，不用整份重貼。
-3. 用繁體中文、親切清楚；程式碼用 ``` 區塊。先講重點，必要時再延伸。
+3. **用學生提問的那個語言回答**；用中文時一律繁體，不可以出現簡體字。
+   親切清楚；程式碼用 ``` 區塊。先講重點，必要時再延伸。
 4. 若問題其實是「平台怎麼操作」（如怎麼開 Lab、裝套件、提交運算任務），改用下方「平台知識」回答或引導對應功能。
 5. 不確定就老實說，不要編造 API 或平台功能。
 
@@ -328,6 +333,70 @@ async def retrieve(db: Session, query: str) -> list[dict]:
     return rank_chunks(qvec, candidates, top_k, min_score)
 
 
+# ==============================================================================
+# ZH: 回答語言 —— 伺服器端判定，不靠模型自己看
+# ==============================================================================
+# ZH: 🔴 為什麼需要這個：提示詞裡已經寫了「用使用者提問的那個語言回答」，
+#     但實測 qwen2.5:7b **問英文照樣用中文回答**（日文問句它倒是守住了）。
+#     失敗模式很一致 —— 檢索到的知識庫全是中文，模型被上下文帶著走，
+#     預設回中文。這對國際學生是實質障礙：他問英文，得到一整段看不懂的中文。
+#
+# ZH: 所以判定改在伺服器端做，並把結論**當成一條硬指令**塞進 system prompt。
+#     只判「是不是中文」這一件事就夠 —— 真正要壓的是「不要預設回中文」，
+#     至於他講的是英文、越南文還是印尼文，交給模型照抄提問語言即可
+#     （列舉語言清單一定會漏，而漏掉的那個人只會拿到中文）。
+#
+# ZH: ⚠ 判定看**書寫系統**不看字詞：假名／諺文出現就不是中文；
+#     完全沒有 CJK 漢字也不是中文。中日文都用漢字，所以假名要先判。
+_KANA_HANGUL = re.compile(r"[぀-ヿ가-힯]")
+_HAN = re.compile(r"[一-鿿]")
+
+
+def is_chinese_query(text: str) -> bool:
+    """
+    ZH: 這句提問是不是中文。
+
+    ZH: 規則：有假名或諺文 → 不是中文（日／韓）；否則有漢字 → 是中文；
+        都沒有 → 不是中文（英文與其他拉丁語系、泰文、俄文…）。
+
+    @node job-scheduler/app/services/rag_service.py::is_chinese_query
+    """
+    t = text or ""
+    if _KANA_HANGUL.search(t):
+        return False
+    return bool(_HAN.search(t))
+
+
+def language_directive(query: str) -> str:
+    """
+    ZH: 依提問語言回傳一行要插進 system prompt 的硬指令。
+
+    ZH: 中文時只需要釘住「繁體」；非中文時要**明確擋掉「回中文」**這個預設行為。
+
+    ZH: 🔴 **這條指令目前對 `qwen2.5:7b` 沒有作用，不要以為它有效。**
+        2026-08-28 實測：英文提問 8 次（四種擺放位置 × 2 次）**全部**用中文回答；
+        連把整段檢索上下文換成英文也一樣 —— 所以不是「被中文上下文帶著走」，
+        是**模型本身壓不住**。同一組測試 `llama3` 2/2 用英文回答。
+        擺放位置的四種比較見 scripts/bench_reply_language.py。
+
+    ZH: 那為什麼還留著：對中文提問它確實有用（釘住繁體），而且換掉 RAG_CHAT_MODEL
+        之後就會生效。拿掉的話換模型的人還要回頭把它加回來。
+
+    @node job-scheduler/app/services/rag_service.py::language_directive
+    """
+    if is_chinese_query(query):
+        return ("\n\n# 回答語言（最高優先）\n"
+                "使用者用中文提問 → 用**繁體中文**回答。**不可以出現簡體字。**")
+    return ("\n\n# 回答語言（最高優先）\n"
+            "The user did NOT ask in Chinese. You MUST reply in exactly the same "
+            "language as the user's question. Do NOT reply in Chinese, even though "
+            "the platform knowledge below is written in Chinese — that is reference "
+            "data, not the language to answer in. Keep on-screen button and page "
+            "names in their original Chinese, followed by an English gloss in "
+            "parentheses the first time each one appears.\n"
+            "使用者不是用中文問的 → 一律用他提問的那個語言回答，不要回中文。")
+
+
 def build_messages(query: str, ranked: list[dict], history: list[dict] | None = None,
                    history_turns: int | None = None) -> list[dict]:
     """
@@ -342,6 +411,8 @@ def build_messages(query: str, ranked: list[dict], history: list[dict] | None = 
         system = GUIDE_SYSTEM_PROMPT.format(context=build_context_block(ranked))
     else:
         system = GUIDE_NO_CONTEXT_PROMPT
+    # ZH: 語言指令的擺放位置由 scripts/bench_reply_language.py 的實測決定，見該檔。
+    system += language_directive(query)
 
     turns = history_turns if history_turns is not None else settings.RAG_HISTORY_TURNS
     msgs = [{"role": "system", "content": system}]
@@ -376,6 +447,8 @@ def build_code_messages(
 
     context = build_context_block(ranked) if ranked else "（無相關平台說明）"
     system = CODE_TUTOR_SYSTEM_PROMPT.format(file_block=file_block, context=context)
+    # ZH: 家教模式同樣要跟著提問語言 —— 國際學生也會用這一邊。
+    system += language_directive(query)
 
     turns = history_turns if history_turns is not None else settings.RAG_HISTORY_TURNS
     msgs = [{"role": "system", "content": system}]
