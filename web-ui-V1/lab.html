@@ -11,6 +11,14 @@
 
     <link rel="stylesheet" href="tokens.css?v=ff9cecda">
     <link rel="stylesheet" href="styles.css?v=4bd632c4">
+    <link rel="stylesheet" href="web.css?v=1594dd84">
+    <!-- ZH: 🔴 側欄狀態必須在**首次繪製之前**套用，否則每換一頁都會看到
+             內容滑出去讓位（widget 的 JS 在 body 尾端才跑，那時已經畫過一次了）。
+             這一段刻意內嵌而不是外部檔案 —— 外部檔案要等網路往返，
+             那段時間頁面就是沒有 padding 的樣子，位移照樣看得到。
+         ZH: 與 CSS 的對應：`html.aibot-docked body { padding-right: … }`。
+             key 與 assistant-widget.js 的 DOCK_KEY 相同，改一邊要改兩邊。 -->
+    <script>try{if(localStorage.getItem('ai_hud_bot_open')!=='0')document.documentElement.classList.add('aibot-docked')}catch(e){}</script>
 </head>
 <body>
 
@@ -83,8 +91,10 @@
 </main>
 
 <script src="tz.js?v=2e214a8b"></script>
-<script src="i18n.js?v=d36d89a7"></script>
+<script src="i18n.js?v=42e137f1"></script>
 <script src="prefs.js?v=a25a96d6"></script>
+<!-- ZH: 小基（浮動助手）。客服模式公開，登入頁也放 —— 設計文件的使用者需求是「不會用這個平台時想直接問」。 -->
+<script src="assistant-widget.js?v=61a7acaa"></script>
 <script src="chrome.js?v=0c8907be"></script>
 <script src="lab.js?v=05a4b051"></script>
 </body>

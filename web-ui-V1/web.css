@@ -1,0 +1,336 @@
+/* ==========================================================================
+ * web.css — 使用者端專屬樣式（V1）
+ *
+ * ZH: 為什麼另開這一支：`styles.css` 是**與管理端逐位元組相同的共用檔**
+ *     （`scripts/check_shared_ui_files.py` 守著）。把只有使用者端會用到的
+ *     樣式塞進去，等於讓管理端也載入一堆永遠用不到的規則，
+ *     而下一個看到的人會以為管理端也有這些元件。
+ *     管理端有 `admin.css` 放專屬樣式，使用者端在此之前沒有對應的檔案。
+ *
+ * ZH: 目前只有小基（浮動助手）。以後其他使用者端專屬的樣式也放這裡。
+ * ========================================================================== */
+
+/* ── 小基：浮動助手 ────────────────────────────────────────────────────
+ * ZH: 2026-08-28 從 V0.5 移植。**沒有沿用 V0.5 的 CSS，是照 V1 的 token 重寫的**：
+ *     V0.5 那份是深色主題（`--bg-solid: #111118`、文字純白），
+ *     直接搬過來會變成淺色平台上掛一個黑色面板。
+ *     class 名稱一個都沒改，所以 JS 不需要跟著動。
+ *
+ * ZH: FAB 原本是寫死的紫色漸層（#6366f1 → #8b5cf6），與平台的黃／藍主題無關。
+ *     改用 `--accent`，切換色系時它會跟著變。
+ * ─────────────────────────────────────────────────────────────────────── */
+
+/* ── 側欄模式（v3.8）────────────────────────────────────────────────
+ * ZH: 擁有者 2026-08-28 裁定：不要小浮窗，要占版面 25~30% 的聊天室。
+ *
+ * ZH: 為什麼不會擠壓內容：`main` 是 `max-width: 720px` 置中，
+ *     實測 2134px 視窗下**左右各空 707px**。側欄開在右邊是用掉本來就空的地方。
+ *     開著時 `body` 加 padding-right，頂部列與內容（都在正常流裡）自己往左讓。
+ *
+ * ZH: 寬度用 clamp：28vw 落在擁有者要的 25~30% 之間，
+ *     但兩端要夾住 —— 超寬螢幕上 30% 會變成一片空白的巨大聊天室，
+ *     視窗窄時又會壓到內容。
+ * ─────────────────────────────────────────────────────────────────── */
+:root { --aibot-w: clamp(340px, 28vw, 560px); }
+
+#aibot-root {
+    position: fixed;
+    right: var(--space-5);
+    bottom: var(--space-5);
+    z-index: 900;          /* ZH: 低於 modal（那些用 1000+），避免蓋住初次設定彈窗 */
+}
+
+/* ZH: 側欄開著時整頁讓位。加 transition 讓它不是瞬間跳掉。
+ *
+ * ZH: 🔴 class 掛在 `<html>` 而不是 `<body>` —— 這是**刻意的**。
+ *     widget 的 JS 在 body 尾端才執行，等它加 class 的時候頁面已經畫好一次了，
+ *     於是每換一頁都會看到內容「滑」出去讓位（擁有者 2026-08-28 回報）。
+ *     改成由 <head> 裡的一小段 inline script 先把 class 加在 <html> 上，
+ *     首次繪製時版面就已經是最終狀態 —— 沒有位移，自然也沒有動畫。
+ *     transition 留著是給**使用者自己開關**時用的，那時候該有動畫。
+ *
+ * ZH: ⚠ 給未來要驗證這一段的人：這條 transition 會讓 `getComputedStyle`
+ *     與 `getBoundingClientRect` 在轉場的那 0.18 秒內**回傳起始值**。
+ *     我在做這個功能時被它騙了六次 —— 一路以為「padding 沒生效、側欄蓋到內容」，
+ *     連注入 `!important` 都還是讀到 0px。
+ *     量之前先 `el.style.transition = 'none'` 再強制一次 reflow，才會讀到真值。
+ */
+html.aibot-docked body { padding-right: var(--aibot-w); }
+body { transition: padding-right 0.18s ease; }
+
+@media (prefers-reduced-motion: reduce) {
+    body { transition: none; }
+}
+
+/* ── 泡泡按鈕 ───────────────────────────────────────────────────────── */
+#aibot-fab {
+    width: 56px;
+    height: 56px;
+    border-radius: var(--radius-pill);
+    border: 1px solid var(--hairline);
+    cursor: pointer;
+    background-color: var(--accent);
+    color: var(--surface);
+    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.18);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 24px;
+    line-height: 1;
+    transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+#aibot-fab:hover { transform: translateY(-2px); box-shadow: 0 10px 24px rgba(0, 0, 0, 0.22); }
+#aibot-fab:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+/* ZH: 面板開著時泡泡換成關閉的樣子（JS 會加 .aibot-open）。 */
+#aibot-fab.aibot-open { background-color: var(--surface-2); color: var(--text-strong); }
+.aibot-fab-icon { pointer-events: none; }
+
+/* ── 面板 ───────────────────────────────────────────────────────────── */
+/* ZH: 側欄本體 —— 貼右滿高。不是浮窗，所以不要圓角與大陰影，
+ *     只留左邊一條分隔線，看起來像頁面的一部分。 */
+#aibot-panel {
+    position: fixed;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    width: var(--aibot-w);
+    display: flex;
+    flex-direction: column;
+    background-color: var(--surface);
+    border-left: 1px solid var(--hairline);
+    overflow: hidden;
+}
+
+/* ZH: 側欄開著的時候不需要泡泡 —— 面板自己有關閉鈕，
+ *     兩個都在會讓「現在到底開著沒」變得含糊。 */
+html.aibot-docked #aibot-fab { display: none; }
+/* ZH: `.aibot-hidden` 是這個 widget 通用的隱藏 class（面板、檔案清單、附檔 chip 都用）。
+ *     用 !important 的理由與 `[hidden]` 那條相同：作者寫的任何 display 宣告
+ *     都會贏過沒有 !important 的規則，於是「該隱藏卻看得見」。 */
+.aibot-hidden { display: none !important; }
+
+/* ── 抬頭 ───────────────────────────────────────────────────────────── */
+.aibot-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-2);
+    padding: var(--space-3);
+    border-bottom: 1px solid var(--hairline);
+    background-color: var(--surface-2);
+}
+.aibot-title { display: flex; align-items: center; gap: var(--space-2); }
+.aibot-title strong { display: block; font-size: 0.95rem; color: var(--text-strong); }
+.aibot-title small { display: block; font-size: 0.75rem; color: var(--text-muted); }
+.aibot-avatar { font-size: 22px; line-height: 1; }
+
+#aibot-close {
+    border: 0;
+    background: none;
+    cursor: pointer;
+    font-size: 1rem;
+    line-height: 1;
+    padding: var(--space-1) var(--space-2);
+    color: var(--text-muted);
+    border-radius: var(--radius-sm);
+}
+#aibot-close:hover { color: var(--text-strong); background-color: var(--surface); }
+
+/* ── 模式切換（客服／程式家教）────────────────────────────────────── */
+.aibot-modes {
+    display: flex;
+    gap: var(--space-1);
+    padding: var(--space-2) var(--space-3);
+    border-bottom: 1px solid var(--hairline);
+}
+.aibot-mode-btn {
+    flex: 1;
+    border: 1px solid var(--hairline);
+    background-color: var(--surface);
+    color: var(--text);
+    border-radius: var(--radius-sm);
+    padding: 4px var(--space-2);
+    font-size: 0.8rem;
+    cursor: pointer;
+}
+/* ZH: 目前模式**不只靠顏色**——同時加粗、換底色（WCAG 1.4.1）。 */
+.aibot-mode-btn.aibot-mode-active {
+    background-color: var(--accent-soft);
+    border-color: var(--accent);
+    color: var(--text-strong);
+    font-weight: 600;
+}
+
+/* ── 對話區 ─────────────────────────────────────────────────────────── */
+.aibot-log {
+    flex: 1;
+    overflow-y: auto;
+    padding: var(--space-3);
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    background-color: var(--surface-2);
+}
+.aibot-bubble {
+    max-width: 85%;
+    padding: var(--space-2) var(--space-3);
+    border-radius: var(--radius-md);
+    font-size: 0.88rem;
+    line-height: 1.55;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+}
+.aibot-user {
+    align-self: flex-end;
+    background-color: var(--accent-soft);
+    border: 1px solid var(--accent);
+    color: var(--text-strong);
+}
+.aibot-assistant {
+    align-self: flex-start;
+    background-color: var(--surface);
+    border: 1px solid var(--hairline);
+    color: var(--text);
+}
+/* ZH: 「正在打字」用不透明度，不要用動畫閃爍 —— 會干擾閱讀，
+ *     而且 prefers-reduced-motion 的使用者也不該看到。 */
+.aibot-assistant.aibot-typing { color: var(--text-muted); font-style: italic; }
+/* ZH: 錯誤用 --error（對 --error-soft 是 5.72，小字 AA 過；數字是算的不是估的）。 */
+.aibot-assistant.aibot-error {
+    background-color: var(--error-soft);
+    border-color: var(--error);
+    color: var(--error);
+}
+
+/* ZH: 「參考來源」是次要資訊，縮小但仍達 AA（--text 對 --surface）。 */
+.aibot-sources {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    margin-top: var(--space-1);
+}
+.aibot-sources a { color: inherit; }
+
+/* ── 附加檔案 ───────────────────────────────────────────────────────── */
+.aibot-attach { display: flex; align-items: center; gap: var(--space-2); padding: 0 var(--space-3) var(--space-2); }
+.aibot-attach-btn {
+    border: 1px solid var(--hairline);
+    background-color: var(--surface);
+    color: var(--text);
+    border-radius: var(--radius-sm);
+    padding: 2px var(--space-2);
+    font-size: 0.78rem;
+    cursor: pointer;
+}
+.aibot-file-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    background-color: var(--surface-2);
+    border: 1px solid var(--hairline);
+    border-radius: var(--radius-pill);
+    padding: 2px var(--space-2);
+    font-size: 0.75rem;
+    max-width: 60%;
+}
+.aibot-file-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.aibot-file-clear { border: 0; background: none; cursor: pointer; color: var(--text-muted); padding: 0 2px; }
+.aibot-file-clear:hover { color: var(--error); }
+.aibot-file-list {
+    max-height: 180px;
+    overflow-y: auto;
+    border: 1px solid var(--hairline);
+    border-radius: var(--radius-sm);
+    background-color: var(--surface);
+    margin: 0 var(--space-3) var(--space-2);
+    font-size: 0.8rem;
+}
+/* ZH: 清單項目是 <button class="aibot-file-item">，狀態句是 .aibot-file-notice。 */
+.aibot-file-item {
+    display: block;
+    width: 100%;
+    text-align: left;
+    border: 0;
+    background: none;
+    padding: var(--space-2);
+    cursor: pointer;
+    color: var(--text);
+    font: inherit;
+}
+.aibot-file-item:hover { background-color: var(--surface-2); }
+.aibot-file-notice { padding: var(--space-2); color: var(--text-muted); }
+
+/* ── 輸入列 ─────────────────────────────────────────────────────────── */
+.aibot-form {
+    display: flex;
+    align-items: flex-end;
+    gap: var(--space-2);
+    padding: var(--space-3);
+    border-top: 1px solid var(--hairline);
+    background-color: var(--surface);
+}
+#aibot-input {
+    flex: 1;
+    resize: none;
+    min-height: 38px;
+    max-height: 120px;
+    border: 1px solid var(--hairline);
+    border-radius: var(--radius-sm);
+    padding: var(--space-2);
+    font: inherit;
+    font-size: 0.88rem;
+    color: var(--text-strong);
+    background-color: var(--surface);
+}
+#aibot-input:focus { outline: none; border-color: var(--accent); }
+#aibot-send {
+    border: 1px solid var(--accent);
+    background-color: var(--accent);
+    color: var(--surface);
+    border-radius: var(--radius-sm);
+    width: 38px;
+    height: 38px;
+    cursor: pointer;
+    font-size: 1rem;
+    line-height: 1;
+    flex: 0 0 auto;
+}
+#aibot-send:disabled { opacity: 0.5; cursor: default; }
+
+/* ── 窄視窗：退回浮動面板 ─────────────────────────────────────────
+ * ZH: 1100px 以下時兩側的空白不夠塞側欄（1280px 時每邊只剩 280px），
+ *     再 dock 下去就會壓到內容。這裡退回原本的浮動小窗。
+ * ZH: 手機目前不開放連線（擁有者 2026-08-28），但**視窗拉窄是隨時會發生的**，
+ *     所以這一段不是為了手機，是為了視窗。
+ * ─────────────────────────────────────────────────────────────────── */
+@media (max-width: 1100px) {
+    html.aibot-docked body { padding-right: 0; }
+    html.aibot-docked #aibot-fab { display: flex; }
+    #aibot-panel {
+        position: absolute;
+        top: auto;
+        bottom: 70px;
+        width: 360px;
+        max-width: calc(100vw - 2 * var(--space-5));
+        height: 520px;
+        max-height: calc(100vh - 140px);
+        border: 1px solid var(--hairline);
+        border-radius: var(--radius-lg);
+        box-shadow: 0 16px 40px rgba(0, 0, 0, 0.18);
+    }
+}
+
+@media (max-width: 480px) {
+    #aibot-root { right: var(--space-3); bottom: var(--space-3); }
+    #aibot-panel {
+        width: calc(100vw - 2 * var(--space-3));
+        height: calc(100vh - 120px);
+        bottom: 66px;
+    }
+    #aibot-fab { width: 50px; height: 50px; font-size: 21px; }
+}
+
+/* ZH: 尊重「減少動態效果」的系統設定。 */
+@media (prefers-reduced-motion: reduce) {
+    #aibot-fab { transition: none; }
+    #aibot-fab:hover { transform: none; }
+}
