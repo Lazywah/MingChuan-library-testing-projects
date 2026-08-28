@@ -60,12 +60,16 @@
             <div class="stat__label" data-i18n="lab_left_today">今日剩餘時間</div>
             <div class="stat__value" id="m-remaining">—</div>
         </div>
-        <div class="stat">
+        <!-- ZH: 「已執行」只有跑起來才有意義，所以它自己會隱藏；
+                 另外兩格停止時照樣顯示（見 lab.js 的說明）。 -->
+        <div class="stat" id="m-elapsed-wrap">
             <div class="stat__label" data-i18n="lab_running_for">已執行</div>
             <div class="stat__value" id="m-elapsed">—</div>
         </div>
         <div class="stat">
-            <div class="stat__label" data-i18n="lab_quota">磁碟配額</div>
+            <!-- ZH: 標籤從「磁碟配額」改成「磁碟」—— 這一格現在顯示的是
+                     「用了多少 / 上限多少」，只寫配額會對不上內容。 -->
+            <div class="stat__label" data-i18n="lab_disk">磁碟</div>
             <div class="stat__value" id="m-quota">—</div>
         </div>
     </div>
@@ -98,11 +102,11 @@
 </main>
 
 <script src="tz.js?v=2e214a8b"></script>
-<script src="i18n.js?v=400e337e"></script>
+<script src="i18n.js?v=32bb64a5"></script>
 <script src="prefs.js?v=a25a96d6"></script>
 <!-- ZH: 小基（浮動助手）。客服模式公開，登入頁也放 —— 設計文件的使用者需求是「不會用這個平台時想直接問」。 -->
 <script src="assistant-widget.js?v=61a7acaa"></script>
 <script src="chrome.js?v=0c8907be"></script>
-<script src="lab.js?v=17f24f25"></script>
+<script src="lab.js?v=a8862c84"></script>
 </body>
 </html>

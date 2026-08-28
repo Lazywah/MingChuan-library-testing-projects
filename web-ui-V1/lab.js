@@ -86,13 +86,31 @@ function render(d) {
         ? T('lab_gpu_on', '這一份實驗室正在使用 GPU。用完請按「關閉實驗室」讓給下一位。')
         : '');
 
-    $('meta').hidden = !running;
-    if (running) {
-        $('m-remaining').textContent = d.today_remaining_min != null
-            ? `${d.today_remaining_min}${T('unit_min', ' 分')}` : '—';
-        $('m-elapsed').textContent = mins(d.elapsed_seconds);
-        $('m-quota').textContent = d.effective_quota_gb != null
-            ? `${d.effective_quota_gb} GB` : '—';
+    // ZH: 🔴 這一區原本整塊只在執行中顯示。但「今日剩餘時間」與「磁碟」
+    //     停止時一樣有意義 —— 而且**想清空間的人正是在關著的狀態下看這一頁**，
+    //     只在執行中才給的話，最需要那個數字的時候剛好看不到。
+    //     只有「已執行」是跑起來才有意義的，單獨藏它。
+    $('meta').hidden = false;
+    $('m-elapsed-wrap').hidden = !running;
+
+    $('m-remaining').textContent = d.today_remaining_min != null
+        ? `${d.today_remaining_min}${T('unit_min', ' 分')}` : '—';
+    $('m-elapsed').textContent = mins(d.elapsed_seconds);
+
+    // ZH: 顯示「用了多少 / 上限多少」。用量是後端**即時量**的（約 0.2 秒），
+    //     不是每日 03:00 的快照 —— 顯示昨天的數字會讓「我明明刪了」變成客訴。
+    // ZH: ⚠ used_gb 是 null 代表**量不到**（不是 0）。這時只顯示配額，
+    //     不要把它寫成 0 —— 「量不到」看起來像「沒在用」是最會誤導人的。
+    if (d.effective_quota_gb == null) {
+        $('m-quota').textContent = '—';
+    } else if (d.used_gb == null) {
+        $('m-quota').textContent = `${d.effective_quota_gb} GB`;
+    } else {
+        $('m-quota').textContent = `${d.used_gb} / ${d.effective_quota_gb} GB`;
+        // ZH: 超過了就講出來 —— 那時他開不了實驗室，要知道原因。
+        if (d.used_gb > d.effective_quota_gb) {
+            $('m-quota').textContent += ' ' + T('lab_disk_over', '（超出）');
+        }
     }
 
     // ZH: 注入的密鑰是「你的程式跑起來時會拿到什麼」——屬於層級 3 的事實，
@@ -216,13 +234,18 @@ $('stop').addEventListener('click', async (ev) => {
 // ── 假資料 ───────────────────────────────────────────────────────────
 function mock(kind) {
     if (kind === 'error') throw new Error('強制錯誤狀態');
-    if (kind === 'stopped') return { status: 'stopped', today_remaining_min: 180 };
+    // ZH: stopped 也要有磁碟數字 —— 那一格現在停止時照樣顯示。
+    if (kind === 'stopped') return { status: 'stopped', today_remaining_min: 180,
+                                     used_gb: 2.1, effective_quota_gb: 10 };
+    // ZH: `?state=full` 看「超出配額」的樣子。
+    if (kind === 'full') return { status: 'stopped', today_remaining_min: 180,
+                                  used_gb: 12.4, effective_quota_gb: 10 };
     // ZH: v3.9 —— `?state=gpu` 看「正在佔著 GPU」的樣子。
     //     不加這個狀態的話，那條提示只有在真的借到卡時才看得到，
     //     光靠檢視模式驗不了版面。
     const base = {
         status: 'running', elapsed_seconds: 742, today_remaining_min: 168,
-        effective_quota_gb: 20, url: '/code/demo/?folder=/home/coder/projects',
+        effective_quota_gb: 20, used_gb: 3.7, url: '/code/demo/?folder=/home/coder/projects',
         injected_secrets: ['HF_TOKEN', 'OPENAI_API_KEY'],
     };
     if (kind === 'gpu') return Object.assign({}, base, { gpu_index: 0 });

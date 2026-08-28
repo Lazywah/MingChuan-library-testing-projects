@@ -853,6 +853,10 @@ def get_status(db: Session, user_id: str, session: str = DEFAULT_SESSION) -> dic
         return {
             "session_name": session,
             "status": "stopped",
+            # ZH: ⚠ 停止時**也要回** —— 想清空間的人多半是在關著的狀態下看這一頁，
+            #     只在執行中才給的話，最需要那個數字的時候剛好看不到。
+            "used_gb": (lambda b: round(b / (1024 ** 3), 2) if b is not None else None)(
+                user_storage_bytes(db, user_id)),
             "limits": limits,
             "today_remaining_min": remaining_min,
             "injected_secrets": masked,
@@ -874,6 +878,11 @@ def get_status(db: Session, user_id: str, session: str = DEFAULT_SESSION) -> dic
         "idle_seconds": int((now - last_act).total_seconds()) if last_act else None,
         "elapsed_seconds": int((now - started).total_seconds()) if started else None,
         "base_image": row.base_image,
+        # ZH: v3.9 使用者現在用了多少（GB）。**即時量**，不是每日 03:00 的快照 ——
+        #     實測一次 0.21 秒，而顯示昨天的數字會讓「我明明刪了」變成客訴。
+        # ZH: ⚠ 量不到回 None，前端顯示「—」。回 0 的話「量不到」看起來像「沒在用」。
+        "used_gb": (lambda b: round(b / (1024 ** 3), 2) if b is not None else None)(
+            user_storage_bytes(db, user_id)),
         # ZH: v3.9 這一份有沒有佔著 GPU（None = CPU 實驗室）。
         #     前端靠它顯示「你正佔著全校唯一那張卡」——
         #     不回的話那段提示永遠不會出現，而使用者不會知道自己擋著別人。
