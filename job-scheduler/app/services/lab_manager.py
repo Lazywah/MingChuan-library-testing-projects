@@ -38,6 +38,24 @@ from sqlalchemy.orm import Session
 from .. import crud, models
 
 
+class StorageFrozenError(RuntimeError):
+    """
+    ZH: 儲存被凍結（超配額或管理員處置），不給開實驗室。
+
+    ZH: 用專屬例外而不是 PermissionError：呼叫端要能回一個**帶數字**的訊息
+        （用了多少／配額多少／要刪多少），而不是一句「沒有權限」。
+        只說「被凍結」的話，使用者不知道要刪到多少才夠。
+
+    ZH: `used_gb` / `quota_gb` / `reason` 供呼叫端組訊息用。
+    """
+
+    def __init__(self, used_gb: float, quota_gb: int, reason: Optional[str] = None):
+        super().__init__(f"storage frozen: {used_gb} GB / {quota_gb} GB ({reason})")
+        self.used_gb = used_gb
+        self.quota_gb = quota_gb
+        self.reason = reason
+
+
 class GpuBusyError(RuntimeError):
     """
     ZH: 想開 GPU 實驗室但卡被佔走了。
@@ -54,7 +72,10 @@ class GpuBusyError(RuntimeError):
         self.reason = reason
 
 from ..config import SCHEDULER_POLICY, settings
-from . import secrets_service, quota_service
+# ZH: `storage_lifecycle` 不 import 回 `lab_manager`（查過），所以這裡可以放模組層。
+#     ⚠ `refresh_storage_usage` 裡那個是**函式內** import —— 當時還沒確認方向，
+#     現在確認了，但保留原樣：那一支只在排程與這裡被呼叫，改不改都一樣。
+from . import secrets_service, quota_service, storage_lifecycle
 
 logger = logging.getLogger(__name__)
 
@@ -648,6 +669,28 @@ def start_session(db: Session, user_id: str, base_image: Optional[str] = None,
     #     這一步原本漏掉了（`_stop_other_running` 定義了卻沒有任何呼叫端），
     #     所以「一次只開一份」實際上沒有生效。
     _stop_other_running(db, user_id, keep=session)
+
+    # ZH: v3.9 儲存被凍結就不給開。
+    #
+    # ZH: 🔴 **這是「凍結」第一次真的擋住人。** 在此之前 `state` 除了管理端的
+    #     列表之外沒有任何地方在讀 —— 管理者按下「凍結」以為擋住了對方，
+    #     對方卻毫無感覺。兩邊認知不一致比兩邊都沒有更糟。
+    #
+    # ZH: ⚠ 擋住這件事**必須與自動解凍一起上線**（`storage_lifecycle.auto_unfreeze`）。
+    #     只擋不解的話，學生刪完檔案還是進不來，只能等管理員 —— 那比不擋更糟。
+    #
+    # ZH: ⚠ **在這裡先試一次自動解凍**，不要只靠每日排程：
+    #     學生刪完檔案會**馬上**想重開，等到隔天 03:00 那個體驗說不過去。
+    st = storage_lifecycle.get_or_create_state(db, user_id)
+    if st.state == "frozen":
+        # ZH: 先量一次最新用量再判 —— 他可能剛剛才刪完檔案。
+        refresh_storage_usage(db, user_id=user_id)
+        db.refresh(st)
+        if not storage_lifecycle.auto_unfreeze(db, user_id):
+            raise StorageFrozenError(
+                used_gb=st.current_size_gb,
+                quota_gb=quota_service.get_effective_quota_gb(db, user_id),
+                reason=st.frozen_reason)
 
     # ZH: v3.9 要 GPU 的話先借一張卡。**借不到就明確拒絕**，不排隊 ——
     #     排隊要有「輪到你了」的通知，那是另一個功能；

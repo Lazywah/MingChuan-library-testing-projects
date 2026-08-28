@@ -308,6 +308,10 @@ def init_db():
             try: conn.execute(text("ALTER TABLE lab_sessions ADD COLUMN gpu_index INTEGER"))
             except Exception: pass
 
+            # ZH: v3.9 凍結原因（自動解凍要靠它分辨「超配額」與「管理員手動」）
+            try: conn.execute(text("ALTER TABLE user_storage_state ADD COLUMN frozen_reason VARCHAR"))
+            except Exception: pass
+
     except Exception as e:
         logger.warning(f"Manual DB migration skipped or partially failed: {e}")
 

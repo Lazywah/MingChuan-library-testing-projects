@@ -155,6 +155,8 @@ def freeze(db: Session, user_id: str, admin_id: Optional[str] = None,
     state.state = "frozen"
     state.state_since = datetime.now(timezone.utc)
     state.notes = f"frozen ({reason}) at {state.state_since.isoformat()}"
+    # ZH: v3.9 結構化地記下原因 —— notes 是給人看的自由文字，不能拿來判斷。
+    state.frozen_reason = reason
 
     if admin_id:
         _log_admin_action(db, admin_id, user_id, "freeze",
@@ -166,6 +168,45 @@ def freeze(db: Session, user_id: str, admin_id: Optional[str] = None,
     # TODO: 實際暫停容器、移除寫入權限（v2.0 透過 Docker 重啟以唯讀掛載實現）
     # ZH: ⚠ 上面那個 TODO 沒做之前,這個 True 的意思只有「狀態已改」——
     #     呼叫端不可以據此宣稱使用者已被擋住（見 docstring）。
+    return True
+
+
+def auto_unfreeze(db: Session, user_id: str) -> bool:
+    """
+    ZH: 因為超配額而被凍結的人，用量降回配額內就自動解凍。有解才回 True。
+
+    ZH: 🔴 **這支必須跟「擋住」一起上線，不能只做擋住。**
+        唯一的解凍路徑本來是 `restore()`，而它要管理員手動操作。
+        只做擋住的話：學生超配額 → 被擋 → **他刪掉檔案也不會自動解開**，
+        得去找管理員。而且凍結滿 30 天會自動走向 `archived`，
+        所以卡住的人會一路往下掉。**那比不擋更糟。**
+
+    ZH: 🔴 **只解 `quota_exceeded` 那一種。**
+        `frozen_reason` 是 `manual`（管理員手動）或 `inactive_90d` 時一律不動 ——
+        自動解凍把管理員的處置撤銷掉，是最不該發生的事。
+        ⚠ `frozen_reason` 是 v3.9 才加的，舊資料是 NULL；
+        NULL 一律**不解**（往安全的方向倒 —— 不知道是誰凍的就不要自作主張）。
+
+    @node job-scheduler/app/services/storage_lifecycle.py::auto_unfreeze
+    """
+    state = get_or_create_state(db, user_id)
+    if state.state != "frozen" or state.frozen_reason != "quota_exceeded":
+        return False
+
+    quota = quota_service.get_effective_quota_gb(db, user_id)
+    # ZH: ⚠ 用 `>` 的相反不是 `<`，是 `<=` —— freeze 的判定是 `size > quota`，
+    #     這裡要用完全互補的條件，否則剛好等於配額的人會在兩邊之間來回震盪。
+    if state.current_size_gb > quota:
+        return False
+
+    state.state = "active"
+    state.state_since = datetime.now(timezone.utc)
+    state.frozen_reason = None
+    state.notes = (f"auto-unfrozen (usage {state.current_size_gb} GB "
+                   f"<= quota {quota} GB) at {state.state_since.isoformat()}")
+    db.commit()
+    logger.info("User %s auto-unfrozen (%.3f GB <= %s GB)",
+                user_id[:8], state.current_size_gb, quota)
     return True
 
 
@@ -331,8 +372,8 @@ def daily_scan(db: Session) -> dict:
 
     @node job-scheduler/app/services/storage_lifecycle.py::daily_scan
     """
-    stats = {"active_to_frozen": 0, "frozen_to_archived": 0,
-             "archived_to_pending_delete": 0}
+    stats = {"active_to_frozen": 0, "frozen_to_active": 0,
+             "frozen_to_archived": 0, "archived_to_pending_delete": 0}
     now = datetime.now(timezone.utc)
     in_semester = is_semester_today()
 
@@ -343,6 +384,12 @@ def daily_scan(db: Session) -> dict:
         if user.role == "teacher":          # 教師例外，預設不歸檔
             continue
         state = get_or_create_state(db, user.id)
+        # ZH: v3.9 先試著自動解凍 —— 超配額的人把檔案刪掉之後要能自己回來。
+        #     沒有這一步的話，被凍結的人只能等管理員手動 restore，
+        #     而凍結滿 30 天會自動走向 archived（見下方）。
+        if state.state == "frozen" and auto_unfreeze(db, user.id):
+            stats["frozen_to_active"] = stats.get("frozen_to_active", 0) + 1
+            state = get_or_create_state(db, user.id)
         if state.state != "active":
             continue
         effective_quota = quota_service.get_effective_quota_gb(db, user.id)

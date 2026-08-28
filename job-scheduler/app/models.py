@@ -598,6 +598,13 @@ class UserStorageState(Base):
     state_since     = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     current_size_gb = Column(Float, default=0.0)
     archive_path    = Column(String, nullable=True)                           # ZH: 歸檔後的 HDD 路徑（archived 狀態時非空）
+    # ZH: v3.9 凍結原因。`freeze()` 的 reason 原本只寫進 notes 的自由文字裡，
+    #     那個字串是**給人看的**，不能拿來做判斷。
+    # ZH: 🔴 為什麼需要它：自動解凍必須分得出來是誰凍的 ——
+    #     「超配額」在用量降下去之後該自動解開，
+    #     **「管理員手動凍結」絕對不可以被自動解開**。
+    #     沒有這個欄位的話，自動解凍會把管理員的處置也一起撤銷。
+    frozen_reason   = Column(String, nullable=True)
     notes           = Column(Text, nullable=True)                             # ZH: admin 註記
 
 

@@ -68,6 +68,25 @@ def start_lab(
     try:
         result = lab_manager.start_session(db, current_user.id, base_image=base_image,
                                            session=session, want_gpu=want_gpu)
+    except lab_manager.StorageFrozenError as e:
+        # ZH: 🔴 **訊息一定要帶數字。** 只說「你的儲存被凍結」的話，
+        #     使用者不知道要刪到多少才夠，只能來問管理員。
+        #     用了多少、上限多少、還差多少 —— 三個數字他就能自己處理。
+        need = max(0, round(e.used_gb - e.quota_gb, 2))
+        if e.reason == "quota_exceeded":
+            detail = (f"ZH: 你的檔案超過配額，暫時不能開實驗室。"
+                      f"目前已用 {e.used_gb} GB，上限 {e.quota_gb} GB —— "
+                      f"至少要再刪掉 {need} GB。刪完直接再按一次開啟即可，不必等管理員。 | "
+                      f"EN: Over storage quota ({e.used_gb} GB of {e.quota_gb} GB). "
+                      f"Free up at least {need} GB, then press start again.")
+        else:
+            # ZH: 管理員手動凍結／90 天未登入 —— 那兩種**不會自動解開**，
+            #     所以不能叫他去刪檔案，要叫他找管理員。
+            detail = ("ZH: 你的儲存目前被管理員凍結，暫時不能開實驗室。"
+                      "請用「問題回報」聯絡管理員。 | "
+                      "EN: Your storage has been frozen by an administrator. "
+                      "Please contact them via 問題回報.")
+        raise HTTPException(status_code=409, detail=detail)
     except lab_manager.GpuBusyError as e:
         # ZH: 🔴 借不到卡是 **409 而不是 500** —— 那不是故障，是「現在有人在用」。
         #     回 500 的話使用者會以為平台壞了而去回報問題。
