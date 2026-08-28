@@ -778,6 +778,26 @@
     }
 
     // ── 訓練任務 ──────────────────────────────────────────────────────────
+    // ZH: 🔴 2026-08-28：原本只畫 completed / failed / running 三桶，
+    //     但後端實際有五個狀態（`pending` 是欄位預設值，`cancelled` 由
+    //     `crud.cancel_job` 寫入）。於是唯一一筆已取消的任務讓畫面變成
+    //     **「總數 1、其他全 0」** —— 每個數字都對，但看的人無從得知那 1 筆去哪了。
+    //
+    // ZH: 所以這裡不寫死桶的清單：認得的狀態照下面的順序顯示，
+    //     **認不得的狀態以原始名稱自成一桶**。「各桶相加 = 總數」變成由構造保證，
+    //     而不是靠我記得在後端新增狀態時回來改這裡。
+    // ZH: 形狀是 [i18n key, 中文, 對應的後端狀態]。**成對寫在一起是有原因的** ——
+    //     `check_i18n` 認的是「key 後面緊接中文 fallback」這個形狀，
+    //     寫成 `{key:…, zh:…}` 它就看不到，會把真的有在用的 key 報成「沒人用」。
+    var JOB_BUCKETS = [
+        // ZH: `queued` 併進「待執行」—— 它在後端只被讀、沒有任何地方寫入（舊別名）。
+        ['an_j_pending',   '待執行', ['pending', 'queued']],
+        ['an_j_running',   '執行中', ['running']],
+        ['an_j_done',      '已完成', ['completed']],
+        ['an_j_failed',    '失敗',   ['failed']],
+        ['an_j_cancelled', '已取消', ['cancelled']],
+    ];
+
     function renderJobs(jobs) {
         if (failed(jobs)) { $('jobs').innerHTML = failBox(jobs); return; }
         if (!jobs.length) {
@@ -787,12 +807,19 @@
         }
         var by = {};
         jobs.forEach(function (j) { by[j.status] = (by[j.status] || 0) + 1; });
-        $('jobs').innerHTML = '<div class="adm-stats">'
-            + stat('an_j_total', '總數', jobs.length)
-            + stat('an_j_done', '已完成', by.completed || 0)
-            + stat('an_j_failed', '失敗', by.failed || 0)
-            + stat('an_j_running', '執行中', by.running || 0)
-            + '</div>';
+
+        var html = stat('an_j_total', '總數', jobs.length);
+        JOB_BUCKETS.forEach(function (b) {
+            var n = 0;
+            b[2].forEach(function (st) { n += by[st] || 0; delete by[st]; });
+            html += stat(b[0], b[1], n);
+        });
+        // ZH: 沒被上面認領的 —— 直接把後端給的字串當標籤印出來。
+        //     醜，但看得見；比安靜地少算一筆好。
+        Object.keys(by).sort().forEach(function (st) {
+            html += stat('', st, by[st]);
+        });
+        $('jobs').innerHTML = '<div class="adm-stats">' + html + '</div>';
     }
 
     // ── 平台使用（依學院／學系／行政單位）─────────────────────────────────

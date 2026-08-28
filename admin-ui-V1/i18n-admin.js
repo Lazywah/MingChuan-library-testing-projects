@@ -507,6 +507,8 @@
         an_j_done: '已完成',
         an_j_failed: '失敗',
         an_j_running: '執行中',
+        an_j_pending: '待執行',
+        an_j_cancelled: '已取消',
 
         an_platform: '平台使用',
         an_group_by: '分組方式',
@@ -1002,6 +1004,8 @@
         an_j_done: 'Completed',
         an_j_failed: 'Failed',
         an_j_running: 'Running',
+        an_j_pending: 'Pending',
+        an_j_cancelled: 'Cancelled',
 
         an_platform: 'Platform usage',
         an_group_by: 'Group by',
