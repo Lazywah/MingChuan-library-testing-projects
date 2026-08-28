@@ -86,6 +86,17 @@ codeserver_resources:
   # 訓練 image (pytorch 等) entrypoint 是 /bin/bash，無 TTY 下立刻 exit 0
   default_image: "aibase/code-server:2026-spring"
 
+  # ZH: v3.9 互動式 GPU 實驗室。
+  # ZH: 🔴 GPU 版**一定要用另一個映像** —— `aibase/code-server` 裡連 torch 都沒有，
+  #     把卡掛上去也沒有東西能用它。`aibase/code-server-gpu` 疊在 `aibase/pytorch` 上，
+  #     torch/CUDA 與批次訓練逐位元組相同（在實驗室跑得動的，送出去也跑得動）。
+  default_gpu_image: "aibase/code-server-gpu:2026-spring"
+  # ZH: 服務層這台有幾張卡。互動式實驗室與批次訓練共用它們，
+  #     佔用登記在 lab_sessions.gpu_index，`/worker/take` 會據此排除。
+  #     ⚠ 這個數字要與實際張數一致：填多了會借出不存在的卡（容器起不來），
+  #       填少了會有卡永遠用不到。
+  gpu_count: 1
+
 # ==============================================================================
 # ZH: 學期日曆（保護學生資料不在學期中被歸檔/刪除）
 # EN: Academic calendar (protects student data during semesters)

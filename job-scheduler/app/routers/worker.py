@@ -95,6 +95,22 @@ class JobUpdatePayload(BaseModel):
 # ZH: 端點 | EN: Endpoints
 # ==============================================================================
 
+def _gpu_index(raw) -> int:
+    """
+    ZH: worker 送來的 GPU 識別轉成整數卡號。轉不動回 -1（永遠不會等於任何佔用值）。
+
+    ZH: ⚠ 回 -1 而不是拋錯：這支只被「排除佔用中的卡」用到，
+        轉不動時**寧可讓它通過**也不要讓整個節點領不到工作 ——
+        認不得的格式是我們的問題，不該變成節點停擺。
+
+    @node job-scheduler/app/routers/worker.py::_gpu_index
+    """
+    try:
+        return int(str(raw).strip())
+    except (TypeError, ValueError):
+        return -1
+
+
 @router.post("/take", response_model=TakeJobResponse)
 def take_job(
     req: TakeJobRequest,
@@ -120,6 +136,25 @@ def take_job(
     if not gate["allowed"]:
         logger.debug("Node %s dispatch blocked (%s)", req.node_id, gate["reason"])
         return {"job": None}
+
+    # ZH: v3.9 互動式 GPU 實驗室閘門 —— 把被實驗室佔住的卡從可派清單裡拿掉。
+    #
+    # ZH: 🔴 為什麼一定要在這裡擋：worker 只看自己行程內的 `_busy_gpus`，
+    #     它**看不到 Lab 容器**。不擋的話，同一張卡會同時跑一個訓練任務和一個
+    #     互動式實驗室，兩邊搶 VRAM → 學生拿到 CUDA OOM，而且看不出是被誰佔走。
+    #
+    # ZH: ⚠ 只對**與服務層同機**的節點生效。台北的節點有自己的卡，
+    #     服務層這邊的實驗室佔用跟它無關 —— 拿去擋它會讓遠端節點永遠領不到工作。
+    #     判斷用 worker 自己宣告的 `shares_service_storage`（預設 False，安全的一邊）。
+    if req.shares_service_storage:
+        held = crud.gpus_held_by_labs(db)
+        if held:
+            usable = [g for g in req.available_gpus if _gpu_index(g) not in held]
+            if not usable:
+                logger.debug("Node %s: all GPUs held by interactive labs %s",
+                             req.node_id, sorted(held))
+                return {"job": None}
+            req.available_gpus = usable
 
     pending_jobs = crud.get_pending_jobs(db)
     if not pending_jobs:

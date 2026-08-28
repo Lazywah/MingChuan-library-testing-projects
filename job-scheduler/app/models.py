@@ -529,6 +529,16 @@ class LabSession(Base):
     #     （SQLAlchemy 把 `last_activity=None` 當成「沒給值」，所以在建立端寫 None 沒有用。）
     last_activity  = Column(DateTime, nullable=True)                                      # ZH: 最後活動時間（沒開過 = None）
     started_at     = Column(DateTime, nullable=True)                          # ZH: 啟動時間
+    # ZH: v3.9 這個 session 佔用的 GPU 編號；NULL = 沒有 GPU（預設，CPU 實驗室）。
+    #
+    # ZH: 🔴 **為什麼要記在這裡**：批次訓練由 `gpu-worker` 派，它用的是自己行程內的
+    #     `_busy_gpus`，看不到 Lab 容器。一張卡被兩個互不知情的分配者共用時，
+    #     學生會拿到莫名其妙的 CUDA OOM，而且完全看不出是被別人佔走。
+    #     把佔用寫進資料庫，`/worker/take` 才有辦法在派工前把這張卡排除掉。
+    #
+    # ZH: ⚠ 只在**與服務層同機**的 worker 上有意義（台北的節點有自己的卡）。
+    #     判斷依據是 take 請求裡的 `shares_service_storage`。
+    gpu_index      = Column(Integer, nullable=True)
     cpu_quota      = Column(Float,   default=0.5)                             # ZH: CPU cores
     mem_quota_mb   = Column(Integer, default=2048)                            # ZH: RAM MB
 

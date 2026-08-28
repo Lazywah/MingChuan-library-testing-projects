@@ -62,10 +62,24 @@ def start_lab(
     # ZH: 🔴 一次只開一份 —— 先關掉其他正在跑的。
     #     **要回報關掉了哪一個**：使用者按下「開啟 B」而 A 被靜靜關掉，
     #     他會以為 A 壞了。
+    # ZH: v3.9 要不要 GPU。沒帶＝不要（既有前端不必改，行為與 v3.8 相同）。
+    want_gpu = bool((payload or {}).get("gpu"))
     switched_from = lab_manager._stop_other_running(db, current_user.id, keep=session)
     try:
         result = lab_manager.start_session(db, current_user.id, base_image=base_image,
-                                           session=session)
+                                           session=session, want_gpu=want_gpu)
+    except lab_manager.GpuBusyError as e:
+        # ZH: 🔴 借不到卡是 **409 而不是 500** —— 那不是故障，是「現在有人在用」。
+        #     回 500 的話使用者會以為平台壞了而去回報問題。
+        #     訊息要講出**是誰在用**：他才知道是等一下就好，還是該找管理員。
+        why = {
+            "lab": "ZH: GPU 正在被另一個人的程式實驗室使用中。你可以先開一般（CPU）實驗室，"
+                   "或稍後再試。 | EN: The GPU is in use by another interactive lab.",
+            "job": "ZH: GPU 正在跑訓練任務。任務跑完就會放開，稍後再試；"
+                   "或先開一般（CPU）實驗室。 | EN: The GPU is running a training job.",
+        }.get(e.reason,
+              "ZH: 目前沒有可用的 GPU。 | EN: No GPU is available right now.")
+        raise HTTPException(status_code=409, detail=why)
     except PermissionError as e:
         raise HTTPException(status_code=429, detail=str(e))
     except ValueError as e:

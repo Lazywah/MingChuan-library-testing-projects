@@ -1745,6 +1745,92 @@ def seed_org_tables(db: Session) -> dict:
     return out
 
 
+# ══════════════════════════════════════════════════════════════════════════
+# ZH: v3.9 互動式 GPU 實驗室 —— GPU 佔用的**唯一判定點**
+# ══════════════════════════════════════════════════════════════════════════
+# ZH: 🔴 為什麼要有這一段：服務層那張卡有**兩個要用它的人**——
+#       · 批次訓練：由 gpu-worker 派，它只看自己行程內的 `_busy_gpus`
+#       · 互動式實驗室：長駐容器，worker 完全不知道它存在
+#     兩個互不知情的分配者共用一張卡，結果是學生拿到 CUDA OOM，
+#     而且**看不出是被別人佔走**——那正是最難查的一類問題。
+#
+# ZH: 擁有者裁定（2026-08-28）採「獨佔鎖」：
+#       · 實驗室要 GPU 時先借走，借不到就明講「有人在用」，不排隊。
+#       · 借走期間 `/worker/take` 把那張卡從可派清單裡拿掉 →
+#         批次任務**留在 pending 排隊**，實驗室一關就會被領走。
+#
+# ZH: ⚠ **判定只寫在這裡一份。** take 閘門與 lab_manager 各寫一份的話，
+#     兩邊遲早不一致，而不一致的表現是「兩邊都以為卡是空的」——
+#     那比沒有鎖更糟，因為它看起來有鎖。
+
+
+def gpus_held_by_labs(db: Session) -> set:
+    """
+    ZH: 目前被互動式實驗室佔住的 GPU 編號。
+
+    ZH: `starting` 也算 —— 容器還在起來的那幾十秒如果不算佔用，
+        worker 剛好來要工作就會把同一張卡派出去。
+
+    @node job-scheduler/app/crud.py::gpus_held_by_labs
+    """
+    rows = (db.query(models.LabSession.gpu_index)
+            .filter(models.LabSession.gpu_index.isnot(None),
+                    models.LabSession.status.in_(("starting", "running")))
+            .all())
+    return {int(r[0]) for r in rows if r[0] is not None}
+
+
+def gpus_running_jobs(db: Session) -> set:
+    """
+    ZH: 目前正在跑批次訓練的 GPU 編號。
+
+    ZH: ⚠ 只看 `running` 不看 `pending` —— pending 還沒拿到卡。
+        把 pending 也算進來的話，佇列裡有任務時實驗室就永遠借不到 GPU。
+
+    @node job-scheduler/app/crud.py::gpus_running_jobs
+    """
+    rows = (db.query(models.TrainingJob.gpu_id)
+            .filter(models.TrainingJob.status == "running",
+                    models.TrainingJob.gpu_id.isnot(None))
+            .all())
+    return {int(r[0]) for r in rows if r[0] is not None}
+
+
+def claim_gpu_for_lab(db: Session, total_gpus: int = 1) -> Optional[int]:
+    """
+    ZH: 幫實驗室借一張卡。借得到回卡號，借不到回 None。
+
+    ZH: ⚠ 這裡**不寫入**——寫入由呼叫端在建立 LabSession 時一起做，
+        才能與「建立 session」在同一個交易裡。分兩段寫的話，
+        兩個人同時開實驗室會各自借到同一張卡（TOCTOU）。
+        SQLite 單寫入者的特性讓這在實務上很難踩到，但把它寫成
+        「查詢 + 由呼叫端在同一交易內落地」比較不會被下一個人拆開。
+
+    @node job-scheduler/app/crud.py::claim_gpu_for_lab
+    """
+    taken = gpus_held_by_labs(db) | gpus_running_jobs(db)
+    for i in range(max(0, total_gpus)):
+        if i not in taken:
+            return i
+    return None
+
+
+def gpu_busy_reason(db: Session) -> str:
+    """
+    ZH: 借不到卡時要告訴使用者**是誰在用**。
+
+    ZH: 只說「GPU 忙碌中」的話，他不知道是要等五分鐘還是等兩小時，
+        也不知道該不該去找管理員。分成兩種原因講。
+
+    @node job-scheduler/app/crud.py::gpu_busy_reason
+    """
+    if gpus_held_by_labs(db):
+        return "lab"      # ZH: 別人的實驗室佔著
+    if gpus_running_jobs(db):
+        return "job"      # ZH: 正在跑批次訓練
+    return "unknown"
+
+
 # ZH: v3.8 依信箱網域判角色（擁有者裁定 2026-08-27）。
 #     這是**唯一實作點** —— 判定規則散成兩份的話,兩邊遲早不一致,
 #     而不一致的表現是「同一個人在不同入口拿到不同角色」。

@@ -303,6 +303,10 @@ def init_db():
             # --- v3.6 實驗室多份存檔：使用者取的名字 ---
             try: conn.execute(text("ALTER TABLE lab_sessions ADD COLUMN display_name VARCHAR"))
             except Exception: pass
+            # ZH: v3.9 互動式 GPU 實驗室佔用的卡號（NULL = CPU 實驗室）。
+            #     `/worker/take` 會依它把卡從可派清單裡排掉。
+            try: conn.execute(text("ALTER TABLE lab_sessions ADD COLUMN gpu_index INTEGER"))
+            except Exception: pass
 
     except Exception as e:
         logger.warning(f"Manual DB migration skipped or partially failed: {e}")

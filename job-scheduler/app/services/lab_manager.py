@@ -35,7 +35,24 @@ import docker
 from docker.errors import NotFound, APIError
 from sqlalchemy.orm import Session
 
-from .. import models
+from .. import crud, models
+
+
+class GpuBusyError(RuntimeError):
+    """
+    ZH: 想開 GPU 實驗室但卡被佔走了。
+
+    ZH: 用**專屬的例外**而不是 RuntimeError：呼叫端要能分辨
+        「沒有卡」（回 409 + 告訴他是誰在用）與「容器起不來」（回 500）——
+        兩者對使用者的意義完全不同，混在一起他只會看到「失敗」。
+
+    ZH: `reason` 是 crud.gpu_busy_reason 的值：lab / job / unknown。
+    """
+
+    def __init__(self, reason: str = "unknown"):
+        super().__init__(f"GPU busy: {reason}")
+        self.reason = reason
+
 from ..config import SCHEDULER_POLICY, settings
 from . import secrets_service, quota_service
 
@@ -188,6 +205,15 @@ class CodeServerLifecycle:
                 cpu_period=100000,
                 cpu_quota=int(config.get("cpu_quota", 0.5) * 100000),
                 mem_limit=f"{config.get('mem_quota_mb', 2048)}m",
+                # ZH: v3.9 互動式 GPU 實驗室。`gpu_index` 是 None 就完全不帶
+                #     device_requests —— 那是 CPU 實驗室，行為與 v3.8 逐字相同。
+                # ZH: ⚠ 指定**單一張卡**（`device_ids=["0"]`）而不是 all：
+                #     多卡機器上 all 會讓一個實驗室看到全部的卡，
+                #     它跑起來就把別人的卡也吃掉，而佔用表只記了一張。
+                **({"device_requests": [docker.types.DeviceRequest(
+                        device_ids=[str(config["gpu_index"])],
+                        capabilities=[["gpu"]])]}
+                   if config.get("gpu_index") is not None else {}),
                 labels={
                     "aibase.role":    "code-server",
                     "aibase.user_id": user_id,
@@ -576,7 +602,7 @@ def _stop_other_running(db: Session, user_id: str, keep: str) -> Optional[str]:
 
 
 def start_session(db: Session, user_id: str, base_image: Optional[str] = None,
-                  session: str = DEFAULT_SESSION) -> dict:
+                  session: str = DEFAULT_SESSION, want_gpu: bool = False) -> dict:
     """
     ZH: 啟動使用者的 code-server session（含配額檢查、secrets 注入、DB 紀錄）
     EN: Start a user's code-server session (with quota check, secrets injection, DB record)
@@ -623,10 +649,24 @@ def start_session(db: Session, user_id: str, base_image: Optional[str] = None,
     #     所以「一次只開一份」實際上沒有生效。
     _stop_other_running(db, user_id, keep=session)
 
+    # ZH: v3.9 要 GPU 的話先借一張卡。**借不到就明確拒絕**，不排隊 ——
+    #     排隊要有「輪到你了」的通知，那是另一個功能；
+    #     現在直接告訴他是誰在用，他可以改開 CPU 實驗室或等一下再來。
+    gpu_index = None
+    if want_gpu:
+        total = SCHEDULER_POLICY.get("codeserver_resources", {}).get("gpu_count", 1)
+        gpu_index = crud.claim_gpu_for_lab(db, total_gpus=total)
+        if gpu_index is None:
+            raise GpuBusyError(crud.gpu_busy_reason(db))
+
     # ZH: 預設 image 從 yaml 讀 | EN: Default image from yaml
     if base_image is None:
+        # ZH: 要 GPU 就換帶 CUDA 的映像 —— CPU 那個映像裡連 torch 都沒有，
+        #     掛了 GPU 上去也沒有東西能用它。
+        key = "default_gpu_image" if want_gpu else "default_image"
         base_image = SCHEDULER_POLICY.get("codeserver_resources", {}).get(
-            "default_image", "aibase/code-server:2026-spring"
+            key, "aibase/code-server-gpu:2026-spring" if want_gpu
+                 else "aibase/code-server:2026-spring"
         )
 
     # ZH: 注入該 user 的所有 secrets
@@ -649,6 +689,9 @@ def start_session(db: Session, user_id: str, base_image: Optional[str] = None,
     )
     row.status = "starting"
     row.base_image = base_image
+    # ZH: 佔用與「session 變成 starting」同一次 commit —— 分兩段寫的話，
+    #     中間那一瞬 worker 來要工作會拿到還沒被記錄的卡。
+    row.gpu_index = gpu_index
     row.started_at = datetime.now(timezone.utc)
     row.last_activity = datetime.now(timezone.utc)
     if not existing:
@@ -668,9 +711,15 @@ def start_session(db: Session, user_id: str, base_image: Optional[str] = None,
             "env":          secret_env,
             # ZH: 🔴 少了這個鍵，開哪一份存檔都會啟動 default 的容器
             "session":      session,
+            "gpu_index":    gpu_index,
         })
     except Exception as e:
         row.status = "stopped"
+        # ZH: 🔴 啟動失敗一定要把卡還回去。不還的話那張卡會被一筆
+        #     stopped 的紀錄永久佔住 —— 而 `gpus_held_by_labs` 只看
+        #     starting/running，所以其實不會漏；但欄位留著會讓人查不清楚，
+        #     而且下次 reuse 這一列時會帶著舊卡號。
+        row.gpu_index = None
         db.commit()
         raise RuntimeError(f"Failed to start container: {e}")
 
@@ -720,6 +769,10 @@ def stop_session(db: Session, user_id: str, reason: str = "user_requested",
 
     row.status = "stopped"
     row.container_id = None
+    # ZH: v3.9 還卡。`gpus_held_by_labs` 只看 starting/running，所以不清也不會漏派；
+    #     但留著舊卡號會讓查問題的人看不出這一列現在到底佔不佔卡，
+    #     而且下次 reuse 這一列時會帶著它。清掉最不會騙人。
+    row.gpu_index = None
     db.commit()
 
     if elapsed > 0:
@@ -778,6 +831,10 @@ def get_status(db: Session, user_id: str, session: str = DEFAULT_SESSION) -> dic
         "idle_seconds": int((now - last_act).total_seconds()) if last_act else None,
         "elapsed_seconds": int((now - started).total_seconds()) if started else None,
         "base_image": row.base_image,
+        # ZH: v3.9 這一份有沒有佔著 GPU（None = CPU 實驗室）。
+        #     前端靠它顯示「你正佔著全校唯一那張卡」——
+        #     不回的話那段提示永遠不會出現，而使用者不會知道自己擋著別人。
+        "gpu_index": row.gpu_index,
         "limits": limits,
         "today_remaining_min": remaining_min,
         "injected_secrets": masked,
