@@ -34,10 +34,13 @@
 
 **需要你決定的有 8 項，見 §4。** 其中最該先看的兩個：
 1. 🔴 `admin` 帳號的信箱網域不存在 → **每次管理員登入都製造一封必退信件**。
-2. ⚠️ 使用者端與管理端**共用同一個 cookie**（`ai_hud_token`，cookie 不分 port）。
-   兩個 UI 都用 Bearer 所以介面本身沒事，但**依賴 cookie 的路徑**會拿到
-   「另一個介面最後登入的那個人」—— 例如 Lab `/code/` 的 nginx auth_request。
-   ⚠️ 我一度把這條寫成「管理端會失去權限」，那是**過度宣稱**，已在 T23 更正。
+2. ✅ **已修（2026-08-28）** 使用者端與管理端原本**共用同一個 cookie**
+   （`ai_hud_token`，cookie 不分 port）。兩個 UI 都用 Bearer 所以介面本身沒事，
+   但**依賴 cookie 的路徑**會拿到「另一個介面最後登入的那個人」——
+   例如 Lab `/code/` 的 nginx auth_request。現在管理端改用 `ai_hud_admin_token`，
+   由 nginx 送 `X-AIBase-Surface: admin` 分辨（**不能用 Host，`$host` 不含 port**）。
+   詳見 §3 問題 1 的「已修」段。⚠️ 我一度把這條寫成「管理端會失去權限」，
+   那是**過度宣稱**，已在 T23 更正。
 
 **我在稽核中判斷錯了五次**，都寫在流水帳裡（T5 兩則、T21 兩則、T23 兩則）。
 共通點是**拿錯的東西去量，然後從量到的結果推論**：
@@ -776,6 +779,35 @@ permanent_delete）**全部忽略回傳值**，一律回 `{"status": "…"}`。
    cookie 自然隔離 —— 這與 go-live 要處理的正式主機名剛好可以一起做。
 3. 兩者都要順手處理：`admin_hud_token` 這個 localStorage 殘留已經過期 6 天卻還留著，
    前端應該在偵測到過期時清掉，而不是留著讓人以為那是有效憑證（我就被誤導了一次）。
+
+**2026-08-28 已修（擁有者裁定「先做甲」，方案 2 的 hostname 大約下週）。**
+
+做法是方案 1，但**判斷來源不是 port 也不是 path**：
+
+- `auth.py` 新增 `USER_COOKIE` / `ADMIN_COOKIE` 兩個常數與 `cookie_name_for(request)`。
+- 由 nginx 的 `:8888` server 區塊明講 `proxy_set_header X-AIBase-Surface admin;`，
+  只加在**三個會轉給後端**的 location（`auth` / `admin` / `external-ai`）；
+  `:80` 區塊實測 **0 個**。沒有這個表頭時一律回 `USER_COOKIE` ——
+  直連 `:8002` 的走 Bearer，行為與改動前逐字相同。
+- 登入與**登出**都改用 `cookie_name_for(request)`。登出特別要留意：
+  名稱寫死的話，在管理端登出會清掉**使用者端**的 cookie 而留下自己的，
+  畫面上完全看不出來（`tests/test_cookie_isolation.py` 有一條專門釘這個）。
+
+🔴 **為什麼不能用 Host 判斷**：nginx 轉發的 `$host` **不含 port**，
+兩個 server 區塊在後端看起來一模一樣。我原本就是要這樣寫的。
+
+**驗證**：
+- `tests/test_cookie_isolation.py` 12 支；全套 **624 passed / 0 skipped**、10 個守衛全綠。
+- **變異測試**：把 `ADMIN_COOKIE` 改回 `"ai_hud_token"` → **5 支紅**
+  （含「使用者端登入不得改動管理端身分」與登出那條），還原後回綠。
+  這證明測試真的在量這件事，不是恆真。
+- **端對端**：改動後在管理端 `:8888` 只帶 cookie 打 `/auth/me` → 從 200 變成 **401**
+  （舊的 `ai_hud_token` 不再被管理端採用）→ 表頭確實有送到後端。
+
+⚠️ **代價（已知且刻意）**：所有現存的管理端 session 失效，要重新登入一次。
+
+⚠️ 上面第 3 點（`admin_hud_token` 殘留）**不適用** —— 那是我當時判斷錯的，
+它不是殘留，是 `admin-ui-V0` 還在用的交接機制（見 T23 的更正）。
 
 ---
 

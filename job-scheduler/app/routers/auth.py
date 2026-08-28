@@ -31,8 +31,8 @@ from datetime import datetime, timezone
 import hmac as _hmac
 
 from .. import crud, schemas, models
-from ..auth import (authenticate_user, create_access_token, get_current_user,
-                    require_admin, require_role)
+from ..auth import (authenticate_user, cookie_name_for, create_access_token,
+                    get_current_user, require_admin, require_role)
 from ..database import get_db
 from ..services import email_service
 from ..rate_limit import limiter
@@ -187,8 +187,10 @@ async def login(
     # SPA 仍從 JSON response 拿 token 存 sessionStorage 給 fetch 用，兩條路平行
     # v2.8 共用機台安全：不設 max_age → session cookie，關閉瀏覽器即失效（避免換手延續）。
     #      JWT 本身仍有 exp(ACCESS_TOKEN_EXPIRE_MINUTES) 把關過期。
+    # ZH: v3.8 —— 兩端的 cookie 名稱分開（見 auth.cookie_name_for）。
+    #     共用一個名稱時,cookie 不分 port,後登入的那一邊會覆蓋先登入的。
     response.set_cookie(
-        key="ai_hud_token",
+        key=cookie_name_for(request),
         value=access_token,
         httponly=True,
         samesite="lax",
@@ -276,6 +278,7 @@ async def forgot_password(
 # ==============================================================================
 @router.post("/logout")
 def logout(
+    request: Request,          # ZH: v3.8 要靠它判斷該清哪一端的 cookie
     response: Response,
     current_user: models.User = Depends(get_current_user),
     db: Session = Depends(get_db)
@@ -292,7 +295,10 @@ def logout(
         logger.error(f"Failed to update logout status: {e}")
     # v2.1: 同步清掉 HttpOnly cookie；否則 localStorage 清了 cookie 還在會讓
     # 已登出的瀏覽器仍能 navigate /code/ (nginx auth_request 仍會通過)
-    response.delete_cookie("ai_hud_token", path="/")
+    # ZH: v3.8 —— 清掉的必須是**這一端自己**的那個 cookie（見 auth.cookie_name_for）。
+    #     寫死名稱的話,在管理端登出會清掉使用者端的 cookie 而留下自己的 ——
+    #     那正好是反過來的錯,而且畫面上看不出來。
+    response.delete_cookie(cookie_name_for(request), path="/")
     return {"message": "Logged out successfully"}
 
 # ==============================================================================

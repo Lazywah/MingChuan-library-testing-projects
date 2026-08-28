@@ -59,7 +59,43 @@ def _extract_token(request: Request, bearer_token: str | None) -> str | None:
     """
     if bearer_token:
         return bearer_token
-    return request.cookies.get("ai_hud_token")
+    return request.cookies.get(cookie_name_for(request))
+
+
+# ==============================================================================
+# ZH: v3.8 —— 兩端的 cookie 分開
+# ==============================================================================
+USER_COOKIE = "ai_hud_token"
+ADMIN_COOKIE = "ai_hud_admin_token"
+
+
+def cookie_name_for(request: Request) -> str:
+    """
+    ZH: 這個請求該用哪一個 cookie 名稱。
+
+    ZH: 🔴 為什麼要分開：cookie 規格**不區分 port**。
+        使用者端（:80）與管理端（:8888）是同一個 host，
+        共用一個 `ai_hud_token` 的話，**後登入的那一邊會覆蓋先登入的**。
+        2026-08-27 稽核實測：在使用者端登入之後，管理端的 cookie 身分
+        也跟著變成那個學生，管理端 API 開始回 403。
+
+    ZH: 目前兩個 UI 都送 `Authorization: Bearer`，所以介面本身沒事；
+        真正吃到影響的是**依賴 cookie 的路徑** —— 現在是 nginx 對
+        Lab `/code/` 的 `auth_request`，未來任何新的導航式端點也會。
+        而且 Bearer 過期時 `_extract_token` 會退回讀 cookie，
+        那時身分就會變成「另一邊最後登入的人」。
+
+    ZH: 怎麼知道請求來自哪一端：**由 nginx 明講**（`X-AIBase-Surface: admin`）。
+        不能用 Host 判斷 —— nginx 傳的 `$host` **不含 port**，
+        兩個 server 區塊看起來一模一樣。
+        沒有這個表頭時一律當使用者端：直連 :8002 的（worker、健檢）
+        本來就走 Bearer，不受影響。
+
+    @node job-scheduler/app/auth.py::cookie_name_for
+    """
+    return (ADMIN_COOKIE
+            if (request.headers.get("X-AIBase-Surface", "").strip().lower() == "admin")
+            else USER_COOKIE)
 
 
 def authenticate_user(db: Session, username: str, password: str):
