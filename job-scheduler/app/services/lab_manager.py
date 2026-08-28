@@ -1059,6 +1059,88 @@ def _volume_size(vol_name: str) -> Optional[int]:
     return None
 
 
+def user_storage_bytes(db: Session, user_id: str) -> Optional[int]:
+    """
+    ZH: 這個人所有存檔的 volume 加總（bytes）。一個都量不到回 None。
+
+    ZH: 🔴 **要把每一份存檔都算進去，不是只算 default。**
+        `archive_user_lab` 當初就踩過這個坑（只處理 `home_<uid>`，
+        於是多份存檔的人刪帳號後留下孤兒 volume）。這裡照它的做法：
+        從 `lab_sessions` 撈存檔名，而且 **default 一定要補進清單** ——
+        它可能沒有 DB 列（見 `list_sessions` 的同一個理由）。
+
+    ZH: ⚠ 回 **None 而不是 0**：「量不到」與「真的是空的」必須分得出來。
+        回 0 的話，Docker 出問題時每個人的用量都會變成 0，
+        而那看起來完全正常 —— 沒有人會發現配額判定已經失效了。
+
+    @node job-scheduler/app/services/lab_manager.py::user_storage_bytes
+    """
+    lc = get_lifecycle()
+    names = {r.session_name for r in db.query(models.LabSession)
+             .filter(models.LabSession.user_id == user_id).all()}
+    names.add(DEFAULT_SESSION)
+
+    total = None
+    for sess in names:
+        vol = lc._volume_name(user_id, sess)
+        try:
+            lc.client.volumes.get(vol)
+        except Exception:
+            continue          # ZH: 這一份從沒啟動過 → 沒有 volume
+        size = _volume_size(vol)
+        if size is not None:
+            total = (total or 0) + size
+    return total
+
+
+def refresh_storage_usage(db: Session, user_id: Optional[str] = None) -> dict:
+    """
+    ZH: 量實際用量並寫回 `UserStorageState.current_size_gb`。
+        `user_id` 給 None 就掃全部有 Lab 紀錄的人。
+
+    ZH: 🔴 **這支存在的理由**：`current_size_gb` 在 v3.9 之前**沒有任何地方更新它** ——
+        欄位預設 0.0、建立 state 時寫 0.0，然後就沒有了。
+        於是 `storage_lifecycle.daily_scan` 裡的
+        `if state.current_size_gb > effective_quota` 永遠是 `0.0 > 10`，
+        **「超配額 → 凍結」那條分支從上線到現在一次都沒有執行過**。
+        數字是假的，流程看起來卻很完整 —— 這是最難發現的一類問題。
+
+    ZH: ⚠ 量不到的人**不寫**（保留上一次的值），不要寫 0。
+        寫 0 的話 Docker 抖一下就會讓所有人的用量歸零，
+        而那個 0 會安靜地讓配額判定失效。
+
+    ZH: ⚠ 這支只負責「讓數字是真的」，**不做任何處置** ——
+        超配額之後要不要凍結、要不要擋，是 `daily_scan` 的事。
+        量測與處置分開，才不會在查「為什麼他被凍結」時要看兩個地方。
+
+    @node job-scheduler/app/services/lab_manager.py::refresh_storage_usage
+    """
+    from . import storage_lifecycle
+
+    if user_id:
+        uids = [user_id]
+    else:
+        # ZH: 只掃**開過 Lab 的人** —— 沒開過的人沒有 volume，量了也是 None，
+        #     全表掃描只是把時間花在必定沒有結果的查詢上。
+        uids = [r[0] for r in db.query(models.LabSession.user_id).distinct().all()]
+
+    out = {"checked": 0, "updated": 0, "unmeasurable": 0}
+    for uid in uids:
+        out["checked"] += 1
+        size = user_storage_bytes(db, uid)
+        if size is None:
+            out["unmeasurable"] += 1
+            continue
+        state = storage_lifecycle.get_or_create_state(db, uid)
+        gb = round(size / (1024 ** 3), 3)
+        if state.current_size_gb != gb:
+            state.current_size_gb = gb
+            out["updated"] += 1
+    db.commit()
+    logger.info("儲存用量掃描: %s", out)
+    return out
+
+
 def archive_user_lab(db: Session, user, retention_days: int, reason: str = "admin_delete") -> Optional[dict]:
     """
     ZH: 刪除使用者前呼叫。停掉並移除其 code-server 容器（容器無資料、可重建），

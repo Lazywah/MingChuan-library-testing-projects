@@ -1751,6 +1751,13 @@ def get_user_quota(
         "user_id": user_id,
         "base_quota_gb": user.disk_quota_gb,
         "effective_quota_gb": quota_service.get_effective_quota_gb(db, user_id),
+        # ZH: v3.9 實際用量。**每日 03:00 掃描時更新**，不是即時值 ——
+        #     即時量的話這支端點要跑 docker df，管理者點一個人就等好幾秒。
+        # ZH: ⚠ 回 `None` 代表「從沒量到過」（沒開過 Lab，或量測失敗），
+        #     不是 0 —— 前端要分得出來，否則「沒量到」看起來像「沒在用」。
+        "used_gb": (lambda st: st.current_size_gb if st else None)(
+            db.query(models.UserStorageState)
+            .filter(models.UserStorageState.user_id == user_id).first()),
         "grants": [
             {
                 "id": g.id,

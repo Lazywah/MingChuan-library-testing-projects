@@ -157,7 +157,7 @@ async def _storage_lifecycle_loop():
     @node job-scheduler/app/scheduler.py::_storage_lifecycle_loop
     """
     logger.info("ZH: 儲存生命週期迴圈啟動 (每日 03:00)")
-    from .services import storage_lifecycle
+    from .services import lab_manager, storage_lifecycle
 
     while _scheduler_running:
         now = datetime.now(timezone.utc)
@@ -187,6 +187,25 @@ async def _storage_lifecycle_loop():
                 #       與 MYAI 初始密碼到期都沒被清除，而且只會靜靜寫進 log 沒人發現。
                 # EN: three independent daily jobs, each guarded separately — one failing
                 #     must not skip the others (it did, via a typo'd function name).
+                # ZH: v3.9 先量實際用量再做生命週期判定。
+                #
+                # ZH: 🔴 **順序有意義，不要對調。** `daily_scan` 的
+                #     「超配額 → 凍結」看的是 `current_size_gb`；
+                #     量測排在它後面的話，判定用的永遠是**前一天**的數字。
+                #
+                # ZH: 🔴 這個量測在 v3.9 之前**完全不存在** —— `current_size_gb`
+                #     沒有任何地方更新它，永遠是 0.0，所以那條凍結分支
+                #     從上線到現在一次都沒執行過。數字是假的，流程看起來卻很完整。
+                #
+                # ZH: 獨立包 try（與下面兩件同一個理由）：量不到用量不該連累
+                #     90 天未登入那條判定 —— 那一條不需要用量。
+                try:
+                    used = lab_manager.refresh_storage_usage(db)
+                    logger.info(f"ZH: 儲存用量掃描完成 | EN: Storage usage scan: {used}")
+                except Exception as e:  # noqa: BLE001
+                    logger.error(f"ZH: 儲存用量掃描錯誤 | EN: Storage usage error: {e}",
+                                 exc_info=True)
+
                 try:
                     stats = storage_lifecycle.daily_scan(db)
                     logger.info(f"ZH: 儲存生命週期掃描完成 | EN: Storage lifecycle scan: {stats}")

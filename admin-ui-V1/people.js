@@ -1076,6 +1076,17 @@
                 + '<span class="kv__v">' + esc(q.base_quota_gb) + ' GB</span></div>'
                 + '<div class="kv"><span class="kv__k">' + esc(T('pp_q_effective', '實際可用')) + '</span>'
                 + '<span class="kv__v">' + esc(q.effective_quota_gb) + ' GB</span></div>'
+                // ZH: v3.9 實際用量。**要與配額並排顯示** —— 只給配額的話，
+                //     管理者無從判斷該不該加額度（那正是 v3.9 之前的狀況：
+                //     `current_size_gb` 沒有人更新，永遠是 0）。
+                // ZH: null = 從沒量到過（沒開過 Lab 或量測失敗），與「0」是兩件事。
+                + '<div class="kv"><span class="kv__k">' + esc(T('pp_q_used', '已使用')) + '</span>'
+                + '<span class="kv__v">'
+                + (q.used_gb == null ? esc(T('pp_q_unknown', '尚未量測'))
+                   : esc(q.used_gb) + ' GB'
+                     + (q.effective_quota_gb && q.used_gb > q.effective_quota_gb
+                        ? ' ' + esc(T('pp_q_over', '（超出配額）')) : ''))
+                + '</span></div>'
 
                 + '<div class="adm-card__title" style="margin-top:1rem">'
                 + esc(T('pp_q_grants', '額外授與')) + '</div>'

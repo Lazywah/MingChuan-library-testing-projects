@@ -84,7 +84,17 @@ class TestFreezeIsOnlyAMarker:
             for m in re.finditer(r'UserStorageState', src):
                 line = src[:m.start()].count("\n") + 1
                 ctx = src.split("\n")[line - 1]
-                if "list_storage_states" in ctx or ctx.strip().startswith("#"):
+                # ZH: ⚠ 這個掃描認的是**字面值**，分不出程式碼與說明文字。
+                #     2026-08-28 誤報過一次：`lab_manager.refresh_storage_usage`
+                #     的 docstring 裡提到 `UserStorageState.current_size_gb`，
+                #     就被當成「有人開始讀狀態了」。
+                #     說明文字一律跳過 —— **提到一個名字不等於讀它**。
+                stripped = ctx.strip()
+                if ("list_storage_states" in ctx
+                        or stripped.startswith("#")
+                        or stripped.startswith("ZH:")
+                        or stripped.startswith("EN:")
+                        or "`UserStorageState" in ctx):
                     continue
                 hits.append(f"{f.name}:{line}")
         assert not [h for h in hits if not h.startswith("admin.py")], \
