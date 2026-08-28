@@ -171,10 +171,10 @@ class Settings(BaseSettings):
     # ZH: v2.6 RAG 客服/導覽助手 | EN: v2.6 RAG support/guide assistant
     # ZH: 直接打 Ollama（不經 Portkey），故需先 `ollama pull` 下列兩個模型：
     #     - RAG_EMBED_MODEL：產生知識庫與問題的向量
-    #     - RAG_CHAT_MODEL ：生成客服回覆（建議中文能力佳的 instruct 模型）
+    #     - RAG_CHAT_MODEL ：生成客服回覆（要能**守住回答語言**，見下方註解）
     # EN: Talks to Ollama directly (not Portkey); pull both models first:
     #     - RAG_EMBED_MODEL: embeds KB chunks and the question
-    #     - RAG_CHAT_MODEL : generates the support reply (prefer a strong-Chinese instruct model)
+    #     - RAG_CHAT_MODEL : generates the support reply (must follow the reply-language rule)
     # ------------------------------------------------------------------
     # ZH: 🔴 **必須用多語系的嵌入模型。** 2026-08-28 之前是 `nomic-embed-text`（英文優先），
     #     實測它在繁中幾乎分不出語意：同一組「問題／正確答案／不相關句子」，
@@ -184,7 +184,16 @@ class Settings(BaseSettings):
     #     換成 bge-m3 後同一份 12 題檢索基準 Top-1 由 **25% → 100%**。
     # ZH: ⚠ 換這個值一定要跟著 **reindex**（向量維度 768→1024，舊向量不能混用）。
     RAG_EMBED_MODEL: str = "bge-m3"
-    RAG_CHAT_MODEL: str = "qwen2.5:7b"
+    # ZH: 🔴 **不要換回 `qwen2.5:7b`。** 2026-08-28 實測（樣本見下）：
+    #       · 英文提問 **0/15** 用英文回答 —— 國際學生一律拿到看不懂的中文，
+    #         而且四種提示詞擺法都壓不住（見 scripts/bench_reply_language.py）。
+    #       · 同一題 10 次裡 **2 次講假話**（把「教師閒置 120 分鐘」講成
+    #         「教師沒有閒置時間限制」），還出現過夾雜韓日文的亂碼輸出。
+    #       · 簡體字漏出 52 字（llama3 是 2 字）。
+    #     llama3 同條件：英文 15/15、假話 0/10、簡體 2 字。
+    # ZH: ⚠ 代價是文風 —— llama3 會加 😊、偶爾語句不順。這是擁有者裁定的取捨：
+    #     用一點文筆換掉「會講假話」與「國際學生看不懂」。
+    RAG_CHAT_MODEL: str = "llama3"
     # ZH: 知識庫目錄（容器內路徑；隨 image 一起打包）| EN: KB dir (in-container path, bundled with image)
     KNOWLEDGE_DIR: str = os.path.normpath(os.path.join(os.path.dirname(__file__), "..", "knowledge"))
     RAG_TOP_K: int = 4                 # ZH: 取前 k 個片段 | EN: top-k chunks

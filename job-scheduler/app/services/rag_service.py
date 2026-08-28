@@ -367,34 +367,72 @@ def is_chinese_query(text: str) -> bool:
     return bool(_HAN.search(t))
 
 
+# ZH: 依書寫系統認得出來的語言。**點名比泛指有效** —— 實測：對日文提問，
+#     說「用使用者提問的那個語言」→ 0/2 用日文回答（都回英文）；
+#     說「Reply in Japanese」→ 2/2 用日文回答。
+# ZH: ⚠ 只列**靠書寫系統就分得出來**的。拉丁字母那一大票（英文、印尼文、
+#     西班牙文…）分不出來，就退回泛指 —— 實測那種情況模型會回英文，
+#     對國際學生是可接受的落點。
+# ZH: 越南文用 đ/ơ/ư 判：那三個字母是越南文特有的（ă/â/ê 在羅馬尼亞文、
+#     法文裡也有，不能用）。
+_NAMED_SCRIPTS = [
+    ("Japanese",   re.compile(r"[\u3040-\u309f\u30a0-\u30ff]")),
+    ("Korean",     re.compile(r"[\uac00-\ud7af\u1100-\u11ff]")),
+    ("Thai",       re.compile(r"[\u0e00-\u0e7f]")),
+    ("Russian",    re.compile(r"[\u0400-\u04ff]")),
+    ("Arabic",     re.compile(r"[\u0600-\u06ff]")),
+    ("Hindi",      re.compile(r"[\u0900-\u097f]")),
+    ("Vietnamese", re.compile(r"[đĐơƠưƯ]")),
+]
+
+
+def detect_named_language(text: str) -> str | None:
+    """
+    ZH: 認得出來就回語言名（英文寫法，要塞進提示詞），認不出來回 None。
+
+    ZH: ⚠ 順序有意義：日文與中文都用漢字，所以**假名要先判**。
+        越南文放最後 —— 它的判準是拉丁字母，最寬鬆。
+
+    @node job-scheduler/app/services/rag_service.py::detect_named_language
+    """
+    t = text or ""
+    for name, pat in _NAMED_SCRIPTS:
+        if pat.search(t):
+            return name
+    return "Traditional Chinese" if _HAN.search(t) else None
+
+
 def language_directive(query: str) -> str:
     """
     ZH: 依提問語言回傳一行要插進 system prompt 的硬指令。
 
-    ZH: 中文時只需要釘住「繁體」；非中文時要**明確擋掉「回中文」**這個預設行為。
+    ZH: 🔴 **泛指沒有用，一定要點名。** 實測見 scripts/bench_reply_language.py：
+        說「用使用者提問的那個語言回答」時，日文提問 0/2 回日文（都回英文）；
+        改成「Reply in Japanese」之後 2/2。
 
-    ZH: 🔴 **這條指令目前對 `qwen2.5:7b` 沒有作用，不要以為它有效。**
-        2026-08-28 實測：英文提問 8 次（四種擺放位置 × 2 次）**全部**用中文回答；
-        連把整段檢索上下文換成英文也一樣 —— 所以不是「被中文上下文帶著走」，
-        是**模型本身壓不住**。同一組測試 `llama3` 2/2 用英文回答。
-        擺放位置的四種比較見 scripts/bench_reply_language.py。
-
-    ZH: 那為什麼還留著：對中文提問它確實有用（釘住繁體），而且換掉 RAG_CHAT_MODEL
-        之後就會生效。拿掉的話換模型的人還要回頭把它加回來。
+    ZH: ⚠ 這條對舊的 `qwen2.5:7b` **完全沒有作用**（英文提問 0/15 回英文，
+        四種擺放位置都試過，連把檢索上下文換成全英文也一樣）。
+        2026-08-28 RAG_CHAT_MODEL 因此換成 llama3。
 
     @node job-scheduler/app/services/rag_service.py::language_directive
     """
-    if is_chinese_query(query):
+    lang = detect_named_language(query)
+    if lang == "Traditional Chinese":
         return ("\n\n# 回答語言（最高優先）\n"
                 "使用者用中文提問 → 用**繁體中文**回答。**不可以出現簡體字。**")
-    return ("\n\n# 回答語言（最高優先）\n"
-            "The user did NOT ask in Chinese. You MUST reply in exactly the same "
-            "language as the user's question. Do NOT reply in Chinese, even though "
-            "the platform knowledge below is written in Chinese — that is reference "
-            "data, not the language to answer in. Keep on-screen button and page "
-            "names in their original Chinese, followed by an English gloss in "
-            "parentheses the first time each one appears.\n"
-            "使用者不是用中文問的 → 一律用他提問的那個語言回答，不要回中文。")
+    if lang:
+        return ("\n\n# Reply language (highest priority)\n"
+                f"Reply in **{lang}**. The user asked in {lang}, so the entire answer "
+                "must be written in that language. Do NOT answer in English or Chinese. "
+                "Keep on-screen button and page names in their original Chinese, "
+                "followed by a short gloss in the answer language the first time each appears.")
+    # ZH: 認不出來（多半是英文或其他拉丁語系）—— 泛指，模型實測會回英文。
+    return ("\n\n# Reply language (highest priority)\n"
+            "Reply in exactly the same language as the user's question. "
+            "Do NOT reply in Chinese — the platform knowledge below is written in "
+            "Chinese, but that is reference data, not the language to answer in. "
+            "Keep on-screen button and page names in their original Chinese, "
+            "followed by an English gloss in parentheses the first time each appears.")
 
 
 def build_messages(query: str, ranked: list[dict], history: list[dict] | None = None,
