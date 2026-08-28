@@ -189,6 +189,42 @@ def check_sso(env: dict):
     return PASS, "SSO OIDC 設定完整（provider=oidc、憑證已填、mock_mode=false）"
 
 
+def check_ollama_models(env: dict):
+    """
+    ZH: 設定裡指名的 Ollama 模型有沒有真的下載下來。
+
+    ZH: 🔴 為什麼需要這一條：原本只檢查 11434 埠通不通 —— 那只證明 Ollama 活著，
+        不證明它有那個模型。模型沒下載時**小基不會報錯**，它會拿到空的檢索結果
+        然後照樣回答（內容是編的），或是回一句「AI 服務尚未啟動」。
+        兩種都不會讓人聯想到「模型沒 pull」。
+
+    ZH: ⚠ 2026-08-28 嵌入模型從 nomic-embed-text 換成 bge-m3，
+        舊機器上照舊指南裝的人只會 pull 到舊的那個。這條就是給那種情況看的。
+
+    @node scripts/deploy_check.py::check_ollama_models
+    """
+    want = [v for v in (env.get("RAG_EMBED_MODEL"), env.get("RAG_CHAT_MODEL")) if v]
+    if not want:
+        return WARN, ".env 沒有指定 RAG_EMBED_MODEL / RAG_CHAT_MODEL（會用程式預設）"
+    if not port_in_use(11434):
+        return WARN, "Ollama 沒在跑（11434 不通），跳過模型檢查"
+    try:
+        r = subprocess.run(["docker", "exec", "ai-platform-ollama", "ollama", "list"],
+                           capture_output=True, timeout=20, text=True, encoding="utf-8",
+                           errors="replace")
+    except Exception as e:
+        return WARN, f"問不到 Ollama 的模型清單：{e}"
+    if r.returncode != 0:
+        return WARN, "問不到 Ollama 的模型清單（容器名可能不是 ai-platform-ollama）"
+    # ZH: `ollama list` 會把 `bge-m3` 顯示成 `bge-m3:latest`，所以比對要去掉 tag。
+    have = {ln.split()[0].split(":")[0] for ln in r.stdout.splitlines()[1:] if ln.strip()}
+    missing = [m for m in want if m.split(":")[0] not in have]
+    if missing:
+        return FAIL, ("Ollama 缺模型 → " + "、".join(missing)
+                      + "（補：docker exec ai-platform-ollama ollama pull <名稱>）")
+    return PASS, "Ollama 已備妥設定指名的模型：" + "、".join(want)
+
+
 def check_drift():
     """@node scripts/deploy_check.py::check_drift"""
     order, _defaults = se.parse_env_example(se.ENV_EXAMPLE)
@@ -556,6 +592,7 @@ def main():
         ("下拉當布林",     check_select_bool()),
         ("錯誤訊息中文",   check_error_messages()),
         ("HTML 中文標記",  check_untranslated_html()),
+        ("Ollama 模型",    check_ollama_models(env)),
         ("主機埠",         check_ports()),
     ]
 

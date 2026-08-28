@@ -176,7 +176,14 @@ class Settings(BaseSettings):
     #     - RAG_EMBED_MODEL: embeds KB chunks and the question
     #     - RAG_CHAT_MODEL : generates the support reply (prefer a strong-Chinese instruct model)
     # ------------------------------------------------------------------
-    RAG_EMBED_MODEL: str = "nomic-embed-text"
+    # ZH: 🔴 **必須用多語系的嵌入模型。** 2026-08-28 之前是 `nomic-embed-text`（英文優先），
+    #     實測它在繁中幾乎分不出語意：同一組「問題／正確答案／不相關句子」，
+    #     英文的鑑別差距 +0.350，繁中只有 **+0.066** —— 所有中文句子都擠在
+    #     0.6–0.8 的窄帶裡，排序等於接近隨機。症狀是**小基答得頭頭是道但內容是編的**
+    #     （檢索撈回不相關的段落，模型就自己補），而且知識庫改再多都救不了。
+    #     換成 bge-m3 後同一份 12 題檢索基準 Top-1 由 **25% → 100%**。
+    # ZH: ⚠ 換這個值一定要跟著 **reindex**（向量維度 768→1024，舊向量不能混用）。
+    RAG_EMBED_MODEL: str = "bge-m3"
     RAG_CHAT_MODEL: str = "qwen2.5:7b"
     # ZH: 知識庫目錄（容器內路徑；隨 image 一起打包）| EN: KB dir (in-container path, bundled with image)
     KNOWLEDGE_DIR: str = os.path.normpath(os.path.join(os.path.dirname(__file__), "..", "knowledge"))
