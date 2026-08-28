@@ -71,6 +71,21 @@ function render(d) {
     setPrimary({ label: running ? T('lab_open', '開啟實驗室') : T('lab_start_open', '啟動並開啟實驗室'), enabled: true });
     $('stop').hidden = !running;
 
+    // ZH: v3.9 GPU 勾選只在「還沒啟動」時出現 —— 已經在跑的容器改不了裝置，
+    //     勾了也沒用，留著只會讓人以為勾一下就能加上去。
+    //     要換成 GPU 版就得先關掉再開，那件事由「關閉實驗室」負責。
+    if ($('gpu-wrap')) {
+        $('gpu-wrap').hidden = running;
+        $('gpu-hint').hidden = running;
+    }
+    // ZH: 已經在跑而且**這一份是 GPU 版**時，把它講出來 ——
+    //     使用者要知道自己正佔著全校唯一那張卡。
+    // ZH: ⚠ 這裡要**連「不是 GPU 版就清掉」一起做**。
+    //     只設不清的話，從 GPU 版切到 CPU 版之後那句話還留在畫面上。
+    note(running && d.gpu_index != null
+        ? T('lab_gpu_on', '這一份實驗室正在使用 GPU。用完請按「關閉實驗室」讓給下一位。')
+        : '');
+
     $('meta').hidden = !running;
     if (running) {
         $('m-remaining').textContent = d.today_remaining_min != null
@@ -95,8 +110,11 @@ async function load() {
     if (FORCED === 'loading') return;
     try {
         const d = FORCED ? mock(FORCED) : await api('/lab/status');
+        // ZH: 🔴 這裡原本在 render 之後補一個 `note('')` 清訊息，
+        //     於是 render 剛設好的「正在使用 GPU」提示**當場被清掉**——
+        //     程式碼看起來完全正確，畫面上就是不出現。
+        //     訊息由 render 自己負責（設或清），這裡不要再插手。
         render(d);
-        note('');
     } catch (e) {
         $('state').textContent = T('lab_st_unknown', '讀不到');
         setPrimary({ label: T('btn_retry', '重試'), enabled: true });
@@ -132,7 +150,11 @@ $('go').addEventListener('click', async () => {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             // ZH: v3.6 —— 要開哪一份存檔。沒選過就是 default（既有行為）。
-            body: JSON.stringify(currentSession ? { session: currentSession } : {}),
+            // ZH: v3.9 勾了才送 gpu:true。沒勾就完全不帶這個鍵 ——
+            //     後端沒收到＝CPU 實驗室，行為與 v3.8 逐字相同。
+            body: JSON.stringify(Object.assign(
+                currentSession ? { session: currentSession } : {},
+                ($('gpu-opt') && $('gpu-opt').checked) ? { gpu: true } : {})),
         });
         // ZH: 伺服器順手關掉了別份時會回報 —— **要說出來**，
         //     使用者按下「開啟 B」而 A 被靜靜關掉會以為 A 壞了。
@@ -144,7 +166,13 @@ $('go').addEventListener('click', async () => {
         await waitReady(started.url);
     } catch (e) {
         setPrimary({ label: T('lab_start_open', '啟動並開啟實驗室'), enabled: true });
-        // ZH: 429 是額度/頻率限制，訊息由後端給，照實顯示不要改寫。
+        // ZH: 429 是額度/頻率限制、409 是 GPU 被佔走 —— 兩種訊息都由後端給，
+        //     **照實顯示不要改寫**：後端才知道是誰在用那張卡。
+        // ZH: 409 不是故障，所以順手把勾選取消掉 ——
+        //     使用者可以直接再按一次開 CPU 實驗室，不必自己想到要取消勾選。
+        if (String(e.message || '').indexOf('GPU') >= 0 && $('gpu-opt')) {
+            $('gpu-opt').checked = false;
+        }
         note(T('lab_start_fail', '啟動失敗') + `：${e.message || e}`);
     }
 });
@@ -189,11 +217,16 @@ $('stop').addEventListener('click', async (ev) => {
 function mock(kind) {
     if (kind === 'error') throw new Error('強制錯誤狀態');
     if (kind === 'stopped') return { status: 'stopped', today_remaining_min: 180 };
-    return {
+    // ZH: v3.9 —— `?state=gpu` 看「正在佔著 GPU」的樣子。
+    //     不加這個狀態的話，那條提示只有在真的借到卡時才看得到，
+    //     光靠檢視模式驗不了版面。
+    const base = {
         status: 'running', elapsed_seconds: 742, today_remaining_min: 168,
         effective_quota_gb: 20, url: '/code/demo/?folder=/home/coder/projects',
         injected_secrets: ['HF_TOKEN', 'OPENAI_API_KEY'],
     };
+    if (kind === 'gpu') return Object.assign({}, base, { gpu_index: 0 });
+    return base;
 }
 
 // ── 啟動 ─────────────────────────────────────────────────────────────

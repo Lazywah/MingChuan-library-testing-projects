@@ -334,3 +334,20 @@ html.aibot-docked #aibot-fab { display: none; }
     #aibot-fab { transition: none; }
     #aibot-fab:hover { transform: none; }
 }
+
+
+/* ── 程式實驗室的 GPU 勾選（v3.9）────────────────────────────────
+   ZH: 放在 web.css 而不是 styles.css —— 那是兩端逐位元組相同的共用檔，
+       管理端沒有這個元素。 */
+.lab-gpu {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    /* ZH: 整列可點 —— 只有那個 13px 的方框可點的話，觸控裝置上很難按中
+       （--tap-min 是 44px，一個裸 checkbox 遠低於它）。 */
+    min-height: var(--tap-min, 44px);
+    cursor: pointer;
+    font-size: 0.9375rem;
+    color: var(--text);
+}
+.lab-gpu input { width: 18px; height: 18px; cursor: pointer; }
