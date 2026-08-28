@@ -215,3 +215,117 @@ class TestGuards:
             {"key": None, "name": "  ", "college": "資訊學院"},
         ]})
         assert r.status_code == 400
+
+
+# ── 匯出／匯入 ──────────────────────────────────────────────────────────
+class TestExport:
+    def test_export_round_trips(self, client, adm, seeded):
+        """ZH: 匯出的東西要能原封不動匯回去 —— 全部 unchanged 才算真的對稱。"""
+        d = client.get("/api/v1/admin/org/export", headers=adm).json()
+        assert d["version"] == 1
+        assert {r["name"] for r in d["departments"]} == {"資訊工程學系", "會計學系"}
+
+        r = client.post("/api/v1/admin/org/import?dry_run=true", headers=adm, json=d)
+        assert r.status_code == 200, r.text
+        rep = r.json()
+        assert rep["departments"]["added"] == [] and rep["departments"]["updated"] == []
+        assert rep["departments"]["unchanged"] == 2
+        assert rep["units"]["unchanged"] == 1
+
+    def test_export_carries_no_head_count(self, client, adm, seeded):
+        """
+        ZH: 人數是衍生資料。帶著它的話，兩台機器匯出的檔案內容會不同，
+            進版控之後每次都有 diff 而那個 diff 不代表設定有變。
+        """
+        d = client.get("/api/v1/admin/org/export", headers=adm).json()
+        assert all("users" not in r for r in d["departments"])
+
+
+class TestImport:
+    def _file(self, depts=None, units=None):
+        return {"version": 1,
+                "departments": depts if depts is not None else [],
+                "units": units if units is not None else []}
+
+    def test_dry_run_is_the_default_and_writes_nothing(self, client, db, adm, seeded):
+        """
+        ZH: 🔴 這張表牽動全站分群，所以預設是「先給你看」而不是「直接套用」。
+            不帶參數呼叫時**必須**是預覽。
+        """
+        r = client.post("/api/v1/admin/org/import", headers=adm,
+                        json=self._file(depts=[{"name": "全新的系", "college": "資訊學院"}]))
+        assert r.status_code == 200, r.text
+        assert r.json()["dry_run"] is True
+        assert r.json()["departments"]["added"] == ["全新的系"]
+        db.expire_all()
+        assert db.get(models.OrgDepartment, "全新的系") is None, "預覽竟然寫進去了"
+
+    def test_apply_actually_writes(self, client, db, adm, seeded):
+        """ZH: **陽性對照** —— 上面那條若是因為「匯入根本不會寫」而過，這條會抓到。"""
+        r = client.post("/api/v1/admin/org/import?dry_run=false", headers=adm,
+                        json=self._file(depts=[{"name": "全新的系", "college": "資訊學院",
+                                                "campus": "台北", "active": 1}]))
+        assert r.status_code == 200, r.text
+        db.expire_all()
+        got = db.get(models.OrgDepartment, "全新的系")
+        assert got is not None and got.campus == "台北"
+
+    def test_import_never_deletes_rows_missing_from_the_file(self, client, db, adm, seeded):
+        """
+        ZH: 🔴 這支是整段的重點。匯入一個**只有一個系**的檔案，
+            資料庫裡另外那個系必須原封不動 —— 連同填過它的使用者。
+            會刪的話，那些人會安靜地從分組統計裡消失。
+        """
+        r = client.post("/api/v1/admin/org/import?dry_run=false", headers=adm,
+                        json=self._file(depts=[{"name": "會計學系", "college": "管理學院"}]))
+        assert r.status_code == 200, r.text
+        db.expire_all()
+        assert db.get(models.OrgDepartment, "資訊工程學系") is not None, "檔案沒提到的列被刪掉了"
+        assert db.get(models.User, seeded.id).department == "資訊工程學系"
+        # ZH: 而且要**回報**有幾列沒被檔案涵蓋 —— 那是「兩邊不同步」的訊號。
+        assert r.json()["untouched_in_db"]["departments"] == 1
+
+    def test_active_flag_travels(self, client, db, adm, seeded):
+        """ZH: 停用要能靠檔案帶過去 —— 那是「不刪除」之下唯一的下架方式。"""
+        client.post("/api/v1/admin/org/import?dry_run=false", headers=adm,
+                    json=self._file(depts=[{"name": "會計學系", "college": "管理學院",
+                                            "active": 0}]))
+        db.expire_all()
+        assert db.get(models.OrgDepartment, "會計學系").active == 0
+
+    def test_unit_path_is_recomputed_not_trusted(self, client, db, adm, seeded):
+        """ZH: 檔案裡的 path 不採用 —— 舊版檔案組出來的 path 可能與現在的規則不同。"""
+        client.post("/api/v1/admin/org/import?dry_run=false", headers=adm,
+                    json=self._file(units=[{"path": "騙人的/路徑", "name": "出納組",
+                                            "parent": "會計室"}]))
+        db.expire_all()
+        assert db.get(models.OrgUnit, "會計室/出納組") is not None
+        assert db.get(models.OrgUnit, "騙人的/路徑") is None
+
+    def test_bad_version_is_refused(self, client, adm, seeded):
+        r = client.post("/api/v1/admin/org/import?dry_run=false", headers=adm,
+                        json={"version": 999, "departments": [], "units": []})
+        assert r.status_code == 400
+
+    def test_bad_campus_is_refused_and_nothing_is_written(self, client, db, adm, seeded):
+        r = client.post("/api/v1/admin/org/import?dry_run=false", headers=adm,
+                        json=self._file(depts=[
+                            {"name": "先寫得進去的系", "college": "資訊學院"},
+                            {"name": "壞的系", "college": "資訊學院", "campus": "火星"},
+                        ]))
+        assert r.status_code == 400
+        db.expire_all()
+        # ZH: 🔴 整批要一起失敗 —— 前半寫進去、後半失敗的話，
+        #     管理者會拿到一個**改到一半**的對照表而且不知道停在哪。
+        assert db.get(models.OrgDepartment, "先寫得進去的系") is None, "整批匯入沒有一起回滾"
+
+    def test_missing_arrays_are_refused(self, client, adm, seeded):
+        r = client.post("/api/v1/admin/org/import", headers=adm, json={"version": 1})
+        assert r.status_code == 400
+
+    def test_non_admin_cannot_import_or_export(self, client, db, seeded):
+        make_user(db, username="plain2", email="plain2@example.com", role="student")
+        h = auth_headers(client, "plain2", "password123")
+        assert client.get("/api/v1/admin/org/export", headers=h).status_code == 403
+        assert client.post("/api/v1/admin/org/import", headers=h,
+                           json=self._file()).status_code == 403

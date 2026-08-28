@@ -88,6 +88,21 @@
     //     而且訊息消失之後畫面看起來就像什麼都沒發生過。
     //     成功則相反：確認完就沒有用了，留著只會變成雜訊
     //     （下次再按時你分不出那是新的還是上次留下的）。
+    // ZH: 「留在畫面上、但不是錯誤」的訊息。
+    //
+    // ZH: 為什麼需要第三支：`say()` 是紅的（留著）、`flash()` 是中性的（會消失），
+    //     而匯入的**預覽摘要**兩者都不對 —— 它不是錯誤（不該紅），
+    //     但使用者要讀完它再決定按不按「套用」（不能自己消失）。
+    //     第一版拿 say() 來用，於是一段正常的預覽長得像出事了。
+    function note(id, text) {
+        say(id, text);
+        var el = $(id);
+        if (el) {
+            el.classList.remove('inline-error');
+            el.classList.add('inline-note');
+        }
+    }
+
     var _flashTimers = {};
     function flash(id, text, ms) {
         say(id, text);
@@ -1850,6 +1865,122 @@
             say('og-msg', T('pf_org_fail_save', '存不起來（{w}）').replace('{w}', e.message));
         }
     }
+
+
+    // ── 匯出／匯入 ────────────────────────────────────────────────────
+    // ZH: 為什麼要有這個：對照表存在資料庫，**不會跟著 repo 走**。
+    //     換一台機器就只剩種子資料，管理者填過的東西全部不見而且沒有提示。
+    //     匯出的 JSON 可以進版控。
+    //
+    // ZH: 🔴 匯入一律**先預覽**。這張表牽動全站分群，
+    //     「按錯就套用」與「按錯先給你看」的代價差很多。
+    var ORG_PENDING = null;      // ZH: 已預覽、等著套用的檔案內容
+
+    async function exportOrg(btn) {
+        var old = btn.textContent;
+        btn.disabled = true;
+        btn.textContent = T('pf_org_exporting', '匯出中…');
+        try {
+            // ZH: 端點要 Authorization，所以不能用 <a href> 直接下載
+            //     （那樣帶不上 token，會拿到一個 401 的檔案）。與數據頁匯出同一個做法。
+            var res = await fetch(API + '/admin/org/export',
+                                  { headers: { Authorization: 'Bearer ' + token() } });
+            if (!res.ok) throw new Error('HTTP ' + res.status);
+            var blob = await res.blob();
+            var url = URL.createObjectURL(blob);
+            var a = document.createElement('a');
+            a.href = url;
+            a.download = 'org-mapping.json';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+            flash('og-msg', T('pf_org_exported', '已匯出 org-mapping.json。可以把它放進版控，換機器時匯回來。'), 8000);
+        } catch (e) {
+            // ZH: 失敗要講 —— 下載沒發生時畫面上完全沒有痕跡，
+            //     使用者只會以為自己沒按到。
+            say('og-msg', T('pf_org_export_fail', '匯出失敗（{w}）').replace('{w}', e.message));
+        } finally {
+            btn.disabled = false;
+            btn.textContent = old;
+        }
+    }
+
+    function orgImportSummary(rep) {
+        var d = rep.departments, u = rep.units;
+        var line = T('pf_org_preview', '學系：新增 {da}、修改 {du}、不變 {dn}；行政單位：新增 {ua}、修改 {uu}、不變 {un}。')
+            .replace('{da}', d.added.length).replace('{du}', d.updated.length).replace('{dn}', d.unchanged)
+            .replace('{ua}', u.added.length).replace('{uu}', u.updated.length).replace('{un}', u.unchanged);
+        var left = rep.untouched_in_db.departments + rep.untouched_in_db.units;
+        if (left) {
+            // ZH: 這個數字是「兩邊不同步」的訊號 —— 可能檔案舊了，
+            //     也可能有人改過名（改名在匯入時會變成「新增」）。要講出來。
+            line += ' ' + T('pf_org_untouched', '另有 {n} 列在資料庫裡但檔案沒提到 —— 它們不會被動到。')
+                .replace('{n}', left);
+        }
+        var names = d.added.concat(u.added).slice(0, 8);
+        if (names.length) {
+            line += ' ' + T('pf_org_added_names', '會新增：{s}')
+                .replace('{s}', names.join('、') + (d.added.length + u.added.length > 8 ? '…' : ''));
+        }
+        return line;
+    }
+
+    async function previewImport(file) {
+        var text = await file.text();
+        var body;
+        try {
+            body = JSON.parse(text);
+        } catch (e) {
+            say('og-msg', T('pf_org_badjson', '這個檔案不是有效的 JSON。'));
+            return;
+        }
+        try {
+            var rep = await api('/admin/org/import?dry_run=true', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body),
+            });
+            ORG_PENDING = body;
+            $('og-apply').hidden = false;
+            note('og-msg', orgImportSummary(rep) + ' '
+                 + T('pf_org_confirm', '確認無誤請按「套用匯入」。'));
+        } catch (e) {
+            ORG_PENDING = null;
+            $('og-apply').hidden = true;
+            say('og-msg', T('pf_org_import_fail', '匯入失敗（{w}）').replace('{w}', e.message));
+        }
+    }
+
+    async function applyImport() {
+        if (!ORG_PENDING) return;
+        try {
+            var rep = await api('/admin/org/import?dry_run=false', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(ORG_PENDING),
+            });
+            ORG_PENDING = null;
+            $('og-apply').hidden = true;
+            $('og-file').value = '';      // ZH: 清掉，否則選同一個檔不會觸發 change
+            ORG.dept = null; ORG.unit = null;
+            await loadOrg();
+            flash('og-msg', T('pf_org_imported', '匯入完成。') + ' ' + orgImportSummary(rep), 10000);
+        } catch (e) {
+            say('og-msg', T('pf_org_import_fail', '匯入失敗（{w}）').replace('{w}', e.message));
+        }
+    }
+
+    (function wireOrgIo() {
+        var ex = $('og-export'), pick = $('og-pick'), f = $('og-file'), ap = $('og-apply');
+        if (!ex || !pick || !f || !ap) return;
+        ex.addEventListener('click', function () { exportOrg(ex); });
+        pick.addEventListener('click', function () { f.click(); });
+        f.addEventListener('change', function () {
+            if (f.files && f.files[0]) previewImport(f.files[0]);
+        });
+        ap.addEventListener('click', applyImport);
+    })();
 
     (function wireOrg() {
         var tabs = $('og-tabs');

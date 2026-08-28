@@ -24,7 +24,10 @@ ZH: ⚠ 校區一律對照 `org_seed.CAMPUSES` 驗。打錯的值存進去之後
 """
 from typing import Any, Optional
 
-from fastapi import APIRouter, Body, Depends, HTTPException
+import json
+from datetime import datetime, timezone
+
+from fastapi import APIRouter, Body, Depends, HTTPException, Response
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
@@ -236,3 +239,155 @@ def save_units(payload: dict = Body(...),
     db.commit()
     return {"added": added, "updated": updated, "renamed": renamed,
             "moved_users": moved_users}
+
+
+# ══════════════════════════════════════════════════════════════════════════
+# ZH: 匯出／匯入 —— 讓這張表跟著版控走
+# ══════════════════════════════════════════════════════════════════════════
+# ZH: 為什麼需要：對照表存在資料庫裡，**不會跟著 repo 走**。
+#     換一台機器（或重建 data/）就只剩種子資料，管理者填過的校區、停用、
+#     改名全部不見，而且沒有任何提示 —— 只會發現報表的分群變了。
+#     匯出成一個 JSON 檔就能進版控，換機器時匯回來。
+#
+# ZH: 🔴 **匯入只做 upsert，永遠不刪除。**
+#     檔案裡沒有的列**原封不動留著**，不會被清掉。
+#     理由跟編輯器不給刪同一個：`users.department` 存的是系名本身、沒有外鍵，
+#     刪掉一列只會讓填過它的人安靜地從分組統計裡消失。
+#     要停用就在檔案裡把那一列的 `active` 設成 0 —— 那是有紀錄、可還原的。
+#
+# ZH: ⚠ **匯入認不出「改名」。** 檔案以名稱／path 為鍵，所以改過名的列匯進來
+#     會被當成**新的一列**，舊的那列還在（而且填過舊名的人仍指著它）。
+#     這是知情的取捨：要認得改名就得在檔案裡記 id，而這兩張表刻意用名稱當主鍵
+#     （見 models.OrgDepartment）。改名請用管理端的編輯器，那裡會連動使用者。
+#     匯入的預覽會把「新增」列出來，看到不該新增的名字就知道是這個情況。
+
+ORG_EXPORT_VERSION = 1
+
+
+@router.get("/export", summary="匯出組織對照表（JSON，可進版控）")
+def export_org(db: Session = Depends(get_db),
+               _: models.User = Depends(require_admin)):
+    """
+    ZH: 回一個可下載的 JSON。**不含人數** —— 那是衍生資料，
+        帶著它會讓兩台機器的檔案內容不同而看起來像有差異。
+
+    @node job-scheduler/app/routers/org.py::export_org
+    """
+    depts = (db.query(models.OrgDepartment)
+             .order_by(models.OrgDepartment.college, models.OrgDepartment.name).all())
+    units = db.query(models.OrgUnit).order_by(models.OrgUnit.path).all()
+    body = {
+        "_說明": [
+            "組織對照表（學系→學院、行政單位）。這是給版控用的匯出檔。",
+            "匯回的方式：管理端 → 平台設定 → 組織對照表 → 匯入。",
+            "⚠ 匯入只會新增與更新，**不會刪除**檔案裡沒有的列。",
+            "⚠ 匯入認不出改名 —— 改過名的會變成新的一列。改名請用編輯器。",
+        ],
+        "version": ORG_EXPORT_VERSION,
+        "exported_at": datetime.now(timezone.utc).isoformat(),
+        "campuses": org_seed.CAMPUSES,
+        "departments": [{"name": d.name, "college": d.college,
+                         "campus": d.campus, "active": d.active} for d in depts],
+        "units": [{"path": u.path, "name": u.name, "parent": u.parent,
+                   "campus": u.campus, "active": u.active} for u in units],
+    }
+    return Response(
+        content=json.dumps(body, ensure_ascii=False, indent=2),
+        media_type="application/json; charset=utf-8",
+        headers={"Content-Disposition": 'attachment; filename="org-mapping.json"'},
+    )
+
+
+@router.post("/import", summary="匯入組織對照表（預設先預覽）")
+def import_org(payload: dict = Body(...),
+               dry_run: bool = True,
+               db: Session = Depends(get_db),
+               _: models.User = Depends(require_admin)) -> Any:
+    """
+    ZH: body 就是匯出檔的內容。`dry_run=true`（預設）只回報會發生什麼，不寫入。
+
+    ZH: 🔴 預設是預覽而不是直接寫 —— 這張表牽動全站的分群統計，
+        「按錯就套用」與「按錯先給你看」的代價差很多。
+
+    @node job-scheduler/app/routers/org.py::import_org
+    """
+    ver = payload.get("version")
+    if ver is not None and ver != ORG_EXPORT_VERSION:
+        raise HTTPException(
+            status_code=400,
+            detail=(f"ZH: 檔案版本 {ver} 不是這個平台認得的 {ORG_EXPORT_VERSION} | "
+                    f"EN: unsupported export version {ver}"))
+
+    depts = payload.get("departments")
+    units = payload.get("units")
+    if not isinstance(depts, list) or not isinstance(units, list):
+        raise HTTPException(
+            status_code=400,
+            detail="ZH: 檔案裡要有 departments 與 units 兩個陣列 | EN: need both arrays")
+
+    report = {"dry_run": dry_run,
+              "departments": {"added": [], "updated": [], "unchanged": 0},
+              "units": {"added": [], "updated": [], "unchanged": 0},
+              "untouched_in_db": {"departments": 0, "units": 0}}
+
+    seen_d, seen_u = set(), set()
+
+    for r in depts:
+        name = (r.get("name") or "").strip()
+        college = (r.get("college") or "").strip()
+        if not name or not college:
+            raise HTTPException(status_code=400,
+                                detail=f"ZH: 學系缺欄位：{r} | EN: bad department row")
+        campus = _clean_campus(r.get("campus"))
+        active = _as_active(r.get("active", 1))
+        seen_d.add(name)
+        cur = db.get(models.OrgDepartment, name)
+        if cur is None:
+            report["departments"]["added"].append(name)
+            if not dry_run:
+                db.add(models.OrgDepartment(name=name, college=college,
+                                            campus=campus, active=active))
+        elif (cur.college, cur.campus, cur.active) != (college, campus, active):
+            report["departments"]["updated"].append(name)
+            if not dry_run:
+                cur.college, cur.campus, cur.active = college, campus, active
+        else:
+            report["departments"]["unchanged"] += 1
+
+    for r in units:
+        name = (r.get("name") or "").strip()
+        if not name:
+            raise HTTPException(status_code=400,
+                                detail=f"ZH: 單位缺名稱：{r} | EN: bad unit row")
+        parent = (r.get("parent") or "").strip() or None
+        # ZH: path 一律重算，不採用檔案裡的 —— 檔案可能是別的版本組出來的。
+        path = f"{parent}/{name}" if parent else name
+        campus = _clean_campus(r.get("campus"))
+        active = _as_active(r.get("active", 1))
+        seen_u.add(path)
+        cur = db.get(models.OrgUnit, path)
+        if cur is None:
+            report["units"]["added"].append(path)
+            if not dry_run:
+                db.add(models.OrgUnit(path=path, name=name, parent=parent,
+                                      campus=campus, active=active))
+        elif (cur.name, cur.campus, cur.active) != (name, campus, active):
+            report["units"]["updated"].append(path)
+            if not dry_run:
+                cur.name, cur.campus, cur.active = name, campus, active
+        else:
+            report["units"]["unchanged"] += 1
+
+    # ZH: 資料庫有、檔案沒有的 —— 只回報數量，**不動它們**。
+    #     這個數字是給人看的訊號：不是 0 就表示兩邊不同步，可能是檔案舊了，
+    #     也可能是有人改過名（改名會在上面變成「新增」）。
+    report["untouched_in_db"]["departments"] = sum(
+        1 for (n,) in db.query(models.OrgDepartment.name).all() if n not in seen_d)
+    report["untouched_in_db"]["units"] = sum(
+        1 for (p,) in db.query(models.OrgUnit.path).all() if p not in seen_u)
+
+    if dry_run:
+        db.rollback()
+    else:
+        db.commit()
+    return report

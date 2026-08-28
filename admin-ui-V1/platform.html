@@ -182,6 +182,11 @@
         <div class="adm-sec__head">
             <h3 id="h-org" data-i18n="pf_org">組織對照表</h3>
             <span class="topbar__spacer"></span>
+            <button class="btn btn--minor" type="button" id="og-export" data-i18n="pf_org_export">匯出</button>
+            <!-- ZH: file input 藏起來，用按鈕代按 —— 原生的檔案選擇器樣式無法與其他鈕一致。 -->
+            <input type="file" id="og-file" accept="application/json,.json" hidden>
+            <button class="btn btn--minor" type="button" id="og-pick" data-i18n="pf_org_import">匯入</button>
+            <button class="btn btn--primary" type="button" id="og-apply" data-i18n="pf_org_apply" hidden>套用匯入</button>
             <button class="btn btn--minor" type="button" id="og-add" data-i18n="pf_org_add" hidden>新增一列</button>
             <button class="btn btn--minor" type="button" id="og-edit" data-i18n="pf_edit">編輯設定</button>
             <button class="btn btn--minor" type="button" id="og-cancel" data-i18n="pf_cancel" hidden>取消</button>
@@ -208,9 +213,9 @@
 <script src="tz.js?v=2e214a8b"></script>
 <!-- ⚠ ZH: 順序不能動 —— i18n-admin 在 i18n 之後、prefs 之前。 -->
 <script src="i18n.js?v=e51b67bd"></script>
-<script src="i18n-admin.js?v=079c6b99"></script>
+<script src="i18n-admin.js?v=76cf49f5"></script>
 <script src="prefs.js?v=a25a96d6"></script>
 <script src="admin-chrome.js?v=6d90183a"></script>
-<script src="platform.js?v=8acc4f8c"></script>
+<script src="platform.js?v=b832a286"></script>
 </body>
 </html>
