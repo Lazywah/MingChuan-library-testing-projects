@@ -7,9 +7,15 @@
    ZH: ⚠ 搬家不是複製。首頁已經**沒有**額度卡，也沒有 goMyai()。
        兩邊各留一份的話就是同一台狀態機的兩份實作，遲早分岔而且不會報錯。
 
-   ZH: 可用 ?state=empty|loading|error|low|noquota 強制展示各種狀態 ——
-       「MYAI 未開通」「額度用完」這些狀態沒辦法靠真實帳號隨時湊出來，
-       沒有這個開關就等於改完之後沒有任何辦法看一眼對不對。
+   ZH: v3.9 初始密碼也併進來了（原本是 provision.html）——
+       拿到密碼之後要做的事就是這一頁的主要動作，沒有理由分兩頁。
+
+   ZH: 可用 ?state= 強制展示各種狀態 ——「MYAI 未開通」「額度用完」這些
+       沒辦法靠真實帳號隨時湊出來，沒有這個開關就等於改完之後沒辦法看一眼對不對。
+       ⚠ 這一頁有**兩塊**各自的狀態，值刻意不重疊：
+         額度：loading | error | empty | low | noquota
+         密碼：pw | pw-acked | pw-error
+       `empty`（未開通）兩塊都吃 —— 那是同一個事實的兩面。
    ============================================================================== */
 
 const API = '/api/v1';
@@ -49,8 +55,10 @@ const STATE = { provisioned: null };
 //     不必散到八個頁面。
 async function goMyai() {
     const box = $('handoff');
-    // ZH: 這個位置本來可能有東西 ——「你的 MYAI 初始密碼還沒改 · 查看初始密碼」
-    //     就是掛在這裡（見 loadBalance）。先抄下來，成功開啟之後還原回去。
+    // ZH: 先抄下這一格原本的樣子，成功開啟之後還原回去。
+    // ZH: v3.9 起這裡在正常情況下是空的（初始密碼提示已移除），
+    //     但**不要因此省掉還原** —— 省掉的話，「正在帶你前往 MYAI…」
+    //     會永遠留在畫面上，看起來像卡住了。
     const before = { html: box.innerHTML, hidden: box.hidden };
     box.hidden = false;
     box.textContent = T('myai_going', '正在帶你前往 MYAI…（會另開分頁，並需要登入一次）');
@@ -136,6 +144,10 @@ async function loadBalance() {
         //       provisioned=true + initial_password=null  → 已確認或逾期
         // ZH: 記下來給引導流程與「問 AI」的分流用（兩處都要，不能只記其一）。
         STATE.provisioned = !(prov && prov.provisioned === false);
+        // ZH: 密碼區吃的是**這一份** prov，不另外發請求（見 renderProvision）。
+        //     ⚠ 要放在下面那個 early return 之前 —— 額度讀不出數字（points 為 null）
+        //     時密碼還是該顯示，那是兩件不同的事。
+        if (!FORCED) renderProvision(prov);
         if (!STATE.provisioned) return renderProvisioning();
 
         if (bal.points == null) return renderNoBalance();
@@ -145,12 +157,10 @@ async function loadBalance() {
 
         // ZH: 已開通且保留期內未確認 → 額度照常顯示，另外掛一個入口。
         //     不取代額度區：他有點數就能用，初始密碼是「還沒處理的事」不是「阻礙」。
-        if (prov && prov.initial_password) {
-            $('handoff').hidden = false;
-            $('handoff').innerHTML =
-                T('idx_pw_unchanged', '你的 MYAI 初始密碼還沒改')
-                + ` · <a href="provision.html">${T('idx_see_pw', '查看初始密碼')}</a>`;
-        }
+        // ZH: v3.9 這裡原本會掛一句「你的 MYAI 初始密碼還沒改」（擁有者裁定拿掉）。
+        //     密碼卡就在同一頁下面，而且標題就寫著「你的 MYAI 初始密碼」——
+        //     在它上面再放一句話講同一件事，是同一個訊息說兩次。
+        //     這一格留給額度提示（額度已用完 · 看用在哪 · 向管理員申請額度）。
         // ZH: Token 即基準（Decision Log #15）——不換算成「約可再問 N 次」。
         // ZH: v3.8 #9 —— 兩段提醒:1=快用完, 2=已用完。狀態由後端算（crud.myai_balance_state），
         //     前端不自己比門檻 —— 兩邊各判一次的話，信裡說「已用完」而畫面說「偏低」
@@ -191,8 +201,8 @@ async function loadBalance() {
         wireUsageLink();
     } catch (e) {
         // ZH: 額度掛掉不該讓引導流程一起消失 —— 給一個保守值讓它照樣畫出來。
-        //     沒有這一行的話 STATE.provisioned 會永遠是 null，
-        //     「前往 MYAI」就會一直走到 provision.html 而不是真的去 MYAI。
+        //     沒有這一行的話 STATE.provisioned 會永遠是 null，而 renderProvisioning()
+        //     會把「前往 MYAI」停用 —— 額度讀不到就按不了 AI，那是錯的。
         if (STATE.provisioned === null) { STATE.provisioned = true; }
         // 錯誤：**主要動作照常可用**——看不到額度不是不能用 AI 的理由
         value.textContent = '—';
@@ -209,6 +219,12 @@ function renderProvisioning() {
     $('balance-value').textContent = '—';
     $('balance-unit').hidden = true;
     $('balance-meta').textContent = T('idx_provisioning', '你的 AI 帳號正在開通，完成後這裡會顯示額度。');
+    // ZH: v3.9 還沒開通就**停用**主要動作，並給一個出口。
+    //     在這之前是「按下去帶你到 provision.html」—— 那一頁的內容現在就在這一頁，
+    //     跳到自己沒有意義；而讓他按下去開廠商登入頁更糟：他還沒有帳號。
+    // ZH: ⚠ 這一頁沒有 lab.js 那支 setPrimary()，直接動按鈕。
+    $('go-myai').disabled = true;
+    $('stuck').hidden = false;
 }
 
 // ZH: 已開通但額度讀不到 —— 那是額度的問題，不是開通的問題，兩者文案不能共用。
@@ -233,11 +249,14 @@ function requireLogin() {
 }
 
 // ── 啟動 ─────────────────────────────────────────────────────────────
-// ZH: 「前往 MYAI」分流（擁有者裁定 2026-08-24）——已開通就直接跳廠商；
-//     還沒開通的人跳過去只會看到廠商的登入頁而他根本沒有帳號，
-//     所以改帶到說明頁（provision.html 會講「還在開通中」，並提供回報入口）。
+// ZH: 「前往 MYAI」分流（擁有者裁定 2026-08-24）——已開通就直接跳廠商。
+// ZH: 還沒開通的人跳過去只會看到廠商的登入頁，而他根本還沒有帳號。
+//     v3.9 之前的做法是帶他去 provision.html；那一頁已經併進這一頁，
+//     所以改成**就地停用按鈕**並在旁邊講原因（見 renderProvisioning）。
 $('go-myai').addEventListener('click', () => {
-    if (STATE.provisioned === false) { location.href = 'provision.html'; return; }
+    // ZH: 未開通時按鈕已經是停用的（見 renderProvisioning），
+    //     這一條是保險 —— 狀態還沒讀回來就被按到的話，不要送人去廠商登入頁。
+    if (STATE.provisioned === false) { return; }
     goMyai();
 });
 
@@ -245,6 +264,9 @@ $('go-myai').addEventListener('click', () => {
 //     那些請求必定 401，只會在 console 留下看起來像壞掉的紅字。
 if (requireLogin()) {
     loadBalance();
+    // ZH: 檢視模式（?state=）不打後端，直接用假資料把密碼區畫出來。
+    //     正常路徑由 loadBalance 拿到 prov 之後呼叫。
+    if (FORCED) renderProvision(null);
 }
 
 
@@ -253,4 +275,88 @@ if (requireLogin()) {
 //     只在語言**改變**時觸發（不是每次套用），所以不會在載入時多跑一次。
 document.addEventListener('prefs:langchanged', () => {
     loadBalance();
+    if (FORCED) renderProvision(null);
 });
+
+
+// ══════════════════════════════════════════════════════════════════════
+// ZH: 初始密碼（v3.9 從 provision.js 搬過來）
+//
+// ZH: 後端契約（GET /external-ai/my-provision）有**三種**狀態：
+//       provisioned=false                        → 還沒有 MYAI 帳號 → 沒有密碼可看
+//       provisioned=true + initial_password       → 保留期內未確認 → 正常路徑
+//       provisioned=true + initial_password=null  → 已確認或逾期 → 沒東西可看
+//     當成兩種的話，「還沒有帳號」也會被帶去看一個空畫面。踩過一次。
+//
+// 隱私：身分一律由 JWT 推導，後端不吃任何身分參數，查不到別人的。
+//       ack 會**立即銷毀**伺服器上的暫存密碼，不等保留期到 —— 所以文案要講明不可逆。
+// ══════════════════════════════════════════════════════════════════════
+/* ZH: ⚠ 這一支**不自己發請求**。loadBalance() 已經抓過 `/my-provision`
+ *     （它要用 provisioned 來分流），再抓一次就是同一個端點打兩遍 ——
+ *     而且兩份回應可能不一致，那種不一致沒有任何錯誤訊息。
+ * ZH: 讀不到開通狀態時這一支根本不會被呼叫（loadBalance 進了 catch），
+ *     密碼區就不出現。使用者看到的是額度那一塊的「暫時取不到額度」——
+ *     一次失敗講一次就夠。
+ */
+function renderProvision(prov) {
+    const d = FORCED ? mockProv(FORCED) : prov;
+
+    // ZH: 沒有密碼可看（還沒開通／已確認／逾期）—— 整區不出現，也不留訊息。
+    //     絕大多數人本來就沒有密碼，每次進來讀一次「你沒有密碼」是噪音。
+    //     ⚠ 這與 provision.html 的行為不同：那一頁是**特地**點進去的，
+    //     說「這裡沒有東西」才有意義。
+    if (!d || !d.provisioned || !d.initial_password) return;
+
+    $('acct').textContent = d.email || '—';
+    $('pw').textContent = d.initial_password;
+    $('pw-intro').textContent = d.retention_days
+        ? T('prov_window', '這組密碼只在開通後 {d} 天內看得到。').replace('{d}', d.retention_days)
+          + T('prov_change_soon', '請盡快到 MYAI 登入並改成自己的密碼。')
+        : T('prov_change_soon', '請盡快到 MYAI 登入並改成自己的密碼。');
+    $('pw-card').hidden = false;
+}
+
+$('copy').addEventListener('click', async () => {
+    const pw = $('pw').textContent;
+    try {
+        await navigator.clipboard.writeText(pw);
+        $('pw-note').textContent = T('prov_copied', '已複製到剪貼簿。');
+    } catch {
+        // ZH: 剪貼簿在非 https 或權限被拒時不可用。不要靜默失敗 ——
+        //     密碼已設 user-select:all，直接告訴使用者可以手動選取。
+        $('pw-note').textContent = T('prov_copy_manual', '這個瀏覽器不允許自動複製，請直接選取上面那一行。');
+    }
+    $('pw-note').hidden = false;
+});
+
+// ZH: 不可逆的動作。成功之後整區收起來 —— 密碼已經不存在了，留著會誤導。
+$('ack').addEventListener('click', async () => {
+    const btn = $('ack');
+    btn.disabled = true;
+    btn.textContent = T('prov_working', '處理中…');
+    try {
+        if (!FORCED) {
+            const r = await fetch(`${API}/external-ai/my-provision/ack`,
+                                  { method: 'POST', headers: authHeaders() });
+            if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        }
+        $('pw-card').hidden = true;
+    } catch (e) {
+        btn.disabled = false;
+        btn.textContent = T('prov_ack', '我已經改好密碼了');
+        $('pw-note').textContent = T('prov_clear_fail', '清除失敗') + `（${e.message || e}）。`
+            + T('prov_clear_fail2', '可以再試一次；不影響你在 MYAI 已經改好的密碼。');
+        $('pw-note').hidden = false;
+    }
+});
+
+// ZH: 密碼區的假資料。與額度那支（mock）分開 —— 兩塊的狀態值不重疊。
+function mockProv(kind) {
+    if (kind === 'pw-error') throw new Error('強制錯誤狀態');
+    if (kind === 'empty') return { provisioned: false };
+    if (kind === 'pw-acked') return { provisioned: true, email: 'a1234567@example.com',
+                                      initial_password: null, retention_days: 30 };
+    if (kind === 'pw') return { provisioned: true, email: 'a1234567@example.com',
+                                initial_password: 'Mcu-2026-x7Kq', retention_days: 30 };
+    return null;
+}

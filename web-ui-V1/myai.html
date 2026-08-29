@@ -50,7 +50,15 @@
              搬家時就漏掉過一次。 -->
     <section class="primary-card" id="balance-card" aria-labelledby="myai-title">
         <h1 class="hero__title" id="myai-title" data-i18n="grp_ai_t">體驗大模型</h1>
-        <p class="hero__sub" data-i18n="myai_sub">學校採購的 MYAI 教育平台。可以聊天、問問題、幫你寫東西和整理文件。</p>
+        <!-- ZH: 兩句話分兩行（擁有者裁定 2026-08-30）。第一句說「這是什麼」，
+                 第二句說「能拿它做什麼」—— 擠成一段時，第二句會被當成第一句的尾巴。
+             ZH: ⚠ 拆成兩個 data-i18n 而不是在字典裡塞 <br> ——
+                 prefs.js 用 textContent 寫入，標籤會原樣顯示出來（見 rp_news_plain 的教訓）。
+                 與 gpu.html 的 hero__sub 同一套做法。 -->
+        <p class="hero__sub">
+            <span data-i18n="myai_sub1">學校採購的 MYAI 教育平台。</span><br>
+            <span data-i18n="myai_sub2">可以聊天、問問題、幫你寫東西和整理文件。</span>
+        </p>
 
         <div class="balance__label" id="balance-label" data-i18n="bal_label">我的 AI 額度</div>
 
@@ -71,14 +79,69 @@
         <div class="handoff" id="handoff" hidden></div>
     </section>
 
+    <!-- ZH: 卡住時的出口。只在「還沒開通」與「狀態讀不到」兩種情況顯示 ——
+             那兩種的共同點是**使用者在這裡沒有下一步可走**。
+         ZH: 「已確認／逾期」不顯示：那不是故障，給回報入口只會製造無效工單。 -->
+    <nav class="minor" id="stuck" hidden>
+        <a href="report.html" data-i18n="prov_report">一直沒開通？回報給我們</a>
+    </nav>
+
+    <!-- ==================================================================
+         ZH: 初始密碼（v3.9 從 provision.html 併進來，擁有者裁定 2026-08-30）。
+
+         ZH: 併過來的理由：拿到密碼之後要做的事**就是上面那顆「前往 MYAI」**，
+             原本那顆在另一頁，於是使用者得記住密碼、換頁、再登入。
+
+         ZH: ⚠ 這裡**沒有**第二顆「前往 MYAI」。provision.html 上有一顆，
+             是因為那一頁沒有別的出口；併進來之後再放一顆，
+             同一畫面就有兩顆一模一樣的主要動作。
+
+         ZH: 🔴 「我已經改好密碼了」會**立即銷毀**伺服器上暫存的密碼，不等保留期到 ——
+             誤按了我們救不了（只能請他走 MYAI 的忘記密碼）。所以它是次要動作（白），
+             而且排在主要動作**下面**：最醒目的必須是「去改密碼」，
+             那才是他這一刻該做的事。
+
+         ZH: ⚠ 沒有密碼可看時（已確認／逾期）**整區不出現，也不留訊息**。
+             provision.html 會說「目前沒有可顯示的初始密碼」，那是因為
+             使用者是**特地**點進那一頁的；在這一頁，絕大多數人本來就沒有密碼，
+             每次進來都讀一次「你沒有密碼」是噪音。
+         ================================================================== -->
+    <section class="panel" id="pw-card" hidden aria-labelledby="pw-h">
+        <h2 class="chart__title" id="pw-h" data-i18n="prov_h1">你的 MYAI 初始密碼</h2>
+        <p class="footnote" id="pw-intro"></p>
+
+        <div class="kv">
+            <span class="kv__k" data-i18n="label_account">帳號</span>
+            <span class="kv__v" id="acct">—</span>
+        </div>
+
+        <!-- ZH: 使用者就是為了這一行來的。
+                 user-select:all 讓剪貼簿不可用時仍能一鍵選取（v1.5 的做法，沿用）。
+             ZH: 「複製密碼」在這一列的尾端 —— 它是**這個欄位的動作**，
+                 不是這一頁的動作。 -->
+        <div class="kv kv--pw">
+            <span class="kv__k" id="pw-label" data-i18n="prov_initial_pw">初始密碼</span>
+            <code class="kv__v kv__v--pw" id="pw">—</code>
+            <button class="btn btn--minor kv__act" id="copy" type="button"
+                    data-i18n="prov_copy">複製密碼</button>
+        </div>
+
+        <button class="btn btn--ghost btn--block" id="ack" type="button"
+                data-i18n="prov_ack">我已經改好密碼了</button>
+        <div class="handoff" id="pw-note" hidden></div>
+
+        <!-- ZH: 回答的是「為什麼這裡不能改」，不是一個動作。 -->
+        <p class="footnote" data-i18n="prov_how">改密碼的地方在 MYAI 平台本身，不在這裡。用上面的帳號密碼登入後即可修改。</p>
+    </section>
+
 </main>
 
 <script src="docs-entry.js?v=ce0c8bd3"></script>
-<script src="i18n.js?v=a5b6048d"></script>
+<script src="i18n.js?v=74b83e96"></script>
 <script src="prefs.js?v=a25a96d6"></script>
 <!-- ZH: 小基（浮動助手）。客服模式公開，登入頁也放 —— 設計文件的使用者需求是「不會用這個平台時想直接問」。 -->
 <script src="assistant-widget.js?v=61a7acaa"></script>
 <script src="chrome.js?v=6303d44d"></script>
-<script src="myai.js?v=f1b049af"></script>
+<script src="myai.js?v=45f70d18"></script>
 </body>
 </html>

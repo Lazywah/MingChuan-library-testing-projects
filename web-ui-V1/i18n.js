@@ -26,7 +26,8 @@
             // ── 共用 ─────────────────────────────────────────────
             nav_home: '首頁',
             myai_title: '體驗大模型 · MCU AI Base',
-            myai_sub: '學校採購的 MYAI 教育平台。可以聊天、問問題、幫你寫東西和整理文件。',
+            myai_sub1: '學校採購的 MYAI 教育平台。',
+            myai_sub2: '可以聊天、問問題、幫你寫東西和整理文件。',
             nav_lab: '程式實驗室',
             btn_login: '登入',
             btn_retry: '重試',
@@ -132,8 +133,6 @@
         bot_files_fail: '讀取檔案清單失敗，請稍後再試。',
             idx_bal_fail: '暫時取不到額度，不影響使用',
             idx_provisioning: '你的 AI 帳號正在開通，完成後這裡會顯示額度。',
-            idx_pw_unchanged: '你的 MYAI 初始密碼還沒改',
-            idx_see_pw: '查看初始密碼',
             // ── 公告清單 ─────────────────────────────────────
             idx_news_h: '公告',
             idx_news_all: '看全部公告',
@@ -388,7 +387,6 @@
             usage_fail: '暫時取不到使用紀錄',
 
             // ── 開通確認 ─────────────────────────────────────────
-            prov_title: '你的 AI 帳號 · MCU AI Base',
             prov_h1: '你的 MYAI 初始密碼',
             prov_initial_pw: '初始密碼',
             prov_copy: '複製密碼',
@@ -396,18 +394,10 @@
             prov_copy_manual: '這個瀏覽器不允許自動複製，請直接選取上面那一行。',
             prov_ack: '我已經改好密碼了',
             prov_how: '改密碼的地方在 MYAI 平台本身，不在這裡。用上面的帳號密碼登入後即可修改。',
-            prov_go_myai: '前往 MYAI',
             prov_window: '這組密碼只在開通後 {d} 天內看得到。',
             prov_change_soon: '請盡快到 MYAI 登入並改成自己的密碼。',
-            prov_state_fail: '暫時取不到開通狀態',
-            prov_retry: '可以重新整理再試一次。',
             prov_report: '一直沒開通？回報給我們',
-            prov_pending: '你的 MYAI 帳號還在開通中，目前還沒有初始密碼。',
-            prov_after: '開通完成後回到首頁就會看到提示。',
-            prov_none: '目前沒有可顯示的初始密碼——你已經確認過，或是保留期已過。',
-            prov_forgot: '若忘記密碼，請在 MYAI 平台用忘記密碼功能重設。',
             prov_working: '處理中…',
-            prov_cleared: '已清除暫存的初始密碼。之後這裡不會再顯示它。',
             prov_clear_fail: '清除失敗',
             prov_clear_fail2: '可以再試一次；不影響你在 MYAI 已經改好的密碼。',
 
@@ -496,7 +486,8 @@
             // ── Shared ───────────────────────────────────────────
             nav_home: 'Home',
             myai_title: 'Try a large AI model · MCU AI Base',
-            myai_sub: 'MYAI, the education AI platform the university subscribes to — chat, ask questions, draft and tidy up documents.',
+            myai_sub1: 'MYAI, the education AI platform the university subscribes to.',
+            myai_sub2: 'Chat, ask questions, draft and tidy up documents.',
             nav_lab: 'Code Lab',
             btn_login: 'Sign in',
             btn_retry: 'Try again',
@@ -602,8 +593,6 @@
         bot_files_fail: 'Could not load the file list. Please try again shortly.',
             idx_bal_fail: 'Balance unavailable right now — you can still use everything',
             idx_provisioning: 'Your AI account is being set up. Your balance will show here once it is ready.',
-            idx_pw_unchanged: 'You have not changed your initial MYAI password yet',
-            idx_see_pw: 'View initial password',
             // ── Announcements ────────────────────────────────
             idx_news_h: 'Announcements',
             idx_news_all: 'See all announcements',
@@ -858,7 +847,6 @@
             usage_fail: 'Usage history unavailable',
 
             // ── Account setup ────────────────────────────────────
-            prov_title: 'Your AI account · MCU AI Base',
             prov_h1: 'Your initial MYAI password',
             prov_initial_pw: 'Initial password',
             prov_copy: 'Copy password',
@@ -866,18 +854,10 @@
             prov_copy_manual: 'This browser does not allow copying automatically. Please select the line above.',
             prov_ack: 'I have changed my password',
             prov_how: 'You change the password on MYAI itself, not here. Sign in with the details above and change it there.',
-            prov_go_myai: 'Go to MYAI',
             prov_window: 'This password is only visible for {d} days after setup.',
             prov_change_soon: 'Please sign in to MYAI soon and change it to your own password.',
-            prov_state_fail: 'Setup status unavailable',
-            prov_retry: 'Refresh the page and try again.',
             prov_report: 'Still not set up? Tell us',
-            prov_pending: 'Your MYAI account is still being set up, so there is no initial password yet.',
-            prov_after: 'Once it is ready, you will see a prompt on the home page.',
-            prov_none: 'No initial password to show — either you already confirmed it, or the retention period has passed.',
-            prov_forgot: 'If you have forgotten it, use the forgot-password function on MYAI to reset it.',
             prov_working: 'Working…',
-            prov_cleared: 'The stored initial password has been cleared. It will not be shown here again.',
             prov_clear_fail: 'Could not clear',
             prov_clear_fail2: 'You can try again; this does not affect the password you already changed on MYAI.',
 
