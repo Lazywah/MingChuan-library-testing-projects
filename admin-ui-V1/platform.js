@@ -1785,10 +1785,14 @@
         var isDept = ORG_TAB === 'dept';
         var rows = (d.rows || []).concat(ORG_NEW);
 
+        // ZH: v3.9 英文名欄。緊接在中文名後面 —— 填的人是逐列對照著填的，
+        //     擺到最右邊的話眼睛要橫跨整張表，51 列填下來很容易錯行。
         var cols = isDept
-            ? [['pf_org_c_dept', '學系'], ['pf_org_c_college', '學院'],
+            ? [['pf_org_c_dept', '學系'], ['pf_org_c_dept_en', '學系（英）'],
+               ['pf_org_c_college', '學院'], ['pf_org_c_college_en', '學院（英）'],
                ['pf_org_c_campus', '校區'], ['pf_org_c_on', '啟用'], ['pf_org_c_users', '人數']]
-            : [['pf_org_c_unit', '單位'], ['pf_org_c_parent', '上層'],
+            : [['pf_org_c_unit', '單位'], ['pf_org_c_unit_en', '單位（英）'],
+               ['pf_org_c_parent', '上層'],
                ['pf_org_c_campus', '校區'], ['pf_org_c_on', '啟用'], ['pf_org_c_users', '人數']];
 
         $('og-list').innerHTML =
@@ -1806,9 +1810,16 @@
         var users = isNew ? '<span class="footnote">—</span>' : esc(num(r.users || 0));
 
         if (!ORG_EDIT) {
+            // ZH: 沒填英文就顯示「—」，一眼看得出哪幾列還沒填。
             return '<tr>'
                 + '<td>' + esc(r.name || '') + '</td>'
-                + '<td>' + esc((isDept ? r.college : r.parent) || '—') + '</td>'
+                + '<td>' + (r.name_en ? esc(r.name_en)
+                    : '<span class="footnote">—</span>') + '</td>'
+                + (isDept
+                    ? '<td>' + esc(r.college || '—') + '</td>'
+                      + '<td>' + (r.college_en ? esc(r.college_en)
+                          : '<span class="footnote">—</span>') + '</td>'
+                    : '<td>' + esc(r.parent || '—') + '</td>')
                 + '<td>' + esc(r.campus || '—') + '</td>'
                 + '<td>' + (r.active ? esc(T('pf_org_on', '啟用'))
                     : '<span class="footnote">' + esc(T('pf_org_off', '停用')) + '</span>') + '</td>'
@@ -1822,7 +1833,14 @@
 
         return '<tr data-row data-key="' + esc(isNew ? '' : key) + '" data-i="' + i + '">'
             + '<td><input type="text" data-f="name" value="' + esc(r.name || '') + '"></td>'
+            + '<td><input type="text" data-f="name_en" value="' + esc(r.name_en || '')
+            + '" placeholder="' + esc(T('pf_org_en_ph', '官方英文名')) + '"></td>'
             + '<td>' + second + '</td>'
+            + (isDept
+                ? '<td><input type="text" data-f="college_en" value="'
+                  + esc(r.college_en || '') + '" placeholder="'
+                  + esc(T('pf_org_en_ph', '官方英文名')) + '"></td>'
+                : '')
             + '<td>' + orgCampusSelect(r.campus || '', d.campuses) + '</td>'
             + '<td><select data-f="active">'
             + '<option value="1"' + (r.active ? ' selected' : '') + '>' + esc(T('pf_org_on', '啟用')) + '</option>'
@@ -1841,9 +1859,14 @@
                 return el ? el.value : '';
             };
             var row = { key: tr.dataset.key || null, name: g('name').trim(),
+                        name_en: g('name_en').trim(),
                         campus: g('campus'), active: g('active') };
-            if (isDept) row.college = g('college').trim();
-            else row.parent = g('parent').trim();
+            if (isDept) {
+                row.college = g('college').trim();
+                row.college_en = g('college_en').trim();
+            } else {
+                row.parent = g('parent').trim();
+            }
             out.push(row);
         });
         return out;
@@ -2016,7 +2039,8 @@
             ORG_EDIT = false; ORG_NEW = []; orgBtns(); say('og-msg', ''); renderOrg();
         });
         $('og-add').addEventListener('click', function () {
-            ORG_NEW.push({ __new: true, name: '', college: '', parent: '',
+            ORG_NEW.push({ __new: true, name: '', name_en: '',
+                           college: '', college_en: '', parent: '',
                            campus: '', active: 1, users: 0 });
             renderOrg();
             var last = $('og-list').querySelector('tr:last-child [data-f="name"]');

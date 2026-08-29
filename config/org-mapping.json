@@ -1,0 +1,1205 @@
+{
+  "_說明": [
+    "組織對照表（學系→學院、行政單位）。這是給版控用的匯出檔。",
+    "匯回的方式：管理端 → 平台設定 → 組織對照表 → 匯入。",
+    "⚠ 匯入只會新增與更新，**不會刪除**檔案裡沒有的列。",
+    "⚠ 匯入認不出改名 —— 改過名的會變成新的一列。改名請用編輯器。",
+    "name_en / college_en 取自銘傳大學官方英文網站；查不到的留空，畫面會退回中文。"
+  ],
+  "version": 2,
+  "campuses": [
+    "台北",
+    "桃園",
+    "金門",
+    "基河",
+    "美國分校"
+  ],
+  "departments": [
+    {
+      "name": "公共事務與行政管理學系",
+      "college": "人文社會科學暨教育學院",
+      "campus": null,
+      "active": 1,
+      "name_en": "Public Affairs and Administration",
+      "college_en": "School of Humanities, Social Sciences, and Education"
+    },
+    {
+      "name": "國防行政管理進修學士學程",
+      "college": "人文社會科學暨教育學院",
+      "campus": null,
+      "active": 1,
+      "name_en": "Bachelor's Degree Program in National Defense Administration",
+      "college_en": "School of Humanities, Social Sciences, and Education"
+    },
+    {
+      "name": "應用中文與華語文教學系",
+      "college": "人文社會科學暨教育學院",
+      "campus": null,
+      "active": 1,
+      "name_en": "Applied Chinese and Teaching Chinese as a Second Language",
+      "college_en": "School of Humanities, Social Sciences, and Education"
+    },
+    {
+      "name": "應用日語學系",
+      "college": "人文社會科學暨教育學院",
+      "campus": null,
+      "active": 1,
+      "name_en": "Applied Japanese",
+      "college_en": "School of Humanities, Social Sciences, and Education"
+    },
+    {
+      "name": "應用英語學系",
+      "college": "人文社會科學暨教育學院",
+      "campus": null,
+      "active": 1,
+      "name_en": "Applied English",
+      "college_en": "School of Humanities, Social Sciences, and Education"
+    },
+    {
+      "name": "教育研究所",
+      "college": "人文社會科學暨教育學院",
+      "campus": null,
+      "active": 1,
+      "name_en": "Graduate School of Education",
+      "college_en": "School of Humanities, Social Sciences, and Education"
+    },
+    {
+      "name": "犯罪防治學系",
+      "college": "人文社會科學暨教育學院",
+      "campus": null,
+      "active": 1,
+      "name_en": "Criminal Justice",
+      "college_en": "School of Humanities, Social Sciences, and Education"
+    },
+    {
+      "name": "諮商臨床與工商心理學系",
+      "college": "人文社會科學暨教育學院",
+      "campus": null,
+      "active": 1,
+      "name_en": "Counseling and I/O Psychology",
+      "college_en": "School of Humanities, Social Sciences, and Education"
+    },
+    {
+      "name": "生物科技學系",
+      "college": "健康暨醫學工程學院",
+      "campus": null,
+      "active": 1,
+      "name_en": "Biotechnology",
+      "college_en": "School of Health and Medical Engineering"
+    },
+    {
+      "name": "生物醫學工程學系",
+      "college": "健康暨醫學工程學院",
+      "campus": null,
+      "active": 1,
+      "name_en": "Biomedical Engineering",
+      "college_en": "School of Health and Medical Engineering"
+    },
+    {
+      "name": "醫療資訊與管理學系",
+      "college": "健康暨醫學工程學院",
+      "campus": null,
+      "active": 1,
+      "name_en": "Healthcare Information & Management",
+      "college_en": "School of Health and Medical Engineering"
+    },
+    {
+      "name": "全媒體大一不分系",
+      "college": "傳播學院",
+      "campus": null,
+      "active": 1,
+      "name_en": "Interdisciplinary Program in the School of Communication",
+      "college_en": "School of Communication"
+    },
+    {
+      "name": "廣告暨策略行銷學系",
+      "college": "傳播學院",
+      "campus": null,
+      "active": 1,
+      "name_en": "Advertising & Strategic Marketing",
+      "college_en": "School of Communication"
+    },
+    {
+      "name": "廣播電視學系",
+      "college": "傳播學院",
+      "campus": null,
+      "active": 1,
+      "name_en": "Radio & Television",
+      "college_en": "School of Communication"
+    },
+    {
+      "name": "影音新聞暨社群傳播學系",
+      "college": "傳播學院",
+      "campus": null,
+      "active": 1,
+      "name_en": "Audiovisual Journalism and Social Media Communication",
+      "college_en": "School of Communication"
+    },
+    {
+      "name": "新媒體暨傳播管理學系",
+      "college": "傳播學院",
+      "campus": null,
+      "active": 1,
+      "name_en": "New Media and Communication Administration",
+      "college_en": "School of Communication"
+    },
+    {
+      "name": "師資培育中心",
+      "college": "共同教育學院",
+      "campus": null,
+      "active": 1,
+      "name_en": "Teacher Education Center",
+      "college_en": "Institute of General Education"
+    },
+    {
+      "name": "英語教學中心",
+      "college": "共同教育學院",
+      "campus": null,
+      "active": 1,
+      "name_en": "English Language Center",
+      "college_en": "Institute of General Education"
+    },
+    {
+      "name": "通識教育中心",
+      "college": "共同教育學院",
+      "campus": null,
+      "active": 1,
+      "name_en": "General Education Center",
+      "college_en": "Institute of General Education"
+    },
+    {
+      "name": "體育室",
+      "college": "共同教育學院",
+      "campus": null,
+      "active": 1,
+      "name_en": "Office of Physical Education",
+      "college_en": "Institute of General Education"
+    },
+    {
+      "name": "國際事務碩士學程",
+      "college": "國際學院",
+      "campus": null,
+      "active": 1,
+      "name_en": "Master Program in International Affairs",
+      "college_en": "International College"
+    },
+    {
+      "name": "國際事務與外交學士學程",
+      "college": "國際學院",
+      "campus": null,
+      "active": 1,
+      "name_en": "International Affairs & Diplomacy Program",
+      "college_en": "International College"
+    },
+    {
+      "name": "國際企業與貿易學士學程",
+      "college": "國際學院",
+      "campus": null,
+      "active": 1,
+      "name_en": "International Business and Trade Program",
+      "college_en": "International College"
+    },
+    {
+      "name": "新聞與大眾傳播學士學程",
+      "college": "國際學院",
+      "campus": null,
+      "active": 1,
+      "name_en": "Journalism and Mass Communication Program",
+      "college_en": "International College"
+    },
+    {
+      "name": "旅遊與觀光學士學程",
+      "college": "國際學院",
+      "campus": null,
+      "active": 1,
+      "name_en": "Travel and Tourism Program",
+      "college_en": "International College"
+    },
+    {
+      "name": "時尚與創新管理學士學程",
+      "college": "國際學院",
+      "campus": null,
+      "active": 1,
+      "name_en": "Fashion & Innovation Management Program",
+      "college_en": "International College"
+    },
+    {
+      "name": "資訊科技應用與管理學士學程",
+      "college": "國際學院",
+      "campus": null,
+      "active": 1,
+      "name_en": "Information Technology Management Program",
+      "college_en": "International College"
+    },
+    {
+      "name": "法律學系",
+      "college": "法律學院",
+      "campus": null,
+      "active": 1,
+      "name_en": "Law",
+      "college_en": "School of Law"
+    },
+    {
+      "name": "財金法律學系",
+      "college": "法律學院",
+      "campus": null,
+      "active": 1,
+      "name_en": "Financial Law",
+      "college_en": "School of Law"
+    },
+    {
+      "name": "人工智慧應用暨管理學士學程",
+      "college": "管理學院",
+      "campus": null,
+      "active": 1,
+      "name_en": "Artificial Intelligence Applications and Management Program",
+      "college_en": "School of Management"
+    },
+    {
+      "name": "企業管理學系",
+      "college": "管理學院",
+      "campus": null,
+      "active": 1,
+      "name_en": "Business Administration",
+      "college_en": "School of Management"
+    },
+    {
+      "name": "國際企業學系",
+      "college": "管理學院",
+      "campus": null,
+      "active": 1,
+      "name_en": "International Business",
+      "college_en": "School of Management"
+    },
+    {
+      "name": "會計學系",
+      "college": "管理學院",
+      "campus": null,
+      "active": 1,
+      "name_en": "Accounting",
+      "college_en": "School of Management"
+    },
+    {
+      "name": "財務金融學系",
+      "college": "管理學院",
+      "campus": null,
+      "active": 1,
+      "name_en": "Finance",
+      "college_en": "School of Management"
+    },
+    {
+      "name": "資訊應用與金融保險學系",
+      "college": "管理學院",
+      "campus": null,
+      "active": 1,
+      "name_en": "Information Applications, Finance and Insurance",
+      "college_en": "School of Management"
+    },
+    {
+      "name": "休閒遊憩管理學系",
+      "college": "觀光學院",
+      "campus": null,
+      "active": 1,
+      "name_en": "Leisure & Recreation Management",
+      "college_en": "School of Tourism"
+    },
+    {
+      "name": "觀光事業學系",
+      "college": "觀光學院",
+      "campus": null,
+      "active": 1,
+      "name_en": "Tourism",
+      "college_en": "School of Tourism"
+    },
+    {
+      "name": "餐旅管理學系",
+      "college": "觀光學院",
+      "campus": null,
+      "active": 1,
+      "name_en": "Hospitality Management",
+      "college_en": "School of Tourism"
+    },
+    {
+      "name": "商品設計學系",
+      "college": "設計學院",
+      "campus": null,
+      "active": 1,
+      "name_en": "Product Design",
+      "college_en": "School of Design"
+    },
+    {
+      "name": "商業設計學系",
+      "college": "設計學院",
+      "campus": null,
+      "active": 1,
+      "name_en": "Commercial Design",
+      "college_en": "School of Design"
+    },
+    {
+      "name": "建築學系",
+      "college": "設計學院",
+      "campus": null,
+      "active": 1,
+      "name_en": "Architecture",
+      "college_en": "School of Design"
+    },
+    {
+      "name": "數位媒體設計學系",
+      "college": "設計學院",
+      "campus": null,
+      "active": 1,
+      "name_en": "Digital Media Design",
+      "college_en": "School of Design"
+    },
+    {
+      "name": "都市設計與永續發展學系",
+      "college": "設計學院",
+      "campus": null,
+      "active": 1,
+      "name_en": "Urban Design and Sustainable Development",
+      "college_en": "School of Design"
+    },
+    {
+      "name": "應用統計與資料科學學系",
+      "college": "金融科技學院",
+      "campus": null,
+      "active": 1,
+      "name_en": "Applied Statistics and Information Science",
+      "college_en": "School of Financial Technology"
+    },
+    {
+      "name": "金融學系",
+      "college": "金融科技學院",
+      "campus": null,
+      "active": 1,
+      "name_en": "Money and Banking",
+      "college_en": "School of Financial Technology"
+    },
+    {
+      "name": "金融科技應用學系",
+      "college": "金融科技學院",
+      "campus": null,
+      "active": 1,
+      "name_en": "Financial Technology Applications",
+      "college_en": "School of Financial Technology"
+    },
+    {
+      "name": "人工智慧應用學系",
+      "college": "電機資訊學院",
+      "campus": null,
+      "active": 1,
+      "name_en": "Applied Artificial Intelligence",
+      "college_en": "School of Electrical and Information Engineering"
+    },
+    {
+      "name": "半導體應用學士學程",
+      "college": "電機資訊學院",
+      "campus": null,
+      "active": 1,
+      "name_en": "Semiconductor Applications Program",
+      "college_en": "School of Electrical and Information Engineering"
+    },
+    {
+      "name": "資訊工程學系",
+      "college": "電機資訊學院",
+      "campus": null,
+      "active": 1,
+      "name_en": "Computer Science & Information Engineering",
+      "college_en": "School of Electrical and Information Engineering"
+    },
+    {
+      "name": "資訊管理學系",
+      "college": "電機資訊學院",
+      "campus": null,
+      "active": 1,
+      "name_en": "Information Management",
+      "college_en": "School of Electrical and Information Engineering"
+    },
+    {
+      "name": "電機工程學系",
+      "college": "電機資訊學院",
+      "campus": null,
+      "active": 1,
+      "name_en": "Electrical Engineering",
+      "college_en": "School of Electrical and Information Engineering"
+    }
+  ],
+  "units": [
+    {
+      "path": "中小企業創新育成中心",
+      "name": "中小企業創新育成中心",
+      "parent": null,
+      "campus": null,
+      "active": 1,
+      "name_en": "Innovation and Incubation Center"
+    },
+    {
+      "path": "人力資源處",
+      "name": "人力資源處",
+      "parent": null,
+      "campus": null,
+      "active": 1,
+      "name_en": "Human Resources"
+    },
+    {
+      "path": "兩岸研究中心",
+      "name": "兩岸研究中心",
+      "parent": null,
+      "campus": null,
+      "active": 1,
+      "name_en": "Cross-Strait Research Center"
+    },
+    {
+      "path": "前程規劃處",
+      "name": "前程規劃處",
+      "parent": null,
+      "campus": null,
+      "active": 1,
+      "name_en": "Career Planning and Counseling Division"
+    },
+    {
+      "path": "前程規劃處/職涯發展中心",
+      "name": "職涯發展中心",
+      "parent": "前程規劃處",
+      "campus": null,
+      "active": 1,
+      "name_en": ""
+    },
+    {
+      "path": "前程規劃處/諮商輔導中心",
+      "name": "諮商輔導中心",
+      "parent": "前程規劃處",
+      "campus": null,
+      "active": 1,
+      "name_en": ""
+    },
+    {
+      "path": "國際副校長室",
+      "name": "國際副校長室",
+      "parent": null,
+      "campus": null,
+      "active": 1,
+      "name_en": ""
+    },
+    {
+      "path": "國際副校長室/EMI資源中心",
+      "name": "EMI資源中心",
+      "parent": "國際副校長室",
+      "campus": null,
+      "active": 1,
+      "name_en": ""
+    },
+    {
+      "path": "國際副校長室/MSCHE認證",
+      "name": "MSCHE認證",
+      "parent": "國際副校長室",
+      "campus": null,
+      "active": 1,
+      "name_en": ""
+    },
+    {
+      "path": "國際教育交流處",
+      "name": "國際教育交流處",
+      "parent": null,
+      "campus": null,
+      "active": 1,
+      "name_en": "International Education & Exchange Division"
+    },
+    {
+      "path": "國際教育交流處/僑陸事務組",
+      "name": "僑陸事務組",
+      "parent": "國際教育交流處",
+      "campus": null,
+      "active": 1,
+      "name_en": "Overseas and Mainland Chinese Students Service Section"
+    },
+    {
+      "path": "國際教育交流處/國際事務組",
+      "name": "國際事務組",
+      "parent": "國際教育交流處",
+      "campus": null,
+      "active": 1,
+      "name_en": ""
+    },
+    {
+      "path": "國際教育交流處/國際專修部",
+      "name": "國際專修部",
+      "parent": "國際教育交流處",
+      "campus": null,
+      "active": 1,
+      "name_en": ""
+    },
+    {
+      "path": "國際教育交流處/境外生輔導組",
+      "name": "境外生輔導組",
+      "parent": "國際教育交流處",
+      "campus": null,
+      "active": 1,
+      "name_en": ""
+    },
+    {
+      "path": "國際教育交流處/海外青年技術訓練班",
+      "name": "海外青年技術訓練班",
+      "parent": "國際教育交流處",
+      "campus": null,
+      "active": 1,
+      "name_en": ""
+    },
+    {
+      "path": "圖書館",
+      "name": "圖書館",
+      "parent": null,
+      "campus": null,
+      "active": 1,
+      "name_en": "Library"
+    },
+    {
+      "path": "圖書館/台北閱覽組",
+      "name": "台北閱覽組",
+      "parent": "圖書館",
+      "campus": null,
+      "active": 1,
+      "name_en": "Taipei Readers' Services"
+    },
+    {
+      "path": "圖書館/採編組",
+      "name": "採編組",
+      "parent": "圖書館",
+      "campus": null,
+      "active": 1,
+      "name_en": "Acquisitions"
+    },
+    {
+      "path": "圖書館/桃園閱覽組",
+      "name": "桃園閱覽組",
+      "parent": "圖書館",
+      "campus": null,
+      "active": 1,
+      "name_en": "Taoyuan Readers' Services"
+    },
+    {
+      "path": "圖書館/資訊組",
+      "name": "資訊組",
+      "parent": "圖書館",
+      "campus": null,
+      "active": 1,
+      "name_en": "Electronic Resources"
+    },
+    {
+      "path": "基河行政處",
+      "name": "基河行政處",
+      "parent": null,
+      "campus": null,
+      "active": 1,
+      "name_en": "Jihe Complex Administration"
+    },
+    {
+      "path": "基河行政處/庶務組",
+      "name": "庶務組",
+      "parent": "基河行政處",
+      "campus": null,
+      "active": 1,
+      "name_en": ""
+    },
+    {
+      "path": "基河行政處/產品創新中心",
+      "name": "產品創新中心",
+      "parent": "基河行政處",
+      "campus": null,
+      "active": 1,
+      "name_en": ""
+    },
+    {
+      "path": "基河行政處/處長室",
+      "name": "處長室",
+      "parent": "基河行政處",
+      "campus": null,
+      "active": 1,
+      "name_en": ""
+    },
+    {
+      "path": "基河行政處/行政資源組",
+      "name": "行政資源組",
+      "parent": "基河行政處",
+      "campus": null,
+      "active": 1,
+      "name_en": ""
+    },
+    {
+      "path": "基河行政處/銘傳會館",
+      "name": "銘傳會館",
+      "parent": "基河行政處",
+      "campus": null,
+      "active": 1,
+      "name_en": ""
+    },
+    {
+      "path": "學務處",
+      "name": "學務處",
+      "parent": null,
+      "campus": null,
+      "active": 1,
+      "name_en": "Office of Student Affairs"
+    },
+    {
+      "path": "學務處/住宿服務組",
+      "name": "住宿服務組",
+      "parent": "學務處",
+      "campus": null,
+      "active": 1,
+      "name_en": "Housing Service Section"
+    },
+    {
+      "path": "學務處/原住民族學生資源中心",
+      "name": "原住民族學生資源中心",
+      "parent": "學務處",
+      "campus": null,
+      "active": 1,
+      "name_en": ""
+    },
+    {
+      "path": "學務處/學務長室",
+      "name": "學務長室",
+      "parent": "學務處",
+      "campus": null,
+      "active": 1,
+      "name_en": "Dean's Office"
+    },
+    {
+      "path": "學務處/生活輔導組",
+      "name": "生活輔導組",
+      "parent": "學務處",
+      "campus": null,
+      "active": 1,
+      "name_en": "Student Advising Section"
+    },
+    {
+      "path": "學務處/衛生保健組",
+      "name": "衛生保健組",
+      "parent": "學務處",
+      "campus": null,
+      "active": 1,
+      "name_en": "Campus Health Section"
+    },
+    {
+      "path": "學務處/課外活動指導組",
+      "name": "課外活動指導組",
+      "parent": "學務處",
+      "campus": null,
+      "active": 1,
+      "name_en": "Extracurricular Activities Section"
+    },
+    {
+      "path": "學務處/軍訓室",
+      "name": "軍訓室",
+      "parent": "學務處",
+      "campus": null,
+      "active": 1,
+      "name_en": "Military Training Office"
+    },
+    {
+      "path": "學術副校長室",
+      "name": "學術副校長室",
+      "parent": null,
+      "campus": null,
+      "active": 1,
+      "name_en": ""
+    },
+    {
+      "path": "教務處",
+      "name": "教務處",
+      "parent": null,
+      "campus": null,
+      "active": 1,
+      "name_en": "Office of Academic Affairs"
+    },
+    {
+      "path": "教務處/招生中心",
+      "name": "招生中心",
+      "parent": "教務處",
+      "campus": null,
+      "active": 1,
+      "name_en": "Enrollment Center"
+    },
+    {
+      "path": "教務處/教務長室",
+      "name": "教務長室",
+      "parent": "教務處",
+      "campus": null,
+      "active": 1,
+      "name_en": "Dean's Office"
+    },
+    {
+      "path": "教務處/教學暨學習資源中心",
+      "name": "教學暨學習資源中心",
+      "parent": "教務處",
+      "campus": null,
+      "active": 1,
+      "name_en": "Teaching and Learning Resource Center"
+    },
+    {
+      "path": "教務處/桃園教務組",
+      "name": "桃園教務組",
+      "parent": "教務處",
+      "campus": null,
+      "active": 1,
+      "name_en": "Taoyuan Academic Affairs Section"
+    },
+    {
+      "path": "教務處/綜合業務組",
+      "name": "綜合業務組",
+      "parent": "教務處",
+      "campus": null,
+      "active": 1,
+      "name_en": "General Academic Affairs Section"
+    },
+    {
+      "path": "教務處/註冊組",
+      "name": "註冊組",
+      "parent": "教務處",
+      "campus": null,
+      "active": 1,
+      "name_en": "Registrar Section"
+    },
+    {
+      "path": "教務處/課務組",
+      "name": "課務組",
+      "parent": "教務處",
+      "campus": null,
+      "active": 1,
+      "name_en": "Curriculum Section"
+    },
+    {
+      "path": "數位教育暨AI多媒體發展處",
+      "name": "數位教育暨AI多媒體發展處",
+      "parent": null,
+      "campus": null,
+      "active": 1,
+      "name_en": "Digital Education and AI MultiMedia Development Division"
+    },
+    {
+      "path": "數位教育暨AI多媒體發展處/創意設計組",
+      "name": "創意設計組",
+      "parent": "數位教育暨AI多媒體發展處",
+      "campus": null,
+      "active": 1,
+      "name_en": ""
+    },
+    {
+      "path": "數位教育暨AI多媒體發展處/智慧學習組",
+      "name": "智慧學習組",
+      "parent": "數位教育暨AI多媒體發展處",
+      "campus": null,
+      "active": 1,
+      "name_en": ""
+    },
+    {
+      "path": "校務副校長室",
+      "name": "校務副校長室",
+      "parent": null,
+      "campus": null,
+      "active": 1,
+      "name_en": ""
+    },
+    {
+      "path": "校務副校長室/校務研究中心",
+      "name": "校務研究中心",
+      "parent": "校務副校長室",
+      "campus": null,
+      "active": 1,
+      "name_en": ""
+    },
+    {
+      "path": "校友服務暨資源發展處",
+      "name": "校友服務暨資源發展處",
+      "parent": null,
+      "campus": null,
+      "active": 1,
+      "name_en": ""
+    },
+    {
+      "path": "校友服務暨資源發展處/校友總會",
+      "name": "校友總會",
+      "parent": "校友服務暨資源發展處",
+      "campus": null,
+      "active": 1,
+      "name_en": ""
+    },
+    {
+      "path": "校長室",
+      "name": "校長室",
+      "parent": null,
+      "campus": null,
+      "active": 1,
+      "name_en": ""
+    },
+    {
+      "path": "桃園行政處",
+      "name": "桃園行政處",
+      "parent": null,
+      "campus": null,
+      "active": 1,
+      "name_en": "Taoyuan Campus Administration"
+    },
+    {
+      "path": "桃園行政處/學務組",
+      "name": "學務組",
+      "parent": "桃園行政處",
+      "campus": null,
+      "active": 1,
+      "name_en": ""
+    },
+    {
+      "path": "桃園行政處/成功行政暨能源管理組",
+      "name": "成功行政暨能源管理組",
+      "parent": "桃園行政處",
+      "campus": null,
+      "active": 1,
+      "name_en": ""
+    },
+    {
+      "path": "桃園行政處/教務組",
+      "name": "教務組",
+      "parent": "桃園行政處",
+      "campus": null,
+      "active": 1,
+      "name_en": ""
+    },
+    {
+      "path": "桃園行政處/總務組",
+      "name": "總務組",
+      "parent": "桃園行政處",
+      "campus": null,
+      "active": 1,
+      "name_en": ""
+    },
+    {
+      "path": "桃園行政處/處長室",
+      "name": "處長室",
+      "parent": "桃園行政處",
+      "campus": null,
+      "active": 1,
+      "name_en": ""
+    },
+    {
+      "path": "永續發展處",
+      "name": "永續發展處",
+      "parent": null,
+      "campus": null,
+      "active": 1,
+      "name_en": "Sustainable Development Division"
+    },
+    {
+      "path": "法務處",
+      "name": "法務處",
+      "parent": null,
+      "campus": null,
+      "active": 1,
+      "name_en": "Legal Affairs"
+    },
+    {
+      "path": "泰國教育文化中心",
+      "name": "泰國教育文化中心",
+      "parent": null,
+      "campus": null,
+      "active": 1,
+      "name_en": "Education and Culture Center of Thailand"
+    },
+    {
+      "path": "環境保護暨職業安全衛生中心",
+      "name": "環境保護暨職業安全衛生中心",
+      "parent": null,
+      "campus": null,
+      "active": 1,
+      "name_en": "Environmental Protection, Occupational Safety and Hygiene Center"
+    },
+    {
+      "path": "產學暨推廣處",
+      "name": "產學暨推廣處",
+      "parent": null,
+      "campus": null,
+      "active": 1,
+      "name_en": "Industry-academia Collaboration and University Extension"
+    },
+    {
+      "path": "產學暨推廣處/mymcu",
+      "name": "mymcu",
+      "parent": "產學暨推廣處",
+      "campus": null,
+      "active": 1,
+      "name_en": ""
+    },
+    {
+      "path": "產學暨推廣處/推廣組",
+      "name": "推廣組",
+      "parent": "產學暨推廣處",
+      "campus": null,
+      "active": 1,
+      "name_en": ""
+    },
+    {
+      "path": "產學暨推廣處/業務推廣暨育成中心",
+      "name": "業務推廣暨育成中心",
+      "parent": "產學暨推廣處",
+      "campus": null,
+      "active": 1,
+      "name_en": ""
+    },
+    {
+      "path": "產學暨推廣處/產學組",
+      "name": "產學組",
+      "parent": "產學暨推廣處",
+      "campus": null,
+      "active": 1,
+      "name_en": ""
+    },
+    {
+      "path": "產學暨推廣處/華語中心",
+      "name": "華語中心",
+      "parent": "產學暨推廣處",
+      "campus": null,
+      "active": 1,
+      "name_en": ""
+    },
+    {
+      "path": "產推副校長室",
+      "name": "產推副校長室",
+      "parent": null,
+      "campus": null,
+      "active": 1,
+      "name_en": ""
+    },
+    {
+      "path": "研究發展處",
+      "name": "研究發展處",
+      "parent": null,
+      "campus": null,
+      "active": 1,
+      "name_en": "Research and Development"
+    },
+    {
+      "path": "研究發展處/校務發展組",
+      "name": "校務發展組",
+      "parent": "研究發展處",
+      "campus": null,
+      "active": 1,
+      "name_en": ""
+    },
+    {
+      "path": "研究發展處/研究暨評量組",
+      "name": "研究暨評量組",
+      "parent": "研究發展處",
+      "campus": null,
+      "active": 1,
+      "name_en": ""
+    },
+    {
+      "path": "秘書處",
+      "name": "秘書處",
+      "parent": null,
+      "campus": null,
+      "active": 1,
+      "name_en": "General Secretary's Division"
+    },
+    {
+      "path": "秘書處/公共關係組",
+      "name": "公共關係組",
+      "parent": "秘書處",
+      "campus": null,
+      "active": 1,
+      "name_en": "Public Relations Section"
+    },
+    {
+      "path": "秘書處/文書組",
+      "name": "文書組",
+      "parent": "秘書處",
+      "campus": null,
+      "active": 1,
+      "name_en": "Documents Section"
+    },
+    {
+      "path": "秘書處/新聞組",
+      "name": "新聞組",
+      "parent": "秘書處",
+      "campus": null,
+      "active": 1,
+      "name_en": "Journalism Section"
+    },
+    {
+      "path": "稽核室",
+      "name": "稽核室",
+      "parent": null,
+      "campus": null,
+      "active": 1,
+      "name_en": "Audit Office"
+    },
+    {
+      "path": "總務處",
+      "name": "總務處",
+      "parent": null,
+      "campus": null,
+      "active": 1,
+      "name_en": "Office of General Affairs"
+    },
+    {
+      "path": "總務處/事務組",
+      "name": "事務組",
+      "parent": "總務處",
+      "campus": null,
+      "active": 1,
+      "name_en": "Operation Section"
+    },
+    {
+      "path": "總務處/出納組",
+      "name": "出納組",
+      "parent": "總務處",
+      "campus": null,
+      "active": 1,
+      "name_en": "Bursar Section"
+    },
+    {
+      "path": "總務處/採購組",
+      "name": "採購組",
+      "parent": "總務處",
+      "campus": null,
+      "active": 1,
+      "name_en": "Purchasing Section"
+    },
+    {
+      "path": "總務處/營繕組",
+      "name": "營繕組",
+      "parent": "總務處",
+      "campus": null,
+      "active": 1,
+      "name_en": "Construction and Building Section"
+    },
+    {
+      "path": "總務處/總務長室",
+      "name": "總務長室",
+      "parent": "總務處",
+      "campus": null,
+      "active": 1,
+      "name_en": "Dean's Office"
+    },
+    {
+      "path": "美國分校",
+      "name": "美國分校",
+      "parent": null,
+      "campus": null,
+      "active": 1,
+      "name_en": ""
+    },
+    {
+      "path": "藝術中心",
+      "name": "藝術中心",
+      "parent": null,
+      "campus": null,
+      "active": 1,
+      "name_en": "Arts Center"
+    },
+    {
+      "path": "行政副校長室",
+      "name": "行政副校長室",
+      "parent": null,
+      "campus": null,
+      "active": 1,
+      "name_en": ""
+    },
+    {
+      "path": "財務處",
+      "name": "財務處",
+      "parent": null,
+      "campus": null,
+      "active": 1,
+      "name_en": "Controller"
+    },
+    {
+      "path": "財務處/審核組",
+      "name": "審核組",
+      "parent": "財務處",
+      "campus": null,
+      "active": 1,
+      "name_en": "Auditing Section"
+    },
+    {
+      "path": "財務處/會計組",
+      "name": "會計組",
+      "parent": "財務處",
+      "campus": null,
+      "active": 1,
+      "name_en": "Accounting Section"
+    },
+    {
+      "path": "資訊網路處",
+      "name": "資訊網路處",
+      "parent": null,
+      "campus": null,
+      "active": 1,
+      "name_en": "Information and Network"
+    },
+    {
+      "path": "資訊網路處/台北資訊服務組",
+      "name": "台北資訊服務組",
+      "parent": "資訊網路處",
+      "campus": null,
+      "active": 1,
+      "name_en": ""
+    },
+    {
+      "path": "資訊網路處/桃園資訊服務組",
+      "name": "桃園資訊服務組",
+      "parent": "資訊網路處",
+      "campus": null,
+      "active": 1,
+      "name_en": ""
+    },
+    {
+      "path": "資訊網路處/系統發展組",
+      "name": "系統發展組",
+      "parent": "資訊網路處",
+      "campus": null,
+      "active": 1,
+      "name_en": ""
+    },
+    {
+      "path": "資訊網路處/網路技術組",
+      "name": "網路技術組",
+      "parent": "資訊網路處",
+      "campus": null,
+      "active": 1,
+      "name_en": ""
+    },
+    {
+      "path": "金門分部",
+      "name": "金門分部",
+      "parent": null,
+      "campus": null,
+      "active": 1,
+      "name_en": "Kinmen Location"
+    },
+    {
+      "path": "金門分部/事務組",
+      "name": "事務組",
+      "parent": "金門分部",
+      "campus": null,
+      "active": 1,
+      "name_en": ""
+    },
+    {
+      "path": "金門分部/綜合行政組",
+      "name": "綜合行政組",
+      "parent": "金門分部",
+      "campus": null,
+      "active": 1,
+      "name_en": ""
+    },
+    {
+      "path": "體育室",
+      "name": "體育室",
+      "parent": null,
+      "campus": null,
+      "active": 1,
+      "name_en": "Office of Physical Education"
+    }
+  ]
+}

@@ -83,6 +83,7 @@ def list_departments(db: Session = Depends(get_db),
         "campuses": org_seed.CAMPUSES,
         "colleges": sorted({r.college for r in rows}),
         "rows": [{"name": r.name, "college": r.college, "campus": r.campus,
+                  "name_en": r.name_en or "", "college_en": r.college_en or "",
                   "active": r.active, "users": counts.get(r.name, 0)} for r in rows],
     }
 
@@ -113,13 +114,18 @@ def save_departments(payload: dict = Body(...),
         campus = _clean_campus(r.get("campus"))
         active = _as_active(r.get("active", 1))
         key = (r.get("key") or "").strip() or None
+        # ZH: v3.9 英文名。空字串一律存成 None —— 顯示端是用 `or 中文` 退回，
+        #     存 "" 與存 None 的行為要一樣，不然「清空」會變成兩種不同的狀態。
+        name_en = (r.get("name_en") or "").strip() or None
+        college_en = (r.get("college_en") or "").strip() or None
 
         if key is None:
             if db.get(models.OrgDepartment, name):
                 raise HTTPException(status_code=409,
                                     detail=f"ZH: 已經有這個學系：{name} | EN: duplicate: {name}")
             db.add(models.OrgDepartment(name=name, college=college,
-                                        campus=campus, active=active))
+                                        campus=campus, active=active,
+                                        name_en=name_en, college_en=college_en))
             added += 1
             continue
 
@@ -139,13 +145,16 @@ def save_departments(payload: dict = Body(...),
                             .update({models.User.department: name},
                                     synchronize_session=False))
             db.add(models.OrgDepartment(name=name, college=college,
-                                        campus=campus, active=active))
+                                        campus=campus, active=active,
+                                        name_en=name_en, college_en=college_en))
             db.delete(cur)
             renamed += 1
             continue
 
-        if (cur.college, cur.campus, cur.active) != (college, campus, active):
+        if ((cur.college, cur.campus, cur.active, cur.name_en, cur.college_en)
+                != (college, campus, active, name_en, college_en)):
             cur.college, cur.campus, cur.active = college, campus, active
+            cur.name_en, cur.college_en = name_en, college_en
             updated += 1
 
     db.commit()
@@ -170,6 +179,7 @@ def list_units(db: Session = Depends(get_db),
     return {
         "campuses": org_seed.CAMPUSES,
         "rows": [{"path": r.path, "name": r.name, "parent": r.parent,
+                  "name_en": r.name_en or "",
                   "campus": r.campus, "active": r.active,
                   "users": counts.get(r.path, 0)} for r in rows],
     }
@@ -203,13 +213,14 @@ def save_units(payload: dict = Body(...),
         active = _as_active(r.get("active", 1))
         path = f"{parent}/{name}" if parent else name
         key = (r.get("key") or "").strip() or None
+        name_en = (r.get("name_en") or "").strip() or None
 
         if key is None:
             if db.get(models.OrgUnit, path):
                 raise HTTPException(status_code=409,
                                     detail=f"ZH: 已經有這個單位：{path} | EN: duplicate: {path}")
             db.add(models.OrgUnit(path=path, name=name, parent=parent,
-                                  campus=campus, active=active))
+                                  campus=campus, active=active, name_en=name_en))
             added += 1
             continue
 
@@ -227,13 +238,14 @@ def save_units(payload: dict = Body(...),
                             .update({models.User.unit: path},
                                     synchronize_session=False))
             db.add(models.OrgUnit(path=path, name=name, parent=parent,
-                                  campus=campus, active=active))
+                                  campus=campus, active=active, name_en=name_en))
             db.delete(cur)
             renamed += 1
             continue
 
-        if (cur.name, cur.campus, cur.active) != (name, campus, active):
+        if (cur.name, cur.campus, cur.active, cur.name_en) != (name, campus, active, name_en):
             cur.name, cur.campus, cur.active = name, campus, active
+            cur.name_en = name_en
             updated += 1
 
     db.commit()
@@ -261,7 +273,7 @@ def save_units(payload: dict = Body(...),
 #     （見 models.OrgDepartment）。改名請用管理端的編輯器，那裡會連動使用者。
 #     匯入的預覽會把「新增」列出來，看到不該新增的名字就知道是這個情況。
 
-ORG_EXPORT_VERSION = 1
+ORG_EXPORT_VERSION = 2   # ZH: v3.9 多了 name_en / college_en
 
 
 @router.get("/export", summary="匯出組織對照表（JSON，可進版控）")
@@ -287,9 +299,12 @@ def export_org(db: Session = Depends(get_db),
         "exported_at": datetime.now(timezone.utc).isoformat(),
         "campuses": org_seed.CAMPUSES,
         "departments": [{"name": d.name, "college": d.college,
-                         "campus": d.campus, "active": d.active} for d in depts],
+                         "campus": d.campus, "active": d.active,
+                         "name_en": d.name_en or "",
+                         "college_en": d.college_en or ""} for d in depts],
         "units": [{"path": u.path, "name": u.name, "parent": u.parent,
-                   "campus": u.campus, "active": u.active} for u in units],
+                   "campus": u.campus, "active": u.active,
+                   "name_en": u.name_en or ""} for u in units],
     }
     return Response(
         content=json.dumps(body, ensure_ascii=False, indent=2),
@@ -311,11 +326,17 @@ def import_org(payload: dict = Body(...),
 
     @node job-scheduler/app/routers/org.py::import_org
     """
+    # ZH: v3.9 —— 版本改成「不高於現在」就收，不再要求相等。
+    #     格式是**往上相容的疊加**（v2 只是多了 name_en / college_en），
+    #     舊檔缺鍵時下面會保留現有的英文名而不是清掉它。
+    #     嚴格相等的話，bump 一次版本就會讓所有進版控的舊匯出檔失效 ——
+    #     而那些檔案的內容其實完全還能用。
+    #     比現在**新**的仍然要擋：那是未來的格式，我們不知道它多了什麼。
     ver = payload.get("version")
-    if ver is not None and ver != ORG_EXPORT_VERSION:
+    if ver is not None and (not isinstance(ver, int) or ver > ORG_EXPORT_VERSION):
         raise HTTPException(
             status_code=400,
-            detail=(f"ZH: 檔案版本 {ver} 不是這個平台認得的 {ORG_EXPORT_VERSION} | "
+            detail=(f"ZH: 檔案版本 {ver} 比這個平台認得的 {ORG_EXPORT_VERSION} 還新 | "
                     f"EN: unsupported export version {ver}"))
 
     depts = payload.get("departments")
@@ -340,19 +361,32 @@ def import_org(payload: dict = Body(...),
                                 detail=f"ZH: 學系缺欄位：{r} | EN: bad department row")
         campus = _clean_campus(r.get("campus"))
         active = _as_active(r.get("active", 1))
+        # ZH: v3.9 英文名。舊版匯出檔沒有這兩個鍵 → 會是 None，
+        #     於是匯入舊檔會把既有的英文名**清掉**。所以缺鍵時保留現值，
+        #     只有檔案裡明確給了才覆寫（給空字串＝明確要清空）。
+        has_en = "name_en" in r
+        has_cen = "college_en" in r
+        name_en = ((r.get("name_en") or "").strip() or None) if has_en else None
+        college_en = ((r.get("college_en") or "").strip() or None) if has_cen else None
         seen_d.add(name)
         cur = db.get(models.OrgDepartment, name)
         if cur is None:
             report["departments"]["added"].append(name)
             if not dry_run:
                 db.add(models.OrgDepartment(name=name, college=college,
-                                            campus=campus, active=active))
-        elif (cur.college, cur.campus, cur.active) != (college, campus, active):
-            report["departments"]["updated"].append(name)
-            if not dry_run:
-                cur.college, cur.campus, cur.active = college, campus, active
+                                            campus=campus, active=active,
+                                            name_en=name_en, college_en=college_en))
         else:
-            report["departments"]["unchanged"] += 1
+            want_en = name_en if has_en else cur.name_en
+            want_cen = college_en if has_cen else cur.college_en
+            if ((cur.college, cur.campus, cur.active, cur.name_en, cur.college_en)
+                    != (college, campus, active, want_en, want_cen)):
+                report["departments"]["updated"].append(name)
+                if not dry_run:
+                    cur.college, cur.campus, cur.active = college, campus, active
+                    cur.name_en, cur.college_en = want_en, want_cen
+            else:
+                report["departments"]["unchanged"] += 1
 
     for r in units:
         name = (r.get("name") or "").strip()
@@ -364,19 +398,24 @@ def import_org(payload: dict = Body(...),
         path = f"{parent}/{name}" if parent else name
         campus = _clean_campus(r.get("campus"))
         active = _as_active(r.get("active", 1))
+        has_en = "name_en" in r          # ZH: 理由同上：舊檔缺鍵時不要清掉現值
+        name_en = ((r.get("name_en") or "").strip() or None) if has_en else None
         seen_u.add(path)
         cur = db.get(models.OrgUnit, path)
         if cur is None:
             report["units"]["added"].append(path)
             if not dry_run:
                 db.add(models.OrgUnit(path=path, name=name, parent=parent,
-                                      campus=campus, active=active))
-        elif (cur.name, cur.campus, cur.active) != (name, campus, active):
-            report["units"]["updated"].append(path)
-            if not dry_run:
-                cur.name, cur.campus, cur.active = name, campus, active
+                                      campus=campus, active=active, name_en=name_en))
         else:
-            report["units"]["unchanged"] += 1
+            want_en = name_en if has_en else cur.name_en
+            if (cur.name, cur.campus, cur.active, cur.name_en) != (name, campus, active, want_en):
+                report["units"]["updated"].append(path)
+                if not dry_run:
+                    cur.name, cur.campus, cur.active = name, campus, active
+                    cur.name_en = want_en
+            else:
+                report["units"]["unchanged"] += 1
 
     # ZH: 資料庫有、檔案沒有的 —— 只回報數量，**不動它們**。
     #     這個數字是給人看的訊號：不是 0 就表示兩邊不同步，可能是檔案舊了，

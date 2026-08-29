@@ -222,7 +222,9 @@ class TestExport:
     def test_export_round_trips(self, client, adm, seeded):
         """ZH: 匯出的東西要能原封不動匯回去 —— 全部 unchanged 才算真的對稱。"""
         d = client.get("/api/v1/admin/org/export", headers=adm).json()
-        assert d["version"] == 1
+        # ZH: 對照常數而不是寫死數字 —— 格式往上疊加時這條不該假紅。
+        from app.routers.org import ORG_EXPORT_VERSION
+        assert d["version"] == ORG_EXPORT_VERSION
         assert {r["name"] for r in d["departments"]} == {"資訊工程學系", "會計學系"}
 
         r = client.post("/api/v1/admin/org/import?dry_run=true", headers=adm, json=d)
@@ -329,3 +331,89 @@ class TestImport:
         assert client.get("/api/v1/admin/org/export", headers=h).status_code == 403
         assert client.post("/api/v1/admin/org/import", headers=h,
                            json=self._file()).status_code == 403
+
+
+# ══════════════════════════════════════════════════════════════════════════
+# ZH: 英文名（v3.9）
+# ══════════════════════════════════════════════════════════════════════════
+class TestEnglishNames:
+    """
+    ZH: 系所／單位的英文名。**不自動翻譯** —— 官方英文名要人工填，
+        沒填就退回中文顯示，所以填到一半的期間畫面必須照樣可用。
+    """
+
+    def test_options_expose_english_alongside_chinese(self, client, adm, seeded):
+        """
+        ZH: 英文名與中文**並排**送出，由前端依語言挑。
+
+        ZH: 🔴 後端依語言回不同的值會讓同一支 API 有兩種形狀 ——
+            而 `users.department` 存的是中文，比對就會開始出錯。
+        """
+        client.put("/api/v1/admin/org/departments", headers=adm, json={"rows": [
+            {"key": "資訊工程學系", "name": "資訊工程學系", "college": "資訊學院",
+             "name_en": "Dept. of Computer Science", "college_en": "College of Computing",
+             "active": 1},
+        ]})
+        from app import crud
+        from app.database import SessionLocal
+        d = client.get("/api/v1/system/org-options", headers=adm).json()
+        row = [x for x in d["departments"] if x["name"] == "資訊工程學系"][0]
+        assert row["name"] == "資訊工程學系"          # ZH: 中文仍在（value 用它）
+        assert row["name_en"] == "Dept. of Computer Science"
+        assert row["college_en"] == "College of Computing"
+        assert len(d["campuses_en"]) == len(d["campuses"])
+
+    def test_blank_english_is_stored_as_null_not_empty(self, client, adm, seeded):
+        """ZH: 空字串與 None 要是同一種狀態，不然「清空」會有兩種結果。"""
+        client.put("/api/v1/admin/org/departments", headers=adm, json={"rows": [
+            {"key": "資訊工程學系", "name": "資訊工程學系", "college": "資訊學院",
+             "name_en": "   ", "active": 1},
+        ]})
+        d = client.get("/api/v1/admin/org/departments", headers=adm).json()
+        row = [x for x in d["rows"] if x["name"] == "資訊工程學系"][0]
+        assert row["name_en"] == ""
+
+    def test_importing_an_old_v1_file_does_not_wipe_english_names(self, client, adm, seeded):
+        """
+        ZH: 🔴 舊的匯出檔（v1）沒有 name_en 這個鍵。
+            匯入它**不能**把已經填好的英文名清掉 —— 那是靜默的資料損失：
+            匯入報告會說「已更新」，而沒有人會發現少了什麼。
+        """
+        client.put("/api/v1/admin/org/departments", headers=adm, json={"rows": [
+            {"key": "資訊工程學系", "name": "資訊工程學系", "college": "資訊學院",
+             "name_en": "Dept. of Computer Science", "active": 1},
+        ]})
+        old_file = {
+            "version": 1,
+            "departments": [{"name": "資訊工程學系", "college": "資訊學院",
+                             "campus": None, "active": 1}],
+            "units": [],
+        }
+        r = client.post("/api/v1/admin/org/import?dry_run=false", headers=adm, json=old_file)
+        assert r.status_code == 200, r.text
+
+        d = client.get("/api/v1/admin/org/departments", headers=adm).json()
+        row = [x for x in d["rows"] if x["name"] == "資訊工程學系"][0]
+        assert row["name_en"] == "Dept. of Computer Science", "舊檔把英文名清掉了"
+
+    def test_a_file_that_explicitly_clears_english_is_honoured(self, client, adm, seeded):
+        """ZH: 陽性對照 —— 檔案**明確給空字串**時要真的清掉，
+           否則上面那條會變成「永遠改不掉英文名」。"""
+        client.put("/api/v1/admin/org/departments", headers=adm, json={"rows": [
+            {"key": "資訊工程學系", "name": "資訊工程學系", "college": "資訊學院",
+             "name_en": "Dept. of Computer Science", "active": 1},
+        ]})
+        f = {"version": 2,
+             "departments": [{"name": "資訊工程學系", "college": "資訊學院",
+                              "campus": None, "active": 1, "name_en": ""}],
+             "units": []}
+        client.post("/api/v1/admin/org/import?dry_run=false", headers=adm, json=f)
+        d = client.get("/api/v1/admin/org/departments", headers=adm).json()
+        row = [x for x in d["rows"] if x["name"] == "資訊工程學系"][0]
+        assert row["name_en"] == ""
+
+    def test_a_newer_file_version_is_still_rejected(self, client, adm, seeded):
+        """ZH: 舊的收、**新的擋** —— 未來的格式我們不知道它多了什麼。"""
+        r = client.post("/api/v1/admin/org/import", headers=adm,
+                        json={"version": 99, "departments": [], "units": []})
+        assert r.status_code == 400

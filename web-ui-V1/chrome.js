@@ -673,6 +673,19 @@
     function buildOnboarding(me, opts, prefill, unlock) {
         var curLang = (window.Prefs && window.Prefs.get)
             ? window.Prefs.get().ui_lang : 'zh';
+
+        // ZH: v3.9 學系／單位／校區的顯示名。
+        //
+        // ZH: 🔴 **只有顯示會換，送出去的 value 永遠是中文。**
+        //     `users.department` 存的就是中文全名（它同時是 org_departments 的主鍵），
+        //     送英文回去會查無此系而被後端擋下 —— 而錯誤訊息會是「沒有這個學系」，
+        //     完全看不出是語言的問題。
+        //
+        // ZH: 英文名沒填就退回中文（不是留空）—— 148 筆要人工填，
+        //     填到一半的期間畫面必須照樣可用。
+        function disp(zh, en) {
+            return (curLang === 'en' && en) ? en : zh;
+        }
         _onbUnlock = unlock || null;
         var field = onbFieldFor(me.role);
         // ZH: 解鎖模式下只顯示核可範圍內的欄位 —— 顯示了卻不能存,
@@ -687,23 +700,33 @@
 
         // ZH: 學生只能選一個校區（後端 set_user_campuses 也擋,這裡只是別讓他白選）。
         var multi = me.role !== 'student';
-        var campusOpts = opts.campuses.map(function (c) {
-            return '<option value="' + esc(c) + '">' + esc(c) + '</option>';
+        // ZH: 校區的英文名是**平行陣列**（campuses_en），不是每一項的欄位 ——
+        //     校區清單寫死在後端 org_seed，沒有進資料庫，所以沒有物件可以掛。
+        //     長度對不上就整個退回中文，不要用索引硬對（會配錯校區）。
+        var campusEn = (opts.campuses_en && opts.campuses_en.length === opts.campuses.length)
+            ? opts.campuses_en : null;
+        var campusOpts = opts.campuses.map(function (c, i) {
+            return '<option value="' + esc(c) + '">'
+                + esc(disp(c, campusEn ? campusEn[i] : '')) + '</option>';
         }).join('');
 
         var orgHtml = '';
         if (askOrg && field === 'department') {
             // ZH: 依學院分組,51 個系直接平鋪很難找。
             var byCollege = {};
+            var collegeLabel = {};
             opts.departments.forEach(function (d) {
-                (byCollege[d.college] = byCollege[d.college] || []).push(d.name);
+                (byCollege[d.college] = byCollege[d.college] || []).push(d);
+                collegeLabel[d.college] = disp(d.college, d.college_en);
             });
             // ZH: （這裡原本先組了一個寫死「請選擇」的空 optgroup，下一行就整個覆蓋掉 ——
             //      死碼，而且是這個對話框裡唯一沒有走 T() 的字串。）
             orgHtml = Object.keys(byCollege).map(function (c) {
-                return '<optgroup label="' + esc(c) + '">'
-                    + byCollege[c].map(function (n) {
-                        return '<option value="' + esc(n) + '">' + esc(n) + '</option>';
+                return '<optgroup label="' + esc(collegeLabel[c] || c) + '">'
+                    + byCollege[c].map(function (d) {
+                        // ZH: value 一律中文（主鍵），只有顯示的字會換語言。
+                        return '<option value="' + esc(d.name) + '">'
+                            + esc(disp(d.name, d.name_en)) + '</option>';
                     }).join('') + '</optgroup>';
             }).join('');
         } else if (askOrg && field === 'unit') {
@@ -711,11 +734,13 @@
             var tops = opts.units.filter(function (u) { return !u.parent; });
             orgHtml = tops.map(function (t) {
                 var kids = opts.units.filter(function (u) { return u.parent === t.name; });
-                var self = '<option value="' + esc(t.path) + '">' + esc(t.name) + '</option>';
+                var self = '<option value="' + esc(t.path) + '">'
+                    + esc(disp(t.name, t.name_en)) + '</option>';
                 if (!kids.length) return self;
-                return '<optgroup label="' + esc(t.name) + '">' + self
+                return '<optgroup label="' + esc(disp(t.name, t.name_en)) + '">' + self
                     + kids.map(function (k) {
-                        return '<option value="' + esc(k.path) + '">' + esc(k.name) + '</option>';
+                        return '<option value="' + esc(k.path) + '">'
+                            + esc(disp(k.name, k.name_en)) + '</option>';
                     }).join('') + '</optgroup>';
             }).join('');
         }

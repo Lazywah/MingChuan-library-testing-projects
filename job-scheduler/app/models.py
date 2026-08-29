@@ -378,6 +378,12 @@ class OrgDepartment(Base):
 
     name    = Column(String, primary_key=True)                 # ZH: 學系全名
     college = Column(String, nullable=False, index=True)       # ZH: 所屬學院
+    # ZH: v3.9 英文名。空的就退回中文顯示 —— **不自動翻譯**：
+    #     系所有官方英文名，機器翻的比中文更難跟註冊資料對照。
+    # ZH: `college_en` 存在每一列上（學院本身沒有自己的表）。同一個學院的多列
+    #     若填得不一致，分組標籤取**第一個非空的**（見 crud.org_options）。
+    name_en    = Column(String, nullable=True)
+    college_en = Column(String, nullable=True)
     # ZH: 校區由管理者選 —— 官網的教學單位頁沒有標校區，硬推會是假資料。
     campus  = Column(String, nullable=True)
     active  = Column(Integer, default=1)                       # ZH: 停招的留著但不進下拉
@@ -398,6 +404,7 @@ class OrgUnit(Base):
 
     path   = Column(String, primary_key=True)                  # ZH: 上層/名稱，或頂層就是名稱
     name   = Column(String, nullable=False, index=True)        # ZH: 顯示用的原名（逐字照官網）
+    name_en = Column(String, nullable=True)                    # ZH: v3.9 英文名（空的退回中文）
     parent = Column(String, nullable=True, index=True)         # ZH: 上層處室名；頂層為 NULL
     campus = Column(String, nullable=True)
     active = Column(Integer, default=1)

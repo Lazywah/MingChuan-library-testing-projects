@@ -2277,12 +2277,26 @@ def org_options(db: Session) -> dict:
              .order_by(models.OrgDepartment.college, models.OrgDepartment.name).all())
     units = (db.query(models.OrgUnit)
              .filter(models.OrgUnit.active == 1).all())
+    # ZH: v3.9 學院的英文名存在每一列上（學院本身沒有自己的表）。
+    #     同一個學院的多列若填得不一致，這裡取**第一個非空的** ——
+    #     分組標籤只會有一個，不能讓它隨著排序跳來跳去。
+    college_en = {}
+    for d in depts:
+        if d.college not in college_en and (d.college_en or "").strip():
+            college_en[d.college] = d.college_en.strip()
+
     return {
         "campuses": org_seed.CAMPUSES,
-        "departments": [{"name": d.name, "college": d.college, "campus": d.campus}
+        # ZH: 英文名一律**與中文並排送出**，由前端依語言挑 ——
+        #     後端依語言回不同的值的話，同一支 API 會有兩種形狀，
+        #     而快取與比對（例如 users.department 存的是中文）就會開始出錯。
+        "campuses_en": [org_seed.CAMPUS_EN.get(c, c) for c in org_seed.CAMPUSES],
+        "departments": [{"name": d.name, "college": d.college, "campus": d.campus,
+                         "name_en": d.name_en or "",
+                         "college_en": college_en.get(d.college, "")}
                         for d in depts],
         "units": [{"path": u.path, "name": u.name, "parent": u.parent,
-                   "campus": u.campus} for u in units],
+                   "campus": u.campus, "name_en": u.name_en or ""} for u in units],
     }
 
 

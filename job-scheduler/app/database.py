@@ -235,6 +235,14 @@ def init_db():
             try: conn.execute(text("ALTER TABLE external_ai_accounts ADD COLUMN init_pwd_ack INTEGER DEFAULT 0"))
             except Exception: pass
 
+            # --- v3.9 組織對照表的英文名（空的退回中文顯示）---
+            try: conn.execute(text("ALTER TABLE org_departments ADD COLUMN name_en VARCHAR"))
+            except Exception: pass
+            try: conn.execute(text("ALTER TABLE org_departments ADD COLUMN college_en VARCHAR"))
+            except Exception: pass
+            try: conn.execute(text("ALTER TABLE org_units ADD COLUMN name_en VARCHAR"))
+            except Exception: pass
+
             # --- v3.9 初始點數發放：紀錄兼冪等鍵（有 granted_at 就永不再發）---
             try: conn.execute(text("ALTER TABLE external_ai_accounts ADD COLUMN credit_granted_at DATETIME"))
             except Exception: pass
