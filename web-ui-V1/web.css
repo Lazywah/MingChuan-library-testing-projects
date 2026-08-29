@@ -478,3 +478,103 @@ html.aibot-docked #aibot-fab { display: none; }
 /* ZH: 兩行之間要小間隔 —— 它們是同一類東西（補充說明），
  *     用 --space-3 會看起來像兩個獨立區塊。 */
 #balance-card .handoff { margin-top: var(--space-1); }
+
+/* ==========================================================================
+ * ZH: 區塊卡（v3.9）—— 與 .primary-card 同一個盒子，但**左對齊**。
+ *
+ * ZH: 為什麼不直接用 .primary-card：那個是置中的（給「一個大數字＋一顆按鈕」用），
+ *     清單與說明文字置中會很難讀。
+ * ZH: 為什麼放 web.css：styles.css 與 admin 端逐位元組相同，這個只有使用者端要。
+ * ========================================================================== */
+.panel {
+    margin-top: var(--space-5);
+    padding: var(--space-5);
+    border: 1px solid var(--hairline);
+    border-radius: var(--radius-lg);
+    background-color: var(--surface);
+}
+
+/* ZH: 卡片內的次要動作（例如「關閉實驗室」）。
+ * ZH: 做成文字不是按鈕 —— 卡片裡已經有一顆主要動作，兩顆實心鈕並排會分不出主次。
+ *     但可點高度不能跟著掉：用上下 padding 撐到 24px 以上（WCAG 2.5.8 AA）。
+ *     與首頁額度卡的兩行說明同一套處理。 */
+.card-action { margin: var(--space-3) 0 0; }
+.card-action a {
+    display: inline;
+    padding: 3px 2px;
+    color: var(--link);
+    font-size: 0.875rem;
+    text-decoration: underline;
+}
+.card-action a:hover { color: var(--text-strong); }
+
+/* ==========================================================================
+ * ZH: 資訊 icon 與說明泡泡（v3.9）—— 行為見 chrome.js 的說明
+ * ========================================================================== */
+.tip { position: relative; display: inline-block; }
+
+/* ZH: 圓形的 i。可點區 24px（WCAG 2.5.8 AA）——
+ *     它旁邊就是標題文字，做成 44px 會把行高撐開。 */
+.tip__btn {
+    width: 24px;
+    height: 24px;
+    margin-left: var(--space-1);
+    padding: 0;
+    border: 1px solid var(--hairline);
+    border-radius: 50%;
+    background: var(--surface-2);
+    color: var(--text-muted);
+    font: inherit;
+    font-size: 0.75rem;
+    line-height: 1;
+    cursor: pointer;
+    vertical-align: middle;
+}
+.tip__btn:hover { color: var(--text-strong); border-color: var(--link); }
+.tip__btn:focus-visible { outline: var(--focus-ring); outline-offset: 2px; }
+.tip__btn[aria-expanded="true"] { background: var(--accent-soft); border-color: var(--accent); }
+
+/* ZH: 泡泡。定位在 icon 下方靠左，寬度固定 —— 跟著內容伸縮的話，
+ *     一句話的泡泡會變成很寬的一條，兩句話的又擠成一柱。 */
+.tip__body {
+    position: absolute;
+    top: calc(100% + var(--space-1));
+    left: 0;
+    z-index: 20;
+    width: max-content;
+    max-width: min(20rem, 80vw);
+    padding: var(--space-3);
+    border: 1px solid var(--hairline);
+    border-radius: var(--radius-md);
+    background: var(--surface);
+    box-shadow: var(--shadow-2);
+    font-size: 0.8125rem;
+    font-weight: 400;
+    line-height: 1.6;
+    color: var(--text);
+    text-align: left;
+    white-space: normal;
+}
+/* ZH: 靠右的 icon（例如卡片右上角）要讓泡泡往左長，否則會被視窗切掉。 */
+.tip--right .tip__body { left: auto; right: 0; }
+
+/* ZH: ⚠ `[hidden]` 會被作者的 display 宣告打敗（styles.css 有一條全域補丁），
+ *     這裡不另外寫 display，靠那條補丁即可 —— 寫了反而多一份要維護的規則。 */
+
+/* ZH: 一個 icon 裝多段說明（v3.9）。每段一個小標＋一句話。 */
+.tip__body--wide { max-width: min(26rem, 86vw); }
+.tip__item { display: block; }
+.tip__item + .tip__item {
+    margin-top: var(--space-3);
+    padding-top: var(--space-3);
+    border-top: 1px solid var(--hairline);
+}
+.tip__item b {
+    display: block;
+    margin-bottom: 2px;
+    color: var(--text-strong);
+    font-size: 0.8125rem;
+}
+/* ZH: 標題裡的 icon 不要跟著 h1 變大變粗 —— 它是輔助不是標題的一部分。 */
+.hero__title .tip__btn { font-weight: 400; font-size: 0.75rem; vertical-align: middle; }
+.hero__title .tip__body { font-weight: 400; }

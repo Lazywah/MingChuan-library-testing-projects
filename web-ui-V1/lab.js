@@ -153,7 +153,6 @@ function render(d) {
     //     要換成 GPU 版就得先關掉再開，那件事由「關閉實驗室」負責。
     if ($('gpu-wrap')) {
         $('gpu-wrap').hidden = running;
-        $('gpu-hint').hidden = running;
     }
 
     // ZH: 已經在跑而且**這一份是 GPU 版**時，把它講出來 ——
@@ -201,11 +200,14 @@ function render(d) {
     //     但沒有它使用者會以為密鑰沒生效。只在有東西時出現。
     const sec = d.injected_secrets;
     const has = Array.isArray(sec) ? sec.length : (sec && Object.keys(sec).length);
-    $('secrets').hidden = !has;
+    // ZH: v3.9 收進標題旁那個唯一的 icon。控制的是**泡泡裡的那一段**
+    //     （#tip-secrets），不是泡泡本身 —— 動泡泡會讓它一開始就是打開的。
+    $('tip-secrets').hidden = !has;
     if (has) {
         const names = Array.isArray(sec) ? sec : Object.keys(sec);
-        $('secrets').textContent = T('lab_env', '啟動時會注入這些環境變數：{n}').replace('{n}', names.join('、'));
+        $('secrets').textContent = names.join('、');
     }
+    syncTipVisibility();
 }
 
 async function load() {
@@ -481,11 +483,27 @@ document.addEventListener('prefs:langchanged', () => loadSessions());
  * ------------------------------------------------------------------ */
 function renderArchiveNote(s) {
     const el = $('archive-note');
-    if (!el) return;
+    const wrap = $('tip-archive');
+    if (!el || !wrap) return;
     const v = s && s['lab_archive_days'];
-    if (v == null) { el.hidden = true; return; }
+    // ZH: 讀不到就這一段不出現 —— 顯示一句沒有數字的話比不顯示更糟。
+    if (v == null) { wrap.hidden = true; syncTipVisibility(); return; }
     el.textContent = T('lab_archive_note', '如果帳號被刪除，這些存檔會先封存保留 {d} 天，逾期才真的銷毀。').replace('{d}', v);
-    el.hidden = false;
+    wrap.hidden = false;
+    syncTipVisibility();
+}
+
+/* ZH: 泡泡裡三段都沒有時，整個 icon 就不要出現 ——
+ *     點開是空的比沒有 icon 更糟（使用者會以為壞了）。
+ * ZH: ⚠ 第一段（我的存檔）是寫死的，所以實務上永遠有一段；
+ *     這支仍然保留，因為那一段將來可能被拿掉，而拿掉的人不會想到要改這裡。
+ */
+function syncTipVisibility() {
+    const tip = $('lab-tip');
+    if (!tip) return;
+    const items = tip.querySelectorAll('.tip__item');
+    const any = Array.prototype.some.call(items, (el) => !el.hidden);
+    tip.hidden = !any;
 }
 
 let PUB_SETTINGS = null;
