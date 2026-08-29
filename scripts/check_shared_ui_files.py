@@ -32,7 +32,8 @@ CANON_DIR = ROOT / "web-ui-V1"
 # ZH: `styles.css` 也在裡面 —— 管理端**沿用同一份基礎樣式**，
 #     管理端專屬的規則放在各自的 `admin.css`，不改這一份。
 #     這樣「按鈕長什麼樣」只有一個定義，兩邊不會各自演化。
-SHARED = ["tokens.css", "styles.css", "i18n.js", "prefs.js"]
+# ZH: tip.js 是 v3.9 加的 —— 說明泡泡的行為，兩端共用一份實作。
+SHARED = ["tokens.css", "styles.css", "i18n.js", "prefs.js", "tip.js"]
 
 
 def _sha(p: pathlib.Path) -> str:

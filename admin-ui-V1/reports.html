@@ -10,7 +10,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Open+Sans:wght@400;600;700&display=swap" rel="stylesheet">
 
     <link rel="stylesheet" href="tokens.css?v=ff9cecda">
-    <link rel="stylesheet" href="styles.css?v=25be4520">
+    <link rel="stylesheet" href="styles.css?v=da4b019d">
     <link rel="stylesheet" href="admin.css?v=d02fe167">
 </head>
 <body>
@@ -32,12 +32,20 @@
              因為它是你主動要做的事，不是等著被觸發的。 -->
     <section class="adm-sec" aria-labelledby="h-news">
         <div class="adm-sec__head">
-            <h2 id="h-news" data-i18n="rp_news">公告</h2>
+            <h2>
+                <span id="h-news" data-i18n="rp_news">公告</span>
+                <span class="tip">
+                    <button type="button" class="tip__btn" aria-expanded="false"
+                            aria-controls="tip-news" data-i18n-aria="tip_more" aria-label="這是什麼">i</button>
+                    <span class="tip__body" id="tip-news" role="tooltip" hidden>
+                    <span data-i18n="rp_news_why">公告會出現在使用者的首頁與「最新消息」。置頂的排在最前面；沒有勾公開的只有你看得到，可以當草稿用。</span>
+                    </span>
+                </span>
+            </h2>
             <span class="topbar__spacer"></span>
             <span class="footnote" id="news-sum"></span>
             <button class="btn btn--minor" type="button" id="news-new" data-i18n="rp_news_new">寫一則公告</button>
         </div>
-        <p class="footnote" data-i18n="rp_news_why">公告會出現在使用者的首頁與「最新消息」。置頂的排在最前面；沒有勾公開的只有你看得到，可以當草稿用。</p>
         <section class="adm-card adm-sec" id="news-form" hidden></section>
         <div id="news" aria-live="polite"><span class="skeleton skeleton--line"></span></div>
         <div class="inline-error" id="news-msg" hidden></div>
@@ -57,7 +65,21 @@
     </section>
 
     <section class="adm-sec" aria-labelledby="h-mail">
-        <div class="adm-sec__head"><h2 id="h-mail" data-i18n="rp_mail">寄信紀錄</h2></div>
+        <div class="adm-sec__head">
+            <!-- ZH: ⚠ id 在內層 span 上（section 用 aria-labelledby 指著它）——
+                     留在 h2 上的話，可及名稱會把 icon 的 aria-label 一起唸進去。 -->
+            <h2>
+                <span id="h-mail" data-i18n="rp_mail">寄信紀錄</span>
+                <span class="tip" id="mail-tip" hidden>
+                    <button type="button" class="tip__btn" aria-expanded="false"
+                            aria-controls="mail-tip-body" data-i18n-aria="tip_more" aria-label="這是什麼">i</button>
+                    <!-- ZH: 內容由 reports.js 填（設定值是後端來的，不是固定文案）。
+                             ⚠ 這裡**不要**掛 data-i18n —— 掛了的話，切語言時
+                             prefs.js 會用字典把 JS 填進去的值整段蓋掉。 -->
+                    <span class="tip__body" id="mail-tip-body" role="tooltip" hidden></span>
+                </span>
+            </h2>
+        </div>
         <div id="mail" aria-live="polite"><span class="skeleton skeleton--line"></span></div>
     </section>
 
@@ -71,9 +93,10 @@
 <script src="tz.js?v=2e214a8b"></script>
 <!-- ⚠ ZH: 順序不能動 —— i18n-admin 在 i18n 之後、prefs 之前。 -->
 <script src="i18n.js?v=a5b6048d"></script>
-<script src="i18n-admin.js?v=a90da435"></script>
+<script src="i18n-admin.js?v=0e1d4446"></script>
+<script src="tip.js?v=a6f881c1"></script>
 <script src="prefs.js?v=a25a96d6"></script>
 <script src="admin-chrome.js?v=6d90183a"></script>
-<script src="reports.js?v=11a97048"></script>
+<script src="reports.js?v=74440a14"></script>
 </body>
 </html>

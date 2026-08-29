@@ -1401,13 +1401,25 @@
         var shown = rows.slice(0, BX_MAX);
         return '<section class="adm-block">'
             + '<div class="adm-block__head">'
-            + '<h3 class="adm-block__title">' + esc(T(key, zh)) + '</h3>'
+            + '<h3 class="adm-block__title">' + esc(T(key, zh))
+            // ZH: v3.9 說明收進標題旁的 icon（擁有者裁定 2026-08-30）——
+            //     三張小表各掛一段兩行說明，加起來比表格本身還長。
+            // ZH: ⚠ 泡泡的 id 用 key 推出來（'tip-' + key）。三張表共用這支，
+            //     寫死一個 id 的話畫面上會出現三個相同 id，
+            //     而 aria-controls 只會指到第一個 —— 後兩顆 icon 點了打不開自己那張。
+            + '<span class="tip">'
+            + '<button type="button" class="tip__btn" aria-expanded="false"'
+            + ' aria-controls="tip-' + esc(key) + '"'
+            + ' aria-label="' + esc(T('tip_more', '這是什麼')) + '">i</button>'
+            + '<span class="tip__body" id="tip-' + esc(key) + '" role="tooltip" hidden>'
+            + esc(T(whyKey, whyZh)) + '</span>'
+            + '</span>'
+            + '</h3>'
             // ZH: 筆數緊跟著標題。原本靠 space-between 推到最右邊，
             //     離標題 1246px —— 那個數字是在講誰，完全看不出來。
             + '<span class="adm-block__n">' + esc(rows.length) + '</span>'
             + '<span class="topbar__spacer"></span>'
             + '</div>'
-            + '<p class="footnote">' + esc(T(whyKey, whyZh)) + '</p>'
             + '<div class="adm-tablewrap adm-tablewrap--narrow">'
             + '<table class="adm-table"><thead><tr>'
             + cols.map(function (c) {

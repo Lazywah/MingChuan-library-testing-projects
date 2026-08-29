@@ -10,8 +10,8 @@
     <link href="https://fonts.googleapis.com/css2?family=Open+Sans:wght@400;600;700&display=swap" rel="stylesheet">
 
     <link rel="stylesheet" href="tokens.css?v=ff9cecda">
-    <link rel="stylesheet" href="styles.css?v=25be4520">
-    <link rel="stylesheet" href="web.css?v=85545483">
+    <link rel="stylesheet" href="styles.css?v=da4b019d">
+    <link rel="stylesheet" href="web.css?v=b12cac55">
     <!-- ZH: 🔴 側欄狀態必須在**首次繪製之前**套用，否則每換一頁都會看到
              內容滑出去讓位（widget 的 JS 在 body 尾端才跑，那時已經畫過一次了）。
              這一段刻意內嵌而不是外部檔案 —— 外部檔案要等網路往返，
@@ -40,8 +40,12 @@
              ZH: 裡面的三段各自可以缺席（環境變數要有注入才有、封存天數讀不到就沒有），
                  由 lab.js 控制。**三段都沒有時整個 icon 不出現** ——
                  點開是空的比沒有 icon 更糟。 -->
-        <h1 class="hero__title" id="lab-title">
-            <span data-i18n="lab_h1">我的程式實驗室</span>
+        <!-- ZH: ⚠ `id` 在**內層的 span** 上，不在 <h1> 本身 ——
+                 卡片用 aria-labelledby 指著它。留在 h1 上的話，
+                 螢幕閱讀器唸出來的卡片名稱會變成「我的程式實驗室 這是什麼」
+                 （icon 按鈕的 aria-label 被算進可及名稱）。 -->
+        <h1 class="hero__title">
+            <span id="lab-title" data-i18n="lab_h1">我的程式實驗室</span>
             <span class="tip" id="lab-tip">
                 <button type="button" class="tip__btn" aria-expanded="false"
                         aria-controls="lab-tip-body" data-i18n-aria="tip_more" aria-label="這是什麼">i</button>
@@ -156,7 +160,8 @@
 <script src="prefs.js?v=a25a96d6"></script>
 <!-- ZH: 小基（浮動助手）。客服模式公開，登入頁也放 —— 設計文件的使用者需求是「不會用這個平台時想直接問」。 -->
 <script src="assistant-widget.js?v=61a7acaa"></script>
-<script src="chrome.js?v=4b3ec8b8"></script>
+<script src="tip.js?v=a6f881c1"></script>
+<script src="chrome.js?v=5fbf9d11"></script>
 <script src="lab.js?v=908550b3"></script>
 </body>
 </html>

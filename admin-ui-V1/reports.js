@@ -333,12 +333,33 @@
     // ── 寄信紀錄 ──────────────────────────────────────────────────────────
     // ZH: 把 "<ISO>|scanned|bounces|applied" 轉成一句人話。
     //     空字串＝服務啟動後還沒掃過（與「掃過但沒東西」是兩件事，不能混）。
+    // ZH: v3.9 一行拆成兩處（擁有者裁定 2026-08-30）：
+    //       畫面上留**這一次掃描的結果**（會變的、要看的），
+    //       伺服器／信箱／間隔進標題旁的 icon（設定值，看一次就夠）。
+    //     原本四段擠成一行，真正要看的「最後一次」被推到最尾巴。
+    // ZH: ⚠ icon 的內容用 textContent 填，不用 innerHTML ——
+    //     host 與 folder 是設定檔來的字串，不是常數。
+    function fillMailTip(b) {
+        var tip = $('mail-tip');
+        var body = $('mail-tip-body');
+        if (!tip || !body) return;
+        if (!b) { tip.hidden = true; return; }
+        body.textContent = b.enabled
+            ? T('rp_bounce_cfg', '退信回收：{h} · {f} · 每 {m} 分鐘')
+                .replace('{h}', b.host).replace('{f}', b.folder)
+                .replace('{m}', b.interval_minutes)
+            : T('rp_bounce_off_why',
+                '退信回收未啟用。寄給不存在信箱的信會永遠停在「已交付」，看不出來。');
+        tip.hidden = false;
+    }
+
     function bounceLine(b) {
         if (!b) return '';
+        fillMailTip(b);
+        // ZH: 未啟用時畫面上只留一句狀態，理由在 icon 裡 ——
+        //     「為什麼要在意」看一次就夠，「現在是關的」才是每次都要看到的。
         if (!b.enabled) {
-            return '<p class="footnote">' + esc(T('rp_bounce_off',
-                '退信回收：未啟用。寄給不存在信箱的信會永遠停在「已交付」，看不出來。'))
-                + '</p>';
+            return '<p class="footnote">' + esc(T('rp_bounce_off', '退信回收：未啟用')) + '</p>';
         }
         var when = T('rp_bounce_never', '尚未掃描過');
         if (b.last_scan) {
@@ -348,9 +369,7 @@
                     .replace('{s}', p[1] || 0).replace('{b}', p[2] || 0).replace('{a}', p[3] || 0) + '）';
         }
         return '<p class="footnote">'
-            + esc(T('rp_bounce_on', '退信回收：{h} · {f} · 每 {m} 分鐘 · 最後一次 {w}')
-                .replace('{h}', b.host).replace('{f}', b.folder)
-                .replace('{m}', b.interval_minutes).replace('{w}', when))
+            + esc(T('rp_bounce_on', '最後退信回收：{w}').replace('{w}', when))
             + '</p>';
     }
 
@@ -378,9 +397,19 @@
             ['rp_m_to', '收件者'], ['rp_m_kind', '種類'],
             ['rp_m_status', '結果'], ['rp_m_when', '時間'],
         ];
+        // ZH: v3.9 這裡原本有一句「⚠『已交付』不代表送達 —— 網域存在但信箱
+        //     不存在時會稍後才退信」。拿掉了（擁有者裁定 2026-08-30）。
+        //
+        // ZH: 理由是一條通則，不只適用這一句：
+        //     **人不會去在意自己確認不了的事。**
+        //     管理員看到「已交付」時，沒有任何辦法自己驗證對方收到沒有 ——
+        //     給他一句警語，他做不了任何事，只是多一個沒有出口的疑慮。
+        //     不如就給一個狀態，等查證回來（退信回收掃到）再把它更新掉。
+        // ZH: ⚠ 所以這條規則的前提是**那個更新真的會發生**。
+        //     退信回收停掉的話，狀態就永遠停在「已交付」而沒有人知道 ——
+        //     那正是上面 bounceLine() 的「退信回收：未啟用」要一直看得到的原因。
         $('mail').innerHTML =
             head0
-            + '<p class="footnote">' + esc(T('rp_mail_hint', '')) + '</p>'
             + '<div class="adm-tablewrap"><table class="adm-table"><thead><tr>'
             + head.map(function (h) { return '<th>' + esc(T(h[0], h[1])) + '</th>'; }).join('')
             + '</tr></thead><tbody>'

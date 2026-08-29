@@ -10,7 +10,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Open+Sans:wght@400;600;700&display=swap" rel="stylesheet">
 
     <link rel="stylesheet" href="tokens.css?v=ff9cecda">
-    <link rel="stylesheet" href="styles.css?v=25be4520">
+    <link rel="stylesheet" href="styles.css?v=da4b019d">
     <link rel="stylesheet" href="admin.css?v=d02fe167">
 </head>
 <body>
@@ -48,7 +48,16 @@
     <!-- ZH: 營運設定兩個檢視都要出現，裡面顯示哪幾組由 platform.js 決定。 -->
     <section class="adm-sec" data-view="both" aria-labelledby="h-settings">
         <div class="adm-sec__head">
-            <h2 id="h-settings" data-i18n="pf_settings">營運設定</h2>
+            <h2>
+                <span id="h-settings" data-i18n="pf_settings">營運設定</span>
+                <span class="tip">
+                    <button type="button" class="tip__btn" aria-expanded="false"
+                            aria-controls="tip-settings" data-i18n-aria="tip_more" aria-label="這是什麼">i</button>
+                    <span class="tip__body" id="tip-settings" role="tooltip" hidden>
+                    <span data-i18n="pf_settings_why">改完立刻生效，不用重啟。留空就回到 .env 的預設值。</span>
+                    </span>
+                </span>
+            </h2>
             <span class="topbar__spacer"></span>
             <!-- ZH: 預設唯讀。要改才按「編輯設定」——
                      15 個輸入框常駐會把這一區撐得很長，而且捲頁時滑鼠停在數字欄位上
@@ -57,7 +66,6 @@
             <button class="btn btn--minor" type="button" id="s-cancel" data-i18n="pf_cancel" hidden>取消</button>
             <button class="btn btn--primary" type="button" id="s-save" data-i18n="pf_save" hidden>儲存設定</button>
         </div>
-        <p class="footnote" data-i18n="pf_settings_why">改完立刻生效，不用重啟。留空就回到 .env 的預設值。</p>
         <p class="footnote" id="s-ro-hint" data-i18n="pf_readonly_hint">目前是唯讀。要改請按「編輯設定」。</p>
         <!-- ZH: 星號的圖例。常駐而不是只靠 tooltip ——
                  tooltip 要滑上去才看得到，而這件事是「你在改之前就該知道」。 -->
@@ -81,13 +89,21 @@
              把它放在最上面一行，改設定的人才會注意到。 -->
     <section class="adm-sec" data-view="platform" aria-labelledby="h-alertmail">
         <div class="adm-sec__head">
-            <h2 id="h-alertmail" data-i18n="pf_am_title">告警信</h2>
+            <h2>
+                <span id="h-alertmail" data-i18n="pf_am_title">告警信</span>
+                <span class="tip">
+                    <button type="button" class="tip__btn" aria-expanded="false"
+                            aria-controls="tip-alertmail" data-i18n-aria="tip_more" aria-label="這是什麼">i</button>
+                    <span class="tip__body" id="tip-alertmail" role="tooltip" hidden>
+                    <span data-i18n="pf_am_why">系統自己出事的時候（同步失敗、退信回收停掉）會寄這封信。收件人全部留空＝完全不寄。</span>
+                    </span>
+                </span>
+            </h2>
             <span class="topbar__spacer"></span>
             <button class="btn btn--minor" type="button" id="am-edit" data-i18n="pf_edit">編輯設定</button>
             <button class="btn btn--minor" type="button" id="am-cancel" data-i18n="pf_cancel" hidden>取消</button>
             <button class="btn btn--primary" type="button" id="am-save" data-i18n="pf_save" hidden>儲存設定</button>
         </div>
-        <p class="footnote" data-i18n="pf_am_why">系統自己出事的時候（同步失敗、退信回收停掉）會寄這封信。收件人全部留空＝完全不寄。</p>
         <div id="alertmail" aria-live="polite"><span class="skeleton skeleton--line"></span></div>
         <div class="inline-error" id="am-msg" hidden></div>
     </section>
@@ -158,7 +174,16 @@
         <div class="inline-error" id="x-msg" hidden></div>
 
         <div class="adm-sec__head">
-            <h3 id="h-ext-map" data-i18n="pf_mm">廠商模型代碼對應</h3>
+            <h3>
+                <span id="h-ext-map" data-i18n="pf_mm">廠商模型代碼對應</span>
+                <span class="tip">
+                    <button type="button" class="tip__btn" aria-expanded="false"
+                            aria-controls="tip-mm" data-i18n-aria="tip_more" aria-label="這是什麼">i</button>
+                    <span class="tip__body" id="tip-mm" role="tooltip" hidden>
+                    <span data-i18n="pf_mm_why">廠商的備註欄給的是原始代碼（如 gpt_5_6_sol）。這張表只影響「數據」那一頁的顯示與分群，不會改寫原始交易紀錄，改錯了隨時改回。</span>
+                    </span>
+                </span>
+            </h3>
             <span class="topbar__spacer"></span>
             <!-- ZH: 跟營運設定同一套：預設唯讀，按「編輯設定」才變成可填的欄位。
                      這裡的理由更強 —— 三十幾列各有三個欄位，常駐等於上百個輸入框。 -->
@@ -167,7 +192,6 @@
             <button class="btn btn--minor" type="button" id="mm-cancel" data-i18n="pf_cancel" hidden>取消</button>
             <button class="btn btn--primary" type="button" id="mm-save" data-i18n="pf_save" hidden>儲存設定</button>
         </div>
-        <p class="footnote" data-i18n="pf_mm_why">廠商的備註欄給的是原始代碼（如 gpt_5_6_sol）。這張表只影響「數據」那一頁的顯示與分群，不會改寫原始交易紀錄，改錯了隨時改回。</p>
         <p class="footnote" id="mm-ro-hint" data-i18n="pf_readonly_hint">目前是唯讀。要改請按「編輯設定」。</p>
         <p class="footnote" id="mm-edit-hint" data-i18n="pf_mm_edit_hint" hidden>改完按「儲存設定」才會送出。只有真的改過的列會被寫入。</p>
         <div id="mm-unmapped" aria-live="polite"></div>
@@ -177,14 +201,22 @@
         <!-- ZH: 手動補齊。兩段式（預覽 → 確認），與組織對照表匯入同一套慣例：
                  不可逆的操作先讓人看一眼再送出。 -->
         <div class="adm-sec__head">
-            <h3 id="h-topup" data-i18n="pf_topup">手動補齊點數</h3>
+            <h3>
+                <span id="h-topup" data-i18n="pf_topup">手動補齊點數</span>
+                <span class="tip">
+                    <button type="button" class="tip__btn" aria-expanded="false"
+                            aria-controls="tip-topup" data-i18n-aria="tip_more" aria-label="這是什麼">i</button>
+                    <span class="tip__body tip__body--wide" id="tip-topup" role="tooltip" hidden>
+                    <span class="tip__item" data-i18n="pf_topup_why">把所有綁定帳號補到同一個點數水位。低於這個數字的才會補，補的是差額；已經高於的不動。重複執行不會重複發放。給例外狀況用（活動、補償、每月補點當天服務沒起來）。</span>
+                    <span class="tip__item" data-i18n="pf_topup_note">每月自動補點是另一回事，在「系統設定」的 MYAI 那一組（補到的點數、補點日）。這裡按下去是立刻執行，不看補點日。</span>
+                    </span>
+                </span>
+            </h3>
             <span class="topbar__spacer"></span>
             <button class="btn btn--minor" type="button" id="tu-preview" data-i18n="pf_topup_preview">預覽</button>
             <button class="btn btn--primary" type="button" id="tu-apply" data-i18n="pf_topup_apply" hidden>確認補齊</button>
             <button class="btn btn--minor" type="button" id="tu-cancel" data-i18n="pf_cancel" hidden>取消</button>
         </div>
-        <p class="footnote" data-i18n="pf_topup_why">把所有綁定帳號補到同一個點數水位。低於這個數字的才會補，補的是差額；已經高於的不動。重複執行不會重複發放。給例外狀況用（活動、補償、每月補點當天服務沒起來）。</p>
-        <p class="footnote" data-i18n="pf_topup_note">每月自動補點是另一回事，在「系統設定」的 MYAI 那一組（補到的點數、補點日）。這裡按下去是立刻執行，不看補點日。</p>
         <label class="field">
             <span class="field__label" data-i18n="pf_topup_target">補到的點數</span>
             <input class="field__input" type="number" id="tu-target" min="1" step="1" inputmode="numeric">
@@ -198,7 +230,16 @@
              （第一版誤接在 MYAI 區塊尾端，於是只有切到 MYAI 才看得到。） -->
     <section class="adm-sec" data-view="platform" aria-labelledby="h-org">
         <div class="adm-sec__head">
-            <h3 id="h-org" data-i18n="pf_org">組織對照表</h3>
+            <h3>
+                <span id="h-org" data-i18n="pf_org">組織對照表</span>
+                <span class="tip">
+                    <button type="button" class="tip__btn" aria-expanded="false"
+                            aria-controls="tip-org" data-i18n-aria="tip_more" aria-label="這是什麼">i</button>
+                    <span class="tip__body" id="tip-org" role="tooltip" hidden>
+                    <span data-i18n="pf_org_why">「數據」那一頁依學院／學系／行政單位分群，靠的就是這張表。學院不存在使用者身上，改這裡全站立刻生效，不必回填任何人。</span>
+                    </span>
+                </span>
+            </h3>
             <span class="topbar__spacer"></span>
             <button class="btn btn--minor" type="button" id="og-export" data-i18n="pf_org_export">匯出</button>
             <!-- ZH: file input 藏起來，用按鈕代按 —— 原生的檔案選擇器樣式無法與其他鈕一致。 -->
@@ -210,7 +251,6 @@
             <button class="btn btn--minor" type="button" id="og-cancel" data-i18n="pf_cancel" hidden>取消</button>
             <button class="btn btn--primary" type="button" id="og-save" data-i18n="pf_save" hidden>儲存設定</button>
         </div>
-        <p class="footnote" data-i18n="pf_org_why">「數據」那一頁依學院／學系／行政單位分群，靠的就是這張表。學院不存在使用者身上，改這裡全站立刻生效，不必回填任何人。</p>
         <!-- ZH: 兩份清單分頁切換 —— 51 個系加 97 個單位放在同一張表會找不到東西。 -->
         <div class="seg" role="radiogroup" aria-labelledby="h-org" id="og-tabs">
             <button class="seg__opt" type="button" role="radio" aria-checked="true"
@@ -231,7 +271,8 @@
 <script src="tz.js?v=2e214a8b"></script>
 <!-- ⚠ ZH: 順序不能動 —— i18n-admin 在 i18n 之後、prefs 之前。 -->
 <script src="i18n.js?v=a5b6048d"></script>
-<script src="i18n-admin.js?v=a90da435"></script>
+<script src="i18n-admin.js?v=0e1d4446"></script>
+<script src="tip.js?v=a6f881c1"></script>
 <script src="prefs.js?v=a25a96d6"></script>
 <script src="admin-chrome.js?v=6d90183a"></script>
 <script src="platform.js?v=37295737"></script>

@@ -38,6 +38,16 @@ PROVIDERS = {
     "DocsEntry": "docs-entry.js",
 }
 
+# ZH: 第二條規則：**用了某種標記就必須載對應的檔案**。
+#
+# ZH: 為什麼要有這條 —— tooltip（tip.js）不定義任何全域，所以上面那張
+#     PROVIDERS 表對它視而不見。漏載的症狀是「icon 畫得出來、點了沒反應」，
+#     console 乾乾淨淨，跟 tz.js 那次一模一樣的騙人法。
+# ZH: 判準同樣保守：只認明確的 class 名，不去猜。
+MARKUP_NEEDS = {
+    "tip.js": ("tip__btn",),
+}
+
 # ZH: 只認「識別字後面接 . 或 (」，並且前面不能是 . 或字元
 #     （避免把 `foo.T(` 或 `SOMETHING_T` 算進來）
 def _uses(src: str, name: str) -> bool:
@@ -93,6 +103,23 @@ def main() -> int:
                         problems.append(
                             f"{html_path.relative_to(ROOT)} 沒有載 {provider}，"
                             f"但 {js_name} 用到了 {glob_name}")
+
+            # ZH: 標記檢查。HTML 與**這一頁自己載的 JS**都要看 ——
+            #     泡泡可能是頁面 JS 動態產生的（例如清單裡每一列一個），
+            #     只掃 HTML 的話那種頁面會安靜地漏掉。
+            blob = html
+            for js_name in _scripts(html):
+                js_path = ui_dir / js_name
+                if js_path.exists():
+                    blob += js_path.read_text(encoding="utf-8", errors="replace")
+            for provider, marks in MARKUP_NEEDS.items():
+                if provider in loaded:
+                    continue
+                for mark in marks:
+                    if mark in blob:
+                        problems.append(
+                            f"{html_path.relative_to(ROOT)} 用了 {mark} 但沒有載 {provider}")
+                        break
 
     problems = sorted(set(problems))
     if problems:

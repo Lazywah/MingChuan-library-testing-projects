@@ -10,7 +10,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Open+Sans:wght@400;600;700&display=swap" rel="stylesheet">
 
     <link rel="stylesheet" href="tokens.css?v=ff9cecda">
-    <link rel="stylesheet" href="styles.css?v=25be4520">
+    <link rel="stylesheet" href="styles.css?v=da4b019d">
     <link rel="stylesheet" href="admin.css?v=d02fe167">
 </head>
 <body>
@@ -72,13 +72,21 @@
              很少用的 CSV 匯入才收進 fold。 -->
     <section class="adm-sec" data-view="myai" aria-labelledby="h-batch">
         <div class="adm-sec__head">
-            <h2 id="h-batch" data-i18n="pp_bx">廠商帳號對應</h2>
+            <h2>
+                <span id="h-batch" data-i18n="pp_bx">廠商帳號對應</span>
+                <span class="tip">
+                    <button type="button" class="tip__btn" aria-expanded="false"
+                            aria-controls="tip-bx" data-i18n-aria="tip_more" aria-label="這是什麼">i</button>
+                    <span class="tip__body" id="tip-bx" role="tooltip" hidden>
+                    <span data-i18n="pp_bx_why">同步只是把廠商那邊的帳號與點數抓回來看；配對只寫平台這邊的對應表。兩者都不會改到廠商的資料。</span>
+                    </span>
+                </span>
+            </h2>
             <span class="topbar__spacer"></span>
             <span class="footnote" id="bx-sum"></span>
             <button class="btn btn--minor" type="button" id="bx-sync" data-i18n="pp_bx_sync">同步廠商帳號</button>
             <button class="btn btn--minor" type="button" id="bx-match" data-i18n="pp_bx_match">自動配對</button>
         </div>
-        <p class="footnote" data-i18n="pp_bx_why">同步只是把廠商那邊的帳號與點數抓回來看；配對只寫平台這邊的對應表。兩者都不會改到廠商的資料。</p>
         <div class="inline-error" id="bx-msg" hidden></div>
         <div id="bx-body" aria-live="polite"><span class="skeleton skeleton--line"></span></div>
 
@@ -104,9 +112,10 @@
 <script src="tz.js?v=2e214a8b"></script>
 <!-- ⚠ ZH: 順序不能動 —— i18n-admin 在 i18n 之後、prefs 之前。 -->
 <script src="i18n.js?v=a5b6048d"></script>
-<script src="i18n-admin.js?v=a90da435"></script>
+<script src="i18n-admin.js?v=0e1d4446"></script>
+<script src="tip.js?v=a6f881c1"></script>
 <script src="prefs.js?v=a25a96d6"></script>
 <script src="admin-chrome.js?v=6d90183a"></script>
-<script src="people.js?v=0faa158b"></script>
+<script src="people.js?v=20309db3"></script>
 </body>
 </html>

@@ -10,7 +10,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Open+Sans:wght@400;600;700&display=swap" rel="stylesheet">
 
     <link rel="stylesheet" href="tokens.css?v=ff9cecda">
-    <link rel="stylesheet" href="styles.css?v=25be4520">
+    <link rel="stylesheet" href="styles.css?v=da4b019d">
     <link rel="stylesheet" href="admin.css?v=d02fe167">
 </head>
 <body>
@@ -62,7 +62,17 @@
 
     <section class="adm-sec" aria-labelledby="h-myai">
         <div class="adm-sec__head">
-            <h2 id="h-myai" data-i18n="an_myai">MYAI 點數消耗</h2>
+            <!-- ZH: ⚠ id 在內層 span 上 —— section 用 aria-labelledby 指著它，
+                     留在 h2 上的話 icon 的 aria-label 會被算進可及名稱。 -->
+            <h2>
+                <span id="h-myai" data-i18n="an_myai">MYAI 點數消耗</span>
+                <span class="tip">
+                    <button type="button" class="tip__btn" aria-expanded="false"
+                            aria-controls="tip-myai-src" data-i18n-aria="tip_more" aria-label="這是什麼">i</button>
+                    <span class="tip__body" id="tip-myai-src" role="tooltip" hidden
+                          data-i18n="an_myai_src">資料來自廠商的交易日誌（逐筆、含模型）。點數是廠商計費的單位，不是平台自己的 Token。</span>
+                </span>
+            </h2>
             <span class="topbar__spacer"></span>
             <!-- ZH: 這一頁的數字全部來自廠商的交易日誌。日誌是定期同步來的，
                      所以「資料看起來不對」十次有九次是還沒同步 ——
@@ -99,9 +109,10 @@
 <script src="tz.js?v=2e214a8b"></script>
 <!-- ⚠ ZH: 順序不能動 —— i18n-admin 在 i18n 之後、prefs 之前。 -->
 <script src="i18n.js?v=a5b6048d"></script>
-<script src="i18n-admin.js?v=a90da435"></script>
+<script src="i18n-admin.js?v=0e1d4446"></script>
+<script src="tip.js?v=a6f881c1"></script>
 <script src="prefs.js?v=a25a96d6"></script>
 <script src="admin-chrome.js?v=6d90183a"></script>
-<script src="analytics.js?v=f5c753c7"></script>
+<script src="analytics.js?v=6006b2f8"></script>
 </body>
 </html>

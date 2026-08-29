@@ -563,8 +563,9 @@
         });
 
         $('myai').innerHTML =
-            '<p class="footnote">' + esc(T('an_myai_src', '')) + '</p>'
-            + '<div class="adm-stats">'
+            // ZH: v3.9 資料來源那句搬進標題旁的 icon（見 analytics.html）。
+            //     它回答的是「這些數字哪來的」—— 看一次就夠，不必每次進來都讀。
+            '<div class="adm-stats">'
             + stat('an_consumed', '期間總消耗', d.total_consumed)
             + stat('an_tx', '交易筆數', d.tx_count)
             + stat('an_uses', 'AI 使用次數', d.total_uses)
