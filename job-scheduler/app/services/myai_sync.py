@@ -1277,6 +1277,72 @@ async def manual_topup(db: Session, target: int, admin_id: str,
     return {"status": "done", **preview}
 
 
+async def grant_points(db: Session, user, points: int, admin_id: str,
+                       reason: str = "") -> dict:
+    """
+    ZH: 給**一個人**加點（個別需求用）。
+
+    ZH: 🔴 **這是「加 N」不是「補到 N」，所以它不是冪等的** ——
+        按兩次就發兩次。手動補齊（manual_topup）可以放心重按，這一支不行。
+        擋重複的責任在呼叫端（介面上要先確認），這裡只保證：
+          · 每一次都寫稽核（誰、給誰、多少、為什麼）
+          · 失敗不重試
+
+    ZH: ⚠️ 不能加給轉出帳號自己 —— 自己轉給自己，廠商行為未知。
+
+    @node job-scheduler/app/services/myai_sync.py::grant_points
+    """
+    points = int(points or 0)
+    if points <= 0:
+        raise MyaiSyncError("加點數必須大於 0")
+
+    row = account_for_user(db, user)
+    if row is None:
+        raise MyaiSyncError(f"{user.username} 還沒有綁定廠商帳號，無法加點")
+    email = (row.email or "").strip()
+    if not email:
+        raise MyaiSyncError(f"{user.username} 的廠商帳號沒有 email，無法加點")
+
+    source = (settings.MYAI_ADMIN_EMAIL or "").strip().lower()
+    if source and email.lower() == source:
+        raise MyaiSyncError("不能加給轉出帳號自己（那是自己轉給自己）")
+
+    before = int(row.points or 0)
+    logger.warning("MYAI 個別加點：admin=%s → %s +%d 點（原本 %d）%s",
+                   admin_id, email, points, before, reason or "")
+
+    import json as _json
+
+    def _audit(outcome: str):
+        """ZH: 不可逆的操作一定要留下軌跡。這一支**有 target_user** ——
+           加點是給特定某個人的，稽核查得到「誰拿到了」。"""
+        db.add(models.AdminAction(
+            admin_id=admin_id, target_user=user.id, action="myai_grant_points",
+            payload=_json.dumps({"email": email, "points": points,
+                                 "before": before, "reason": reason or "",
+                                 "outcome": outcome}, ensure_ascii=False),
+            timestamp=datetime.now(timezone.utc)))
+        db.commit()
+
+    rows = [{"email": email, "points": points,
+             "remark": (reason or "admin-grant")[:60]}]
+    try:
+        res = await transfer_credit_batch(rows, confirm_grant=True)
+    except Exception as e:  # noqa: BLE001
+        _audit(f"failed: {str(e)[:120]}")
+        logger.error("MYAI 個別加點失敗 %s：%s —— **不重試**", email, e)
+        raise
+
+    _audit("ok" if res.get("granted") else "unknown")
+    if not res.get("granted"):
+        logger.error("MYAI 個別加點狀態未知 %s —— 點數可能已轉出，請到廠商後台對帳", email)
+        return {"status": "unknown", "email": email, "points": points,
+                "before": before}
+    logger.info("MYAI 個別加點完成 %s：+%d 點", email, points)
+    return {"status": "done", "email": email, "points": points,
+            "before": before, "after": before + points}
+
+
 def _nickname_for(user) -> str:
     """ZH: 暱稱優先用平台顯示名，退回 username（學號）| EN: nickname for the vendor account
 

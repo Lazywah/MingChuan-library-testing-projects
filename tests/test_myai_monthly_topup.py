@@ -426,3 +426,88 @@ def test_manual_rejects_non_positive_target(db, monkeypatch):
     for bad in (0, -1):
         with pytest.raises(M.MyaiSyncError):
             asyncio.run(M.manual_topup(db, bad, "a", dry_run=False))
+
+
+# ══════════════════════════════════════════════════════════════════════════
+# ZH: 六、個別加點
+# ══════════════════════════════════════════════════════════════════════════
+# ZH: 🔴 這一支與補齊**語意相反**：它是「加 N」，不是冪等的。
+#     測試要釘住的是「它誠實地不冪等」，不是假裝它是。
+
+def test_grant_adds_the_amount(db, monkeypatch):
+    """ZH: 加 N 就是加 N，不是補到 N。"""
+    admin = make_user(db, username="ga", email="ga@example.com", role="admin")
+    u = _bind(db, "g1@example.com", 100)
+    seen = _capture_transfer(monkeypatch)
+
+    res = asyncio.run(M.grant_points(db, u, 250, admin.id, "個別需求"))
+    assert res["status"] == "done"
+    assert res["before"] == 100 and res["after"] == 350
+    assert seen[0][0]["points"] == 250, "送出的是差額而不是加值"
+
+
+def test_grant_twice_really_grants_twice(db, monkeypatch):
+    """
+    ZH: 🔴 **刻意驗證它不冪等。**
+
+    ZH: 這不是缺陷，是這支功能的語意（個別加點就是要能加第二次）。
+        寫成測試是為了讓下一個人清楚知道：擋重複的責任在介面，不在這裡。
+        哪天有人把它「修」成冪等，這條會紅並問他是不是搞混了兩支功能。
+    """
+    admin = make_user(db, username="gb", email="gb@example.com", role="admin")
+    u = _bind(db, "g2@example.com", 0)
+    seen = _capture_transfer(monkeypatch)
+
+    asyncio.run(M.grant_points(db, u, 100, admin.id))
+    asyncio.run(M.grant_points(db, u, 100, admin.id))
+    assert len(seen) == 2, "第二次沒送出 —— 個別加點不該被當成冪等的"
+
+
+def test_grant_writes_audit_with_the_target_user(db, monkeypatch):
+    """
+    ZH: 加點是給特定某個人的，稽核要查得到「誰拿到了」——
+        所以 target_user 必須有值（手動補齊那支是整批，沒有單一對象）。
+    """
+    admin = make_user(db, username="gc", email="gc@example.com", role="admin")
+    u = _bind(db, "g3@example.com", 0)
+    _capture_transfer(monkeypatch)
+
+    asyncio.run(M.grant_points(db, u, 50, admin.id, "社團活動"))
+    row = (db.query(models.AdminAction)
+             .filter(models.AdminAction.action == "myai_grant_points").one())
+    assert row.admin_id == admin.id
+    assert row.target_user == u.id
+    assert "社團活動" in row.payload
+
+
+def test_grant_refuses_unbound_user(db, monkeypatch):
+    """ZH: 沒綁定就沒有可以加點的對象 —— 明講，不要靜靜地不做事。"""
+    admin = make_user(db, username="gd", email="gd@example.com", role="admin")
+    lonely = make_user(db, username="lonely", email="lonely@example.com")
+    seen = _capture_transfer(monkeypatch)
+    with pytest.raises(M.MyaiSyncError):
+        asyncio.run(M.grant_points(db, lonely, 100, admin.id))
+    assert seen == []
+
+
+def test_grant_refuses_the_source_account(db, monkeypatch):
+    """ZH: 不能加給轉出帳號自己 —— 自己轉給自己，廠商行為未知。"""
+    admin = make_user(db, username="ge", email="ge@example.com", role="admin")
+    u = _bind(db, "boss2@example.com", 0)
+    monkeypatch.setattr(M.settings, "MYAI_ADMIN_EMAIL", "BOSS2@example.com")
+    seen = _capture_transfer(monkeypatch)
+    with pytest.raises(M.MyaiSyncError):
+        asyncio.run(M.grant_points(db, u, 100, admin.id))
+    assert seen == []
+
+
+@pytest.mark.parametrize("bad", [0, -10])
+def test_grant_refuses_non_positive(db, monkeypatch, bad):
+    """ZH: 加 0 是白跑；負數在廠商端的行為未知（可能變成扣點）。"""
+    admin = make_user(db, username="gf" + str(abs(bad)), role="admin",
+                      email="gf%d@example.com" % abs(bad))
+    u = _bind(db, "g4-%d@example.com" % abs(bad), 0)
+    seen = _capture_transfer(monkeypatch)
+    with pytest.raises(M.MyaiSyncError):
+        asyncio.run(M.grant_points(db, u, bad, admin.id))
+    assert seen == []

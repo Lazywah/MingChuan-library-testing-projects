@@ -2033,3 +2033,30 @@ async def myai_manual_topup(
         return await myai_sync.manual_topup(db, target, admin.id, dry_run=dry_run)
     except myai_sync.MyaiSyncError as e:
         raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.post("/users/{user_id}/myai/grant", summary="給單一使用者加點（個別需求）")
+async def myai_grant_points(
+    user_id: str,
+    points: int = Body(..., embed=True, description="要加的點數"),
+    reason: str = Body("", embed=True, description="原因（會寫進稽核與廠商備註）"),
+    db: Session = Depends(get_db),
+    admin: models.User = Depends(require_admin),
+):
+    """
+    ZH: 給一個人加點。
+
+    ZH: 🔴 **這是「加 N」不是「補到 N」，按兩次就發兩次。**
+        與手動補齊（/myai/topup）刻意不同 —— 那支重按是安全的，這支不是。
+        介面上必須先確認再送。
+
+    @node job-scheduler/app/routers/admin.py::myai_grant_points
+    """
+    from ..services import myai_sync
+    user = db.query(models.User).filter(models.User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="ZH: 找不到這個使用者 | EN: user not found")
+    try:
+        return await myai_sync.grant_points(db, user, points, admin.id, reason)
+    except myai_sync.MyaiSyncError as e:
+        raise HTTPException(status_code=400, detail=str(e))

@@ -911,9 +911,12 @@
                     + esc(T('pp_cancel', '取消變更')) + '</button>'
                 : '<button class="btn btn--minor" type="button" id="e-edit">'
                     + esc(T('pp_edit', '編輯')) + '</button>'
+                    + '<button class="btn btn--minor" type="button" id="e-grant">'
+                    + esc(T('pp_ext_grant', '加點')) + '</button>'
                     + '<button class="btn btn--minor" type="button" id="e-unbind">'
                     + esc(T('pp_ext_unbind', '解除綁定')) + '</button>')
             + '</div>'
+            + '<div id="e-grant-box" hidden></div>'
             + '<div class="inline-error" id="e-msg" hidden></div>';
 
         if (EXT_EDIT) {
@@ -928,6 +931,81 @@
                 loadExtAi(u);
             });
             $('e-unbind').addEventListener('click', function () { unbindExt(u, b); });
+            $('e-grant').addEventListener('click', function () { toggleGrant(u, b); });
+        }
+    }
+
+    // ZH: 個別加點（v3.9）
+    //
+    // ZH: 🔴 **這是「加 N」不是「補到 N」——按兩次就發兩次。**
+    //     管理端的「手動補齊」重按是安全的（大家都在同一水位就沒有差額），
+    //     這一支不是。所以送出前一定要 confirm()，而且訊息裡要**寫出數字**：
+    //     「確定嗎」擋不住手滑，「要給 X 加 500 點嗎」才擋得住。
+    function closeGrant() {
+        var box = $('e-grant-box');
+        if (!box) return;
+        box.hidden = true;
+        box.innerHTML = '';
+        say('e-msg', '');      // ZH: 關掉表單也要清掉它留下的錯誤訊息
+    }
+
+    function toggleGrant(u, b) {
+        var box = $('e-grant-box');
+        if (!box.hidden) { closeGrant(); return; }
+        box.innerHTML =
+            '<p class="footnote">' + esc(T('pp_grant_why',
+                '直接加給這個人，不是補到某個水位。點數從平台的廠商管理帳號轉出，不可逆。'))
+            + '</p>'
+            + field('e-grant-pts', T('pp_grant_pts', '要加的點數'), '', 'number',
+                    ' min="1" step="1" inputmode="numeric"')
+            + field('e-grant-why', T('pp_grant_reason', '原因（會寫進紀錄）'), '')
+            + '<div class="ds__actions">'
+            + '<button class="btn btn--primary" type="button" id="e-grant-go">'
+            + esc(T('pp_grant_go', '送出加點')) + '</button>'
+            + '<button class="btn btn--minor" type="button" id="e-grant-cancel">'
+            + esc(T('pp_grant_cancel', '取消')) + '</button></div>';
+        box.hidden = false;
+        $('e-grant-go').addEventListener('click', function () { doGrant(u, b); });
+        $('e-grant-cancel').addEventListener('click', closeGrant);
+        $('e-grant-pts').focus();
+    }
+
+    async function doGrant(u, b) {
+        var pts = parseInt($('e-grant-pts').value, 10);
+        if (!isFinite(pts) || pts <= 0) {
+            say('e-msg', T('pp_grant_need', '請填一個大於 0 的點數。'));
+            return;
+        }
+        var why = $('e-grant-why').value.trim();
+        // ZH: 數字寫進確認訊息 —— 這是唯一擋得住「多打一個 0」的地方。
+        if (!confirm(T('pp_grant_confirm',
+                '要給 {n} 加 {p} 點嗎？點數從平台的管理帳號轉出，送出後收不回來。')
+                .replace('{n}', b.myai_email || u.username).replace('{p}', num(pts)))) return;
+
+        var btn = $('e-grant-go');
+        btn.disabled = true;            // ZH: 防連點 —— 這一支不冪等
+        try {
+            var r = await api('/admin/users/' + encodeURIComponent(u.id) + '/myai/grant', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ points: pts, reason: why }),
+            });
+            closeGrant();
+            if (r.status === 'unknown') {
+                // ZH: 送出後廠商沒回報成功 —— 點數可能已經轉出。
+                //     這一則要留在畫面上（紅的），不能用會消失的提示：
+                //     訊息一消失，「不要再按一次」也跟著消失了。
+                say('e-msg', T('pp_grant_unknown',
+                    '送出了，但廠商沒有回報成功。點數可能已經轉出 —— '
+                    + '請到廠商後台對帳，不要再送一次。'));
+            } else {
+                say('e-msg', '');
+                loadExtAi(u);          // ZH: 重讀，讓點數欄顯示新的值
+            }
+        } catch (e) {
+            say('e-msg', String(e.message || e));
+        } finally {
+            btn.disabled = false;
         }
     }
 
