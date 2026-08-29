@@ -385,3 +385,57 @@ html.aibot-docked #aibot-fab { display: none; }
 #m-remaining[data-warn="warn"],
 #m-remaining[data-warn="urgent"],
 #m-remaining[data-warn="over"] { color: var(--error); font-weight: 600; }
+
+/* ==========================================================================
+ * ZH: 首頁的分組卡片（B 方案，v3.9）
+ *
+ * ZH: 為什麼用 auto-fit 而不是固定欄數：手機自動變一欄，**不用做第二套版面**，
+ *     而且之後多一條分支只是多一張卡 —— 這是選 B 的主要理由之一。
+ *
+ * ZH: 為什麼在 web.css 不在 styles.css：styles.css 與 admin 端逐位元組相同，
+ *     這一區只有使用者端有（見 check_shared_ui_files）。
+ * ========================================================================== */
+.groups { margin-top: var(--space-6); }
+.group + .group { margin-top: var(--space-5); }
+
+.group__h {
+    margin: 0 0 var(--space-2);
+    font-size: 0.9375rem;
+    font-weight: 700;
+    color: var(--text-strong);
+}
+/* ZH: 副標與標題同一行 —— 它是條件補充（「不用寫程式」），不是第二個標題。 */
+.group__sub {
+    margin-left: var(--space-2);
+    font-size: 0.8125rem;
+    font-weight: 400;
+    color: var(--text-muted);
+}
+
+.group__cards {
+    display: grid;
+    gap: var(--space-2);
+    /* ZH: 240px 是實測值 —— 再小的話「訓練你的第一個…」那種長標題會斷成三行。 */
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+}
+
+.gcard {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: var(--space-3) var(--space-4);
+    min-height: var(--tap-min);
+    justify-content: center;
+    border: 1px solid var(--hairline);
+    border-radius: var(--radius-md);
+    background-color: var(--surface);
+    text-decoration: none;
+    /* ZH: ⚠ 卡片是連結，但**不要**用 --link 的藍字：一整面藍字讀起來像清單，
+     *     而這裡的層級是「標題 + 說明」。顏色交給裡面的兩個 span。 */
+    color: inherit;
+}
+.gcard:hover { border-color: var(--accent); box-shadow: var(--shadow-2); }
+.gcard:focus-visible { outline: var(--focus-ring); outline-offset: 2px; }
+
+.gcard__t { font-weight: 600; color: var(--text-strong); }
+.gcard__d { font-size: 0.8125rem; color: var(--text-muted); }

@@ -73,7 +73,6 @@ async function loadBalance() {
         //       provisioned=true + initial_password=null  → 已確認或逾期
         // ZH: 記下來給引導流程與「問 AI」的分流用（兩處都要，不能只記其一）。
         STATE.provisioned = !(prov && prov.provisioned === false);
-        maybeRenderFlow();
         if (!STATE.provisioned) return renderProvisioning();
 
         if (bal.points == null) return renderNoBalance();
@@ -130,8 +129,8 @@ async function loadBalance() {
     } catch (e) {
         // ZH: 額度掛掉不該讓引導流程一起消失 —— 給一個保守值讓它照樣畫出來。
         //     沒有這一行的話 STATE.provisioned 會永遠是 null，
-        //     maybeRenderFlow 一直等，流程條**安靜地不出現**。
-        if (STATE.provisioned === null) { STATE.provisioned = true; maybeRenderFlow(); }
+        //     「前往 MYAI」就會一直走到 provision.html 而不是真的去 MYAI。
+        if (STATE.provisioned === null) { STATE.provisioned = true; }
         // 錯誤：**主要動作照常可用**——看不到額度不是不能用 AI 的理由
         value.textContent = '—';
         unit.hidden = true;
@@ -143,7 +142,7 @@ async function loadBalance() {
 //     給一個連結等於帶使用者去看一個空畫面。
 function renderProvisioning() {
     // ZH: 這裡也可能是 FORCED==='empty' 直接進來的（沒經過 loadBalance 的主線）。
-    if (STATE.provisioned === null) { STATE.provisioned = false; maybeRenderFlow(); }
+    if (STATE.provisioned === null) { STATE.provisioned = false; }
     $('balance-value').textContent = '—';
     $('balance-unit').hidden = true;
     $('balance-meta').textContent = T('idx_provisioning', '你的 AI 帳號正在開通，完成後這裡會顯示額度。');
@@ -238,76 +237,15 @@ async function loadNews() {
 // ZH: 所以「已完成」這個標籤**只會出現在偵測得到的步驟上**。
 //     對測不到的步驟猜一個狀態，比不標更糟 —— 使用者會相信它。
 // ══════════════════════════════════════════════════════════════════════
-const STATE = { provisioned: null, hasJobs: null };
-let FLOW_FORCED_OPEN = false;
-
-async function loadJobCount() {
-    try {
-        const r = await get('/jobs?limit=1');
-        STATE.hasJobs = !!(r && typeof r.total === 'number' && r.total > 0);
-    } catch (e) {
-        // ZH: 取不到就當「沒訓練過」——寧可多顯示一次引導，也不要把它藏起來。
-        STATE.hasJobs = false;
-    }
-    maybeRenderFlow();
-}
-
-function maybeRenderFlow() {
-    if (STATE.provisioned === null || STATE.hasJobs === null) return;
-    renderFlow();
-}
-
-function renderFlow() {
-    const sec = $('flow');
-    const reopen = $('flow-reopen');
-
-    // ZH: 送過訓練 ＝ 已經上手 → 引導讓位。不是永久拿掉，下面那一行叫得回來。
-    if (STATE.hasJobs && !FLOW_FORCED_OPEN) {
-        sec.hidden = true;
-        reopen.hidden = false;
-        return;
-    }
-    sec.hidden = false;
-    reopen.hidden = true;
-
-    // ZH: ⚠ 只排**看得見**的步驟。文件庫沒內容時那一格是 hidden，
-    //     若照 HTML 的順序寫死標籤，就會出現「下一步」後面接「最後」中間跳掉一格。
-    const items = Array.prototype.filter.call(
-        $('flow-steps').children, (li) => !li.hidden);
-    if (!items.length) return;
-
-    // ZH: 目前在第幾步。只用偵測得到的兩個事實推：
-    //     沒開通 → 停在開通那一步；已開通但沒訓練過 → 往後推一格。
-    const idxMyai = items.findIndex((li) => li.querySelector('#step-myai'));
-    let cur;
-    if (!STATE.provisioned) {
-        cur = idxMyai >= 0 ? idxMyai : 0;
-    } else {
-        cur = (idxMyai >= 0 ? idxMyai : -1) + 1;
-        if (cur >= items.length) cur = items.length - 1;
-    }
-
-    items.forEach((li, n) => {
-        const slot = li.querySelector('[data-state]');
-        if (!slot) return;
-        let key = '', fallback = '';
-        if (n < cur) { key = 'st_done'; fallback = '已完成'; }
-        else if (n === cur) { key = 'st_now'; fallback = '現在在這'; }
-        else if (n === cur + 1) { key = 'st_next'; fallback = '下一步'; }
-        slot.textContent = key ? T(key, fallback) : '';
-        li.classList.toggle('is-now', n === cur);
-        li.classList.toggle('is-done', n < cur);
-    });
-
-    // ZH: 文件庫那一格是 docs-entry.js **非同步**打開的（它要先抓 docs-content.json）。
-    //     沒有這個 observer 的話，第一次算標籤時它還是 hidden，
-    //     打開之後標籤就對不上了 —— 而且畫面上看不出哪裡怪。
-    if (!renderFlow._observing) {
-        renderFlow._observing = true;
-        new MutationObserver(() => renderFlow()).observe(
-            $('flow-steps'), { attributes: true, attributeFilter: ['hidden'], subtree: true });
-    }
-}
+// ══════════════════════════════════════════════════════════════════════
+// ZH: 開通狀態。v3.9 之前這裡還有 `hasJobs` 與整套流程條的狀態機
+//     （現在在這／下一步／已完成）—— B 方案改成分組卡片之後那些都不需要了：
+//     卡片不編號、不排先後，所以也不必偵測「你走到第幾步」。
+//
+// ZH: `provisioned` 留著，因為最上面那顆「前往 MYAI」仍然要分流：
+//     還沒開通的人跳過去只會看到廠商的登入頁，而他根本還沒有帳號。
+// ══════════════════════════════════════════════════════════════════════
+const STATE = { provisioned: null };
 
 // ── 主要動作：前往 MYAI（V1 修正）────────────────────────────────────
 // ZH: 只有這一頁有這個動作。頂部列的「MYAI」是**連到本頁**，不自己跳轉——
@@ -388,19 +326,12 @@ $('go-myai').addEventListener('click', () => {
     if (STATE.provisioned === false) { location.href = 'provision.html'; return; }
     goMyai();
 });
-$('link-usage').addEventListener('click', (ev) => {
+// ZH: 分組卡片裡的「問 AI」與最上面那顆走同一條路 ——
+//     同一個動作有兩個入口時，行為必須是同一份實作，不是兩份長得像的。
+$('g-myai').addEventListener('click', (ev) => {
     ev.preventDefault();
-    location.href = 'usage.html';
-});
-$('link-report').addEventListener('click', (ev) => {
-    ev.preventDefault();
-    location.href = 'report.html';
-});
-// ZH: 引導收起來之後叫回來。只影響這一次瀏覽，不寫進偏好——
-//     那是「我想再看一次」，不是「我要永遠顯示」。
-$('flow-show').addEventListener('click', () => {
-    FLOW_FORCED_OPEN = true;
-    renderFlow();
+    if (STATE.provisioned === false) { location.href = 'provision.html'; return; }
+    goMyai();
 });
 
 // ZH: 先擋登入。requireLogin() 為 false 時已經在導向了，不要再發請求 ——
@@ -408,7 +339,6 @@ $('flow-show').addEventListener('click', () => {
 if (requireLogin()) {
     loadBalance();
     loadNews();
-    loadJobCount();
 }
 
 
@@ -418,6 +348,6 @@ if (requireLogin()) {
 document.addEventListener('prefs:langchanged', () => {
     loadBalance();
     loadNews();
-    // ZH: 流程的狀態標籤也是 JS 產生的，換語言要一起重畫（狀態已在手上，不用重打 API）。
-    if (STATE.provisioned !== null && STATE.hasJobs !== null) renderFlow();
+    // ZH: 分組卡片的文案全部帶 data-i18n，prefs.js 的字典掃描換得掉，
+    //     所以這裡不必再重畫它 —— 只有 JS 產生的（額度提示、公告）要自己重跑。
 });
