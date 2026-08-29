@@ -578,3 +578,9 @@ html.aibot-docked #aibot-fab { display: none; }
 /* ZH: 標題裡的 icon 不要跟著 h1 變大變粗 —— 它是輔助不是標題的一部分。 */
 .hero__title .tip__btn { font-weight: 400; font-size: 0.75rem; vertical-align: middle; }
 .hero__title .tip__body { font-weight: 400; }
+
+/* ZH: 數字列包成卡片（v3.9）。`.stats` 自己帶 margin-bottom（給沒有盒子的
+ *     頁面用的），包進來之後那段會變成盒子底部多出來的空白 —— 抵銷掉。
+ * ZH: ⚠ 只在 .stats-card 裡抵銷。train.html 與 usage.html 的 .stats
+ *     沒有盒子，那個 margin 在那兩頁仍然是對的。 */
+.stats-card .stats { margin-bottom: 0; }

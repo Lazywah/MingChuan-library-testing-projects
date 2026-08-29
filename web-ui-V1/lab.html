@@ -11,7 +11,7 @@
 
     <link rel="stylesheet" href="tokens.css?v=ff9cecda">
     <link rel="stylesheet" href="styles.css?v=25be4520">
-    <link rel="stylesheet" href="web.css?v=138a0a08">
+    <link rel="stylesheet" href="web.css?v=20eda0e7">
     <!-- ZH: 🔴 側欄狀態必須在**首次繪製之前**套用，否則每換一頁都會看到
              內容滑出去讓位（widget 的 JS 在 body 尾端才跑，那時已經畫過一次了）。
              這一段刻意內嵌而不是外部檔案 —— 外部檔案要等網路往返，
@@ -98,7 +98,12 @@
     </section>
 
     <!-- 層級 2 · 這次 session 的事實 -->
-    <div class="stats" id="meta" hidden>
+    <!-- ZH: v3.9 包成卡片，與上面的狀態卡、下面的存檔卡同一個盒子。
+             原本這三個數字直接浮在兩張卡中間，看起來像「卡片之間掉出來的東西」。
+         ZH: ⚠ `id="meta"` 與 `hidden` 都在**外層**：lab.js 用 `$('meta').hidden = false`
+             解除隱藏，掛在內層的話載入前後會先出現一個空盒子。 -->
+    <section class="panel stats-card" id="meta" hidden>
+      <div class="stats">
         <div class="stat">
             <div class="stat__label" data-i18n="lab_left_today">今日剩餘時間</div>
             <div class="stat__value" id="m-remaining">—</div>
@@ -115,7 +120,8 @@
             <div class="stat__label" data-i18n="lab_disk">磁碟</div>
             <div class="stat__value" id="m-quota">—</div>
         </div>
-    </div>
+      </div>
+    </section>
 
 
     <!-- ==================================================================
