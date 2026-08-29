@@ -50,6 +50,38 @@ const STATE_TEXT = () => ({
     cancelled: T('tr_cancelled', '已取消'),
 });
 
+/* ── 排隊說明（v3.9，會議交辦 #8）──────────────────────────────────
+ * ZH: 只在**真的在排隊**時說話。常駐顯示 GPU 規格對學生沒有決策價值，
+ *     而且會變成一個要維護的假資訊來源。
+ *
+ * ZH: 兩件事分開講：
+ *     · 前面還有幾個 —— 只在前面真的有人時才出現（position > 1）。
+ *       排第一個卻寫「前面還有 0 個」是廢話，還會讓人以為系統壞了。
+ *     · 為什麼還沒開始 —— 只給排第一個的人。前面有人的話原因很明顯。
+ *
+ * ZH: 🔴 桃園目前只有一張卡，而程式實驗室會**獨佔**它。所以
+ *     「有人開著實驗室」是這裡最常見的原因 —— 講清楚，使用者才知道
+ *     是要等十分鐘還是去問管理員，而不是以為自己送單失敗了。
+ */
+const WAIT_REASON = () => ({
+    lab:     T('jl_wait_lab', '有人正在使用程式實驗室的 GPU'),
+    job:     T('jl_wait_job', '有其他訓練正在跑'),
+    closed:  T('jl_wait_closed', '目前不在開放時段'),
+    no_node: T('jl_wait_no_node', '目前沒有機器在線'),
+});
+
+function queueNote(j) {
+    if (j.status !== 'pending' && j.status !== 'queued') return '';
+    const parts = [];
+    if (j.queue_position > 1) {
+        parts.push(T('jl_queue_ahead', '前面還有 {n} 個')
+            .replace('{n}', j.queue_position - 1));
+    }
+    const why = WAIT_REASON()[j.wait_reason];
+    if (why) parts.push(why);
+    return parts.length ? `　（${parts.join('，')}）` : '';
+}
+
 let filter = '';
 let polling = null;
 
@@ -103,6 +135,7 @@ function row(j) {
         <div class="entry__title">${esc(j.job_name || '—')}</div>
         <div class="entry__desc">
             ${esc(STATE_TEXT()[j.status] || j.status)}
+            ${esc(queueNote(j))}
             ${active && j.progress ? `　${Math.round(j.progress)}%` : ''}
             ${when ? `　${esc(when)}` : ''}
             ${j.status === 'failed' && j.error_message

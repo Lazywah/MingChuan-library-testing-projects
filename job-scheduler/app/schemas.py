@@ -514,6 +514,14 @@ class JobListItem(BaseModel):
     # ZH: v3.6 有沒有可下載的模型（列表直接給下載鈕用）
     has_model: bool = False
     model_bytes: Optional[int] = None
+    # ZH: v3.9 排隊位置（只有 pending 的任務會有值）。
+    #   position/total —— 同池內的第幾個 / 共幾個
+    #   wait_reason    —— 只給排第一個的：lab（別人的實驗室佔著卡）/
+    #                     job（正在跑別的訓練）/ closed（時段外）/ no_node（沒機器在線）
+    # ZH: ⚠ 位置是**估計值**，見 crud.queue_info 的說明。
+    queue_position: Optional[int] = None
+    queue_total: Optional[int] = None
+    wait_reason: Optional[str] = None
 
 
 class JobListResponse(BaseModel):

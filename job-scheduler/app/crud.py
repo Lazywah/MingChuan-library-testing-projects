@@ -633,6 +633,59 @@ def get_pending_jobs(db: Session) -> List[models.TrainingJob]:
     ).all()
 
 
+def queue_info(db: Session) -> dict:
+    """
+    ZH: v3.9 排隊位置與等待原因（會議交辦 #8）。
+        回 {job_id: {"position": n, "total": m, "reason": str|None}}，只含 pending。
+
+    ZH: 🔴 **位置一定要用派工端真正的排序算**，否則會給出一個「看起來合理但錯」
+        的數字 —— 而使用者沒有任何方法發現它是錯的。這裡：
+          · 排序＝`get_pending_jobs`（priority DESC, created_at ASC），
+            與 worker 拿到的那份**同一支函式**，不另寫一份。
+          · **同池內**計算 —— worker 拿到清單後還會再依 pool 篩一次
+            （見 routers/worker.py 的 `_pool_allows`），跨池一起數會虛報。
+
+    ZH: ⚠ 已知的不精確：batch 節點在「互動池沒有任何 worker 在線」時會代領
+        interactive 的任務。那種情況下 interactive 任務的實際位置會比這裡算的更前面。
+        **不修**：要精確就得把 take_job 的整段條件複製一份，而複製出來的那一份
+        遲早與本尊漂開 —— 那比偶爾少報一位更難發現。位置只當估計值用。
+
+    ZH: `reason` 只給**排第一個**的任務（前面沒人還在等 → 值得解釋為什麼）。
+        排在後面的人原因很明顯：前面有人。
+
+    @node job-scheduler/app/crud.py::queue_info
+    """
+    pending = get_pending_jobs(db)
+    if not pending:
+        return {}
+
+    by_pool: dict = {}
+    for j in pending:
+        by_pool.setdefault(normalize_pool(getattr(j, "pool_type", "batch")), []).append(j)
+
+    # ZH: 原因只在需要時算一次（要查節點與 Lab 佔用，不要每筆都算）。
+    avail = pool_availability(db)
+    busy = None
+
+    out: dict = {}
+    for pool, lst in by_pool.items():
+        for i, j in enumerate(lst, 1):
+            reason = None
+            if i == 1:
+                pa = avail.get(pool) or {}
+                if not pa.get("available"):
+                    # ZH: 沒有可派工的節點 —— 分「等時段」與「等機器上線」，
+                    #     因為使用者的下一步不同（前者等就好，後者要問管理員）。
+                    reason = "closed" if pa.get("next_open") else "no_node"
+                else:
+                    # ZH: 有節點卻還沒派 → 卡在別人手上。這正是桃園單卡的日常。
+                    if busy is None:
+                        busy = gpu_busy_reason(db)
+                    reason = busy if busy in ("lab", "job") else None
+            out[j.id] = {"position": i, "total": len(lst), "reason": reason}
+    return out
+
+
 def get_running_jobs_count(db: Session) -> int:
     """ZH: 取得正在執行的任務數量 | EN: Get running jobs count
 

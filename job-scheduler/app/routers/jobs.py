@@ -280,8 +280,13 @@ def list_jobs(
             db, user_id=current_user.id, status=status_filter, limit=limit, offset=offset
         )
 
+    # ZH: v3.9 排隊位置。整批算一次再對映 —— 逐筆算的話是 O(n²)，
+    #     而且每一筆都會重新查一次節點與 Lab 佔用。
+    qinfo = crud.queue_info(db)
+
     job_list = []
     for job in jobs:
+        q = qinfo.get(job.id) or {}
         # ZH: 列表不回傳 logs（可能很大）；詳細日誌請用 GET /{job_id}
         # EN: List excludes logs (potentially huge); use GET /{job_id} for full logs
         job_list.append({
@@ -303,6 +308,10 @@ def list_jobs(
             #     ⚠ 這是**手工組的 dict**，只在 schema 加欄位不會自動帶上（踩過兩次）。
             "has_model": bool(job.artifact_bytes),
             "model_bytes": job.artifact_bytes,
+            # ZH: ⚠ 這是手工組的 dict —— 只在 schema 加欄位不會自動帶上（檔案上方踩過兩次的那個）。
+            "queue_position": q.get("position"),
+            "queue_total": q.get("total"),
+            "wait_reason": q.get("reason"),
         })
 
     return {"total": total, "jobs": job_list}
