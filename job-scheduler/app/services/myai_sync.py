@@ -780,6 +780,29 @@ def _echoed_rows(html: str, fields: tuple) -> list[dict]:
     return [{f: _html.unescape(cols[f][i]) for f in fields} for i in range(n)]
 
 
+def _urlencoded(rows: list[dict], fields: tuple) -> str:
+    """
+    ZH: 把回吐的列組成表單 body（`emails[]=a&emails[]=b&…`）。
+
+    ZH: 🔴 **為什麼不用 httpx 的 `data=`**：確認送出需要**重複的 key**
+        （一列一組 `emails[]`），dict 裝不下，而 httpx 0.25 拿到
+        list of tuples 會走到同步串流的路徑，在 AsyncClient 上直接丟
+        `RuntimeError: Attempted to send an sync request with an AsyncClient instance.`
+
+    ZH: 這個坑真的踩過（2026-08-29 首次 SSO 自動開通就死在這裡）——
+        而且錯誤訊息完全不提「data 參數的型別」，看起來像 client 用錯了。
+        所以自己 urlencode 再用 `content=` 送，型別問題就不存在。
+
+    @node job-scheduler/app/services/myai_sync.py::_urlencoded
+    """
+    from urllib.parse import urlencode
+    pairs = []
+    for row in rows:
+        for f in fields:
+            pairs.append((f + "[]", row[f]))
+    return urlencode(pairs)
+
+
 async def register_batch(rows: list[dict]) -> dict:
     """
     ZH: 送出批次註冊（兩段式，**第二段會真的建立帳號**）。
@@ -836,16 +859,14 @@ async def register_batch(rows: list[dict]) -> dict:
     # ZH: 第二段 —— 把預覽頁回吐的值原樣送回去確認。
     #     刻意用**廠商回吐的值**而不是我們手上的原值：如果他做了正規化
     #     （去空白、轉小寫…），照他的送回去才不會又觸發一次解析差異。
-    form = []
-    for row in echoed:
-        for f in fields:
-            form.append((f + "[]", row[f]))
+    body = _urlencoded(echoed, fields)
 
     async def _confirm(client):
         """@node job-scheduler/app/services/myai_sync.py::register_batch.<nested>._confirm"""
         return await client.post(
-            REGISTER_CONFIRM_PATH, data=form,
-            headers={"Referer": settings.MYAI_BASE_URL.rstrip("/") + REGISTER_BATCH_CHECK_PATH},
+            REGISTER_CONFIRM_PATH, content=body,
+            headers={"Content-Type": "application/x-www-form-urlencoded",
+                     "Referer": settings.MYAI_BASE_URL.rstrip("/") + REGISTER_BATCH_CHECK_PATH},
         )
 
     logger.info("MYAI 批次註冊：確認建立 %d 個帳號", len(echoed))
@@ -1031,16 +1052,14 @@ async def transfer_credit_batch(rows: list[dict], confirm_grant: bool = False) -
         raise MyaiSyncError(
             f"廠商預覽的轉點名單與送出的不符（送出 {sent}、解析 {got}）—— 已中止，未轉出任何點數")
 
-    form = []
-    for row in echoed:
-        for f in fields:
-            form.append((f + "[]", row[f]))
+    body = _urlencoded(echoed, fields)
 
     async def _confirm(client):
         """@node job-scheduler/app/services/myai_sync.py::transfer_credit_batch.<nested>._confirm"""
         return await client.post(
-            TRANSFER_CONFIRM_PATH, data=form,
-            headers={"Referer": settings.MYAI_BASE_URL.rstrip("/") + TRANSFER_BATCH_CHECK_PATH},
+            TRANSFER_CONFIRM_PATH, content=body,
+            headers={"Content-Type": "application/x-www-form-urlencoded",
+                     "Referer": settings.MYAI_BASE_URL.rstrip("/") + TRANSFER_BATCH_CHECK_PATH},
         )
 
     r2 = await _session_request(_confirm, _valid)
