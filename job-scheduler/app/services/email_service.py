@@ -312,7 +312,14 @@ def send_admin_alert(kind: str, subject: str, html_content: str) -> int:
     return len(to_addrs) + len(cc_addrs)
 
 
-def send_login_alert(to_email: str, username: str, ip_address: str):
+# ZH: 登入通知的 email_log kind。節流查詢與寄信端必須用同一個字串 ——
+#     兩邊各寫各的字面值，改了一邊就會變成「查不到紀錄 → 每次都寄」，
+#     而那個失效方向是安靜的（信照寄，只是節流沒生效）。
+LOGIN_ALERT_KIND = "login_alert"
+
+
+def send_login_alert(to_email: str, username: str, ip_address: str,
+                     user_id: str = None):
     """
     ZH: 寄送登入通知
     EN: Send login alert
@@ -340,7 +347,10 @@ def send_login_alert(to_email: str, username: str, ip_address: str):
         </body>
     </html>
     """
-    send_email(to_email, subject, html, kind="login_alert", username=username)
+    # ZH: 帶上 user_id —— 節流要靠 email_log 分人計時（見 crud.should_send_login_alert），
+    #     而登入通知先前沒傳這個值，那一欄一直是 NULL。
+    send_email(to_email, subject, html, kind=LOGIN_ALERT_KIND,
+               username=username, user_id=user_id)
 
 def send_password_change_alert(to_email: str, username: str):
     """

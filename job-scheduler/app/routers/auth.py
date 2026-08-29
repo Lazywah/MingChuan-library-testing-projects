@@ -141,10 +141,15 @@ async def login(
 
     # ZH: 記錄上線狀態與次數 | EN: Record online status and login count
     # v2.1 在線狀態修正：online_status 已 deprecated（由 admin 端依 last_activity 動態計算）
+    # ZH: 🔴 先把「上一次的 IP」抄下來 —— 下面那行馬上就會蓋掉它，
+    #     而登入通知要靠「這次跟上次是不是同一個位址」決定要不要跳過節流。
+    #     抄在更新之後的話兩者永遠相等，換 IP 的登入會被靜靜地吃掉。
+    prev_login_ip = user.last_login_ip
+    now_ip = request.client.host if request.client else "Unknown"
     try:
         now = datetime.now(timezone.utc)
         user.last_login_time = now
-        user.last_login_ip = request.client.host if request.client else "Unknown"
+        user.last_login_ip = now_ip
         user.last_activity = now  # v2.1: 登入瞬間即活躍
         user.login_count += 1
         db.commit()
@@ -172,13 +177,20 @@ async def login(
             logger.error(f"Failed to write login log: {e}")
 
     # ZH: 發送登入通知 | EN: Send login alert
+    # ZH: v3.9 可設定：總開關 login_alert_email、最短間隔 login_alert_hours。
+    #     換 IP 的登入一律照寄（見 crud.should_send_login_alert）。
     if user.email:
-        background_tasks.add_task(
-            email_service.send_login_alert,
-            user.email,
-            user.username,
-            request.client.host if request.client else "Unknown"
-        )
+        send_it, why = crud.should_send_login_alert(db, user.id, prev_login_ip, now_ip)
+        if send_it:
+            background_tasks.add_task(
+                email_service.send_login_alert,
+                user.email,
+                user.username,
+                now_ip,
+                user.id,
+            )
+        else:
+            logger.info("登入通知未寄給 %s（原因：%s）", user.username, why)
 
     access_token = create_access_token(
         data={"sub": user.username, "role": user.role}

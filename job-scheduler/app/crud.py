@@ -1461,6 +1461,17 @@ SYSTEM_SETTINGS = {
     #     退了才知道地址是錯的。關著的期間，信箱正確與否無從得知。
     #     所以正式上線前要記得開回來。
     "myai_provision_email":     {"starred": True, "group": "myai", "type": "int",   "default": lambda: 1,                                    "min": 0,   "max": 1,    "label": "MYAI 開通通知信(1=寄, 0=不寄; 關掉會失去退信偵測)"},
+    # ZH: v3.9 平台登入通知信。拆成兩個旋鈕，各管一件事：
+    #       login_alert_email  —— 寄不寄（總開關）
+    #       login_alert_hours  —— 寄多密（同一人的最短間隔）
+    # ZH: ⚠️ **這裡的 0 跟 myai_balance_alert_days 的 0 意思相反**（那邊 0=不寄）。
+    #     所以刻意不把「不寄」也塞進間隔值裡 —— 一個旋鈕只有一個意思，
+    #     想關就把 login_alert_email 設 0，間隔永遠只是間隔。
+    #     兩個設定放在一起看的人不會被 0 騙到。
+    # ZH: 🔴 間隔**擋不住換 IP 的登入**（見 should_send_login_alert）——
+    #     從沒看過的位址登入正是這封信唯一真正的價值，節流不該把它一起吃掉。
+    "login_alert_email":        {"starred": True, "group": "platform", "type": "int",   "default": lambda: 1,                                    "min": 0,   "max": 1,    "label": "登入通知信(1=寄, 0=不寄)"},
+    "login_alert_hours":        {"starred": True, "group": "platform", "type": "int",   "default": lambda: 0,                                    "min": 0,   "max": 720,  "label": "登入通知信的最短間隔(小時; 0=每次都寄; 換 IP 一律照寄)"},
     # v3.3 刪除使用者後 Lab volume 的封存保留天數（逾期背景任務真正刪除）
     "lab_archive_days":         {"starred": True, "public": True, "group": "platform", "type": "int",   "default": lambda: 30,                                   "min": 1,   "max": 365,  "label": "刪除帳號後 Lab 資料封存天數(逾期銷毀)"},
     # v3.4 有使用者在線時的 MYAI 輪詢間隔（無人在線會完全跳過，不受此值影響）
@@ -1552,6 +1563,47 @@ def _clamp_setting(v, lo, hi):
     if hi is not None:
         v = min(hi, v)
     return v
+
+
+def should_send_login_alert(db: Session, user_id: str, prev_ip: str,
+                           now_ip: str) -> tuple:
+    """
+    ZH: 這一次登入要不要寄通知信。回傳 (要不要寄, 原因)。
+
+    ZH: 三段判斷，順序有意義：
+          1. `login_alert_email` = 0 → 不寄。總開關優先於一切。
+          2. **IP 跟上一次不一樣 → 一定寄**，不看間隔。
+             登入通知唯一真正的價值就是「有人從沒看過的地方登入」，
+             節流若把這一封也吃掉，這個功能就只剩雜訊了。
+          3. 同一個 IP → 看 `login_alert_hours` 的最短間隔。
+
+    ZH: ⚠️ `prev_ip` 必須是**這次登入把 last_login_ip 蓋掉之前**的值。
+        呼叫端若在更新之後才讀，兩邊永遠相等，第 2 條等於沒寫
+        （而且失效方向是安靜的：信變少，看起來像節流生效）。
+
+    ZH: 節流狀態直接用 email_log，不另開表 —— 它本來就記了 kind/user_id/時間。
+        **寄失敗也算數**：SMTP 掛掉的時候不該反過來把人的信箱洗版。
+
+    @node job-scheduler/app/crud.py::should_send_login_alert
+    """
+    if not get_setting(db, "login_alert_email"):
+        return False, "disabled"
+
+    if (prev_ip or "") != (now_ip or ""):
+        return True, "new_ip"
+
+    hours = int(get_setting(db, "login_alert_hours") or 0)
+    if hours <= 0:
+        return True, "always"
+
+    from .services.email_service import LOGIN_ALERT_KIND
+    since = datetime.now(timezone.utc) - timedelta(hours=hours)
+    recent = db.query(models.EmailLog).filter(
+        models.EmailLog.user_id == user_id,
+        models.EmailLog.kind == LOGIN_ALERT_KIND,
+        models.EmailLog.created_at >= since,
+    ).first()
+    return (recent is None), ("throttled" if recent is not None else "interval_ok")
 
 
 def get_setting(db: Session, key: str):
