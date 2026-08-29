@@ -351,3 +351,16 @@ html.aibot-docked #aibot-fab { display: none; }
     color: var(--text);
 }
 .lab-gpu input { width: 18px; height: 18px; cursor: pointer; }
+
+/* ZH: 初次設定對話框裡的語言切換（v3.9）。
+ *     靠右，貼在標題上方 —— 那是視線進入這個框的第一個位置，
+ *     而只看英文的人需要在讀懂任何一個字之前就找到它。
+ * ZH: 為什麼不在 styles.css：那份與 admin 端逐位元組相同，
+ *     這個對話框只有使用者端有（見 check_shared_ui_files）。 */
+.onb__lang {
+    display: flex;
+    justify-content: flex-end;
+    margin-bottom: var(--space-2);
+}
+/* ZH: .lang-switch 的 margin-right 是給頂部列用的，在這裡會把它推離右邊界。 */
+.onb__lang .lang-switch { margin-right: 0; }

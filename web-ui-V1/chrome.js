@@ -671,6 +671,8 @@
     var _onbUnlock = null;
 
     function buildOnboarding(me, opts, prefill, unlock) {
+        var curLang = (window.Prefs && window.Prefs.get)
+            ? window.Prefs.get().ui_lang : 'zh';
         _onbUnlock = unlock || null;
         var field = onbFieldFor(me.role);
         // ZH: 解鎖模式下只顯示核可範圍內的欄位 —— 顯示了卻不能存,
@@ -696,7 +698,8 @@
             opts.departments.forEach(function (d) {
                 (byCollege[d.college] = byCollege[d.college] || []).push(d.name);
             });
-            orgHtml = '<optgroup label="' + '請選擇' + '"></optgroup>';
+            // ZH: （這裡原本先組了一個寫死「請選擇」的空 optgroup，下一行就整個覆蓋掉 ——
+            //      死碼，而且是這個對話框裡唯一沒有走 T() 的字串。）
             orgHtml = Object.keys(byCollege).map(function (c) {
                 return '<optgroup label="' + esc(c) + '">'
                     + byCollege[c].map(function (n) {
@@ -719,6 +722,26 @@
 
         box.innerHTML =
             '<div class="onb__box">'
+            // ZH: 🔴 語言切換**必須放在對話框裡面**。
+            //     這個遮罩是 `position:fixed; inset:0; z-index:1000`，蓋住整頁 ——
+            //     包含頂部列上的那組「中／EN」。而它刻意沒有關閉鈕、點背景也關不掉
+            //     （校區與學系是分組統計的基礎，能跳過就會有一堆「未分類」）。
+            //     兩件事加起來：**只看英文的人第一次登入就被鎖在一個中文對話框裡，
+            //     而切語言的鈕正好被自己擋住了。**
+            //     不改 z-index 讓頂部列浮上來，是因為那會讓遮罩看起來破一個洞；
+            //     把切換帶進來比較誠實 —— 它本來就是這一刻唯一需要的控制項。
+            + '<div class="onb__lang">'
+            +   '<div class="lang-switch">'
+            +     '<button type="button" data-set-lang="zh" aria-pressed="'
+            +       (curLang === 'zh' ? 'true' : 'false')
+            +       '" data-i18n-aria="prefs_lang_zh" aria-label="'
+            +       esc(T('prefs_lang_zh', '切換成中文')) + '">中</button>'
+            +     '<button type="button" data-set-lang="en" aria-pressed="'
+            +       (curLang === 'en' ? 'true' : 'false')
+            +       '" data-i18n-aria="prefs_lang_en" aria-label="'
+            +       esc(T('prefs_lang_en', '切換成英文')) + '">EN</button>'
+            +   '</div>'
+            + '</div>'
             + '<h2 class="onb__title" id="onb-title">'
             + esc(unlock ? T('onb_edit_title', '修改你的資料')
                          : T('onb_title', '先完成基本設定')) + '</h2>'
@@ -771,6 +794,31 @@
         box.querySelector('#onb-go').addEventListener('click', function () {
             reviewOnboarding(box, multi, field);
         });
+
+        // ZH: 切語言要把對話框整個重畫。
+        //
+        // ZH: 🔴 光是把切換鈕放進來還不夠 —— 標題、說明、按鈕文字都是 build 當下
+        //     用 T() 組進 innerHTML 的，字典掃描只換得掉有 `data-i18n` 的元素。
+        //     不重畫的話：他按了 EN，背後的頁面變成英文，**而他正看著的對話框
+        //     還是中文** —— 那比沒有切換鈕更令人困惑（看起來像按了沒反應）。
+        //
+        // ZH: ⚠️ 重畫要**把已經選好的帶回去**，用的是 #onb-back 同一套 prefill；
+        //     不帶的話切一次語言就得從 51 個系裡重選一次。
+        //     `_onbUnlock` 也要帶（理由同 #onb-back 那裡）。
+        function onLang() {
+            var sel = box.querySelector('#onb-campus');
+            var picked = !sel ? []
+                : multi
+                    ? Array.prototype.slice.call(sel.selectedOptions)
+                        .map(function (o) { return o.value; })
+                    : (sel.value ? [sel.value] : []);
+            var orgEl = box.querySelector('#onb-org');
+            document.removeEventListener('prefs:langchanged', onLang);
+            box.remove();
+            buildOnboarding(_me, _onbOpts,
+                { campuses: picked, org: orgEl ? orgEl.value : null }, _onbUnlock);
+        }
+        document.addEventListener('prefs:langchanged', onLang);
     }
 
     // ── 二次確認（v3.8）──────────────────────────────────────────────
