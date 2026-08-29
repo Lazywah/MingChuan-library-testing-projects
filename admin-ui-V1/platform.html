@@ -174,6 +174,24 @@
         <div id="mm-list" aria-live="polite"><span class="skeleton skeleton--line"></span></div>
         <div class="inline-error" id="mm-msg" hidden></div>
 
+        <!-- ZH: 手動補齊。兩段式（預覽 → 確認），與組織對照表匯入同一套慣例：
+                 不可逆的操作先讓人看一眼再送出。 -->
+        <div class="adm-sec__head">
+            <h3 id="h-topup" data-i18n="pf_topup">手動補齊點數</h3>
+            <span class="topbar__spacer"></span>
+            <button class="btn btn--minor" type="button" id="tu-preview" data-i18n="pf_topup_preview">預覽</button>
+            <button class="btn btn--primary" type="button" id="tu-apply" data-i18n="pf_topup_apply" hidden>確認補齊</button>
+            <button class="btn btn--minor" type="button" id="tu-cancel" data-i18n="pf_cancel" hidden>取消</button>
+        </div>
+        <p class="footnote" data-i18n="pf_topup_why">把所有綁定帳號補到同一個點數水位。低於這個數字的才會補，補的是差額；已經高於的不動。重複執行不會重複發放。給例外狀況用（活動、補償、每月補點當天服務沒起來）。</p>
+        <p class="footnote" data-i18n="pf_topup_note">每月自動補點是另一回事，在「系統設定」的 MYAI 那一組（補到的點數、補點日）。這裡按下去是立刻執行，不看補點日。</p>
+        <label class="field">
+            <span class="field__label" data-i18n="pf_topup_target">補到的點數</span>
+            <input class="field__input" type="number" id="tu-target" min="1" step="1" inputmode="numeric">
+        </label>
+        <div id="tu-result" aria-live="polite"></div>
+        <div class="inline-error" id="tu-msg" hidden></div>
+
     </section>
 
     <!-- ZH: 組織對照表是**平台層**的東西，不屬於 MYAI 檢視。
@@ -212,10 +230,10 @@
 
 <script src="tz.js?v=2e214a8b"></script>
 <!-- ⚠ ZH: 順序不能動 —— i18n-admin 在 i18n 之後、prefs 之前。 -->
-<script src="i18n.js?v=32bb64a5"></script>
-<script src="i18n-admin.js?v=adc8807f"></script>
+<script src="i18n.js?v=bc17c7f6"></script>
+<script src="i18n-admin.js?v=5a61ccac"></script>
 <script src="prefs.js?v=a25a96d6"></script>
 <script src="admin-chrome.js?v=6d90183a"></script>
-<script src="platform.js?v=364d65c8"></script>
+<script src="platform.js?v=6efd04f9"></script>
 </body>
 </html>

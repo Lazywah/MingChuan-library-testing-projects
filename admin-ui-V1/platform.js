@@ -2025,6 +2025,115 @@
         $('og-save').addEventListener('click', saveOrg);
     })();
 
+    // ══════════════════════════════════════════════════════════════════
+    // ZH: 手動補齊點數（v3.9）
+    // ══════════════════════════════════════════════════════════════════
+    // ZH: 兩段式：預覽 → 確認。與組織對照表匯入同一套慣例 ——
+    //     不可逆的操作先讓人看一眼再送出。
+    //
+    // ZH: 🔴 預覽的名單**不留在前端當成送出的依據**。按「確認補齊」時後端會
+    //     重新同步、重新算一次差額。中間有人用掉點數的話，補的是**當下**的差額。
+    //     把預覽結果送回去當名單的話，補的會是一份已經過期的數字。
+    (function () {
+        var PREVIEWED = null;      // ZH: 只用來決定按鈕要不要亮，不當送出的資料
+
+        function btns() {
+            $('tu-apply').hidden = !PREVIEWED;
+            $('tu-cancel').hidden = !PREVIEWED;
+            // ZH: 刻意**不**把輸入框鎖起來 —— 鎖了的話下面那個 input 監聽器
+            //     永遠不會觸發（打不了字就沒有 input 事件），等於死碼。
+            //     改成「改了數字就讓預覽失效」，同樣防得住「看 A 的預覽、送出 B」。
+        }
+
+        function reset() {
+            PREVIEWED = null;
+            $('tu-result').innerHTML = '';
+            say('tu-msg', '');
+            btns();
+        }
+
+        function target() {
+            var v = parseInt($('tu-target').value, 10);
+            return (isFinite(v) && v > 0) ? v : null;
+        }
+
+        function renderPreview(r) {
+            if (!r.count) {
+                $('tu-result').innerHTML = '<p class="footnote">'
+                    + esc(T('pf_topup_nobody', '沒有人低於這個點數，不需要補。')) + '</p>';
+                return;
+            }
+            var rows = r.rows.map(function (x) {
+                return '<tr><td>' + esc(x.email) + '</td>'
+                     + '<td class="num">' + num(x.points) + '</td></tr>';
+            }).join('');
+            // ZH: 用既有的 tableHtml —— 它會包上 .adm-tablewrap（橫向捲動），
+            //     自己組的話窄畫面會把整頁撐寬。
+            $('tu-result').innerHTML = tableHtml(
+                [['pf_topup_who', '帳號'], ['pf_topup_add', '要補', 'num']], rows);
+            note('tu-msg', T('pf_topup_sum', '{n} 個帳號，合計 {p} 點。按「確認補齊」才會送出。')
+                .replace('{n}', num(r.count)).replace('{p}', num(r.points)));
+        }
+
+        async function preview() {
+            var t = target();
+            if (!t) { say('tu-msg', T('pf_topup_need', '請填一個大於 0 的點數。')); return; }
+            say('tu-msg', '');
+            try {
+                var r = await api('/admin/myai/topup', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ target: t, dry_run: true }),
+                });
+                PREVIEWED = t;
+                renderPreview(r);
+                // ZH: 沒有人要補時不給「確認」鈕 —— 按了也是空操作，
+                //     但會讓人以為真的做了什麼。
+                if (!r.count) { PREVIEWED = null; }
+                btns();
+            } catch (e) {
+                say('tu-msg', String(e.message || e));
+            }
+        }
+
+        async function apply() {
+            var t = target();
+            if (!t) return;
+            $('tu-apply').disabled = true;      // ZH: 防連點
+            try {
+                var r = await api('/admin/myai/topup', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ target: t, dry_run: false }),
+                });
+                reset();
+                if (r.status === 'unknown') {
+                    // ZH: 送出後失敗 —— 點數**可能已經轉出**。這一則不能用會消失的
+                    //     提示，讀者必須看到並去廠商後台對帳。
+                    say('tu-msg', T('pf_topup_unknown',
+                        '送出了，但廠商沒有回報成功。點數可能已經轉出 —— '
+                        + '請到廠商後台對帳，不要再按一次。'));
+                } else {
+                    flash('tu-msg', T('pf_topup_done', '補齊完成：{n} 個帳號、合計 {p} 點。')
+                        .replace('{n}', num(r.count)).replace('{p}', num(r.points)), 8000);
+                }
+            } catch (e) {
+                say('tu-msg', String(e.message || e));
+            } finally {
+                $('tu-apply').disabled = false;
+            }
+        }
+
+        $('tu-preview').addEventListener('click', preview);
+        $('tu-apply').addEventListener('click', apply);
+        $('tu-cancel').addEventListener('click', reset);
+        // ZH: 改了數字就讓預覽失效 —— 否則會發生「看著 A 的預覽、送出 B」。
+        $('tu-target').addEventListener('input', function () {
+            if (PREVIEWED) reset();
+        });
+        btns();
+    })();
+
     async function loadAll() {
         await Promise.all([loadSettings(), loadModels(), loadNodes(), loadExt(), loadMap(),
                            loadOrg()]);
