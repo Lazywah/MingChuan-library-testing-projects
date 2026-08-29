@@ -383,9 +383,19 @@
     //     這些 URL 來自管理端的自由文字欄位,不是常數。
     // ZH: 不合格回空字串,呼叫端據此**整個不畫這個連結** ——
     //     畫一個壞掉的連結比不畫更糟:使用者會以為是自己按錯。
-    function safeUrl(raw) {
+    // ZH: 只放行 http(s)。**這是那條規則的唯一一份實作** ——
+    //     safeUrl()（給 href="..." 字串插值用）與 news.js 的自動連結
+    //     都走這裡，不各寫一份 protocol 檢查。
+    // ZH: 回傳**沒有跳脫過**的原字串：接 DOM 的 `a.href = …` 要的是原值，
+    //     跳脫過的 `&amp;` 設進去會變成網址裡真的多一個 "amp;"。
+    function httpUrl(raw) {
         const v = String(raw == null ? '' : raw).trim();
-        if (!/^https?:\/\//i.test(v)) return '';
+        return /^https?:\/\//i.test(v) ? v : '';
+    }
+
+    function safeUrl(raw) {
+        const v = httpUrl(raw);
+        if (!v) return '';
         return v.replace(/&/g, '&amp;').replace(/"/g, '&quot;')
                 .replace(/</g, '&lt;').replace(/>/g, '&gt;');
     }
@@ -1040,7 +1050,8 @@
     //     （goMyai 已搬回 app.js：MYAI 改成回首頁之後，只剩首頁那顆按鈕在用它。）
     // ZH: safeUrl 對外開放是因為 app.js / usage.js 都要畫「申請額度」那個連結。
     //     兩邊各寫一份的話,只有一邊會被記得補上 javascript: 的防線。
-    window.Chrome = { logout: logout, publicSettings: publicSettings, safeUrl: safeUrl };
+    window.Chrome = { logout: logout, publicSettings: publicSettings,
+                     safeUrl: safeUrl, httpUrl: httpUrl };
 
     if (document.readyState === 'loading') {
         document.addEventListener('DOMContentLoaded', build);

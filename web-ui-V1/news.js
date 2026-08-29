@@ -81,7 +81,7 @@ function render(list) {
 
         const body = document.createElement('p');
         body.className = 'post__body';
-        body.textContent = a.body || '';      // ⚠ 不用 innerHTML，見檔頭
+        linkify(body, a.body || '');
 
         art.append(head, h, body);
         box.appendChild(art);
@@ -94,6 +94,80 @@ function render(list) {
             .replace('{n}', LIMIT);
     }
 }
+
+/* ==========================================================================
+ * ZH: 內文裡的網址自動變連結（v3.9，擁有者裁定 2026-08-30）
+ *
+ * ZH: 🔴 做法是**只認網址，不吃 HTML**。整段內文仍然一個字元都不當標籤解析：
+ *     這裡把文字切成「網址」與「非網址」兩種片段，非網址的用 createTextNode，
+ *     網址的建一個 <a> 並用 `a.href = …` 設值 —— 全程沒有 innerHTML。
+ *     所以管理員貼 `<script>` 進來，畫面上仍然是那七個字元。
+ *
+ * ZH: 🔴 連結文字**一律是完整網址**，不支援自訂錨點文字。
+ *     這是防釣魚：使用者永遠看得到自己要去哪裡。而且這個限制不花成本 ——
+ *     真的需要短文字的時候，寫「詳見 https://…」讀起來一樣清楚。
+ *
+ * ZH: 協定的判斷交給 Chrome.httpUrl（唯一一份實作）——
+ *     `javascript:` / `data:` 那類不會通過，於是連結建不出來，維持純文字。
+ *
+ * ZH: ⚠ 尾隨標點不算網址的一部分。中文裡「請看 https://x.com/a。」那個句號
+ *     會被瀏覽器當成路徑的一部分，連過去是 404。所以右邊的 `。，、）」.,;)]`
+ *     一律退回文字節點。
+ * ========================================================================== */
+// ZH: 只抓 http(s) 開頭。不做「www. 開頭也算」那種猜測 ——
+//     猜錯的代價是把一段普通文字變成壞掉的連結，而那看起來像是平台的錯。
+//
+// ZH: 🔴 字元集是**白名單**（RFC 3986 允許未編碼出現的那些），不是「非空白就算」。
+//     第一版就是後者，於是中文緊接網址時整串被吃進去 ——
+//     「請看 https://x.com/a。謝謝」變成一個連到
+//     `https://x.com/a%E3%80%82%E8%AC%9D%E8%AC%9D` 的死連結。
+//     中文裡**網址後面通常沒有空白**，所以這不是邊角案例，是常態。
+//     改用白名單之後，中文字元自然落在網址外面，不必去猜哪些標點該砍。
+const URL_RE = /https?:\/\/[A-Za-z0-9\-._~:\/?#\[\]@!$&'()*+,;=%]+/g;
+
+// ZH: 半形標點放在網址尾端時要退回文字：英文寫法「see https://x.com/a.」
+//     那個句點是句子的，不是網址的。
+// ZH: ⚠ 只列**半形**。全形的（。，、）】）已經不在上面的白名單裡，
+//     根本不會被匹配進來 —— 列在這裡就是永遠不會執行的死碼。
+const TRAIL = '.,;:!?\'"';
+
+function linkify(el, text) {
+    let last = 0;
+    let m;
+    URL_RE.lastIndex = 0;
+    while ((m = URL_RE.exec(text)) !== null) {
+        let url = m[0];
+        // ZH: 把尾隨標點切掉，切下來的部分回到文字。
+        while (url.length && TRAIL.indexOf(url[url.length - 1]) >= 0) {
+            url = url.slice(0, -1);
+        }
+        // ZH: 收尾的 `)` 只有在**沒有配對的 `(`** 時才砍。
+        //     維基百科那種 `…/Foo_(bar)` 的括號是網址的一部分，
+        //     無條件砍掉會得到一個 404 的連結。
+        while (url.endsWith(')') &&
+               (url.match(/\(/g) || []).length < (url.match(/\)/g) || []).length) {
+            url = url.slice(0, -1);
+        }
+        const safe = window.Chrome.httpUrl(url);
+        if (!safe) continue;               // ZH: 不合格就整段留在文字裡
+
+        if (m.index > last) el.appendChild(document.createTextNode(text.slice(last, m.index)));
+
+        const a = document.createElement('a');
+        a.href = safe;
+        a.textContent = safe;              // ZH: 顯示完整網址（見檔頭）
+        a.target = '_blank';
+        // ZH: noopener 必要 —— 少了它，開啟的頁面可以用 window.opener 改寫這一頁。
+        a.rel = 'noopener noreferrer';
+        el.appendChild(a);
+
+        last = m.index + safe.length;
+    }
+    // ZH: ⚠ 最後這一段不能省。省掉的話「網址後面還有話」的公告會被截斷，
+    //     而畫面上看不出來 —— 只是少了幾個字。
+    if (last < text.length) el.appendChild(document.createTextNode(text.slice(last)));
+}
+
 
 async function load() {
     if (FORCED === 'loading') return;
