@@ -11,7 +11,7 @@
 
 const API = '/api/v1';
 
-/* ZH: 開發期強制狀態：?state=empty|loading|error|overflow
+/* ZH: 開發期強制狀態：?state=empty|loading|error|overflow|low|noquota
        四個狀態不可能都靠真實資料湊出來（例如「MYAI 未開通」需要一個沒開通的帳號），
        沒有這個開關就等於沒辦法檢查它們——而那正是 0→1 設計最常漏掉的部分。 */
 const FORCED = new URLSearchParams(location.search).get('state');
@@ -53,10 +53,18 @@ async function loadBalance() {
     try {
         if (FORCED === 'error') throw new Error('forced');
 
-        const [bal, prov] = await Promise.all([
-            get('/external-ai/my-balance'),
-            get('/external-ai/my-provision').catch(() => null),
-        ]);
+        // ZH: v3.9 `?state=low` / `?state=noquota` —— 低額度與已用完的強制狀態。
+        //     加這兩個的理由很實際：這一塊只有「真的沒額度的帳號」才看得到，
+        //     所以改完之後沒有任何辦法看一眼對不對。這一頁本來就有
+        //     `?state=` 的慣例（見檔頭），補齊它比每次借帳號來得便宜。
+        const [bal, prov] = (FORCED === 'low' || FORCED === 'noquota')
+            ? [{ points: FORCED === 'low' ? 2500 : 0, threshold: 30000,
+                 state: FORCED === 'low' ? 'low' : 'empty', apply_guide_url: '' },
+               { provisioned: true, initial_password: null }]
+            : await Promise.all([
+                get('/external-ai/my-balance'),
+                get('/external-ai/my-provision').catch(() => null),
+            ]);
 
         // ZH: 後端契約有**三種**開通狀態，先前只當成兩種，於是在「還沒有帳號」
         //     的狀態下也顯示「確認我的初始密碼」——點進去是空的。
@@ -108,6 +116,14 @@ async function loadBalance() {
                 parts.push(`<a href="${guide}" target="_blank" rel="noopener noreferrer">`
                            + `${T('idx_apply_more', '如何申請額度')}</a>`);
             }
+            // ZH: v3.9 向管理者申請 —— 走**既有的問題回報**，不另開一條路。
+            //     那條路已經完整了（管理端看得到、回得了、使用者看得到回覆）；
+            //     另開一個申請表單會多出第二個收件匣，而第二個總是沒人看的那個。
+            // ZH: 與上面的「如何申請額度」不衝突：那個是外部說明（怎麼申請），
+            //     這個是動作（現在就申請）。而且說明網址沒設定時它根本不顯示 ——
+            //     那正是最常見的狀態，於是「額度用完」曾經是一句沒有下一步的話。
+            parts.push(`<a href="report.html?topic=quota">`
+                       + `${T('idx_ask_quota', '向管理員申請額度')}</a>`);
             meta.innerHTML = parts.join(' · ');
         }
         wireUsageLink();

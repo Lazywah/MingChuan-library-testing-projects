@@ -235,6 +235,12 @@ def init_db():
             try: conn.execute(text("ALTER TABLE external_ai_accounts ADD COLUMN init_pwd_ack INTEGER DEFAULT 0"))
             except Exception: pass
 
+            # --- v3.9 問題回報的主旨與類別 ---
+            try: conn.execute(text("ALTER TABLE issue_reports ADD COLUMN subject VARCHAR"))
+            except Exception: pass
+            try: conn.execute(text("ALTER TABLE issue_reports ADD COLUMN category VARCHAR"))
+            except Exception: pass
+
             # --- v3.9 組織對照表的英文名（空的退回中文顯示）---
             try: conn.execute(text("ALTER TABLE org_departments ADD COLUMN name_en VARCHAR"))
             except Exception: pass

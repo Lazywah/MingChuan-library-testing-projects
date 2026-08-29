@@ -104,6 +104,12 @@ function renderBalance(acc, bal) {
                        + `${T('idx_apply_more', '如何申請額度')}</a>`);
         }
     }
+    // ZH: v3.9 與首頁同一個入口（見 app.js 的說明）。兩頁都有這張卡，
+    //     只加一邊的話「從哪一頁點進來」會決定看不看得到下一步。
+    if (stage !== 'ok') {
+        parts.push(`<a href="report.html?topic=quota">`
+                   + `${T('idx_ask_quota', '向管理員申請額度')}</a>`);
+    }
     if (acc.expiry) parts.push(T('usage_valid_until', '有效至 {d}').replace('{d}', acc.expiry));
     // ZH: 這裡改用 innerHTML 是因為要放連結；除了 safeUrl 過的網址之外，
     //     其餘都是字典裡的固定字串與數字，沒有資料庫來的自由文字。

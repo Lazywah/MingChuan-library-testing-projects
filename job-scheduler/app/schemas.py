@@ -30,7 +30,7 @@ from datetime import datetime, timezone, date, time, timedelta
 # ZH: 台灣時區只定義一次。gpu_schedule 只依賴標準庫，沒有循環匯入風險。
 from .gpu_schedule import TZ_TAIPEI
 import json
-from typing import Optional, Dict, Any, List
+from typing import ClassVar, Optional, Dict, Any, List
 
 
 # ==============================================================================
@@ -753,10 +753,35 @@ class IssueReportCreate(BaseModel):
     ⚠ ZH: diagnostics 是**前端攤開給使用者看的那一份**，原封不動送上來。
         後端不補任何使用者沒看到的欄位（IP、session…）——見 models.IssueReport 註解。
     """
+    subject: Optional[str] = Field(None, max_length=120,
+                                   description="ZH: 主旨（一句話）| EN: subject line")
+    category: Optional[str] = Field(None, max_length=20,
+                                    description="ZH: 類別代碼 | EN: category code")
     body: str = Field(..., min_length=1, max_length=4000,
                       description="ZH: 使用者描述 | EN: what happened")
     diagnostics: Dict[str, Any] = Field(default_factory=dict,
                                         description="ZH: 頁面上顯示過的診斷欄位")
+
+    # ZH: 類別是**固定的代碼**，不是自由文字。收白名單以外的值一律當成沒選 ——
+    #     不擋的話資料庫裡會長出一堆只出現過一次的類別，管理端的篩選就沒有意義了。
+    # ZH: 🔴 這份清單與前端 report.js 的 CATEGORIES 必須一致。
+    #     不一致的表現是：使用者選得到、送出後被清空，而且沒有任何錯誤訊息。
+    # ZH: 標 ClassVar —— 不標的話 pydantic 會把它當成一個**欄位**，
+    #     整個模組匯入就失敗（PydanticUserError）。
+    CATEGORIES: ClassVar[set] = {"quota", "account", "train", "lab", "other"}
+
+    @field_validator("category")
+    @classmethod
+    def _known_category(cls, v):
+        v = (v or "").strip()
+        return v if v in cls.CATEGORIES else None
+
+    @field_validator("subject")
+    @classmethod
+    def _clean_subject(cls, v):
+        # ZH: 整串空白等於沒填。存 "" 與存 None 要是同一種狀態。
+        v = (v or "").strip()
+        return v or None
 
     @field_validator("body")
     @classmethod
@@ -775,6 +800,8 @@ class IssueReportResponse(BaseModel):
     id: int
     user_id: Optional[str] = None
     username_at_report: Optional[str] = None
+    subject: Optional[str] = None
+    category: Optional[str] = None          # ZH: 代碼；顯示文字由前端依語言查表
     body: str
     diagnostics: Optional[str] = None       # ZH: 存的是 JSON 字串，前端自己 parse
     status: str = "open"

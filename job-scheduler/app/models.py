@@ -845,6 +845,16 @@ class IssueReport(Base):
     user_id     = Column(String, ForeignKey("users.id", ondelete="SET NULL"),
                          nullable=True, index=True)
     username_at_report = Column(String, nullable=True)                        # ZH: 送出當下的帳號名快照
+    # ZH: v3.9 主旨與類別。
+    #   subject  —— 管理端清單一列只放得下一句話，用內文的前 60 字當摘要
+    #               常常切在句子中間。主旨是使用者自己寫的那一句。
+    #   category —— 值是**固定的英數代碼**（quota/account/train/lab/other），
+    #               不是顯示文字：顯示文字要翻譯，而翻譯過的字串當篩選鍵，
+    #               介面一切成英文就篩不到任何東西。
+    # ZH: 兩者都 nullable —— v3.9 之前的回報沒有這兩欄，補上預設值等於
+    #     替使用者宣稱他選了某個類別。空的就是空的。
+    subject     = Column(String, nullable=True)
+    category    = Column(String, nullable=True, index=True)
     body        = Column(Text, nullable=False)                                # ZH: 使用者描述
     diagnostics = Column(Text, nullable=True)                                 # ZH: JSON，前端攤開給使用者看的那份
     status      = Column(String, default="open", index=True)                  # ZH: open / in_progress / resolved

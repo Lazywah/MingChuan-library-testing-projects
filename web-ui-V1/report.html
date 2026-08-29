@@ -42,6 +42,19 @@
             <span data-i18n="rep_sub1">送出後管理者會在管理介面看到。</span><strong data-i18n="rep_sub2">不會另外寄信通知你</strong><span data-i18n="rep_sub3">—— 回覆會出現在這一頁下方的「我的回報」。</span>
         </p>
 
+        <!-- ZH: v3.9 主旨與類別。順序是刻意的：先分類、再一句話、最後才是細節。
+                 管理端的清單一列就是「類別＋主旨」，先填的兩欄正好是被看見的那兩欄。 -->
+        <label class="field">
+            <span class="field__label" for="cat" data-i18n="rep_cat">這是關於什麼</span>
+            <select class="field__input" id="cat"></select>
+        </label>
+
+        <label class="field">
+            <span class="field__label" for="subject" data-i18n="rep_subject">主旨</span>
+            <input class="field__input" type="text" id="subject" maxlength="120"
+                   data-i18n-placeholder="rep_subject_ph" placeholder="一句話說明，例：前往 MYAI 後是空白頁">
+        </label>
+
         <label class="field">
             <span class="field__label" for="what" data-i18n="rep_what">發生了什麼事</span>
             <textarea class="field__input" id="what" rows="5" maxlength="4000"
@@ -70,11 +83,11 @@
 </main>
 
 <script src="tz.js?v=2e214a8b"></script>
-<script src="i18n.js?v=bc17c7f6"></script>
+<script src="i18n.js?v=c725f6c8"></script>
 <script src="prefs.js?v=a25a96d6"></script>
 <!-- ZH: 小基（浮動助手）。客服模式公開，登入頁也放 —— 設計文件的使用者需求是「不會用這個平台時想直接問」。 -->
 <script src="assistant-widget.js?v=61a7acaa"></script>
 <script src="chrome.js?v=a7562341"></script>
-<script src="report.js?v=1a7d7e1b"></script>
+<script src="report.js?v=05adbf26"></script>
 </body>
 </html>

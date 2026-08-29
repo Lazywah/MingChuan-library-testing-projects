@@ -68,6 +68,10 @@ async def create_report(
     r = models.IssueReport(
         user_id=current_user.id,
         username_at_report=current_user.username,
+        # ZH: 主旨與類別已經在 schema 過濾過（空白→None、未知代碼→None）。
+        #     這裡不再補預設值 —— 補了等於替使用者宣稱他選了某個類別。
+        subject=payload.subject,
+        category=payload.category,
         body=payload.body,
         diagnostics=diag,
         status="open",
@@ -108,6 +112,7 @@ admin_router = APIRouter(tags=["問題回報管理 Admin Issue Reports"])
 @admin_router.get("", response_model=list[schemas.IssueReportResponse])
 def admin_list_reports(
     status: Optional[str] = Query(None, description="ZH: open / in_progress / resolved；不給＝全部"),
+    category: Optional[str] = Query(None, description="ZH: quota/account/train/lab/other；不給＝全部"),
     limit: int = Query(200, ge=1, le=500),
     db: Session = Depends(get_db),
     _: models.User = Depends(require_admin),
@@ -121,10 +126,16 @@ def admin_list_reports(
     """
     if status is not None and status not in schemas.ISSUE_STATUSES:
         raise HTTPException(status_code=400, detail=f"未知的 status：{status}")
+    # ZH: 未知的類別**明講**，不要安靜地回全部 —— 靜默忽略的話，
+    #     前後端的代碼一旦漂開，管理者會以為「這個類別真的沒有回報」。
+    if category is not None and category not in schemas.IssueReportCreate.CATEGORIES:
+        raise HTTPException(status_code=400, detail=f"未知的 category：{category}")
 
     q = db.query(models.IssueReport)
     if status:
         q = q.filter(models.IssueReport.status == status)
+    if category:
+        q = q.filter(models.IssueReport.category == category)
     rows = q.order_by(models.IssueReport.created_at.desc()).limit(limit).all()
 
     order = {"open": 0, "in_progress": 1, "resolved": 2}

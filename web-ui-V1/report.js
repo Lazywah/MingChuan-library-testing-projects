@@ -22,6 +22,33 @@ const $ = (id) => document.getElementById(id);
 
 let ME = null;
 
+/* ── 回報類別（v3.9）───────────────────────────────────────────────
+ * ZH: 🔴 **代碼與 schemas.IssueReportCreate.CATEGORIES 必須一致。**
+ *     不一致的表現是：使用者選得到、送出後被清空，而且沒有任何錯誤訊息 ——
+ *     後端把未知代碼當成「沒選」處理。
+ * ZH: 存的是代碼不是顯示文字：翻譯過的字串當篩選鍵的話，
+ *     介面一切成英文，管理端就篩不到任何東西。
+ */
+const CATEGORIES = [
+    ['quota',   'rep_cat_quota',   'AI 額度'],
+    ['train',   'rep_cat_train',   '訓練任務'],
+    ['lab',     'rep_cat_lab',     '程式實驗室'],
+    ['account', 'rep_cat_account', '帳號與登入'],
+    ['other',   'rep_cat_other',   '其他'],
+];
+
+function fillCategories(selected) {
+    const sel = $('cat');
+    if (!sel) return;
+    // ZH: 第一項是空值 —— 類別**不強迫選**。強迫的話，不知道該選哪一個的人
+    //     會隨便挑一個，而那比留空更難處理（看起來像分類過了）。
+    sel.innerHTML = '<option value="">' + T('rep_cat_none', '（不指定）') + '</option>'
+        + CATEGORIES.map(([code, key, zh]) =>
+            `<option value="${code}"${code === selected ? ' selected' : ''}>${T(key, zh)}</option>`
+        ).join('');
+}
+fillCategories('');
+
 // ZH: 色系切換已集中到 prefs.js（跟帳號走）。
 //     原本九個頁面各寫一份，**只有 app.js 那份會存與還原**——
 //     於是「有些頁面換了顏色，其他頁面還沒變」。同一條規則不要有第二份實作。
@@ -103,7 +130,12 @@ $('send').addEventListener('click', async () => {
         const r = await fetch(`${API}/reports`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', ...authHeaders() },
-            body: JSON.stringify({ body, diagnostics: Object.fromEntries(diagnostics()) }),
+            body: JSON.stringify({
+                subject: $('subject').value.trim(),
+                category: $('cat').value,
+                body,
+                diagnostics: Object.fromEntries(diagnostics()),
+            }),
         });
 
         if (r.status === 401 || r.status === 403) {
@@ -122,6 +154,10 @@ $('send').addEventListener('click', async () => {
         }
 
         $('what').value = '';
+        // ZH: 主旨與類別一起清 —— 只清內文的話，下一則回報會頂著上一則的主旨送出，
+        //     而管理端清單看到的就是那個錯的主旨。
+        $('subject').value = '';
+        fillCategories('');
         say(T('rep_sent', '已送出。管理者的回覆會出現在下方「我的回報」——不會另外寄信通知你。'));
         await loadMine();
     } catch {
@@ -252,7 +288,43 @@ async function load() {
 load();
 
 
+/* ── 預填主題（v3.9）────────────────────────────────────────────────
+ * ZH: `?topic=quota` —— 從「額度已用完」的提示按過來時，先把申請的骨架填好。
+ *
+ * ZH: 為什麼是預填**而不是**做一個獨立的「申請額度」表單：
+ *     問題回報這條路已經完整了（管理端看得到、回得了、使用者看得到回覆）。
+ *     另開一條的話會有第二個收件匣，而第二個收件匣總是那個沒人看的。
+ *
+ * ZH: ⚠ 只填**空的**輸入框。使用者已經打了字還被蓋掉的話，那是資料遺失
+ *     —— 而且他不會知道自己剛剛打的東西去哪了。
+ * ZH: ⚠ 填完把游標移到最後，讓他直接接著打，不用先點一下再按 End。
+ */
+(function prefillTopic() {
+    var topic = new URLSearchParams(location.search).get('topic');
+    if (topic !== 'quota') return;
+    var el = $('what');
+    if (!el || el.value.trim()) return;
+    // ZH: 用陣列 join 換行，不寫跳脫字元 —— 這一行的字典值裡也有換行，
+    //     兩邊都用同一個組法，改文案時不會有人漏掉一個 \n。
+    el.value = T('rep_prefill_quota',
+        ['我想申請額外的 AI 額度。', '', '用途：', '大概需要多少：'].join('\n'));
+    // ZH: 類別與主旨一起填好 —— 從「額度已用完」點過來的人，這三欄他都不必想。
+    //     同樣只在**空的**時候才填（見上面的理由）。
+    fillCategories('quota');
+    const sub = $('subject');
+    if (sub && !sub.value.trim()) sub.value = T('rep_subject_quota', '申請額外的 AI 額度');
+    el.focus();
+    el.setSelectionRange(el.value.length, el.value.length);
+})();
+
+
 // ── 語言切換時重繪 ───────────────────────────────────────────────────
 // ZH: prefs.js 的字典掃描只換得掉 `data-i18n` 元素；本頁 JS 產生的內容要自己重跑。
 //     只在語言**改變**時觸發（不是每次套用），所以不會在載入時多跑一次。
-document.addEventListener('prefs:langchanged', () => { renderDiag(); loadMine(); });
+document.addEventListener('prefs:langchanged', () => {
+    // ZH: 類別的顯示文字是 build 當下用 T() 組進 <option> 的，
+    //     字典掃描換不掉 —— 要自己重畫，並**保留已經選好的那一個**。
+    fillCategories($('cat') ? $('cat').value : '');
+    renderDiag();
+    loadMine();
+});

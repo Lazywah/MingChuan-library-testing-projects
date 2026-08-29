@@ -11,7 +11,7 @@
 
     <link rel="stylesheet" href="tokens.css?v=ff9cecda">
     <link rel="stylesheet" href="styles.css?v=e6a0b3ae">
-    <link rel="stylesheet" href="admin.css?v=3d45d601">
+    <link rel="stylesheet" href="admin.css?v=d02fe167">
 </head>
 <body>
 
@@ -47,7 +47,13 @@
         <div class="adm-sec__head"><h2 id="h-reports" data-i18n="adm_nav_reports">回報</h2></div>
         <!-- ZH: 每個篩選都帶數量 —— 不帶的話你得逐一點過才知道哪裡有事。 -->
         <div class="adm-inline" id="filters"></div>
+        <!-- ZH: 類別另起一排（見 reports.js 的說明）。 -->
+        <div class="adm-inline" id="cat-filters"></div>
         <div id="list" aria-live="polite"><span class="skeleton skeleton--line"></span></div>
+        <!-- ZH: 單則回報的彈窗。**只有一個**，每次填內容 ——
+                 一則一個的話，一百則回報就有一百份隱藏的表單掛在 DOM 上。
+             ZH: <dialog> 在 top layer 渲染，不受祖先的 transform/overflow 影響。 -->
+        <dialog class="rmod" id="rp-dialog"></dialog>
     </section>
 
     <section class="adm-sec" aria-labelledby="h-mail">
@@ -64,10 +70,10 @@
 
 <script src="tz.js?v=2e214a8b"></script>
 <!-- ⚠ ZH: 順序不能動 —— i18n-admin 在 i18n 之後、prefs 之前。 -->
-<script src="i18n.js?v=bc17c7f6"></script>
-<script src="i18n-admin.js?v=a749e6f8"></script>
+<script src="i18n.js?v=c725f6c8"></script>
+<script src="i18n-admin.js?v=a90da435"></script>
 <script src="prefs.js?v=a25a96d6"></script>
 <script src="admin-chrome.js?v=6d90183a"></script>
-<script src="reports.js?v=65c11acc"></script>
+<script src="reports.js?v=11a97048"></script>
 </body>
 </html>

@@ -20,6 +20,8 @@
     var STATUSES = ['open', 'in_progress', 'resolved'];
 
     var FILTER = 'open';       // ZH: 預設看「待處理」—— 打開這一頁通常是為了處理事情
+    // ZH: v3.9 類別篩選。'' = 全部。與狀態篩選**分開**：兩者是不同的問題
+    //     （「還沒處理的」與「關於額度的」），合成一排會變成十幾顆按鈕。
     var REPORTS = [];
 
     function $(id) { return document.getElementById(id); }
@@ -114,6 +116,28 @@
                 + esc(o[1]) + '　' + n + '</button>';
         }).join('');
 
+        // ZH: 類別篩選另起一排。不帶數量 —— summary 端點只算狀態，
+        //     硬湊一個前端算的數字會與狀態那排的來源不同，兩排對不起來時
+        //     沒有人分得出是資料錯還是篩選錯。
+        $('cat-filters').innerHTML =
+            [['', T('rp_all', '全部')]].concat(CATEGORIES.map(function (c) {
+                return [c[0], T(c[1], c[2])];
+            })).map(function (o) {
+                // ZH: 每個類別帶自己的 class，選中時才上色（見 admin.css）——
+                //     沒選中就保持中性，五顆全上色的話反而看不出選了哪一個。
+                return '<button class="btn btn--minor btn--cat-' + esc(o[0] || 'all')
+                    + (CAT_FILTER === o[0] ? ' is-current' : '') + '"'
+                    + ' type="button" data-cat="' + esc(o[0]) + '"'
+                    + (CAT_FILTER === o[0] ? ' aria-current="true"' : '') + '>'
+                    + esc(o[1]) + '</button>';
+            }).join('');
+        $('cat-filters').querySelectorAll('[data-cat]').forEach(function (b) {
+            b.addEventListener('click', function () {
+                CAT_FILTER = b.dataset.cat;
+                load();
+            });
+        });
+
         $('filters').querySelectorAll('[data-filter]').forEach(function (b) {
             b.addEventListener('click', function () {
                 FILTER = b.dataset.filter;
@@ -121,6 +145,28 @@
             });
         });
     }
+
+    // ZH: 展開中的回報（id → 1）。跨重畫保留，見 renderReports 末尾的說明。
+    // ZH: 類別代碼 → 顯示文字。🔴 代碼必須與 schemas.IssueReportCreate.CATEGORIES
+    //     以及使用者端 report.js 的 CATEGORIES 三邊一致。
+    //     這裡只負責顯示；篩選送出去的一律是代碼。
+    var CATEGORIES = [
+        ['quota',   'rep_cat_quota',   'AI 額度'],
+        ['train',   'rep_cat_train',   '訓練任務'],
+        ['lab',     'rep_cat_lab',     '程式實驗室'],
+        ['account', 'rep_cat_account', '帳號與登入'],
+        ['other',   'rep_cat_other',   '其他'],
+    ];
+    function catLabel(code) {
+        for (var i = 0; i < CATEGORIES.length; i++) {
+            if (CATEGORIES[i][0] === code) return T(CATEGORIES[i][1], CATEGORIES[i][2]);
+        }
+        // ZH: 不認得的代碼**原樣顯示**，不要當成沒分類 ——
+        //     那代表前後端漂開了，而藏起來就沒有人會發現。
+        return code || '';
+    }
+
+    var CAT_FILTER = '';
 
     function renderReports() {
         if (!REPORTS.length) {
@@ -130,52 +176,130 @@
 
         $('list').innerHTML = REPORTS.map(function (r) {
             var who = r.username_at_report || T('rp_anon', '（帳號已刪除）');
-            return '<section class="adm-card" data-report="' + esc(r.id) + '">'
-                + '<div class="adm-card__title">'
-                + '<span class="adm-pill adm-pill--' + esc(r.status) + '">'
-                + esc(T('st_' + r.status, r.status)) + '</span>　'
-                + esc(T('rp_from', '{who} 於 {when}')
-                    .replace('{who}', who).replace('{when}', TW.dateTime(r.created_at)))
-                + '</div>'
+            // ZH: 摘要 —— 內文的第一行，換行與連續空白壓成一個空格。
+            //     不壓的話一則有換行的回報會把整列撐成好幾行。
+            var snip = (r.body || '').replace(/\s+/g, ' ').trim();
+            if (snip.length > 60) snip = snip.slice(0, 60) + '…';
 
-                // ZH: 用 textContent 的等價寫法（esc）—— 回報內容是使用者輸入的。
-                + '<p class="adm-report__body">' + esc(r.body) + '</p>'
-
-                + (r.diagnostics ? '<details class="fold">'
-                    + '<summary class="fold__summary">' + esc(T('rp_diag', '一起送出的診斷資訊')) + '</summary>'
-                    + '<pre class="diag">' + esc(prettyDiag(r.diagnostics)) + '</pre>'
-                    + '</details>' : '')
-
-                + '<label class="field">'
-                + '<span class="field__label" for="rep-' + esc(r.id) + '">'
-                + esc(T('rp_reply', '回覆')) + '</span>'
-                + '<textarea class="field__input" id="rep-' + esc(r.id) + '" rows="3"'
-                + ' placeholder="' + esc(T('rp_reply_ph', '寫給他看的回覆…')) + '">'
-                + esc(r.admin_reply || '') + '</textarea></label>'
-                + '<p class="footnote">' + esc(T('rp_reply_hint',
-                    '他會在「問題回報」那一頁看到這段話。刻意不寄通知信。')) + '</p>'
-                + (r.replied_at ? '<p class="footnote">'
-                    + esc(T('rp_replied', '已於 {when} 回覆').replace('{when}', TW.dateTime(r.replied_at)))
-                    + '</p>' : '')
-
-                + '<div class="adm-inline">'
-                + '<select class="field__input" id="st-' + esc(r.id) + '"'
-                + ' aria-label="' + esc(T('rp_mark', '改狀態')) + '">'
-                + STATUSES.map(function (s) {
-                    return '<option value="' + s + '"' + (r.status === s ? ' selected' : '') + '>'
-                        + esc(T('st_' + s, s)) + '</option>';
-                }).join('')
-                + '</select>'
-                + '<button class="btn btn--minor" type="button" data-save="' + esc(r.id) + '">'
-                + esc(T('rp_save', '送出回覆')) + '</button>'
-                + '</div>'
-                + '<div class="inline-error" id="msg-' + esc(r.id) + '" hidden></div>'
-                + '</section>';
+            // ZH: 一列 = 一顆按鈕。用 <button> 不用 <div onclick> ——
+            //     鍵盤 Tab 到得了、Enter/Space 都能開，
+            //     螢幕閱讀器也唸得出這是一個動作而不是一段文字。
+            return '<button class="rp adm-card rp__row" type="button"'
+                + ' data-open="' + esc(r.id) + '">'
+                +   '<span class="adm-pill adm-pill--' + esc(r.status) + '">'
+                +     esc(T('st_' + r.status, r.status)) + '</span>'
+                +   (r.category
+                        ? '<span class="rp__cat rp__cat--' + esc(r.category) + '">'
+                          + esc(catLabel(r.category)) + '</span>'
+                        : '')
+                +   '<span class="rp__who">' + esc(who) + '</span>'
+                // ZH: 有主旨就用主旨當標題 —— 那是使用者自己下的一句話，
+                //     比從內文切前 60 字準得多。舊回報沒有主旨，退回用摘要。
+                +   '<span class="rp__snip">' + esc(r.subject || snip) + '</span>'
+                +   '<span class="rp__when footnote">' + esc(TW.dateTime(r.created_at)) + '</span>'
+                // ZH: 已回覆的標記留在列上 —— 不放的話要一則一則點開才知道
+                //     哪些處理過了，而那正是收起內容之後最容易失去的資訊。
+                +   (r.replied_at
+                        ? '<span class="rp__done">' + esc(T('rp_has_reply', '已回覆')) + '</span>'
+                        : '<span class="rp__done"></span>')
+                + '</button>';
         }).join('');
 
-        $('list').querySelectorAll('[data-save]').forEach(function (b) {
-            b.addEventListener('click', function () { save(b.dataset.save); });
+        $('list').querySelectorAll('[data-open]').forEach(function (b) {
+            b.addEventListener('click', function () { openReport(b.dataset.open); });
         });
+    }
+
+    // ══════════════════════════════════════════════════════════════════
+    // ZH: 單則回報的彈窗（v3.9）
+    // ══════════════════════════════════════════════════════════════════
+    // ZH: 用原生 <dialog> + showModal()，不自己做遮罩。理由不只是省事：
+    //     · **top layer 渲染** —— 祖先有 transform / filter / overflow 時，
+    //       自製的 `position: fixed` 遮罩會以那個祖先為基準，蓋不滿整頁
+    //       而且捲動時會跑掉（初次設定那個對話框的註解裡記過這個坑）。
+    //     · Esc 關閉、焦點鎖在對話框內、背景不可 Tab —— 全部免費。
+    //
+    // ZH: 只用**一個** dialog，每次填內容 —— 一則一個的話，
+    //     一百則回報就有一百份隱藏的表單掛在 DOM 上。
+    function openReport(id) {
+        var r = null;
+        for (var i = 0; i < REPORTS.length; i++) {
+            if (String(REPORTS[i].id) === String(id)) { r = REPORTS[i]; break; }
+        }
+        if (!r) return;
+
+        var dlg = $('rp-dialog');
+        var who = r.username_at_report || T('rp_anon', '（帳號已刪除）');
+
+        // ZH: 🔴 已回覆的就唯讀（擁有者裁定 2026-08-29）。
+        //     回覆是**單則**的，而且學生已經看到了 —— 事後改掉它等於
+        //     偷偷換掉他讀過的東西，而他不會收到任何通知。
+        // ZH: ⚠ 唯讀的只有**回覆內容**。狀態仍然改得動：
+        //     「回覆了」與「處理完了」是兩件事，回覆當下常常還沒結案。
+        //     連狀態一起鎖的話，回覆過的回報會永遠停在「處理中」。
+        var locked = !!r.replied_at;
+
+        dlg.innerHTML =
+            '<form method="dialog" class="rmod__x">'
+            + '<button class="btn btn--minor" value="close" aria-label="'
+            + esc(T('rp_close', '關閉')) + '">✕</button></form>'
+
+            // ZH: 主旨在**最上面靠左**（擁有者裁定 2026-08-29）——
+            //     它是這則回報的標題，先看到它才知道下面那排標籤在講什麼。
+            //     沒有主旨的是舊回報，那一行就不出現，狀態列自然遞補到最上面。
+            + (r.subject ? '<h2 class="rmod__title">' + esc(r.subject) + '</h2>' : '')
+
+            + '<div class="rmod__head">'
+            +   '<span class="adm-pill adm-pill--' + esc(r.status) + '">'
+            +     esc(T('st_' + r.status, r.status)) + '</span>'
+            +   (r.category
+                    ? '<span class="rp__cat rp__cat--' + esc(r.category) + '">'
+                      + esc(catLabel(r.category)) + '</span>'
+                    : '')
+            +   '<span class="rmod__meta">' + esc(who) + '　'
+            +     esc(TW.dateTime(r.created_at)) + '</span>'
+            + '</div>'
+
+            + '<p class="adm-report__body">' + esc(r.body) + '</p>'
+
+            + (r.diagnostics ? '<details class="fold">'
+                + '<summary class="fold__summary">' + esc(T('rp_diag', '一起送出的診斷資訊')) + '</summary>'
+                + '<pre class="diag">' + esc(prettyDiag(r.diagnostics)) + '</pre>'
+                + '</details>' : '')
+
+            + (locked
+                // ZH: 唯讀時顯示的是**已送出的那段文字**，不是一個關不掉的輸入框 ——
+                //     disabled 的 textarea 看起來仍然像可以編輯，只是壞掉了。
+                ? '<div class="rmod__replied">'
+                  + '<div class="field__label">' + esc(T('rp_reply', '回覆')) + '</div>'
+                  + '<p class="adm-report__body">' + esc(r.admin_reply || '') + '</p>'
+                  + '<p class="footnote">'
+                  + esc(T('rp_replied', '已於 {when} 回覆').replace('{when}', TW.dateTime(r.replied_at)))
+                  + '　' + esc(T('rp_locked', '回覆送出後不能再改 —— 對方已經看到了。'))
+                  + '</p></div>'
+                : '<label class="field">'
+                  + '<span class="field__label" for="rp-reply">' + esc(T('rp_reply', '回覆')) + '</span>'
+                  + '<textarea class="field__input" id="rp-reply" rows="5"'
+                  + ' placeholder="' + esc(T('rp_reply_ph', '寫給他看的回覆…')) + '"></textarea></label>'
+                  + '<p class="footnote">' + esc(T('rp_reply_hint',
+                      '他會在「問題回報」那一頁看到這段話。刻意不寄通知信。')) + '</p>')
+
+            + '<div class="adm-inline rmod__foot">'
+            + '<select class="field__input" id="rp-status"'
+            + ' aria-label="' + esc(T('rp_mark', '改狀態')) + '">'
+            + STATUSES.map(function (st) {
+                return '<option value="' + st + '"' + (r.status === st ? ' selected' : '') + '>'
+                    + esc(T('st_' + st, st)) + '</option>';
+            }).join('')
+            + '</select>'
+            + '<button class="btn btn--primary" type="button" id="rp-save">'
+            + esc(locked ? T('rp_save_status', '更新狀態') : T('rp_save', '送出回覆'))
+            + '</button>'
+            + '</div>'
+            + '<div class="inline-error" id="rp-msg" hidden></div>';
+
+        $('rp-save').addEventListener('click', function () { save(r.id, locked); });
+        dlg.showModal();
     }
 
     // ZH: 診斷是 JSON 字串。排版過再顯示 —— 一整行的 JSON 讀不出東西來。
@@ -188,21 +312,21 @@
         }
     }
 
-    async function save(id) {
-        var body = {
-            admin_reply: $('rep-' + id).value,
-            status: $('st-' + id).value,
-        };
+    async function save(id, locked) {
+        // ZH: 唯讀時**不送 admin_reply** —— 送一個空字串會把既有的回覆清掉，
+        //     而畫面上完全看不出發生了什麼事。
+        var body = { status: $('rp-status').value };
+        if (!locked) body.admin_reply = $('rp-reply').value;
         try {
             await api('/admin/reports/' + encodeURIComponent(id), {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(body),
             });
-            flash('msg-' + id, T('rp_saved', '已送出'));
+            $('rp-dialog').close();
             await load();          // ZH: 重讀 —— 狀態改了之後可能就不屬於目前的篩選了
         } catch (e) {
-            say('msg-' + id, T('rp_fail', '存不起來（{w}）').replace('{w}', e.message));
+            say('rp-msg', T('rp_fail', '存不起來（{w}）').replace('{w}', e.message));
         }
     }
 
@@ -464,7 +588,10 @@
 
     async function load() {
         try {
-            var q = FILTER ? '?status=' + encodeURIComponent(FILTER) : '';
+            var qs = [];
+            if (FILTER) qs.push('status=' + encodeURIComponent(FILTER));
+            if (CAT_FILTER) qs.push('category=' + encodeURIComponent(CAT_FILTER));
+            var q = qs.length ? '?' + qs.join('&') : '';
             var summary = await api('/admin/reports/summary');
             REPORTS = await api('/admin/reports' + q);
             renderFilters(summary.counts || {});

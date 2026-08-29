@@ -1305,3 +1305,179 @@ textarea.field__input {
     padding: 2px;
 }
 .am-chips__in:focus { outline: none; }   /* 焦點訊號由容器的 :focus-within 給 */
+
+
+/* ==========================================================================
+ * ZH: 回報清單 —— 信件式收合（v3.9）
+ *
+ * ZH: 之前每一則都是完全展開的卡片（內文＋診斷＋回覆框＋狀態＋按鈕）。
+ *     十則就要捲很久，而且**看不出哪些還沒處理** —— 全部長得一樣高。
+ *     改成一列一則，點開才是全文與回覆。
+ *
+ * ZH: 用原生 <details>，不自己做展開收合：鍵盤操作、螢幕閱讀器的展開狀態、
+ *     Ctrl+F 找字時自動展開（Chrome 的 hidden=until-found 行為）都是免費的。
+ * ========================================================================== */
+.rp { padding: 0; }
+.rp + .rp { margin-top: var(--space-2); }
+
+.rp__row {
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    padding: var(--space-3) var(--space-4);
+    min-height: var(--tap-min);
+    list-style: none;
+}
+/* ZH: 這裡原本有一個 ▸ 三角（<details> 就地展開的時代）。
+ *     現在點一列是**開彈窗**，留著三角會說謊 —— 它的意思是「按下去會在原地展開」。 */
+.rp__row:hover { background-color: var(--surface-2); }
+.rp__row:focus-visible { outline: var(--focus-ring); outline-offset: -2px; }
+
+.rp__who { flex: none; color: var(--text-strong); font-weight: 600; }
+/* ZH: 摘要是唯一該被壓縮的東西 —— 其餘欄位寬度固定，
+ *     不然視窗一窄，時間與「已回覆」會先被擠掉，而那兩個正是掃視時要看的。 */
+.rp__snip {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--text-muted);
+}
+.rp__when { flex: none; }
+/* ZH: 固定寬度 —— 有的沒有「已回覆」，不固定的話每一列的時間會左右跳，
+ *     一整排看起來像沒有對齊。 */
+.rp__done {
+    flex: none;
+    min-width: 3.5rem;
+    text-align: right;
+    font-size: 0.8rem;
+    /* ZH: 用 --text-muted 不用強調色 —— 這裡沒有 --ok 這種 token，
+     *     而「已回覆」是已完成的狀態，不需要搶注意力；
+     *     真正要被看見的是**沒有**這個標記的那幾列。 */
+    color: var(--text-muted);
+}
+
+
+/* ZH: 窄畫面把摘要與時間收掉，只留狀態與人 —— 一列硬塞五個欄位會變成
+ *     每個都只剩兩三個字，那比不顯示更難讀。 */
+@media (max-width: 640px) {
+    .rp__snip, .rp__when { display: none; }
+}
+
+/* ZH: 回報列上的類別標籤（v3.9）。低調 —— 它是分類不是狀態，
+ *     搶了狀態藥丸的注意力就本末倒置。 */
+.rp__cat {
+    flex: none;
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    border: 1px solid var(--hairline);
+    border-radius: var(--radius-pill);
+    padding: 1px var(--space-2);
+    white-space: nowrap;
+}
+/* ZH: 展開後的主旨。收合列會被 ellipsis 截斷，這裡是完整的那一句。 */
+.rp__subject {
+    margin: 0;
+    font-size: 1rem;
+    color: var(--text-strong);
+}
+/* ZH: 窄畫面把類別也收掉（同摘要與時間）—— 一列硬塞六個欄位讀不了。 */
+@media (max-width: 640px) {
+    .rp__cat { display: none; }
+}
+
+
+/* ==========================================================================
+ * ZH: 回報的彈窗與類別配色（v3.9）
+ * ========================================================================== */
+
+/* ZH: 一列現在是 <button> —— 把瀏覽器的預設按鈕外觀清掉，
+ *     但**保留** :focus-visible 的外框（鍵盤使用者靠它知道自己在哪一列）。 */
+.rp__row {
+    width: 100%;
+    text-align: left;
+    font: inherit;
+    color: inherit;
+    background: none;
+}
+
+/* ZH: 類別色。🔴 每一組都實際算過對比（小字要 4.5:1）：
+ *       quota   5c warn-600 / warn-050    4.87
+ *       train      blue-600 / slate-050   6.15
+ *       lab        slate-600 / slate-050  5.71
+ *       account    ink / yellow-050      14.65
+ *       other      grey-400 / grey-050    4.65
+ *     不發明新色 —— tokens.css 每一個顏色都標了對比值，那是算過的。
+ * ZH: 顏色只是**次要**線索：類別文字本身就寫在上面（WCAG 1.4.1，
+ *     不能只靠顏色傳達資訊）。色盲的人照樣讀得到「AI 額度」四個字。 */
+.rp__cat--quota   { color: var(--mcu-warn-600);  background: var(--mcu-warn-050);   border-color: transparent; }
+.rp__cat--train   { color: var(--mcu-blue-600);  background: var(--mcu-slate-050);  border-color: transparent; }
+.rp__cat--lab     { color: var(--mcu-slate-600); background: var(--mcu-slate-050);  border-color: transparent; }
+.rp__cat--account { color: var(--mcu-ink);       background: var(--mcu-yellow-050); border-color: transparent; }
+.rp__cat--other   { color: var(--mcu-grey-400);  background: var(--mcu-grey-050);   border-color: transparent; }
+
+/* ZH: 類別篩選鈕也上同一組色 —— 篩選列與清單上的標籤不同色的話，
+ *     「我點的是哪一個」要靠讀字確認，等於顏色白上了。 */
+.btn--cat-quota[aria-current]   { background: var(--mcu-warn-050);   color: var(--mcu-warn-600); }
+.btn--cat-train[aria-current]   { background: var(--mcu-slate-050);  color: var(--mcu-blue-600); }
+.btn--cat-lab[aria-current]     { background: var(--mcu-slate-050);  color: var(--mcu-slate-600); }
+.btn--cat-account[aria-current] { background: var(--mcu-yellow-050); color: var(--mcu-ink); }
+.btn--cat-other[aria-current]   { background: var(--mcu-grey-050);   color: var(--mcu-grey-400); }
+
+/* ── 彈窗 ────────────────────────────────────────────────────────── */
+/* ZH: <dialog> 的預設值會蓋掉 max-width，所以三個都要寫。 */
+.rmod {
+    width: min(720px, calc(100vw - 2 * var(--space-5)));
+    max-width: none;
+    max-height: calc(100vh - 2 * var(--space-5));
+    padding: var(--space-5);
+    border: 1px solid var(--hairline);
+    border-radius: var(--radius-lg);
+    background-color: var(--surface);
+    color: var(--text);
+    overflow-y: auto;                 /* ZH: 內容比視窗高時捲**內層**，不是整頁 */
+}
+.rmod::backdrop { background: rgb(31 35 40 / 55%); }
+
+/* ZH: 關閉鈕改成絕對定位貼右上角。
+ *     原本它自己佔一整列，把主旨往下推了一行 —— 而主旨才是這個彈窗的標題，
+ *     它應該在最上面。 */
+.rmod { position: relative; }
+.rmod__x { position: absolute; top: var(--space-4); right: var(--space-4); margin: 0; }
+
+/* ZH: 主旨在最上面靠左。右邊留出關閉鈕的位置，長主旨才不會鑽到 ✕ 底下。 */
+.rmod__title {
+    margin: 0 0 var(--space-2);
+    padding-right: 3rem;
+    font-size: 1.15rem;
+    color: var(--text-strong);
+}
+
+.rmod__head {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    flex-wrap: wrap;
+    margin-bottom: var(--space-3);
+}
+/* ZH: 🔴 回報人與時間**不能用 .footnote** —— 它有 `margin-top: var(--space-5)`，
+ *     在 flex 容器裡那個上邊距會把它整個往下推，於是它比旁邊的狀態藥丸低一截，
+ *     看起來像沒對齊（實際上 align-items:center 是對的，被邊距推走了）。
+ *     這裡自己寫一份：一樣的顏色與字級，但沒有邊距。 */
+.rmod__meta {
+    margin: 0;
+    color: var(--text-muted);
+    font-size: 0.85rem;
+    line-height: 1.6;                 /* ZH: 與 .adm-pill 同行高，基線才會齊 */
+}
+
+/* ZH: 已送出的回覆 —— 用實心底標示它「已經定案」，
+ *     跟還能編輯的輸入框在視覺上分開。 */
+.rmod__replied {
+    background-color: var(--surface-2);
+    border-radius: var(--radius-sm);
+    padding: var(--space-3);
+}
+.rmod__foot { margin-top: var(--space-4); }
