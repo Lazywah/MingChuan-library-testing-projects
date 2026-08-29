@@ -11,7 +11,7 @@
 
     <link rel="stylesheet" href="tokens.css?v=ff9cecda">
     <link rel="stylesheet" href="styles.css?v=e6a0b3ae">
-    <link rel="stylesheet" href="web.css?v=e8f673d2">
+    <link rel="stylesheet" href="web.css?v=f8743f76">
     <!-- ZH: 🔴 側欄狀態必須在**首次繪製之前**套用，否則每換一頁都會看到
              內容滑出去讓位（widget 的 JS 在 body 尾端才跑，那時已經畫過一次了）。
              這一段刻意內嵌而不是外部檔案 —— 外部檔案要等網路往返，
@@ -52,26 +52,35 @@
         </div>
 
         <!-- ZH: 層級 1 —— 使用者就是為了這一行來的。
-                 user-select:all 讓剪貼簿不可用時仍能一鍵選取（v1.5 的做法，沿用）。 -->
-        <div class="kv">
+                 user-select:all 讓剪貼簿不可用時仍能一鍵選取（v1.5 的做法，沿用）。
+             ZH: v3.9 「複製密碼」移進這一列的尾端 —— 它是**這個欄位的動作**，
+                 不是這一頁的動作。放在下面跟另外兩個按鈕排在一起時，
+                 三顆按鈕看起來是同一組步驟，而它其實只是輔助。 -->
+        <div class="kv kv--pw">
             <span class="kv__k" id="pw-label" data-i18n="prov_initial_pw">初始密碼</span>
             <code class="kv__v kv__v--pw" id="pw">—</code>
+            <button class="btn btn--minor kv__act" id="copy" type="button"
+                    data-i18n="prov_copy">複製密碼</button>
         </div>
 
-        <button class="btn btn--ghost" id="copy" type="button" data-i18n="prov_copy">複製密碼</button>
-
-        <!-- ZH: 主要動作（唯一）。按下即**立即銷毀**伺服器上暫存的密碼，
-                 不等保留期到。文案必須講明這是不可逆的。 -->
-        <button class="btn btn--primary" id="ack" type="button" data-i18n="prov_ack">我已經改好密碼了</button>
+        <!-- ZH: 🔴 順序是刻意的：**先「前往 MYAI」（黃、主要），才是「我已經改好」（白、次要）**。
+                 「我已經改好密碼了」按下去會**立即銷毀**伺服器上暫存的密碼，不等保留期到 ——
+                 而還沒去改密碼的人一旦誤按，我們救不了他（只能請他走 MYAI 的忘記密碼）。
+                 舊版把它做成唯一的主要動作、「前往 MYAI」反而是卡片外的小連結，
+                 於是視覺上最醒目的那一顆正好是那顆不可逆的。
+                 現在最醒目的是「去改密碼」，那才是他這一刻該做的事。 -->
+        <a class="btn btn--primary btn--block" href="#" id="go-myai"
+           data-i18n="prov_go_myai">前往 MYAI</a>
+        <button class="btn btn--ghost btn--block" id="ack" type="button"
+                data-i18n="prov_ack">我已經改好密碼了</button>
         <div class="handoff" id="note" hidden></div>
     </section>
 
-    <!-- ZH: 「前往 MYAI」原本埋在句子中間，實測高 18px——全站最小的可點目標。
-             把它抽出來成為獨立的層級 3 按鈕，句子改成完整敘述。
-             WCAG 2.5.8 對「句子內的連結」有豁免，但這一個是**動作**不是引述連結。 -->
+    <!-- ZH: 「前往 MYAI」原本埋在這個句子中間，實測高 18px——全站最小的可點目標；
+             後來抽成獨立按鈕，v3.9 再移進卡片內成為主要動作（見上面）。
+             這一句留著 —— 它回答的是「為什麼這裡不能改」，不是一個動作。 -->
     <p class="hint" id="how" hidden>
         <span data-i18n="prov_how">改密碼的地方在 MYAI 平台本身，不在這裡。用上面的帳號密碼登入後即可修改。</span>
-        <a class="btn--minor" href="#" id="go-myai" data-i18n="prov_go_myai">前往 MYAI</a>
     </p>
 
 </main>

@@ -364,3 +364,15 @@ html.aibot-docked #aibot-fab { display: none; }
 }
 /* ZH: .lang-switch 的 margin-right 是給頂部列用的，在這裡會把它推離右邊界。 */
 .onb__lang .lang-switch { margin-right: 0; }
+
+/* ZH: 初始密碼那一列尾端的「複製密碼」（v3.9）。
+ *     `.kv` 是 flex + align-items:baseline —— 按鈕用 auto margin 推到最右，
+ *     並改回 center 對齊：baseline 會讓按鈕的文字基線去對齊密碼的基線，
+ *     而密碼有 padding 與較大字級，對出來按鈕會浮在半空中。
+ * ZH: 窄畫面讓這一列可以折行，否則密碼（等寬、1.125rem）會把按鈕擠出畫面。 */
+.kv--pw { flex-wrap: wrap; }
+.kv__act {
+    margin-inline-start: auto;
+    align-self: center;
+    flex: none;
+}
