@@ -1,4 +1,41 @@
 /* ==========================================================================
+ * ZH: SSO 回來時把 token 收下（v3.9）
+ *
+ * ZH: 學校 SSO 驗證完之後，後端 302 回 `/V1/?sso_token=...`。
+ *     那個 token **必須進 sessionStorage** —— 後端同時設的 `ai_hud_token`
+ *     cookie 是 HttpOnly（給 /code/ 的 nginx auth_request 用），JS 讀不到，
+ *     所有 fetch 的 Authorization 都是從 sessionStorage 拿的。
+ *
+ * ZH: 🔴 這一段在 V1 一直不存在 —— SSO 原本 302 到 `/train/`，而 nginx 把
+ *     `/train/` 導到 V0，V0 的 setupSSOLogin() 接住了它。於是用 SSO 登入的人
+ *     會落在**舊介面**，而且沒有任何錯誤訊息。2026-08-29 改成導回 V1，
+ *     這一段就是 V1 這邊接住它的地方。
+ *
+ * ZH: ⚠️ 位置很重要：要在**任何 fetch 之前**跑完。所以放在檔案最上面、
+ *     在其他 IIFE 之前 —— chrome.js 是同步 script，這裡執行完才輪到
+ *     DOMContentLoaded 上的那些請求。
+ *
+ * ZH: ⚠️ 收下之後要把參數從網址上拿掉：token 留在網址列會進瀏覽歷史，
+ *     也會跟著 Referer 送給外部連結。只拿掉 sso_token，其他查詢參數留著
+ *     （`?state=` 這種除錯參數還有人在用）。
+ * ========================================================================== */
+(function () {
+    'use strict';
+    try {
+        var url = new URL(window.location.href);
+        var t = url.searchParams.get('sso_token');
+        if (!t) return;
+        sessionStorage.setItem('ai_hud_token', t);
+        url.searchParams.delete('sso_token');
+        window.history.replaceState({}, document.title,
+            url.pathname + (url.searchParams.toString() ? '?' + url.searchParams : '') + url.hash);
+    } catch (e) {
+        // ZH: 這裡壞掉不能讓整頁跟著壞 —— 最壞的情況是使用者被當成未登入，
+        //     而登入頁本來就在那裡。靜默失敗好過白畫面。
+    }
+})();
+
+/* ==========================================================================
  * chrome.js — 頂部列右側的唯一真相來源（導覽 + 帳號選單 + 登出）
  *
  * ZH: 版面（擁有者裁定 2026-08-20）：

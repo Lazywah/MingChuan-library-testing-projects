@@ -148,11 +148,15 @@ def _finalize_sso_login(db: Session, user_info: dict, request: Request = None) -
         logger.error(f"SSO 登入時更新 last_login_* 失敗: {e}")
         db.rollback()
 
-    # 簽 JWT 並 302 回前端
-    # v2.1 bug fix: 之前 redirect 到 "/" 會跑到 Open WebUI（nginx 把 / 代理給 open-webui），
-    # 改為 "/train/" 才會回到本平台的 web-ui SPA，由 setupSSOLogin IIFE 抓 ?sso_token= 進 dashboard
+    # ZH: 簽 JWT 並 302 回前端。
+    # ZH: v2.1 的註解說要導到 "/train/"（"/" 會跑到 Open WebUI）——當時 /train/ 就是
+    #     現行介面。後來 nginx 把 `/train/` 變成導向 **V0** 的舊版別名，而這一行沒跟著改，
+    #     於是**用 SSO 登入的人全部落在舊介面**，且沒有任何錯誤訊息。
+    # ZH: 🔴 2026-08-29 改成直接導 V1。改這一行的同時，web-ui-V1/chrome.js 也補上了
+    #     接收 `?sso_token=` 的那一段 —— **兩者缺一不可**：只改這裡的話，人會落在
+    #     V1 而網址上的 token 沒有人收，看起來就像登入失敗。
     access_token = create_access_token(data={"sub": user.username, "role": user.role})
-    response = RedirectResponse(url=f"/train/?sso_token={access_token}")
+    response = RedirectResponse(url=f"/V1/?sso_token={access_token}")
     # v2.1: 同步設 cookie，讓瀏覽器直接導航 /code/ 時也帶得到 token (auth_request 用)
     # SPA 透過 URL ?sso_token= 自行存 localStorage 給 fetch 用，cookie 純粹給瀏覽器
     # 自動帶到 /code/ 走 nginx auth_request；兩個 storage 用途不同。
