@@ -165,6 +165,18 @@
     //     「從表格拿掉了、新區塊又沒出現」那種安靜消失。
     var ALERT_MAIL_KEYS = ['admin_alert_emails', 'admin_alert_cc_emails'];
 
+    // ZH: 設定與分組的名稱**是後端給的**，不在 i18n.js 裡 —— 那份字典管的是
+    //     介面自己的文案，設定清單是資料。所以翻譯跟著資料走（label / label_en），
+    //     這裡只負責照目前語言挑一個。
+    // ZH: ⚠️ 挑不到就退回中文，不是留空 —— 與 i18n.js 的規則一致：
+    //     中英混雜比一片空白好，而且哪些沒翻一眼看得出來。
+    //     （後端有匯入時自檢擋著漏翻，這裡是前後端版本對不上時的最後一道。）
+    function labelOf(o) {
+        if (!o) return '';
+        var lang = (window.Prefs && window.Prefs.get) ? window.Prefs.get().ui_lang : 'zh';
+        return (lang === 'en' && o.label_en) ? o.label_en : (o.label || '');
+    }
+
     // ZH: 逗號分隔字串 → 陣列。空白與空項目一律丟掉。
     //     `null` / 空字串會得到空陣列（不是 [""]）—— 那會讓畫面出現一個空白列。
     function splitAddrs(v) {
@@ -565,7 +577,7 @@
                     + '" aria-label="' + esc(T('pf_star_why',
                     '這個值使用者看得到，或者改之前應該先公告。')) + '">\u2605</span> '
                 : '';
-            var name = '<td>' + star + esc(s2.label)
+            var name = '<td>' + star + esc(labelOf(s2))
                 + (s2.overridden ? ' <span class="adm-pill adm-pill--temp">'
                     + esc(T('pf_overridden', '已覆寫')) + '</span>' : '') + '</td>';
 
@@ -589,12 +601,12 @@
                 //     選項由後端給 —— 前端不維護一份模型清單，
                 //     不然管理者新增模型之後這裡還是舊的。
                 ? cellSelect('v', s2.choices || [], s2.overridden ? s2.value : '',
-                             { blankText: T('pf_use_default', '（用預設）'), label: s2.label })
+                             { blankText: T('pf_use_default', '（用預設）'), label: labelOf(s2) })
                 : cellInput('v', s2.overridden ? s2.value : '', {
                     type: (s2.type === 'int' || s2.type === 'float') ? 'number' : 'text',
                     step: s2.type === 'float' ? '0.01' : null,
                     min: s2.min, max: s2.max, placeholder: s2.default,
-                    label: s2.label,
+                    label: labelOf(s2),
                 });
             return '<tr data-key="' + esc(s2.key) + '">' + name + field
                 + '<td class="footnote">' + esc(s2.default) + '</td>'
@@ -627,7 +639,7 @@
                 return x.group === g.key && ALERT_MAIL_KEYS.indexOf(x.key) < 0;
             });
             if (!rows.length) return '';        // 空的分組不畫標題
-            return '<h3 class="adm-subhead">' + esc(g.label) + '</h3>'
+            return '<h3 class="adm-subhead">' + esc(labelOf(g)) + '</h3>'
                  + tableHtml(cols, rows.map(rowHtml).join(''));
         });
 
