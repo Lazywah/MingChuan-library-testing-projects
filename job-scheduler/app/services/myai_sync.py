@@ -1209,14 +1209,20 @@ async def provision_user(db: Session, user) -> dict:
     #     我們替他組出來的信箱到底存不存在。寄了、退了，才是事實。
     #     寄信是同步阻塞的，這裡在 async 流程中 → 丟到執行緒避免卡住事件迴圈。
     #     寄失敗絕不影響已完成的開通。
-    try:
-        import asyncio
-        from .email_service import send_myai_provisioned
-        from .. import crud as _crud
-        url = _crud.get_system_config(db, "platform_public_url", "") or ""
-        await asyncio.to_thread(send_myai_provisioned, email, _nickname_for(user), url)
-    except Exception as e:  # noqa: BLE001
-        logger.warning("MYAI 開通通知信寄送失敗（不影響開通）：%s", e)
+    # ZH: v3.9 開發階段可以關掉（myai_provision_email=0）—— 反覆拿真帳號測流程時，
+    #     每一次成功都會寄一封信給真的學生信箱。
+    #     ⚠️ 關掉的期間，上面那段「退信才是事實」的機制等於停擺。
+    from .. import crud as _crud
+    if not _crud.get_setting(db, "myai_provision_email"):
+        logger.info("MYAI 開通通知信已關閉（myai_provision_email=0），未寄給 %s", email)
+    else:
+        try:
+            import asyncio
+            from .email_service import send_myai_provisioned
+            url = _crud.get_system_config(db, "platform_public_url", "") or ""
+            await asyncio.to_thread(send_myai_provisioned, email, _nickname_for(user), url)
+        except Exception as e:  # noqa: BLE001
+            logger.warning("MYAI 開通通知信寄送失敗（不影響開通）：%s", e)
 
     granted = await grant_initial_credit(db, acc, email)
     return {"status": "created", "email": email, "credit": granted}

@@ -1454,6 +1454,13 @@ SYSTEM_SETTINGS = {
     "myai_autoprovision":       {"starred": True, "group": "myai", "type": "int",   "default": lambda: 0,                                    "min": 0,   "max": 1,    "label": "MYAI 首次登入自動開通(1=開, 0=關)"},
     "myai_init_pwd_days":       {"starred": True, "group": "myai", "type": "int",   "default": lambda: 30,                                   "min": 1,   "max": 180,  "label": "MYAI 初始密碼保存天數(逾期自動清除)"},
     "myai_initial_credit":      {"starred": True, "group": "myai", "type": "int",   "default": lambda: 0,                                    "min": 0,   "max": None, "label": "MYAI 新帳號初始點數(0=不發放)"},
+    # ZH: v3.9 開通通知信的開關。開發階段拿來閉嘴用 —— 反覆拿真帳號測開通流程時，
+    #     每一次成功都會寄一封信給真的學生信箱。
+    # ZH: ⚠️ 關掉會**一併失去唯一的退信探針**：SSO 路徑本來完全不寄信，
+    #     這封信是我們唯一一次「把推導出來的信箱拿去撞真實世界」的機會，
+    #     退了才知道地址是錯的。關著的期間，信箱正確與否無從得知。
+    #     所以正式上線前要記得開回來。
+    "myai_provision_email":     {"starred": True, "group": "myai", "type": "int",   "default": lambda: 1,                                    "min": 0,   "max": 1,    "label": "MYAI 開通通知信(1=寄, 0=不寄; 關掉會失去退信偵測)"},
     # v3.3 刪除使用者後 Lab volume 的封存保留天數（逾期背景任務真正刪除）
     "lab_archive_days":         {"starred": True, "public": True, "group": "platform", "type": "int",   "default": lambda: 30,                                   "min": 1,   "max": 365,  "label": "刪除帳號後 Lab 資料封存天數(逾期銷毀)"},
     # v3.4 有使用者在線時的 MYAI 輪詢間隔（無人在線會完全跳過，不受此值影響）

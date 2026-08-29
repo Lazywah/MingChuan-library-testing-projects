@@ -284,3 +284,63 @@ def test_grant_marks_unknown_without_retrying(monkeypatch):
     assert acc.credit_granted_pts == 0
     assert "對帳" in acc.credit_grant_note
     assert len(calls) == 1, "重試了"
+
+
+# ══════════════════════════════════════════════════════════════════════════
+# ZH: 五、開通通知信的開關（myai_provision_email）
+# ══════════════════════════════════════════════════════════════════════════
+# ZH: 這一組用真的 db fixture 跑完整條 provision_user —— 只把「對廠商送出」
+#     和「真的寄信」這兩件事換掉。開關測試如果只驗設定讀得到，等於沒驗。
+
+def _provision_env(monkeypatch, db, send_email_flag, sent):
+    """ZH: 把 provision_user 需要的外部相依換掉，回傳建好的 user。
+
+    ZH: 廠商呼叫一律換成「成功」，寄信換成記錄到 sent，其餘走真的程式碼。
+    """
+    from app.services import email_service
+
+    async def fake_register(rows):
+        return {"ok": True, "created": True, "status": 200,
+                "rows": [{"emails": rows[0]["email"]}], "html": ""}
+
+    async def fake_transfer(rows, confirm_grant=False):
+        return {"ok": True, "granted": True, "count": 1, "points": 1}
+
+    monkeypatch.setattr(M, "register_batch", fake_register)
+    monkeypatch.setattr(M, "transfer_credit_batch", fake_transfer)
+    monkeypatch.setattr(email_service, "send_myai_provisioned",
+                        lambda *a, **k: sent.append(a[0]))
+
+    real_get_setting = M.crud.get_setting
+
+    def patched(_db, key):
+        if key == "myai_autoprovision":
+            return 1
+        if key == "myai_provision_email":
+            return send_email_flag
+        if key == "myai_initial_credit":
+            return 0        # ZH: 這組測的是寄信，點數另有測試
+        return real_get_setting(_db, key)
+
+    monkeypatch.setattr(M.crud, "get_setting", patched)
+
+    from conftest import make_user
+    return make_user(db, username="12360013", email="12360013@example.com")
+
+
+def test_provision_email_is_sent_when_enabled(monkeypatch, db):
+    """ZH: 陽性對照 —— 開著的時候真的會寄，否則下面那個測試等於沒測。"""
+    sent = []
+    user = _provision_env(monkeypatch, db, 1, sent)
+    res = asyncio.run(M.provision_user(db, user))
+    assert res["status"] == "created"
+    assert sent == ["12360013@example.com"]
+
+
+def test_provision_email_is_suppressed_when_disabled(monkeypatch, db):
+    """ZH: 關掉就完全不寄 —— 而且開通本身仍要成功（關信不等於關功能）。"""
+    sent = []
+    user = _provision_env(monkeypatch, db, 0, sent)
+    res = asyncio.run(M.provision_user(db, user))
+    assert res["status"] == "created", "關掉通知信不應影響開通"
+    assert sent == [], "設定為 0 卻還是寄了"
