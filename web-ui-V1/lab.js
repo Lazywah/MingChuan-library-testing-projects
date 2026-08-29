@@ -89,23 +89,67 @@ function render(d) {
  *
  * ZH: 剩 10 分鐘以內改用警示語氣 —— 那是「該存檔了」的時間點。
  */
+/* ZH: 預警門檻（擁有者裁定 2026-08-29）：30 / 10 / 5 分鐘。
+ *
+ * ZH: GPU 借用與每日額度**共用同一組門檻**。兩套的話，使用者要記兩種規則，
+ *     而且哪一個先到取決於當下狀態 —— 那不是他該花心思的地方。
+ *
+ * ZH: 回傳 'none' | 'notice'(≤30) | 'warn'(≤10) | 'urgent'(≤5) | 'over'(≤0)。
+ *     只回級別不回文案 —— 兩個地方的句子不一樣，但緊急程度的判準要是同一個。
+ */
+const WARN_AT = [30, 10, 5];
+
+function warnLevel(min) {
+    if (min == null || !isFinite(min)) return 'none';
+    if (min <= 0) return 'over';
+    if (min <= WARN_AT[2]) return 'urgent';
+    if (min <= WARN_AT[1]) return 'warn';
+    if (min <= WARN_AT[0]) return 'notice';
+    return 'none';
+}
+
 function gpuNote(d) {
     const base = T('lab_gpu_on', '這一份實驗室正在使用 GPU。用完請按「關閉實驗室」讓給下一位。');
     if (!d.gpu_deadline) return base;
+    // ZH: 用**到期時刻**減，不是後端給的剩餘秒數 —— 頁面放著不動時
+    //     剩餘秒數會越來越不準，而且看起來完全正常。
     const left = Math.round((new Date(d.gpu_deadline) - Date.now()) / 60000);
-    if (!isFinite(left)) return base;
-    if (left <= 0) return `${base}　${T('lab_gpu_expiring', 'GPU 借用時間已到，實驗室即將自動關閉。')}`;
-    const tmpl = left <= 10
-        ? T('lab_gpu_soon', 'GPU 只剩 {n} 分鐘，請盡快存檔。')
-        : T('lab_gpu_left', 'GPU 借用還剩 {n} 分鐘。');
+    const lv = warnLevel(left);
+    if (lv === 'none') return base;
+    if (lv === 'over') return `${base}　${T('lab_gpu_expiring', 'GPU 借用時間已到，實驗室即將自動關閉。')}`;
+    const tmpl = lv === 'notice'
+        ? T('lab_gpu_left', 'GPU 借用還剩 {n} 分鐘。')
+        : T('lab_gpu_soon', 'GPU 只剩 {n} 分鐘，請盡快存檔。');
     return `${base}　${tmpl.replace('{n}', left)}`;
+}
+
+/* ZH: 每日額度的預警。
+ * ZH: 🔴 額度用完是**當場關閉**（與 hard_limit 一致，檔案在 volume 裡不會遺失）。
+ *     沒有預警的話那看起來像當機 —— 這幾句就是唯一的預告。
+ * ZH: ⚠ 只在**執行中**才警示。關著的時候顯示「只剩 5 分鐘」沒有意義，
+ *     他還沒開始用；而那個數字本來就一直在畫面上（m-remaining）。
+ */
+function dailyNote(d, running) {
+    if (!running) return '';
+    const lv = warnLevel(d.today_remaining_min);
+    if (lv === 'none') return '';
+    if (lv === 'over') return T('lab_daily_over', '今日可用時間已用完，實驗室即將自動關閉。');
+    const tmpl = lv === 'notice'
+        ? T('lab_daily_left', '今日可用時間還剩 {n} 分鐘。')
+        : T('lab_daily_soon', '今日可用時間只剩 {n} 分鐘，請盡快存檔。');
+    return tmpl.replace('{n}', d.today_remaining_min);
 }
 
     // ZH: 已經在跑而且**這一份是 GPU 版**時，把它講出來 ——
     //     使用者要知道自己正佔著全校唯一那張卡。
     // ZH: ⚠ 這裡要**連「不是 GPU 版就清掉」一起做**。
     //     只設不清的話，從 GPU 版切到 CPU 版之後那句話還留在畫面上。
-    note(running && d.gpu_index != null ? gpuNote(d) : '');
+    // ZH: GPU 與每日額度可能同時要說話（例如借了卡又快到每日上限）。
+    //     兩句都給 —— 少講一句就等於有一種被關掉的原因永遠沒有預告。
+    note([
+        running && d.gpu_index != null ? gpuNote(d) : '',
+        dailyNote(d, running),
+    ].filter(Boolean).join('　'));
 
     // ZH: 🔴 這一區原本整塊只在執行中顯示。但「今日剩餘時間」與「磁碟」
     //     停止時一樣有意義 —— 而且**想清空間的人正是在關著的狀態下看這一頁**，
@@ -116,6 +160,9 @@ function gpuNote(d) {
 
     $('m-remaining').textContent = d.today_remaining_min != null
         ? `${d.today_remaining_min}${T('unit_min', ' 分')}` : '—';
+    // ZH: 把級別放到 data 屬性上，顏色交給 CSS。
+    //     ⚠ 顏色是**次要**線索：上面那句話本身就寫著剩幾分鐘（WCAG 1.4.1）。
+    $('m-remaining').dataset.warn = warnLevel(d.today_remaining_min);
     $('m-elapsed').textContent = mins(d.elapsed_seconds);
 
     // ZH: 顯示「用了多少 / 上限多少」。用量是後端**即時量**的（約 0.2 秒），

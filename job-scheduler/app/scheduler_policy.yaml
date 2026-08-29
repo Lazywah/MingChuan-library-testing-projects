@@ -36,15 +36,16 @@ mock_mode: true
 # EN: Two pools for different usage patterns
 #   - batch: Batch training (high-end GPU servers, --rm containers)
 #   - interactive: Interactive GPU (service-layer RTX 5090, v2.1 only)
-pools:
-  batch:
-    description: "批次訓練池（高階 GPU 伺服器）"
-    enabled: true
-    container_lifecycle: ephemeral    # --rm，跑完即關
-  interactive:
-    description: "互動式 GPU 池（服務層 5090，v2.1 啟用）"
-    enabled: false                    # v2.0 預留，v2.1 才開放
-    container_lifecycle: persistent   # 長駐，idle timeout 關閉
+# ZH: v3.9 —— 這裡原本有一個 `pools:` 區塊（batch/interactive 的 description /
+#     enabled / container_lifecycle）。**整段沒有任何程式碼讀它**，已移除。
+#
+# ZH: 移除的理由不是「沒用到所以清掉」，是它**會誤導**：
+#     `interactive.enabled: false` 看起來像「互動式 GPU 沒有開放」，
+#     但實際上 GPU 實驗室是開著的 —— 它不走這個池，是 lab_manager
+#     直接用 crud.claim_gpu_for_lab() 借卡（見 services/lab_manager.py）。
+#     接手的人照這個旗標判斷會得到完全相反的結論。
+#
+# ZH: 池別的合法值現在只有一個真相來源：crud.VALID_POOLS。
 
 # ==============================================================================
 # ZH: v2.0 Lab 模組 — Session 時間管理

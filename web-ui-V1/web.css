@@ -376,3 +376,12 @@ html.aibot-docked #aibot-fab { display: none; }
     align-self: center;
     flex: none;
 }
+
+/* ZH: 今日剩餘時間的警示色（v3.9）。門檻 30/10/5 由 lab.js 判定，
+ *     這裡只負責上色 —— 判準寫在兩個地方遲早會漂開。
+ * ZH: ⚠ 顏色是**次要**線索：數字本身與旁邊那句話都寫著剩幾分鐘（WCAG 1.4.1）。
+ *     色盲的人不會因為看不出顏色而錯過這個資訊。 */
+#m-remaining[data-warn="notice"] { color: var(--text); }
+#m-remaining[data-warn="warn"],
+#m-remaining[data-warn="urgent"],
+#m-remaining[data-warn="over"] { color: var(--error); font-weight: 600; }
