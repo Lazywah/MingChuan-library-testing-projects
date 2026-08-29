@@ -12,8 +12,8 @@
     <link href="https://fonts.googleapis.com/css2?family=Open+Sans:wght@400;600;700&display=swap" rel="stylesheet">
 
     <link rel="stylesheet" href="tokens.css?v=ff9cecda">
-    <link rel="stylesheet" href="styles.css?v=90f2ff3d">
-    <link rel="stylesheet" href="web.css?v=916f5f2a">
+    <link rel="stylesheet" href="styles.css?v=25be4520">
+    <link rel="stylesheet" href="web.css?v=e5b52cde">
     <!-- ZH: 🔴 側欄狀態必須在**首次繪製之前**套用，否則每換一頁都會看到
              內容滑出去讓位（widget 的 JS 在 body 尾端才跑，那時已經畫過一次了）。
              這一段刻意內嵌而不是外部檔案 —— 外部檔案要等網路往返，
@@ -55,13 +55,20 @@
                 class="balance__unit" id="balance-unit" hidden>Token</span>
         </div>
 
-        <div class="balance__meta" id="balance-meta"></div>
-
         <!-- ZH: V1 修正——標籤要講明真實結果。
                  實際流程是「開廠商登出頁 → 1 秒後轉登入頁」，落地是登入表單不是對話框。 -->
         <button class="btn btn--primary" id="go-myai" type="button" data-i18n="idx_go_myai">
             前往 MYAI 問 AI
         </button>
+
+        <!-- ZH: v3.9 額度提示（「額度已用完 · 看用在哪 · 向管理員申請額度」）
+                 從**數字下面**搬到按鈕下面（擁有者裁定 2026-08-29）。
+             ZH: 原本擠在 2.5rem 的大數字正下方，兩行字距離太近而且都是小字，
+                 讀起來像數字的一部分。搬下來之後，卡片由上到下是
+                 「數字 → 主要動作 → 補充說明」，一層一件事。
+             ZH: ⚠ 它仍在同一張卡內，所以「額度用完了」不會被漏看 ——
+                 只是不再和數字擠在一起。 -->
+        <div class="balance__meta" id="balance-meta"></div>
         <div class="handoff" id="handoff" hidden></div>
     </section>
 

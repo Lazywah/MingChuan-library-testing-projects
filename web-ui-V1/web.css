@@ -439,3 +439,42 @@ html.aibot-docked #aibot-fab { display: none; }
 
 .gcard__t { font-weight: 600; color: var(--text-strong); }
 .gcard__d { font-size: 0.8125rem; color: var(--text-muted); }
+
+/* ==========================================================================
+ * ZH: 額度卡的兩行補充說明統一成**文字**（擁有者裁定 2026-08-29）
+ *
+ * ZH: 原本一行是純文字連結（19px）、一行是外框按鈕（44px），看起來不成套。
+ *
+ * ZH: 🔴 只在額度卡內覆蓋，**不動全域的 `.handoff a`** ——
+ *     那條規則有 7 個頁面在用，其中 gpu.html 那個「彈窗被擋時的備援連結」
+ *     是使用者唯一的出路（styles.css 的註解記著它原本只有 18px）。
+ *     全域改掉會把那個修正一起還原，而且沒有人會發現。
+ *
+ * ZH: ⚠ 外觀變成文字，但**可點高度不能跟著掉回 19px**。
+ *     用上下 padding 撐到 25px（WCAG 2.5.8 AA 要 24×24）。
+ *     inline 元素的垂直 padding 不會撐開行高，所以版面不動、只有命中區變大。
+ *     達不到 --tap-min 的 44px 是刻意的：那個高度做不出「像一句話裡的連結」。
+ * ========================================================================== */
+#balance-card .balance__meta a,
+#balance-card .handoff a {
+    display: inline;
+    min-height: 0;
+    margin: 0;
+    padding: 3px 2px;
+    border: 0;
+    border-radius: 0;
+    background: none;
+    font-weight: 400;
+    font-size: inherit;
+    color: var(--link);
+    text-decoration: underline;
+}
+#balance-card .balance__meta a:hover,
+#balance-card .handoff a:hover {
+    background: none;
+    color: var(--text-strong);
+}
+
+/* ZH: 兩行之間要小間隔 —— 它們是同一類東西（補充說明），
+ *     用 --space-3 會看起來像兩個獨立區塊。 */
+#balance-card .handoff { margin-top: var(--space-1); }

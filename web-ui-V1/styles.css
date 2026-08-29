@@ -174,7 +174,11 @@ body {
     font-variant-numeric: tabular-nums;   /* ZH: 數字等寬，輪詢更新時不會左右跳 */
 }
 .balance__unit { font-size: 1rem; font-weight: 400; color: var(--text-muted); margin-left: var(--space-1); }
-.balance__meta { font-size: 0.875rem; color: var(--text-muted); }
+/* ZH: v3.9 額度提示搬到按鈕下方。
+ * ZH: `:empty` 時不要留上邊距 —— 額度正常時這一格是空的，
+ *     留著邊距會讓卡片下緣多出一塊看不出原因的空白。 */
+.balance__meta { font-size: 0.875rem; color: var(--text-muted); margin-top: var(--space-3); }
+.balance__meta:empty { margin-top: 0; }
 .balance__meta a { color: var(--link); }
 
 /* ZH: 低於門檻（/my-balance 的 below 旗標）——視覺上必須不一樣。
