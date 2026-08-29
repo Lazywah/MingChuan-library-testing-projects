@@ -584,3 +584,7 @@ html.aibot-docked #aibot-fab { display: none; }
  * ZH: ⚠ 只在 .stats-card 裡抵銷。train.html 與 usage.html 的 .stats
  *     沒有盒子，那個 margin 在那兩頁仍然是對的。 */
 .stats-card .stats { margin-bottom: 0; }
+
+/* ZH: 三步驟列包成卡片（v3.9）。`.steps` 自帶 margin-top（給沒有盒子的頁面用），
+ *     包進來之後那段會變成盒子頂部多出來的空白 —— 只在這張卡裡抵銷。 */
+.steps-card .steps { margin-top: 0; }
