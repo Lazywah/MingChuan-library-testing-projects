@@ -1234,7 +1234,14 @@ textarea.field__input { resize: vertical; min-height: 6rem; }
  *     也要收成 icon）。放在共用的 styles.css，兩端才會長一樣 ——
  *     各留一份的話，改了間距只有一邊會動。
  * ========================================================================== */
-.tip { position: relative; display: inline-block; }
+/* ZH: 🔴 `inline-flex` + `align-items: center` 是**第二層**的置中。
+ *     第一層（見下面的 `h2:has(> .tip)`）讓這個外殼對齊文字；
+ *     但外殼會被標題的**行高**撐高（實測 24px 的按鈕住在 28.1px 的殼裡），
+ *     裡面的按鈕仍然靠基線排 —— 於是外殼正了、圓圈還是低 2px。
+ * ZH: ⚠ 兩層都要。只做其中一層都還會偏，而偏的量會隨字級變 ——
+ *     這正是它在每一種標題上看起來都「有點怪」的原因。
+ * ZH: .tip__body 是絕對定位（脫離流），不會變成 flex item。 */
+.tip { position: relative; display: inline-flex; align-items: center; }
 
 /* ZH: 圓形的 i。可點區 24px（WCAG 2.5.8 AA）——
  *     它旁邊就是標題文字，做成 44px 會把行高撐開。 */
@@ -1304,4 +1311,25 @@ textarea.field__input { resize: vertical; min-height: 6rem; }
  *     改成不限定祖先：**icon 在任何地方都不該是粗體**，
  *     一個一個補標題選擇器只會漏掉下一個。 */
 .tip__btn, .tip__body { font-weight: 400; }
-.tip__btn { vertical-align: middle; }
+
+/* ZH: 🔴 標題旁的 icon 垂直置中。
+ *
+ * ZH: 原本靠 `vertical-align: middle`，而那**不是**「置中於文字」——
+ *     它對齊的是「基線 + x-height 的一半」，文字方塊的中心卻在
+ *     「基線 + (ascent−descent)/2」。兩者的差距與字級成正比，
+ *     所以每一種標題大小都會偏，而且**都偏同一個方向（偏低）**。
+ *     實測 20.8px 的標題偏低 2.8px —— 在 24px 的圓圈上看得出來。
+ * ZH: 沒有一個與字級無關的 `vertical-align` 值能修好它（差距還跟字體的
+ *     ascent/descent 有關，而這裡中文與拉丁字用的是不同字體）。
+ *     真正置中要靠 flex。
+ * ZH: ⚠ `:has()` 不支援的瀏覽器會退回原本的樣子（偏低幾 px）——
+ *     那是既有狀態，不是新的破壞。用 class 標記的話反而要靠
+ *     「下一個加 icon 的人記得寫」，而靠記得的規則不是約束。
+ * ZH: gap 不用寫 —— .tip__btn 自己帶 margin-left，兩個都給會變兩倍。
+ */
+h1:has(> .tip), h2:has(> .tip), h3:has(> .tip) {
+    display: flex;
+    align-items: center;
+}
+/* ZH: 使用者端的大標是置中的（.primary-card 內），變成 flex 之後要補回來。 */
+.hero__title:has(> .tip) { justify-content: center; }
