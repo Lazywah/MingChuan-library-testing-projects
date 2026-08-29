@@ -118,6 +118,58 @@ class ContainerLifecycle(Protocol):
 # EN: CodeServerLifecycle — sole v2.0 implementation
 # ==============================================================================
 
+def _write_gpu_notice(container, until_text: str) -> None:
+    """
+    ZH: 把 GPU 借用到期時刻寫進容器，讓學生**在 VS Code 裡面**也看得到。
+
+    ZH: 兩個地方，因為兩種人的習慣不同：
+        · `~/GPU借用時間.txt` —— 檔案總管一眼就看得到（不用先開終端機）
+        · `~/.bashrc` 加一行 —— 開終端機時印出來。要跑訓練一定會開終端機，
+          那是提醒他的最自然時機。
+
+    ZH: 🔴 **.bashrc 必須是冪等的**。volume 是長期保存的，每次開實驗室都
+        append 一次的話，一個月後開終端機會印出三十行。用固定的標記行先刪再寫。
+
+    ZH: ⚠ 寫失敗**不影響開實驗室** —— 這只是提示。容器已經起來了，
+        為了一行字把它關掉是本末倒置。平台頁面上的倒數才是主要的告知管道。
+
+    @node job-scheduler/app/services/lab_manager.py::_write_gpu_notice
+    """
+    marker = "# aibase-gpu-notice"
+    note_path = "/home/coder/GPU借用時間.txt"
+    body = "\n".join([
+        "這個實驗室借用了 GPU。",
+        "借用到：" + until_text + "（台北時間）",
+        "",
+        "時間到會自動關閉，檔案不會遺失（都在你的家目錄裡，重開就在）。",
+        "GPU 是全校共用的，用完請主動按「停止實驗室」讓給別人。",
+        "",
+    ])
+    bash_line = 'echo "⏰ GPU 借用到 ' + until_text + '（台北時間）"  ' + marker
+
+    # ZH: 用 python3 -c 寫檔，不用 shell 的字串拼接 ——
+    #     內容含中文、全形括號與引號，交給 shell 轉義遲早會有一種組合出錯，
+    #     而出錯的表現是「提示檔內容怪怪的」，沒有人會回報。
+    prog = (
+        "import io,os\n"
+        "p=" + repr(note_path) + "\n"
+        "io.open(p,'w',encoding='utf-8').write(" + repr(body) + ")\n"
+        "rc='/home/coder/.bashrc'\n"
+        "old=io.open(rc,encoding='utf-8').read().split('\\n') if os.path.exists(rc) else []\n"
+        "keep=[l for l in old if " + repr(marker) + " not in l]\n"
+        # ZH: 去掉尾端空行再 append —— split/join 每跑一次會多留一行空白，
+        #     開一百次實驗室就累積一百個空行（實測到的）。
+        "while keep and not keep[-1].strip(): keep.pop()\n"
+        "keep.append(" + repr(bash_line) + ")\n"
+        "io.open(rc,'w',encoding='utf-8').write('\\n'.join(keep)+'\\n')\n"
+        "os.system('chown coder:coder \"%s\" %s' % (p, rc))\n"
+    )
+    try:
+        container.exec_run(["python3", "-c", prog], user="root")
+    except Exception as e:  # noqa: BLE001
+        logger.warning("寫入 GPU 借用提示失敗（不影響實驗室）：%s", e)
+
+
 class CodeServerLifecycle:
     """
     ZH: 用 Docker SDK 啟動 code-server 容器
@@ -211,6 +263,11 @@ class CodeServerLifecycle:
             "PGID": "1000",
             **config.get("env", {}),
         }
+        # ZH: v3.9 GPU 借用到期時刻。放進環境變數，容器內 `echo $AIBASE_GPU_UNTIL`
+        #     就看得到，寫在 .bashrc 的那一行也是讀它。
+        gpu_until = config.get("gpu_until")
+        if gpu_until:
+            env_vars["AIBASE_GPU_UNTIL"] = gpu_until
 
         try:
             container = self.client.containers.run(
@@ -242,6 +299,8 @@ class CodeServerLifecycle:
                 restart_policy={"Name": "no"},      # 我們自己管，不要 docker auto-restart
             )
             logger.info("Started code-server container %s for user %s", name, user_id[:8])
+            if gpu_until:
+                _write_gpu_notice(container, gpu_until)
             return container.id, name
         except APIError as e:
             logger.error("Failed to start container %s: %s", name, e)
@@ -752,6 +811,10 @@ def start_session(db: Session, user_id: str, base_image: Optional[str] = None,
             "mem_quota_mb": mem_quota,
             "password":     password,
             "env":          secret_env,
+            # ZH: v3.9 GPU 借用到期時刻（台北時間字串）。容器內三個地方會用到它：
+            #     環境變數本身、工作目錄的提示檔、開終端機時印的那一行。
+            #     不是 GPU 實驗室就不帶（None），下面的 lc.start 會略過。
+            "gpu_until":    _gpu_until_text(db, gpu_index),
             # ZH: 🔴 少了這個鍵，開哪一份存檔都會啟動 default 的容器
             "session":      session,
             "gpu_index":    gpu_index,
@@ -887,6 +950,10 @@ def get_status(db: Session, user_id: str, session: str = DEFAULT_SESSION) -> dic
         #     前端靠它顯示「你正佔著全校唯一那張卡」——
         #     不回的話那段提示永遠不會出現，而使用者不會知道自己擋著別人。
         "gpu_index": row.gpu_index,
+        # ZH: v3.9 GPU 借用到期時刻（UTC，明示時區）。CPU 實驗室或不限時 → None。
+        #     前端據此倒數；**不回剩餘秒數**，那會在頁面放著不動時越來越不準。
+        #     給到期時刻，倒數由前端自己算，重新整理也不會錯。
+        "gpu_deadline": (lambda d: d.isoformat() if d else None)(gpu_deadline(db, row)),
         "limits": limits,
         "today_remaining_min": remaining_min,
         "injected_secrets": masked,
@@ -960,6 +1027,64 @@ def reconcile_session(db: Session, row) -> bool:
     return True
 
 
+def _gpu_max_minutes(db: Session) -> int:
+    """ZH: GPU 借用時限（分鐘），0 = 不限。讀不到設定就回 0（不限）——
+       **寧可不踢人，也不要因為設定讀不到就把人的實驗室關掉**。
+
+    @node job-scheduler/app/services/lab_manager.py::_gpu_max_minutes
+    """
+    try:
+        from .. import crud
+        return int(crud.get_setting(db, "lab_gpu_max_minutes") or 0)
+    except Exception:  # noqa: BLE001
+        return 0
+
+
+def _gpu_until_text(db: Session, gpu_index) -> Optional[str]:
+    """
+    ZH: 開始借用**當下**算出的到期時刻（台北時間，給人看的字串）。
+
+    ZH: ⚠ 這裡不能用 gpu_deadline() —— 那支要 session row，而這時候 row 還沒建。
+        兩邊都是「開始時間 + 上限」，開始時間就是現在，結果一致。
+
+    ZH: 台北時間不是 UTC：這串字會直接印在學生的終端機上，
+        給他 UTC 等於要他自己 +8。
+
+    @node job-scheduler/app/services/lab_manager.py::_gpu_until_text
+    """
+    if gpu_index is None:
+        return None
+    m = _gpu_max_minutes(db)
+    if not m:
+        return None
+    from ..gpu_schedule import TZ_TAIPEI
+    until = datetime.now(timezone.utc) + timedelta(minutes=m)
+    return until.astimezone(TZ_TAIPEI).strftime("%Y-%m-%d %H:%M")
+
+
+def gpu_deadline(db: Session, session) -> Optional[datetime]:
+    """
+    ZH: 這個 session 的 GPU 借用到期時刻（UTC）。不是 GPU session 或不限時就回 None。
+
+    ZH: **全站唯一的計算點** —— 掃描迴圈、狀態 API、容器內的提示都用它。
+        各算各的話，畫面上寫的時間與真正被關掉的時間會不一樣，
+        而那種不一致沒有任何錯誤訊息。
+
+    @node job-scheduler/app/services/lab_manager.py::gpu_deadline
+    """
+    if session is None or session.gpu_index is None:
+        return None
+    m = _gpu_max_minutes(db)
+    if not m:
+        return None
+    started = session.started_at
+    if started is None:
+        return None
+    if started.tzinfo is None:
+        started = started.replace(tzinfo=timezone.utc)
+    return started + timedelta(minutes=m)
+
+
 def scan_and_evict(db: Session) -> int:
     """
     ZH: 背景任務 — 掃描所有 running session，依 idle/hard-limit 規則關閉
@@ -996,6 +1121,18 @@ def scan_and_evict(db: Session) -> int:
         last_act = session.last_activity
         if last_act and last_act.tzinfo is None:
             last_act = last_act.replace(tzinfo=timezone.utc)
+
+        # ZH: v3.9 GPU 借用時限 —— **先於**角色的 hard limit 檢查。
+        #     兩者是不同的東西：hard_limit_min 是「session 能開多久」的政策
+        #     （teacher/admin 是 None），這個是稀缺資源的分配，**不分角色**。
+        #     放在前面是因為它比較嚴格；放後面的話 admin 永遠走不到這裡。
+        if session.gpu_index is not None and started:
+            gpu_max = _gpu_max_minutes(db)
+            if gpu_max and (now - started).total_seconds() >= gpu_max * 60:
+                stop_session(db, session.user_id, reason="gpu_time_limit",
+                             session=session.session_name)
+                closed += 1
+                continue
 
         # Hard limit 檢查
         hard_min = limits.get("hard_limit_min")

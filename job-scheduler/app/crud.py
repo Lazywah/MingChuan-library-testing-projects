@@ -1524,6 +1524,15 @@ SYSTEM_SETTINGS = {
     "myai_monthly_topup_to":    {"starred": True, "group": "myai", "type": "int",   "default": lambda: 0,                                    "min": 0,   "max": None, "label": "MYAI 每月補到的點數(0=不補)", "label_en": "MYAI monthly top-up target (0 = no top-up)"},
     "myai_monthly_topup_day":   {"starred": True, "group": "myai", "type": "int",   "default": lambda: 1,                                    "min": 1,   "max": 28,   "label": "MYAI 每月補點日(每月第幾天; 上限 28)", "label_en": "MYAI top-up day of month (max 28)"},
     # v3.3 刪除使用者後 Lab volume 的封存保留天數（逾期背景任務真正刪除）
+    # ZH: v3.9 GPU 實驗室的最長借用時間（0 = 不限）。
+    # ZH: 🔴 **刻意不分角色**，與 scheduler_policy 的 `hard_limit_min` 是兩回事：
+    #     那個是「一個 session 能開多久」的政策，teacher/admin 是 None（無上限）。
+    #     這個是**稀缺資源的分配** —— 桃園目前只有一張卡，而實驗室會獨佔它。
+    #     管理員也適用；不然一個人開著不關，整個校區就沒有人能訓練。
+    # ZH: ⚠ 時間到會**停掉整個 session**，不是只收回 GPU ——
+    #     容器建立時就綁定了 device_requests，沒辦法從執行中的容器把卡拔掉。
+    #     檔案在 per-user volume 裡，停掉不會遺失（重開就在）。
+    "lab_gpu_max_minutes":      {"starred": True, "group": "platform", "type": "int",   "default": lambda: 120,                                  "min": 0,   "max": 1440, "label": "GPU 實驗室最長借用(分鐘; 0=不限)", "label_en": "Max GPU lab hold time (minutes; 0 = unlimited)"},
     "lab_archive_days":         {"starred": True, "public": True, "group": "platform", "type": "int",   "default": lambda: 30,                                   "min": 1,   "max": 365,  "label": "刪除帳號後 Lab 資料封存天數(逾期銷毀)", "label_en": "Lab data archive period after account deletion (days; destroyed when it expires)"},
     # v3.4 有使用者在線時的 MYAI 輪詢間隔（無人在線會完全跳過，不受此值影響）
     "myai_active_poll_minutes": {"group": "myai", "type": "int",   "default": lambda: 3,                                    "min": 1,   "max": 60,   "label": "MYAI 輪詢間隔(分, 僅有人在線時; 無人時自動休息)", "label_en": "MYAI poll interval (minutes; only while someone is online)"},

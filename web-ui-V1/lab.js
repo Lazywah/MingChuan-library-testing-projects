@@ -78,13 +78,34 @@ function render(d) {
         $('gpu-wrap').hidden = running;
         $('gpu-hint').hidden = running;
     }
+/* ── GPU 借用提示（v3.9）────────────────────────────────────────────
+ * ZH: 桃園只有一張卡，實驗室會獨佔它 —— 所以除了「你正佔著卡」之外，
+ *     還要講**還剩多久**。不講的話使用者不知道自己什麼時候會被關掉，
+ *     而被關掉時他會以為是當機。
+ *
+ * ZH: 🔴 後端給的是**到期時刻**不是剩餘秒數。剩餘秒數在頁面放著不動時
+ *     會越來越不準（而且看起來完全正常）；到期時刻由前端自己減，
+ *     放多久、重新整理幾次都是對的。
+ *
+ * ZH: 剩 10 分鐘以內改用警示語氣 —— 那是「該存檔了」的時間點。
+ */
+function gpuNote(d) {
+    const base = T('lab_gpu_on', '這一份實驗室正在使用 GPU。用完請按「關閉實驗室」讓給下一位。');
+    if (!d.gpu_deadline) return base;
+    const left = Math.round((new Date(d.gpu_deadline) - Date.now()) / 60000);
+    if (!isFinite(left)) return base;
+    if (left <= 0) return `${base}　${T('lab_gpu_expiring', 'GPU 借用時間已到，實驗室即將自動關閉。')}`;
+    const tmpl = left <= 10
+        ? T('lab_gpu_soon', 'GPU 只剩 {n} 分鐘，請盡快存檔。')
+        : T('lab_gpu_left', 'GPU 借用還剩 {n} 分鐘。');
+    return `${base}　${tmpl.replace('{n}', left)}`;
+}
+
     // ZH: 已經在跑而且**這一份是 GPU 版**時，把它講出來 ——
     //     使用者要知道自己正佔著全校唯一那張卡。
     // ZH: ⚠ 這裡要**連「不是 GPU 版就清掉」一起做**。
     //     只設不清的話，從 GPU 版切到 CPU 版之後那句話還留在畫面上。
-    note(running && d.gpu_index != null
-        ? T('lab_gpu_on', '這一份實驗室正在使用 GPU。用完請按「關閉實驗室」讓給下一位。')
-        : '');
+    note(running && d.gpu_index != null ? gpuNote(d) : '');
 
     // ZH: 🔴 這一區原本整塊只在執行中顯示。但「今日剩餘時間」與「磁碟」
     //     停止時一樣有意義 —— 而且**想清空間的人正是在關著的狀態下看這一頁**，
