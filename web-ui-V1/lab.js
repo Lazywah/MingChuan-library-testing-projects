@@ -65,19 +65,11 @@ function note(text) {
 const mins = (s) => (s == null ? '—' : `${Math.floor(s / 60)}${T('unit_min', ' 分')}`);
 
 // ── 狀態 ─────────────────────────────────────────────────────────────
-function render(d) {
-    const running = d.status === 'running';
-    $('state').textContent = running ? T('lab_st_running', '執行中') : T('lab_st_stopped', '未啟動');
-    setPrimary({ label: running ? T('lab_open', '開啟實驗室') : T('lab_start_open', '啟動並開啟實驗室'), enabled: true });
-    $('stop').hidden = !running;
-
-    // ZH: v3.9 GPU 勾選只在「還沒啟動」時出現 —— 已經在跑的容器改不了裝置，
-    //     勾了也沒用，留著只會讓人以為勾一下就能加上去。
-    //     要換成 GPU 版就得先關掉再開，那件事由「關閉實驗室」負責。
-    if ($('gpu-wrap')) {
-        $('gpu-wrap').hidden = running;
-        $('gpu-hint').hidden = running;
-    }
+/* ZH: ⚠ 這四個是**頂層**函式。v3.9 加它們時曾經誤植到 render() 內部
+ *     （縮排 0，所以看起來像頂層，語法也合法 —— check_js_syntax 照樣綠）。
+ *     結果是每次 render 都重新建立一次，而且讀的人會以為它們是模組層的工具。
+ *     放在這裡：render 只負責畫，判斷門檻的邏輯不歸它管。
+ */
 /* ── GPU 借用提示（v3.9）────────────────────────────────────────────
  * ZH: 桃園只有一張卡，實驗室會獨佔它 —— 所以除了「你正佔著卡」之外，
  *     還要講**還剩多久**。不講的話使用者不知道自己什麼時候會被關掉，
@@ -139,6 +131,30 @@ function dailyNote(d, running) {
         : T('lab_daily_soon', '今日可用時間只剩 {n} 分鐘，請盡快存檔。');
     return tmpl.replace('{n}', d.today_remaining_min);
 }
+
+
+function render(d) {
+    const running = d.status === 'running';
+    // ZH: 🔴 這兩個元素的 HTML 上掛著 `data-i18n="loading"`（初始文案「讀取中…」）。
+    //     那個屬性**留著的話，之後任何一次 Prefs.apply() 都會把這裡設的字蓋回「讀取中…」**
+    //     —— 而 apply 會在偏好同步、切色系、切語言時各跑一次。
+    //     症狀是「實驗室其實載好了，畫面卻一直寫讀取中」，而 console 乾淨。
+    // ZH: 接手之後就把屬性拿掉：文案的主權從字典轉移到這裡了。
+    //     ⚠ 不能改成「字典裡放正確的字」—— 這兩格的內容取決於狀態，不是固定文案。
+    $('state').removeAttribute('data-i18n');
+    $('go').removeAttribute('data-i18n');
+
+    $('state').textContent = running ? T('lab_st_running', '執行中') : T('lab_st_stopped', '未啟動');
+    setPrimary({ label: running ? T('lab_open', '開啟實驗室') : T('lab_start_open', '啟動並開啟實驗室'), enabled: true });
+    $('stop').hidden = !running;
+
+    // ZH: v3.9 GPU 勾選只在「還沒啟動」時出現 —— 已經在跑的容器改不了裝置，
+    //     勾了也沒用，留著只會讓人以為勾一下就能加上去。
+    //     要換成 GPU 版就得先關掉再開，那件事由「關閉實驗室」負責。
+    if ($('gpu-wrap')) {
+        $('gpu-wrap').hidden = running;
+        $('gpu-hint').hidden = running;
+    }
 
     // ZH: 已經在跑而且**這一份是 GPU 版**時，把它講出來 ——
     //     使用者要知道自己正佔著全校唯一那張卡。
