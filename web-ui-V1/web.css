@@ -588,3 +588,83 @@ html.aibot-docked #aibot-fab { display: none; }
 /* ZH: 三步驟列包成卡片（v3.9）。`.steps` 自帶 margin-top（給沒有盒子的頁面用），
  *     包進來之後那段會變成盒子頂部多出來的空白 —— 只在這張卡裡抵銷。 */
 .steps-card .steps { margin-top: 0; }
+
+/* ==========================================================================
+ * ZH: 導覽列的分類下拉（v3.9）
+ *
+ * ZH: 放在 web.css 不放 styles.css —— styles.css 與 admin 端逐位元組相同，
+ *     而管理端沒有這種下拉，寫過去等於在那邊留一堆用不到的規則。
+ * ZH: 選單的隱藏靠 `hidden` 屬性 + styles.css 那條 `[hidden]{display:none!important}`
+ *     全域補丁。⚠ 這裡的 `display: flex` 若沒有那條補丁會**贏過** UA 的
+ *     `[hidden]{display:none}`，選單就永遠是打開的。
+ * ========================================================================== */
+.navmenu { position: relative; display: inline-flex; }
+
+/* ZH: 倒三角是 ::after 不是文字 —— 寫進 textContent 的話，
+ *     切語言時 prefs.js 重寫 textContent 會把它一起洗掉。 */
+.navmenu__toggle::after {
+    content: '\25BE';
+    margin-left: 4px;
+    font-size: 0.75rem;
+    color: var(--text-muted);
+}
+/* ZH: 目前頁在這一組裡。與 .topnav a[aria-current] 同一個視覺語彙。 */
+.navmenu.is-current .navmenu__toggle {
+    color: var(--text-strong);
+    font-weight: 600;
+    background-color: var(--accent-soft);
+}
+
+.navmenu__menu {
+    position: absolute;
+    top: calc(100% + var(--space-2));
+    left: 0;
+    z-index: 20;
+    min-width: 12rem;
+    padding: var(--space-2);
+    background-color: var(--surface);
+    border: 1px solid var(--hairline);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-2);
+    display: flex;
+    flex-direction: column;
+}
+/* ZH: 選單項要 44px —— 下拉裡的項目最常被做成 28px 高。
+ * ZH: ⚠ 選擇器刻意寫成 `.topnav .navmenu__menu a`（兩個 class）。
+ *     只寫一個 class 的話與 styles.css 的 `.topnav a` 同分，
+ *     要靠「web.css 載得比較晚」才贏 —— 那是會被檔案順序改動打翻的依賴。 */
+.topnav .navmenu__menu a {
+    display: flex;
+    align-items: center;
+    min-height: var(--tap-min);
+    padding: 0 var(--space-3);
+    border-radius: var(--radius-sm);
+    color: var(--text);
+    font-size: 0.9375rem;
+    text-decoration: none;
+    white-space: nowrap;
+}
+.topnav .navmenu__menu a:hover { background-color: var(--surface-2); }
+.topnav .navmenu__menu a[aria-current="page"] {
+    color: var(--text-strong);
+    font-weight: 600;
+    background-color: var(--accent-soft);
+}
+/* ZH: 最右邊那一組往左長 —— 見 chrome.js 裡 navmenu--right 的說明。 */
+.navmenu--right .navmenu__menu { left: auto; right: 0; }
+
+/* ZH: 首頁的引導卡（v3.9，擁有者裁定 2026-08-30）——「體驗大模型」。
+ *
+ * ZH: 為什麼是**低飽和**：這是引導不是警示。滿色的 --accent 在首頁會跟
+ *     額度不足的紅卡、警告的黃卡搶同一個視覺強度，而那些是「出事了」，
+ *     這一張只是「多數人從這裡開始」。
+ * ZH: 為什麼不放在導覽列的下拉裡（那是這一版拿掉的）：下拉要點開才看得到，
+ *     引導對「還沒點開任何東西的人」才有用 —— 首頁才是他一定會經過的地方。
+ * ZH: ⚠ 顏色是**次要**線索：它旁邊的說明文字本身就講了這是什麼（WCAG 1.4.1），
+ *     色盲或高對比模式下少掉這層底色，卡片一樣讀得懂。
+ */
+.gcard--lead {
+    border-color: var(--accent);
+    background-color: var(--accent-soft);
+}
+.gcard--lead:hover { background-color: var(--surface); }

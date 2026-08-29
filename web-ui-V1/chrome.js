@@ -233,7 +233,15 @@
 
         var page = (location.pathname.split('/').pop() || 'index.html');
 
-        // ── 導覽：MYAI（動作）· Lab（頁面）
+        // ── 導覽：首頁 + 三個分類下拉（v3.9，擁有者裁定 2026-08-30）
+        //
+        // ZH: 原本是四個並排的連結：MYAI · 程式實驗室 · 我的訓練 · 我的資料集。
+        //     改成下拉的理由 —— 首頁已經用「想做點什麼／看我的東西／不知道怎麼做」
+        //     分好三組，導覽列卻是**另一套分法**。同一個平台兩種心智模型，
+        //     使用者得自己在腦子裡對應，而那個對應沒有人教他。
+        //
+        // ZH: 「首頁」是新增的第一項（擁有者裁定）。原本第一項是 MYAI，
+        //     而它其實連到首頁 —— **名字與去處不一致**，點下去會意外。
         var nav = bar.querySelector('.topnav');
         if (!nav) {
             nav = document.createElement('nav');
@@ -242,53 +250,112 @@
             //     的英文使用者會遇到，所以沒有人會回報。
             nav.setAttribute('aria-label', T('nav_aria', '主要'));
             // ZH: 插在色系切換**之前**。色系切換是開發期的東西（Decision Log #16，
-            //     上線擇一後整塊移除），順序要讓「移除它之後仍然正確」：
-            //       現在   MYAI Lab [黃][藍] [學號▾]
-            //       上線後 MYAI Lab        [學號▾]
-            //     若接在它後面，開發期會變成 [黃][藍] MYAI Lab，導覽被夾在中間。
+            //     上線擇一後整塊移除），順序要讓「移除它之後仍然正確」。
             var theme = bar.querySelector('.theme-switch');
             if (theme) bar.insertBefore(nav, theme); else bar.appendChild(nav);
         }
         nav.textContent = '';
+        // ZH: 重建導覽時把上一輪的關閉函式丟掉 —— 不清的話每重建一次就多累積
+        //     一組指向已移除節點的閉包（不會壞，但會無限長）。
+        MENUS.length = 0;
 
-        // ZH: MYAI **不做跳轉，回首頁就好**（擁有者裁定 2026-08-20）。
-        //     首頁本來就是「MYAI 那一頁」：額度在上面，層級 1 的動作就是前往 MYAI。
-        //     從頂部直接開廠商分頁會讓「按了沒反應（被擋）」的處理散到八個頁面，
-        //     回首頁則是把那件事收在唯一有 #handoff 的地方。
-        var myai = document.createElement('a');
-        myai.href = 'index.html';
-        myai.setAttribute('data-i18n', 'nav_myai');
-        myai.textContent = T('nav_myai', 'MYAI');
-        if (page === 'index.html' || page === '') myai.setAttribute('aria-current', 'page');
-        nav.appendChild(myai);
+        // ZH: ⚠ 這張表是**首頁分組卡片的鏡像**。改了首頁的分類就要改這裡；
+        //     兩邊分歧比一開始就不分組更糟。
+        var GROUPS = [
+            {
+                key: 'grp_do_t', zh: '想做點什麼',
+                // ZH: 停在這些頁時，這一組的鈕要標成「你在這裡」。
+                // ZH: train.html 沒有自己的選單項（它是從 gpu.html 進去的第二條路），
+                //     但停在那裡時仍然算在這一組 —— 不然那一頁的導覽列會完全沒有落點。
+                // ZH: v3.6 曾把 train.html 跟 jobs.html 歸在一起（「送出與查看是
+                //     同一件事的兩端」）。那是導覽只有平鋪連結時的權宜；
+                //     現在的判準是**使用者帶著什麼念頭來**，送出訓練是「想做點什麼」。
+                pages: ['myai.html', 'gpu.html', 'train.html', 'lab.html'],
+                items: [
+                    // ZH: v3.9 有自己的頁了（擁有者裁定 2026-08-30）。
+                    //     在那之前它連到首頁 —— 而「首頁」就在它左邊，
+                    //     兩個選單項同一個去處，點下去會意外。
+                    // ZH: 「按了被擋」的處理跟著搬過去了：myai.html 是現在唯一有
+                    //     #handoff 的地方，那段邏輯仍然只有一份。
+                    { href: 'myai.html', key: 'grp_ai_t', zh: '體驗大模型' },
+                    { href: 'gpu.html', key: 'grp_go_t', zh: '體驗現有模型訓練' },
+                    { href: 'lab.html', key: 'nav_lab', zh: '程式實驗室' }
+                ]
+            },
+            {
+                key: 'grp_mine_t', zh: '看我的東西',
+                pages: ['jobs.html', 'datasets.html', 'usage.html'],
+                items: [
+                    { href: 'jobs.html', key: 'grp_jobs_t', zh: '我的訓練進度' },
+                    { href: 'datasets.html', key: 'grp_ds_t', zh: '我的歷史資料訓練' },
+                    { href: 'usage.html', key: 'acct_usage', zh: '使用量明細' }
+                ]
+            },
+            {
+                key: 'grp_help_t', zh: '不知道怎麼做',
+                pages: ['docs.html', 'report.html'],
+                items: [
+                    // ZH: 文件庫入口在沒有內容前不出現。規則只寫在 docs-entry.js，
+                    //     這裡只放一個槽位（hidden + data-docs-entry）交給它決定。
+                    { href: 'docs.html', key: 'entry_docs_title', zh: '看別人做過什麼', docs: true },
+                    { href: 'report.html', key: 'acct_report', zh: '問題回報' }
+                ]
+            }
+        ];
 
-        var lab = document.createElement('a');
-        lab.href = 'lab.html';
-        lab.setAttribute('data-i18n', 'nav_lab');
-        lab.textContent = T('nav_lab', '程式實驗室');
-        // ZH: 底色只給「目前所在頁」（擁有者裁定）。
-        if (page === 'lab.html') lab.setAttribute('aria-current', 'page');
-        nav.appendChild(lab);
+        var home = document.createElement('a');
+        home.href = 'index.html';
+        home.setAttribute('data-i18n', 'nav_home');
+        home.textContent = T('nav_home', '首頁');
+        if (page === 'index.html' || page === '') home.setAttribute('aria-current', 'page');
+        nav.appendChild(home);
 
-        // ZH: v3.6 「我的訓練」。**這是三頁裡最該在導覽上的一個** —— 使用者送出之後
-        //     關掉分頁，就只剩導覽找得回那張單（在這之前是完全找不回來）。
-        var jl = document.createElement('a');
-        jl.href = 'jobs.html';
-        jl.setAttribute('data-i18n', 'nav_jobs');
-        jl.textContent = T('nav_jobs', '我的訓練');
-        // ZH: 訓練頁歸在「我的訓練」這一組（送出與查看是同一件事的兩端）
-        if (page === 'jobs.html' || page === 'train.html') jl.setAttribute('aria-current', 'page');
-        nav.appendChild(jl);
+        GROUPS.forEach(function (g, gi) {
+            var box = document.createElement('div');
+            box.className = 'navmenu';
+            // ZH: 🔴 最後一組的選單要往**左**長。導覽列靠右，最右邊那顆鈕
+            //     底下的選單若照預設往右長，會超出視窗右緣並撐出橫向捲軸
+            //     （實測 710px 寬時就會發生）。
+            // ZH: ⚠ 用「是不是最後一組」判斷，不要寫成 CSS 的 :last-child ——
+            //     日後在導覽尾端加任何東西，那個選擇器會安靜地不再命中。
+            if (gi === GROUPS.length - 1) box.className += ' navmenu--right';
+            // ZH: 目前頁在這一組裡就把鈕標起來。
+            // ZH: ⚠ 用 class 不用 aria-current —— 這顆鈕**不是**目前那一頁，
+            //     它只是包著那一頁的選單。真正的 aria-current 掛在下面的連結上。
+            if (g.pages.indexOf(page) >= 0) box.className += ' is-current';
 
-        // ZH: v3.6 「我的資料集」。放進主導覽而不是埋在某一頁的連結裡，
-        //     因為使用者會需要它的時機是「傳不上去了」——那時他不會記得
-        //     從哪一頁進得去。訓練頁與這一頁是互相到得了的一組。
-        var ds = document.createElement('a');
-        ds.href = 'datasets.html';
-        ds.setAttribute('data-i18n', 'nav_datasets');
-        ds.textContent = T('nav_datasets', '我的資料集');
-        if (page === 'datasets.html') ds.setAttribute('aria-current', 'page');
-        nav.appendChild(ds);
+            var btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = 'navmenu__toggle';
+            btn.setAttribute('aria-haspopup', 'menu');
+            btn.setAttribute('aria-expanded', 'false');
+            btn.setAttribute('data-i18n', g.key);
+            btn.textContent = T(g.key, g.zh);
+
+            var menu = document.createElement('div');
+            menu.className = 'navmenu__menu';
+            menu.setAttribute('role', 'menu');
+            menu.hidden = true;
+            g.items.forEach(function (it) {
+                var a = document.createElement('a');
+                a.href = it.href;
+                a.setAttribute('role', 'menuitem');
+                a.setAttribute('data-i18n', it.key);
+                a.textContent = T(it.key, it.zh);
+                if (it.href === page) a.setAttribute('aria-current', 'page');
+                if (it.docs) { a.setAttribute('data-docs-entry', ''); a.hidden = true; }
+                menu.appendChild(a);
+            });
+
+            box.appendChild(btn);
+            box.appendChild(menu);
+            nav.appendChild(box);
+            wireToggle(btn, menu);
+        });
+
+        // ZH: 文件庫那一項是這裡動態建的，**比 docs-entry.js 的第一次掃描還晚**。
+        //     這一行把它已經知道的決定再套一次；規則本身仍然只有那一份實作。
+        DocsEntry.apply(nav);
 
         // ── 帳號選單（永遠在最右邊；色系切換是開發期的，上線會整塊移除）
         var acc = document.createElement('div');
@@ -324,6 +391,9 @@
         fillAccount(toggle, menu);
     }
 
+    // ZH: 所有下拉（三個分類 + 帳號）的關閉函式。開一個就把其他的關掉。
+    var MENUS = [];
+
     function wireToggle(toggle, menu) {
         function close() {
             menu.hidden = true;
@@ -332,9 +402,13 @@
         toggle.addEventListener('click', function (ev) {
             ev.stopPropagation();
             var open = menu.hidden;
+            // ZH: v3.9 導覽變成三個下拉之後才需要這一行 —— 沒有它的話，
+            //     依序點過三個分類，畫面上會同時掛著三張互相疊住的選單。
+            MENUS.forEach(function (fn) { if (fn !== close) fn(); });
             menu.hidden = !open;
             toggle.setAttribute('aria-expanded', String(open));
         });
+        MENUS.push(close);
         // ZH: 🔴 「這一下點在選單裡嗎」必須在**捕獲階段**先記下來。
         //     顏色那幾顆按鈕靠 prefs.js 的 document 委派，所以不能 stopPropagation；
         //     等它冒泡到這裡時，prefs:applied 已經把整個選單重畫過了，

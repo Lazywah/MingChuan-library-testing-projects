@@ -24,7 +24,9 @@
     global.I18N = {
         zh: {
             // ── 共用 ─────────────────────────────────────────────
-            nav_myai: 'MYAI',
+            nav_home: '首頁',
+            myai_title: '體驗大模型 · MCU AI Base',
+            myai_sub: '學校採購的 MYAI 教育平台。可以聊天、問問題、幫你寫東西和整理文件。',
             nav_lab: '程式實驗室',
             btn_login: '登入',
             btn_retry: '重試',
@@ -212,7 +214,6 @@
             jl_empty: '還沒有送出過任何訓練。',
             jl_none_active: '目前沒有正在跑的訓練。',
             jl_load_fail: '暫時讀不到你的訓練紀錄。這不代表它們不見了，稍後重新整理即可。',
-            nav_jobs: '我的訓練',
             jl_back: '回到我的訓練',
 
             // ── 我的資料集（datasets.html）────────────────────────
@@ -493,7 +494,9 @@
 
         en: {
             // ── Shared ───────────────────────────────────────────
-            nav_myai: 'MYAI',
+            nav_home: 'Home',
+            myai_title: 'Try a large AI model · MCU AI Base',
+            myai_sub: 'MYAI, the education AI platform the university subscribes to — chat, ask questions, draft and tidy up documents.',
             nav_lab: 'Code Lab',
             btn_login: 'Sign in',
             btn_retry: 'Try again',
@@ -681,7 +684,6 @@
             jl_empty: 'You have not submitted any training run yet.',
             jl_none_active: 'Nothing is running right now.',
             jl_load_fail: 'Cannot read your training runs right now. That does not mean they are gone — refresh in a moment.',
-            nav_jobs: 'My training',
             jl_back: 'Back to my training runs',
 
             // ── My datasets (datasets.html) ───────────────────────

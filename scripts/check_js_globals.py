@@ -34,6 +34,8 @@ PROVIDERS = {
     "T":      "i18n.js",
     "I18N":   "i18n.js",
     "Prefs":  "prefs.js",
+    # ZH: v3.9 導覽列的文件庫項目由 chrome.js 動態建，要靠這支把決定套上去。
+    "DocsEntry": "docs-entry.js",
 }
 
 # ZH: 只認「識別字後面接 . 或 (」，並且前面不能是 . 或字元

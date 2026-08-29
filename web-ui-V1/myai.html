@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="zh-Hant" data-theme="yellow">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title data-i18n="myai_title">體驗大模型 · MCU AI Base</title>
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Open+Sans:wght@400;600;700&display=swap" rel="stylesheet">
+
+    <link rel="stylesheet" href="tokens.css?v=ff9cecda">
+    <link rel="stylesheet" href="styles.css?v=25be4520">
+    <link rel="stylesheet" href="web.css?v=85545483">
+    <!-- ZH: 🔴 側欄狀態必須在**首次繪製之前**套用，否則每換一頁都會看到
+             內容滑出去讓位（widget 的 JS 在 body 尾端才跑，那時已經畫過一次了）。
+         ZH: 與 CSS 的對應：`html.aibot-docked body { padding-right: … }`。
+             key 與 assistant-widget.js 的 DOCK_KEY 相同，改一邊要改兩邊。 -->
+    <script>try{if(localStorage.getItem('ai_hud_bot_open')!=='0')document.documentElement.classList.add('aibot-docked')}catch(e){}</script>
+</head>
+<body>
+
+<header class="topbar">
+    <span class="topbar__brand">MCU AI Base</span>
+    <span class="topbar__spacer"></span>
+    <!-- ZH: 導覽與帳號選單由 chrome.js 產生（唯一真相來源）。 -->
+</header>
+
+<main class="page page--narrow">
+
+    <!-- ==================================================================
+         ZH: MYAI 專屬頁（v3.9，擁有者裁定 2026-08-30）。
+
+         ZH: 這一整塊原本是**首頁的層級 1**。搬出來的理由：導覽列上「體驗大模型」
+             與「首頁」原本指向同一個地方 —— 名字與去處不一致，點下去會意外。
+             現在它有自己的落點，兩個選單項各自去各自的地方。
+
+         ZH: ⚠ 搬家不是複製：首頁已經**沒有**額度卡了。兩邊都放的話就是
+             同一份狀態機的兩份實作，而它們遲早會分岔（而且分岔時沒有錯誤訊息）。
+
+         ZH: ⚠ 初始密碼提示（「你的 MYAI 初始密碼還沒改」）跟著搬過來了 ——
+             它本來就掛在 #handoff 裡。代價是**沒來過這一頁的人不會被提醒**；
+             要補的話應該是在首頁另做一條獨立的提示，不是把整張卡複製回去。
+         ================================================================== -->
+    <!-- ZH: ⚠ `id="balance-card"` 是**兩個東西的掛勾**，不是裝飾：
+             myai.js 用它掛 data-low（額度偏低／用完時整張卡變色），
+             web.css 用它給 .balance__meta 與 .handoff 裡的連結上樣式。
+             漏掉的話 `$('balance-card')` 回 null，額度會**整段掉進錯誤分支**
+             顯示「暫時取不到額度」—— 而 console 乾乾淨淨（例外被 catch 吃掉）。
+             搬家時就漏掉過一次。 -->
+    <section class="primary-card" id="balance-card" aria-labelledby="myai-title">
+        <h1 class="hero__title" id="myai-title" data-i18n="grp_ai_t">體驗大模型</h1>
+        <p class="hero__sub" data-i18n="myai_sub">學校採購的 MYAI 教育平台。可以聊天、問問題、幫你寫東西和整理文件。</p>
+
+        <div class="balance__label" id="balance-label" data-i18n="bal_label">我的 AI 額度</div>
+
+        <div class="balance__value">
+            <span id="balance-value"><span class="skeleton" aria-hidden="true"></span></span><span
+                class="balance__unit" id="balance-unit" hidden>Token</span>
+        </div>
+
+        <!-- ZH: 文案要講明真實結果。實際流程是「開廠商登出頁 → 1 秒後轉登入頁」，
+                 落地是登入表單不是對話框。 -->
+        <button class="btn btn--primary" id="go-myai" type="button" data-i18n="idx_go_myai">
+            前往 MYAI 問 AI
+        </button>
+
+        <!-- ZH: 額度提示（「額度已用完 · 看用在哪 · 向管理員申請額度」）在按鈕下面。
+                 卡片由上到下是「數字 → 主要動作 → 補充說明」，一層一件事。 -->
+        <div class="balance__meta" id="balance-meta"></div>
+        <div class="handoff" id="handoff" hidden></div>
+    </section>
+
+</main>
+
+<script src="docs-entry.js?v=ce0c8bd3"></script>
+<script src="i18n.js?v=a5b6048d"></script>
+<script src="prefs.js?v=a25a96d6"></script>
+<!-- ZH: 小基（浮動助手）。客服模式公開，登入頁也放 —— 設計文件的使用者需求是「不會用這個平台時想直接問」。 -->
+<script src="assistant-widget.js?v=61a7acaa"></script>
+<script src="chrome.js?v=4b3ec8b8"></script>
+<script src="myai.js?v=f1b049af"></script>
+</body>
+</html>
