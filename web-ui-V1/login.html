@@ -25,6 +25,26 @@
 <header class="topbar">
     <span class="topbar__brand">MCU AI Base</span>
     <span class="topbar__spacer"></span>
+    <!-- ZH: 中／英切換（v3.9 補上）。
+             這一頁**不載 chrome.js**，而其他頁的滑條是 chrome.js 產生的 ——
+             所以登入頁一直沒有它。只看得懂英文的人在這一頁完全沒有辦法切語言，
+             而這正是他遇到的第一個畫面。
+
+         ZH: 放在色系切換**左邊**：色系是開發期的東西，上線會整塊移除
+             （Decision Log #16）。放左邊的話，移除之後這顆會落在最右邊 ——
+             與其他頁「語言在最右邊那組控制項裡」一致。
+
+         ZH: 不接任何事件，也不用自己設 aria-pressed —— prefs.js 有 document 層的
+             委派負責點擊，applyLang() 會重畫所有 [data-set-lang]。
+             ⚠ 這與 chrome.js 那份不同：那邊的按鈕是**在 applyLang 跑完之後**
+             才建出來的，所以要自己算初始值；這裡的按鈕在 HTML 裡，早就存在了。 -->
+    <div class="lang-switch">
+        <button type="button" data-set-lang="zh" aria-pressed="true"
+                data-i18n-aria="prefs_lang_zh" aria-label="切換成中文">中</button>
+        <button type="button" data-set-lang="en" aria-pressed="false"
+                data-i18n-aria="prefs_lang_en" aria-label="切換成英文">EN</button>
+    </div>
+
     <!-- ZH: 開發期的色系切換。上線擇一後整塊移除（Decision Log #16）。 -->
     <div class="theme-switch" role="group" aria-label="色系" data-i18n-aria="theme_aria">
         <button type="button" data-set-theme="yellow" aria-pressed="true" data-i18n="theme_yellow">黃</button>
