@@ -315,6 +315,9 @@ function renderFlow() {
 //     不必散到八個頁面。
 async function goMyai() {
     const box = $('handoff');
+    // ZH: 這個位置本來可能有東西 ——「你的 MYAI 初始密碼還沒改 · 查看初始密碼」
+    //     就是掛在這裡（見 loadBalance）。先抄下來，成功開啟之後還原回去。
+    const before = { html: box.innerHTML, hidden: box.hidden };
     box.hidden = false;
     box.textContent = T('myai_going', '正在帶你前往 MYAI…（會另開分頁，並需要登入一次）');
 
@@ -345,7 +348,14 @@ async function goMyai() {
     }
     setTimeout(() => {
         try { if (win && !win.closed) win.location.replace(loginUrl); } catch (e) { /* 跨網域寫入被拒 */ }
-        fallback(T('myai_opened', '已在新分頁開啟 MYAI。'));
+        // ZH: 開成功了就**不要再給一個「點這裡前往 MYAI」** ——
+        //     分頁已經在他眼前了，再放一個連結只會讓人以為剛才沒成功。
+        //     這一句與那個連結是**給彈窗被擋的人看的**（上面 `!win` 那條路），
+        //     成功時掛在這裡只是噪音。
+        // ZH: 還原成點下去之前的樣子：有未修改的初始密碼時，
+        //     這裡會回到「查看初始密碼」；沒有的話就是空白。
+        box.innerHTML = before.html;
+        box.hidden = before.hidden;
     }, 1000);
 }
 

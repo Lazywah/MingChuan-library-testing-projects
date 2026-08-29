@@ -153,7 +153,6 @@
             entry_docs_desc: '同學的作品與教學影片',
             myai_going: '正在帶你前往 MYAI…（會另開分頁，並需要登入一次）',
             myai_click_here: '點這裡前往 MYAI',
-            myai_opened: '已在新分頁開啟 MYAI。',
 
             // ── 登入 ─────────────────────────────────────────────
             login_title: '登入 · MCU AI Base',
@@ -600,7 +599,6 @@
             entry_docs_desc: 'Student projects and tutorial videos',
             myai_going: 'Taking you to MYAI… (opens a new tab; you will need to sign in once)',
             myai_click_here: 'Click here to open MYAI',
-            myai_opened: 'MYAI opened in a new tab.',
 
             // ── Sign in ──────────────────────────────────────────
             login_title: 'Sign in · MCU AI Base',
