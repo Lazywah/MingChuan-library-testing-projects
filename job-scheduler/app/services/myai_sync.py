@@ -748,17 +748,49 @@ def build_register_xlsx(rows: list[dict]) -> bytes:
     return buf.getvalue()
 
 
+REGISTER_CONFIRM_PATH = "/mcu/gt_sdk/admin_168/user/register_batch_info"
+
+
+def _echoed_rows(html: str, fields: tuple) -> list[dict]:
+    """
+    ZH: 從第一段（預覽）的回應裡，抓廠商**自己解析出來**的那幾列。
+
+    ZH: 廠商的預覽頁把每一列回吐成一組平行的 `name="xxx[]"` input，
+        例如註冊是 emails[]/name_displays[]/passwords[]/remarks[]。
+        把它們讀回來，就能在按下確認之前比對「他讀到的」跟「我送的」一不一樣。
+
+    ZH: 🔴 這不是裝飾。**沒有這一步的話，第二段就是盲送** ——
+        廠商若因為 email 重複、格式不符而少解析了一列，我們照樣會按確認，
+        然後把「成功」寫進資料庫。預覽頁存在的意義就是給人對帳的，
+        程式也該對一次。
+
+    @node job-scheduler/app/services/myai_sync.py::_echoed_rows
+    """
+    cols = {}
+    for f in fields:
+        cols[f] = re.findall(
+            r'<input[^>]*\bname="' + re.escape(f) + r'\[\]"[^>]*\bvalue="([^"]*)"',
+            html, re.I)
+    n = len(cols[fields[0]]) if fields else 0
+    if any(len(v) != n for v in cols.values()):
+        raise MyaiSyncError(
+            "廠商預覽頁的欄位數量對不齊："
+            + "、".join(f"{f}={len(v)}" for f, v in cols.items()))
+    import html as _html
+    return [{f: _html.unescape(cols[f][i]) for f in fields} for i in range(n)]
+
+
 async def register_batch(rows: list[dict]) -> dict:
     """
-    ZH: 送出批次註冊。**第一段**上傳 xlsx 至 register_batch_check（驗證/預覽）。
-        ⚠️ **第二段（確認送出）尚未實作** —— 該頁的實際欄位/token 需真實 POST 一次才看得到，
-        使用者尚未授權對廠商寫入測試。目前僅回傳第一段回應供解析與人工確認。
-        待實測後在此補上確認步驟（找 confirm form 的 action + hidden 欄位再 POST）。
-    EN: Step 1 uploads the workbook to register_batch_check (validate/preview).
-        Step 2 (confirm) is intentionally NOT implemented until we can observe the
-        real response shape; the caller must treat this as "submitted for check".
+    ZH: 送出批次註冊（兩段式，**第二段會真的建立帳號**）。
+          第一段 POST xlsx → register_batch_check（廠商解析並回吐預覽）
+          第二段 POST 表單 → register_batch_info（確認建立）
+        兩段之間會比對廠商解析出來的 email 是否與送出的完全一致，不一致就中止。
+    EN: Two-stage batch registration; stage 2 actually creates the accounts.
+        The echoed preview rows are reconciled against what we sent before confirming.
 
-    回傳 {"ok": bool, "status": int, "html": str}
+    ZH: ⚠️ **第二段失敗時不重試** —— 重送可能建出重複帳號。
+        回傳 {"ok", "status", "created"(bool), "rows"(廠商解析出來的列), "html"}。
 
     @node job-scheduler/app/services/myai_sync.py::register_batch
     """
@@ -766,6 +798,7 @@ async def register_batch(rows: list[dict]) -> dict:
     #     用錯會造成不可逆的點數損失。送出前硬性驗證目標端點。
     _assert_register_endpoint(REGISTER_BATCH_CHECK_PATH)
     _assert_register_endpoint(REGISTER_BATCH_PATH)
+    _assert_register_endpoint(REGISTER_CONFIRM_PATH)
 
     xlsx = build_register_xlsx(rows)
 
@@ -783,7 +816,209 @@ async def register_batch(rows: list[dict]) -> dict:
         return r.status_code == 200 and "Unauthorized" not in r.text[:200]
 
     r = await _session_request(_do, _valid)
-    return {"ok": _valid(r), "status": r.status_code, "html": r.text}
+    if not _valid(r):
+        return {"ok": False, "status": r.status_code, "created": False,
+                "rows": [], "html": r.text}
+
+    fields = ("emails", "name_displays", "passwords", "remarks")
+    echoed = _echoed_rows(r.text, fields)
+
+    # ZH: 對帳 —— 廠商解析出來的 email 必須跟我們送的一模一樣（含筆數）。
+    #     少一列代表他拒收了那一列（重複、格式不符…），這時候按確認就會
+    #     建出「跟我們以為的不一樣」的結果，所以寧可整批中止。
+    sent = [(x.get("email") or "").strip().lower() for x in rows]
+    got = [(x["emails"] or "").strip().lower() for x in echoed]
+    if sent != got:
+        raise MyaiSyncError(
+            f"廠商預覽的名單與送出的不符（送出 {len(sent)} 筆、解析 {len(got)} 筆）"
+            f"：{got or '（空）'} —— 已中止，未建立任何帳號")
+
+    # ZH: 第二段 —— 把預覽頁回吐的值原樣送回去確認。
+    #     刻意用**廠商回吐的值**而不是我們手上的原值：如果他做了正規化
+    #     （去空白、轉小寫…），照他的送回去才不會又觸發一次解析差異。
+    form = []
+    for row in echoed:
+        for f in fields:
+            form.append((f + "[]", row[f]))
+
+    async def _confirm(client):
+        """@node job-scheduler/app/services/myai_sync.py::register_batch.<nested>._confirm"""
+        return await client.post(
+            REGISTER_CONFIRM_PATH, data=form,
+            headers={"Referer": settings.MYAI_BASE_URL.rstrip("/") + REGISTER_BATCH_CHECK_PATH},
+        )
+
+    logger.info("MYAI 批次註冊：確認建立 %d 個帳號", len(echoed))
+    r2 = await _session_request(_confirm, _valid)
+    ok = _valid(r2)
+    if not ok:
+        # ZH: 🔴 這裡**不重試**。第二段送出後帳號可能已經建了，
+        #     重送一次會變成建兩個。交給呼叫端當失敗處理、人工對帳。
+        logger.error("MYAI 批次註冊第二段失敗（回應 %s）—— 不重試，請人工到廠商後台確認",
+                     r2.status_code)
+    return {"ok": ok, "status": r2.status_code, "created": ok,
+            "rows": echoed, "html": r2.text}
+
+
+# ==============================================================================
+# ZH: v3.9 批次轉移點數（發新帳號的初始點數）
+# ==============================================================================
+# ZH: 🔴 **這是唯一一個會讓平台的點數池變少的功能。** 動它之前先讀完這一段。
+#
+# ZH: 廠商官方範本 transfer_credit_batch.xlsx（2026-08-29 實際下載確認，**無標題列**）：
+#       A = 收點數的帳號 email      例 mingtali@gmail.com
+#       B = 點數（整數）            例 168
+#       C = 備註                    例 remark1
+#     ⚠️ **與註冊那支的欄位不同**（註冊是 A=email／B=暱稱／C=密碼／D=備註）。
+#        C 欄在註冊是密碼、在轉點是備註 —— 混用會把密碼當備註送出去。
+#
+# ZH: 兩段式，但**第二段的路徑後綴與註冊不一樣**（實測 2026-08-29）：
+#       註冊：register_batch_check       → register_batch_info
+#       轉點：transfer_credit_batch_check → transfer_credit_batch_result
+#     欄位也不同：emails[] / transferPoints[] / remarks[]（remarks 是 hidden）。
+#
+# ZH: 🔴 **點數從「平台登入廠商後台用的那個帳號」轉出**，不是逐筆指定的參數，
+#     也就是 .env 的 MYAI_ADMIN_EMAIL。改那個值會連帶改變轉出來源，畫面上不會提示。
+#
+# ZH: 🔴 **不可逆。** 送出去的點數收不回來（收回是另一支 get_credit_batch，
+#     而那支的名單語意是「被扣點的人」—— 方向相反，誤用會扣光學生的點數）。
+#     所以：不重試、失敗就失敗、每一次發放都寫稽核。
+
+TRANSFER_BATCH_PATH = "/mcu/gt_sdk/admin_168/user/transfer_credit_batch"
+TRANSFER_BATCH_CHECK_PATH = "/mcu/gt_sdk/admin_168/user/transfer_credit_batch_check"
+TRANSFER_CONFIRM_PATH = "/mcu/gt_sdk/admin_168/user/transfer_credit_batch_result"
+
+
+def _assert_transfer_endpoint(path: str, confirm_grant: bool) -> None:
+    """
+    ZH: 轉點端點的硬性驗證。
+
+    ZH: 🔴 為什麼要 `confirm_grant` 這個看似多餘的參數：
+        這支函式擋得住「路徑打錯」，但擋不住「有人在別的地方順手呼叫它」。
+        要求呼叫端明確傳 True，等於逼他在自己的程式碼裡寫下「我知道這會扣點」。
+        沒有這個的話，一個 for 迴圈裡的手滑就能把池子送光。
+
+    ZH: ⚠️ 白名單只開 `transfer_credit_batch` 這一族路徑。
+        `get_credit`（回收，名單＝被扣點的人）與 `delete` 一律仍然全禁 ——
+        那兩支的誤用方向是「扣光學生的點數」，比池子被掏空更難善後。
+
+    @node job-scheduler/app/services/myai_sync.py::_assert_transfer_endpoint
+    """
+    if not confirm_grant:
+        raise MyaiSyncError(
+            "拒絕送出：轉移點數必須由呼叫端明確傳 confirm_grant=True"
+            "（這個操作會從管理者帳號扣點且不可逆）")
+    p = (path or "").lower()
+    if "transfer_credit_batch" not in p:
+        raise MyaiSyncError(f"拒絕送出：目標端點不是批次轉移點數（{path}）")
+    for bad in ("get_credit", "delete", "top_up", "topup", "register"):
+        if bad in p:
+            raise MyaiSyncError(
+                f"拒絕送出：端點含禁用字樣 '{bad}'（{path}）—— 可能誤用其他批次功能")
+
+
+def build_transfer_xlsx(rows: list[dict]) -> bytes:
+    """
+    ZH: 依廠商範本組出轉點用的 xlsx（三欄、無標題列）。
+
+    ZH: rows = [{"email":..., "points": int, "remark":...}, ...]
+
+    ZH: ⚠️ points 一律轉成 int 且必須 > 0 —— 送 0 是白跑一趟，
+        送負數在廠商端的行為未知（可能變成扣點），不要試。
+
+    @node job-scheduler/app/services/myai_sync.py::build_transfer_xlsx
+    """
+    from openpyxl import Workbook
+    wb = Workbook()
+    ws = wb.active
+    for r in rows:
+        email = (r.get("email") or "").strip()
+        pts = int(r.get("points") or 0)
+        if not email:
+            raise MyaiSyncError("轉點名單有空的 email")
+        if pts <= 0:
+            raise MyaiSyncError(f"轉點數必須大於 0（{email} 給的是 {pts}）")
+        ws.append([email, pts, (r.get("remark") or "").strip()])
+    buf = io.BytesIO()
+    wb.save(buf)
+    return buf.getvalue()
+
+
+async def transfer_credit_batch(rows: list[dict], confirm_grant: bool = False) -> dict:
+    """
+    ZH: 對廠商送出批次轉移點數（兩段式）。**會從管理者帳號扣點，不可逆。**
+
+    ZH: rows = [{"email", "points", "remark"}]；`confirm_grant` 必須明確傳 True。
+
+    ZH: 與註冊同樣的對帳：第一段的預覽頁會回吐廠商解析出來的 email 與點數，
+        兩者都要與送出的完全一致才按確認。點數對不上就中止 ——
+        「多發了幾點」是收不回來的。
+
+    ZH: ⚠️ **不重試。** 第二段失敗時點數**可能已經送出也可能沒有**，
+        呼叫端必須當成「可能已發放」處理（去廠商後台對帳），
+        **絕對不要自動再送一次**。重送一次 = 有機率發兩倍。
+
+    @node job-scheduler/app/services/myai_sync.py::transfer_credit_batch
+    """
+    _assert_transfer_endpoint(TRANSFER_BATCH_CHECK_PATH, confirm_grant)
+    _assert_transfer_endpoint(TRANSFER_CONFIRM_PATH, confirm_grant)
+    if not rows:
+        return {"ok": True, "granted": False, "count": 0, "points": 0}
+
+    body = build_transfer_xlsx(rows)
+    total = sum(int(r.get("points") or 0) for r in rows)
+    logger.warning("MYAI 批次轉點：%d 個帳號、合計 %d 點（來源＝平台的廠商管理帳號）",
+                   len(rows), total)
+
+    async def _do(client):
+        """@node job-scheduler/app/services/myai_sync.py::transfer_credit_batch.<nested>._do"""
+        return await client.post(
+            TRANSFER_BATCH_CHECK_PATH,
+            files={"upload_xls": ("transfer_credit_batch.xlsx", body,
+                                  "application/vnd.openxmlformats-officedocument."
+                                  "spreadsheetml.sheet")},
+            headers={"Referer": settings.MYAI_BASE_URL.rstrip("/") + TRANSFER_BATCH_PATH},
+        )
+
+    def _valid(r):
+        """@node job-scheduler/app/services/myai_sync.py::transfer_credit_batch.<nested>._valid"""
+        return r.status_code == 200 and "Unauthorized" not in r.text[:200]
+
+    r = await _session_request(_do, _valid)
+    if not _valid(r):
+        raise MyaiSyncError(f"轉點預覽回應 {r.status_code}")
+
+    fields = ("emails", "transferPoints", "remarks")
+    echoed = _echoed_rows(r.text, fields)
+
+    sent = [((x.get("email") or "").strip().lower(), int(x.get("points") or 0))
+            for x in rows]
+    got = [((x["emails"] or "").strip().lower(), int(x["transferPoints"] or 0))
+           for x in echoed]
+    if sent != got:
+        raise MyaiSyncError(
+            f"廠商預覽的轉點名單與送出的不符（送出 {sent}、解析 {got}）—— 已中止，未轉出任何點數")
+
+    form = []
+    for row in echoed:
+        for f in fields:
+            form.append((f + "[]", row[f]))
+
+    async def _confirm(client):
+        """@node job-scheduler/app/services/myai_sync.py::transfer_credit_batch.<nested>._confirm"""
+        return await client.post(
+            TRANSFER_CONFIRM_PATH, data=form,
+            headers={"Referer": settings.MYAI_BASE_URL.rstrip("/") + TRANSFER_BATCH_CHECK_PATH},
+        )
+
+    r2 = await _session_request(_confirm, _valid)
+    ok = _valid(r2)
+    if not ok:
+        logger.error("MYAI 轉點第二段失敗（回應 %s）—— **不重試**，"
+                     "點數可能已轉出，請人工到廠商後台對帳", r2.status_code)
+    else:
+        logger.warning("MYAI 轉點完成：%d 個帳號、合計 %d 點", len(echoed), total)
+    return {"ok": ok, "granted": ok, "count": len(echoed), "points": total}
 
 
 def _nickname_for(user) -> str:
@@ -953,7 +1188,10 @@ async def provision_user(db: Session, user) -> dict:
     except Exception as e:  # noqa: BLE001
         logger.error("MYAI 自動開通失敗 %s: %s", email, e)
         return {"status": "failed", "error": str(e)[:200]}
-    if not res.get("ok"):
+    # ZH: 🔴 判準是 `created`（第二段確認完成）而不是 `ok`（第一段預覽回 200）。
+    #     這裡原本看的是 `ok`，而第二段當時根本沒實作 —— 於是「預覽成功」
+    #     被寫成「帳號建好了」，還寄了開通信、存了對應不到任何帳號的初始密碼。
+    if not res.get("created"):
         return {"status": "failed", "error": f"廠商回應 {res.get('status')}"}
 
     if not acc:
@@ -980,7 +1218,67 @@ async def provision_user(db: Session, user) -> dict:
     except Exception as e:  # noqa: BLE001
         logger.warning("MYAI 開通通知信寄送失敗（不影響開通）：%s", e)
 
-    return {"status": "created", "email": email}
+    granted = await grant_initial_credit(db, acc, email)
+    return {"status": "created", "email": email, "credit": granted}
+
+
+async def grant_initial_credit(db: Session, acc, email: str) -> dict:
+    """
+    ZH: 發放新帳號的初始點數（`myai_initial_credit`，0 = 不發）。
+
+    ZH: 三件事必須同時成立才會真的送出：設定值 > 0、這個帳號**沒發過**、
+        呼叫端明確允許扣點。三者缺一就安靜地不發。
+
+    ZH: 🔴 **冪等靠資料庫的事實，不靠流程。** `acc.credit_granted_at` 有值就直接回。
+        自動開通是背景任務、SSO 可能重複觸發，只要有一次重入就會重複發放，
+        而發出去的點數收不回來。
+
+    ZH: 🔴 **失敗不重試、也不拋例外。** 發點數失敗不該讓「帳號已經建好」這件事
+        看起來像失敗；把原因記在 credit_grant_note 裡，交給管理者人工處理。
+        重試才是真正危險的選項 —— 第二段送出後失敗時，點數可能已經轉出了。
+
+    @node job-scheduler/app/services/myai_sync.py::grant_initial_credit
+    """
+    from .. import crud
+    if acc is None:
+        return {"granted": False, "reason": "no_account"}
+    if acc.credit_granted_at is not None:
+        return {"granted": False, "reason": "already_granted",
+                "points": acc.credit_granted_pts}
+    try:
+        points = int(crud.get_setting(db, "myai_initial_credit") or 0)
+    except Exception:  # noqa: BLE001
+        points = 0
+    if points <= 0:
+        return {"granted": False, "reason": "disabled"}
+
+    rows = [{"email": email, "points": points, "remark": "auto-provision"}]
+    try:
+        res = await transfer_credit_batch(rows, confirm_grant=True)
+    except Exception as e:  # noqa: BLE001
+        # ZH: 中止在預覽階段（對帳不符、上傳失敗…）—— 點數確定沒有轉出。
+        acc.credit_grant_note = f"failed: {str(e)[:180]}"
+        db.commit()
+        logger.error("MYAI 初始點數發放失敗 %s：%s", email, e)
+        return {"granted": False, "reason": "error", "error": str(e)[:200]}
+
+    if not res.get("granted"):
+        # ZH: 🔴 第二段送出後失敗 —— 點數**可能已經轉出**。標成 unknown 讓人去對帳，
+        #     並且**照樣寫 granted_at**，這樣重入時不會再送一次。
+        acc.credit_granted_at = datetime.now(timezone.utc)
+        acc.credit_granted_pts = 0
+        acc.credit_grant_note = (f"unknown: 確認階段回應 {res.get('count')} 筆但未成功，"
+                                 f"請到廠商後台對帳（預計 {points} 點）")
+        db.commit()
+        logger.error("MYAI 初始點數狀態未知 %s（%d 點）—— 不重試，請人工對帳", email, points)
+        return {"granted": False, "reason": "unknown", "points": points}
+
+    acc.credit_granted_at = datetime.now(timezone.utc)
+    acc.credit_granted_pts = points
+    acc.credit_grant_note = "ok"
+    db.commit()
+    logger.info("MYAI 初始點數發放完成 %s：%d 點", email, points)
+    return {"granted": True, "points": points}
 
 
 def provision_status(db: Session, user) -> dict:

@@ -235,6 +235,14 @@ def init_db():
             try: conn.execute(text("ALTER TABLE external_ai_accounts ADD COLUMN init_pwd_ack INTEGER DEFAULT 0"))
             except Exception: pass
 
+            # --- v3.9 初始點數發放：紀錄兼冪等鍵（有 granted_at 就永不再發）---
+            try: conn.execute(text("ALTER TABLE external_ai_accounts ADD COLUMN credit_granted_at DATETIME"))
+            except Exception: pass
+            try: conn.execute(text("ALTER TABLE external_ai_accounts ADD COLUMN credit_granted_pts INTEGER"))
+            except Exception: pass
+            try: conn.execute(text("ALTER TABLE external_ai_accounts ADD COLUMN credit_grant_note TEXT"))
+            except Exception: pass
+
             # --- v3.5 退信回收：Message-ID 對應 + 退信時間 ---
             try: conn.execute(text("ALTER TABLE email_log ADD COLUMN message_id VARCHAR"))
             except Exception: pass

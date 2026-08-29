@@ -700,6 +700,21 @@ class ExternalAiAccount(Base):
     init_pwd_at     = Column(DateTime, nullable=True)                         # ZH: 發放時間（保存期起算）| EN: issued at (retention clock)
     init_pwd_ack    = Column(Integer, default=0)                              # ZH: 1=學生已按「我已修改」→ 立即清除 | EN: acknowledged
 
+    # ==========================================================================
+    # ZH: v3.9 初始點數發放紀錄 —— **這三欄同時是稽核紀錄與冪等鍵**。
+    #     發點數是不可逆的（廠商端收不回來），所以「發過沒有」不能靠流程保證，
+    #     要靠資料庫裡的事實：`credit_granted_at` 有值就**永不再發**。
+    #     為什麼不寫進 admin_actions：那張表的 admin_id 是 NOT NULL 且外鍵指向
+    #     users，而自動開通沒有「執行的管理員」—— 硬塞一個人進去等於記錄假的
+    #     執行者。現有的系統發起路徑是直接跳過稽核（storage_lifecycle 的
+    #     `if admin_id:`），對不可逆的發點數而言那更糟。
+    # EN: v3.9 initial-credit grant record; doubles as the idempotency key.
+    #     A non-null credit_granted_at means "already granted, never again".
+    # ==========================================================================
+    credit_granted_at    = Column(DateTime, nullable=True)                    # ZH: 發放時間（有值＝發過了）| EN: granted at (non-null = already granted)
+    credit_granted_pts   = Column(Integer, nullable=True)                     # ZH: 實際發放點數 | EN: points granted
+    credit_grant_note    = Column(Text, nullable=True)                        # ZH: 結果／失敗原因 | EN: outcome or failure reason
+
 
 # ==============================================================================
 # ZH: 表 16: KnowledgeChunk - RAG 知識庫片段 (v2.6 客服/導覽助手)
