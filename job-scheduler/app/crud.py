@@ -1443,8 +1443,16 @@ _GROUP_KEYS = {g["key"] for g in SETTING_GROUPS}
 
 
 SYSTEM_SETTINGS = {
-    "monthly_token_limit":      {"starred": True, "group": "platform", "type": "int",   "default": lambda: settings.DEFAULT_MONTHLY_TOKEN_LIMIT, "min": 0,   "max": None, "label": "每月 Token 額度(新帳號預設；改既有帳號用批量設定)", "label_en": "Monthly token quota (default for new accounts; use bulk edit for existing ones)"},
-    "token_reset_day":          {"starred": True, "group": "platform", "type": "int",   "default": lambda: settings.TOKEN_RESET_DAY,             "min": 1,   "max": 28,   "label": "額度重置日(每月第幾天)", "label_en": "Quota reset day (day of the month)"},
+    # ZH: 🔴 v3.9 —— 這兩個**刻意從管理畫面隱藏**（擁有者 2026-08-29 裁定）。
+    #     它們是**平台自己的** Token 額度與重置日，跟學生實際在用的 MYAI 點數
+    #     完全無關。畫面上並排時，接手的人會以為調這裡就能改學生的額度 ——
+    #     調了不會有任何效果，而且不會有錯誤訊息告訴他調錯地方了。
+    #     MYAI 的點數請調 myai_* 那一組。
+    # ZH: ⚠️ 隱藏 ≠ 停用。平台的月額度與每月重置**照常運作**，
+    #     只是不放在畫面上讓人誤會。要調的話改 .env 的 DEFAULT_MONTHLY_TOKEN_LIMIT
+    #     / TOKEN_RESET_DAY，或把這裡的 hidden 拿掉。
+    "monthly_token_limit":      {"hidden": True, "starred": True, "group": "platform", "type": "int",   "default": lambda: settings.DEFAULT_MONTHLY_TOKEN_LIMIT, "min": 0,   "max": None, "label": "每月 Token 額度(新帳號預設；改既有帳號用批量設定)", "label_en": "Monthly token quota (default for new accounts; use bulk edit for existing ones)"},
+    "token_reset_day":          {"hidden": True, "starred": True, "group": "platform", "type": "int",   "default": lambda: settings.TOKEN_RESET_DAY,             "min": 1,   "max": 28,   "label": "額度重置日(每月第幾天)", "label_en": "Quota reset day (day of the month)"},
     "job_timeout_minutes":      {"starred": True, "public": True, "group": "platform", "type": "int",   "default": lambda: settings.JOB_TIMEOUT_MINUTES,         "min": 1,   "max": None, "label": "任務逾時(分鐘)", "label_en": "Job timeout (minutes)"},
     "myai_sync_interval_hours": {"group": "myai", "type": "int",   "default": lambda: settings.MYAI_SYNC_INTERVAL_HOURS,    "min": 0,   "max": 168,  "label": "MYAI 同步間隔(小時, 0=關閉)", "label_en": "MYAI sync interval (hours; 0 = off)"},
     "rag_top_k":                {"group": "assistant", "type": "int",   "default": lambda: settings.RAG_TOP_K,                   "min": 1,   "max": 20,   "label": "小基 RAG 取回片段數", "label_en": "Assistant RAG: chunks retrieved"},
@@ -1688,6 +1696,14 @@ def rag_model_provider(db: Session, model_id: str) -> str:
 #     所以漏翻的表現是：介面切成英文，這一列還是中文 —— 沒有人會回報，
 #     因為看得懂中文的人不會發現，看不懂的人以為本來就這樣。
 #     擋在匯入時 = 新增旋鈕的人當場就知道要補。分組的 label 同理。
+# ZH: hidden（管理畫面看不到）與 public（前台讀得到）互斥 ——
+#     兩個都標等於「管理者看不到、但使用者看得到」，那必然是標錯的。
+_hidden_public = [k for k, v in SYSTEM_SETTINGS.items()
+                  if v.get("hidden") and v.get("public")]
+if _hidden_public:
+    raise RuntimeError(
+        "SYSTEM_SETTINGS 裡這些同時標了 hidden 與 public：%s" % _hidden_public)
+
 _no_en = [k for k, v in SYSTEM_SETTINGS.items() if not (v.get("label_en") or "").strip()]
 _no_en += [g["key"] for g in SETTING_GROUPS if not (g.get("label_en") or "").strip()]
 if _no_en:
@@ -1739,6 +1755,11 @@ def get_all_settings(db: Session) -> list:
     """
     out = []
     for key, spec in SYSTEM_SETTINGS.items():
+        # ZH: v3.9 隱藏的旋鈕不送到管理畫面（擁有者 2026-08-29 裁定）。
+        #     過濾放在**後端**：前端過濾的話值還是整份送到瀏覽器了，
+        #     而且下一個接手的人打開 devtools 就會看到一個「看起來能調」的東西。
+        if spec.get("hidden"):
+            continue
         raw = get_system_config(db, key, "")
         item = {
             "key": key,
