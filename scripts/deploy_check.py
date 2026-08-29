@@ -189,6 +189,23 @@ def check_sso(env: dict):
     return PASS, "SSO OIDC 設定完整（provider=oidc、憑證已填、mock_mode=false）"
 
 
+def check_kb_freshness():
+    """
+    ZH: 知識庫提到的介面字串是否還存在（小基會不會拿舊名稱指路）。
+
+    ZH: 這一條是 WARN 不是 FAIL —— 知識庫過期不會讓平台起不來，
+        但會讓小基自信地講錯，而那要兩個月才有人發現。
+
+    @node scripts/deploy_check.py::check_kb_freshness
+    """
+    import subprocess as _sp
+    r = _sp.run([sys.executable, str(SCRIPTS_DIR / "check_kb_freshness.py")],
+                capture_output=True, text=True, encoding="utf-8", errors="replace")
+    if r.returncode == 0:
+        return PASS, "知識庫提到的介面字串都還在"
+    return WARN, "知識庫可能過期（介面改名了沒跟上）→ python scripts/check_kb_freshness.py"
+
+
 def check_ollama_models(env: dict):
     """
     ZH: 設定裡指名的 Ollama 模型有沒有真的下載下來。
@@ -592,6 +609,7 @@ def main():
         ("下拉當布林",     check_select_bool()),
         ("錯誤訊息中文",   check_error_messages()),
         ("HTML 中文標記",  check_untranslated_html()),
+        ("知識庫新鮮度",   check_kb_freshness()),
         ("Ollama 模型",    check_ollama_models(env)),
         ("主機埠",         check_ports()),
     ]
