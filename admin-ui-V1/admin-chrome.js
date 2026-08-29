@@ -97,6 +97,8 @@
         var here = (location.pathname.split('/').pop() || 'index.html');
         var bar = document.createElement('header');
         bar.className = 'topbar';
+        // ZH: 目前語言。給下面的中/英滑條算 aria-pressed 用（理由見那裡）。
+        var adminLang = (window.Prefs && window.Prefs.get().ui_lang === 'en') ? 'en' : 'zh';
 
         // ZH: 版面：只有品牌在左，導覽與帳號選單一起靠右。
         //     跟使用者端一致 —— 那邊也是「LOGO 在左，其餘全部靠右」。
@@ -113,11 +115,18 @@
             + '</nav>'
 
             // ZH: 中／英切換，放在帳號鈕左邊（與使用者端同一個位置與同一份樣式）。
-            //     不接事件 —— prefs.js 的委派負責點擊與 aria-pressed。
+            //     點擊不用接 —— prefs.js 有 document 層的委派。
+            // ZH: 🔴 但 aria-pressed 的**初始值要自己算**（與使用者端同一個坑）：
+            //     prefs.js 只在 applyLang() 裡重畫所有 [data-set-lang]，
+            //     而這兩顆是在那之後才生出來的。寫死 true 的話，
+            //     切成英文後換一頁，內容是英文而滑條回到「中」——
+            //     語言其實好好的，是按鈕在說謊。
             + '<div class="lang-switch">'
-            + '  <button type="button" data-set-lang="zh" aria-pressed="true"'
+            + '  <button type="button" data-set-lang="zh" aria-pressed="'
+            +      (adminLang === 'zh' ? 'true' : 'false') + '"'
             + '          data-i18n-aria="prefs_lang_zh" aria-label="切換成中文">中</button>'
-            + '  <button type="button" data-set-lang="en" aria-pressed="false"'
+            + '  <button type="button" data-set-lang="en" aria-pressed="'
+            +      (adminLang === 'en' ? 'true' : 'false') + '"'
             + '          data-i18n-aria="prefs_lang_en" aria-label="切換成英文">EN</button>'
             + '</div>'
 

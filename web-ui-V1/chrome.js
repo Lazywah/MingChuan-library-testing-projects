@@ -305,7 +305,25 @@
         // ZH: 不接任何事件 —— prefs.js 有 document 層的委派（data-set-lang），
         //     aria-pressed 也由它在 applyLang 統一重畫。
         var langBox = document.createElement('div');
-        langBox.innerHTML = '<div class="lang-switch"><button type="button" data-set-lang="zh" aria-pressed="true" data-i18n-aria="prefs_lang_zh" aria-label="切換成中文">中</button><button type="button" data-set-lang="en" aria-pressed="false" data-i18n-aria="prefs_lang_en" aria-label="切換成英文">EN</button></div>';
+        // ZH: 🔴 aria-pressed 的初始值**必須自己算**。
+        //
+        // ZH: prefs.js 只在 applyLang() 裡重畫所有 [data-set-lang]，而這兩顆是
+        //     **在那之後**才生出來的 —— prefs.js 的 DOMContentLoaded 監聽註冊得
+        //     比這裡早，所以先跑完，等這兩顆出現時已經沒有人會再碰它們。
+        // ZH: 症狀很會騙人：切成英文之後換一頁，**內容確實是英文**，
+        //     只有滑條回到「中」。看起來像「語言沒保持住」，
+        //     實際上語言好好的，是那顆按鈕在說謊。
+        // ZH: ⚠ 同一個檔案裡，色系那幾顆與新手引導那一份都已經這樣算了
+        //     （見 prefsSection 的註解）—— 只有頂部列這一份漏掉。
+        var topLang = (window.Prefs.get().ui_lang === 'en') ? 'en' : 'zh';
+        langBox.innerHTML = '<div class="lang-switch">'
+            + '<button type="button" data-set-lang="zh" aria-pressed="'
+            + (topLang === 'zh' ? 'true' : 'false')
+            + '" data-i18n-aria="prefs_lang_zh" aria-label="切換成中文">中</button>'
+            + '<button type="button" data-set-lang="en" aria-pressed="'
+            + (topLang === 'en' ? 'true' : 'false')
+            + '" data-i18n-aria="prefs_lang_en" aria-label="切換成英文">EN</button>'
+            + '</div>';
         bar.appendChild(langBox.firstChild);
 
         bar.appendChild(acc);
