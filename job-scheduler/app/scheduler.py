@@ -23,6 +23,7 @@ _scheduler_task = None
 _lab_scan_task = None        # v2.0: 每分鐘掃描 lab session idle/hard-limit
 _storage_scan_task = None    # v2.0: 每日 03:00 執行儲存生命週期掃描
 _myai_sync_task = None       # v2.8: 每 N 小時 headless 同步 myai168 帳號/Token
+_myai_topup_task = None      # v3.9: 每月把所有綁定帳號補到同一個點數水位
 _myai_balance_task = None    # v2.8: 每 N 分輕量輪詢交易日誌更新餘額（低點數提醒用）
 _bounce_scan_task  = None    # v3.5: 定期 IMAP 讀退信回填 email_log（信箱不存在的事實來源）
 
@@ -469,9 +470,58 @@ async def _bounce_scan_loop():
 # EN: Scheduler lifecycle control
 # ==============================================================================
 
+async def _myai_topup_loop():
+    """
+    ZH: 每月補點。每小時醒一次，實際做不做由 myai_sync.monthly_topup 判斷。
+
+    ZH: 🔴 為什麼是「每小時醒一次」而不是「算到下個月 1 號再睡過去」：
+        長睡眠遇到容器重啟就整段消失，而重啟不會補跑 —— 補點會**整個月沒發生**，
+        而且沒有任何錯誤訊息。醒得勤一點很便宜（一次只是讀兩個設定值），
+        真正的閘門是資料庫裡的「這個月做過了沒」，不是睡多久。
+
+    ZH: 帳密未設就不啟用（帳密在 .env，不是 runtime 設定）。
+
+    @node job-scheduler/app/scheduler.py::_myai_topup_loop
+    """
+    from .config import settings
+    if not (settings.MYAI_ADMIN_EMAIL and settings.MYAI_ADMIN_PASSWORD):
+        logger.info("ZH: MYAI 每月補點未啟用（帳密未設）")
+        return
+    from .services import myai_sync
+
+    try:
+        await asyncio.sleep(120)          # ZH: 開機先讓服務穩定
+    except asyncio.CancelledError:
+        return
+
+    logger.info("ZH: MYAI 每月補點迴圈啟動（每小時檢查一次）")
+    while _scheduler_running:
+        db = SessionLocal()
+        try:
+            res = await myai_sync.monthly_topup(db)
+            # ZH: 只在**真的做了事**的時候記 log —— 每小時印一行「今天不是補點日」
+            #     會把日誌洗掉，然後真正重要的那一行就沒有人看得到了。
+            if res.get("status") not in ("disabled", "already_done", "not_today"):
+                logger.info(f"ZH: MYAI 每月補點 | EN: MYAI monthly top-up: {res}")
+            if res.get("status") in ("failed", "unknown", "sync_failed"):
+                _alert("myai_topup", "MYAI 每月補點異常 | MYAI monthly top-up problem",
+                       str(res))
+        except Exception as e:  # noqa: BLE001
+            logger.error(f"ZH: MYAI 每月補點錯誤 | EN: MYAI monthly top-up error: {e}")
+            _alert("myai_topup", "MYAI 每月補點失敗 | MYAI monthly top-up failed", str(e))
+        finally:
+            db.close()
+        try:
+            await asyncio.sleep(3600)
+        except asyncio.CancelledError:
+            break
+
+    logger.info("ZH: MYAI 每月補點迴圈已停止")
+
+
 async def start_scheduler():
     """@node job-scheduler/app/scheduler.py::start_scheduler"""
-    global _scheduler_task, _lab_scan_task, _storage_scan_task, _myai_sync_task, _myai_balance_task, _bounce_scan_task, _scheduler_running
+    global _scheduler_task, _lab_scan_task, _storage_scan_task, _myai_sync_task, _myai_balance_task, _bounce_scan_task, _myai_topup_task, _scheduler_running
     _scheduler_running = True
     _scheduler_task    = asyncio.create_task(_timeout_cleanup_loop())
     _lab_scan_task     = asyncio.create_task(_lab_session_scan_loop())
@@ -479,14 +529,15 @@ async def start_scheduler():
     _myai_sync_task    = asyncio.create_task(_myai_sync_loop())
     _myai_balance_task = asyncio.create_task(_myai_balance_loop())
     _bounce_scan_task  = asyncio.create_task(_bounce_scan_loop())
-    logger.info("ZH: 排程器背景工作已啟動 (timeout + lab + storage + myai + myai餘額 + 退信回收) | EN: Scheduler started (6 tasks)")
+    _myai_topup_task   = asyncio.create_task(_myai_topup_loop())
+    logger.info("ZH: 排程器背景工作已啟動 (timeout + lab + storage + myai + myai餘額 + 退信回收 + 每月補點) | EN: Scheduler started (7 tasks)")
 
 
 async def stop_scheduler():
     """@node job-scheduler/app/scheduler.py::stop_scheduler"""
-    global _scheduler_task, _lab_scan_task, _storage_scan_task, _myai_sync_task, _myai_balance_task, _bounce_scan_task, _scheduler_running
+    global _scheduler_task, _lab_scan_task, _storage_scan_task, _myai_sync_task, _myai_balance_task, _bounce_scan_task, _myai_topup_task, _scheduler_running
     _scheduler_running = False
-    for task in (_scheduler_task, _lab_scan_task, _storage_scan_task, _myai_sync_task, _myai_balance_task, _bounce_scan_task):
+    for task in (_scheduler_task, _lab_scan_task, _storage_scan_task, _myai_sync_task, _myai_balance_task, _bounce_scan_task, _myai_topup_task):
         if task:
             task.cancel()
             try:

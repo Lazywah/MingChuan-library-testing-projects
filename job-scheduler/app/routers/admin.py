@@ -2005,3 +2005,31 @@ def get_audit_log(
             for r in rows
         ],
     }
+
+
+# ==============================================================================
+# ZH: v3.9 MYAI 手動補齊點數
+# ==============================================================================
+@router.post("/myai/topup", summary="手動把所有綁定帳號補到指定點數（預設先預覽）")
+async def myai_manual_topup(
+    target: int = Body(..., embed=True, description="要補到的點數（每人補到這個水位）"),
+    dry_run: bool = Body(True, embed=True, description="true=只預覽不送出"),
+    db: Session = Depends(get_db),
+    admin: models.User = Depends(require_admin),
+):
+    """
+    ZH: 手動補齊 —— 給例外狀況用（活動、補償、排程當天服務沒起來…）。
+
+    ZH: `dry_run=true`（預設）只回報會補誰、補多少。要真的送出必須明確傳 false，
+        與組織對照表匯入同一套慣例：**不可逆的操作先讓人看一眼**。
+
+    ZH: 🔴 重複按不會重複發放 —— 這是「補到 N」而不是「加 N」的性質：
+        第一次跑完所有人都在 N，第二次算差額就是空的。
+
+    @node job-scheduler/app/routers/admin.py::myai_manual_topup
+    """
+    from ..services import myai_sync
+    try:
+        return await myai_sync.manual_topup(db, target, admin.id, dry_run=dry_run)
+    except myai_sync.MyaiSyncError as e:
+        raise HTTPException(status_code=400, detail=str(e))

@@ -917,6 +917,28 @@ def _assert_transfer_endpoint(path: str, confirm_grant: bool) -> None:
                 f"拒絕送出：端點含禁用字樣 '{bad}'（{path}）—— 可能誤用其他批次功能")
 
 
+def _pool_balance(html: str):
+    """
+    ZH: 從轉點預覽頁讀出**轉出帳號自己還剩多少點**（廠商叫「您的點數」）。
+
+    ZH: 讀不出來回 None —— **不要回 0**。0 會讓下面的檢查誤判成「池子空了」
+        而中止每一次補點，那個失敗方向看起來像「功能壞了」但其實只是版型改了。
+        讀不出來時我們選擇照送（廠商端本來就會擋不足額），並在日誌講明沒查到。
+
+    ZH: 版型（2026-08-29 實測）：
+          <div class="css_td">您的點數</div><div class="css_td">2,033,236</div>
+
+    @node job-scheduler/app/services/myai_sync.py::_pool_balance
+    """
+    m = re.search(r"您的點數\s*</div>\s*<div[^>]*>\s*([\d,]+)\s*</div>", html)
+    if not m:
+        return None
+    try:
+        return int(m.group(1).replace(",", ""))
+    except ValueError:
+        return None
+
+
 def build_transfer_xlsx(rows: list[dict]) -> bytes:
     """
     ZH: 依廠商範本組出轉點用的 xlsx（三欄、無標題列）。
@@ -988,6 +1010,16 @@ async def transfer_credit_batch(rows: list[dict], confirm_grant: bool = False) -
     if not _valid(r):
         raise MyaiSyncError(f"轉點預覽回應 {r.status_code}")
 
+    # ZH: 🔴 送出去之前先看轉出帳號還剩多少 —— 池子不夠而硬送，
+    #     廠商可能只轉一部分（誰拿到誰沒拿到我們無從得知），
+    #     那比整批不送難善後得多。預覽頁本來就把餘額印在上面，用它。
+    pool = _pool_balance(r.text)
+    if pool is None:
+        logger.warning("MYAI 轉點：預覽頁讀不到「您的點數」，跳過餘額檢查（版型可能改了）")
+    elif total > pool:
+        raise MyaiSyncError(
+            f"拒絕送出：要轉 {total} 點，但轉出帳號只剩 {pool} 點 —— 已中止，未轉出任何點數")
+
     fields = ("emails", "transferPoints", "remarks")
     echoed = _echoed_rows(r.text, fields)
 
@@ -1019,6 +1051,230 @@ async def transfer_credit_batch(rows: list[dict], confirm_grant: bool = False) -
     else:
         logger.warning("MYAI 轉點完成：%d 個帳號、合計 %d 點", len(echoed), total)
     return {"ok": ok, "granted": ok, "count": len(echoed), "points": total}
+
+
+# ==============================================================================
+# ZH: v3.9 每月補點 —— 把所有綁定帳號補到同一個水位
+# ==============================================================================
+# ZH: 規則（擁有者 2026-08-29 裁定）：
+#       · 補到**固定值**（`myai_monthly_topup_to`），不是每人固定加
+#       · **所有**綁定且啟用的帳號，不看這個月有沒有登入
+#       · 每月第 `myai_monthly_topup_day` 天（預設 1 號，台北時間）
+#       · 到期日不管 —— 那是廠商在處理的事
+#
+# ZH: 🔴 **冪等靠資料庫的事實，不靠排程準時。** 排程每小時醒一次，同一天會醒很多次；
+#     容器重啟、時間調整、補跑都會讓「今天是不是 1 號」重複成立。
+#     所以真正的閘門是「這個月做過了沒」，記在 SystemConfig。
+
+TOPUP_MONTH_KEY = "myai_topup_last_month"
+
+
+def _taipei_month(now=None) -> str:
+    """ZH: 台北時間的 YYYY-MM。
+
+    ZH: 🔴 用台北不用 UTC：「每月 1 號」是講給人聽的日期。
+        UTC 的話台北時間 1 號早上 8 點之前都還算上個月，
+        補點會在 1 號當天「還沒發生」，而看畫面的人已經在等了。
+
+    @node job-scheduler/app/services/myai_sync.py::_taipei_month
+    """
+    from ..gpu_schedule import TZ_TAIPEI
+    return (now or datetime.now(timezone.utc)).astimezone(TZ_TAIPEI).strftime("%Y-%m")
+
+
+def _taipei_day(now=None) -> int:
+    """ZH: 台北時間的日（1–31）。
+
+    @node job-scheduler/app/services/myai_sync.py::_taipei_day
+    """
+    from ..gpu_schedule import TZ_TAIPEI
+    return (now or datetime.now(timezone.utc)).astimezone(TZ_TAIPEI).day
+
+
+def topup_targets(db: Session, target: int) -> list[dict]:
+    """
+    ZH: 算出這次要補誰、各補多少。回 [{"email", "points", "remark"}]。
+
+    ZH: 只收**已綁定平台帳號**的人 —— 廠商後台還有我們的管理帳號與其他來源的
+        帳號，補到那些身上是把點數送給不相干的人。綁定是「這是我們的學生」
+        唯一可靠的判準。
+
+    ZH: 已經 >= 目標的人不入列（補 0 是白跑，而且 build_transfer_xlsx 會拒絕）。
+
+    ZH: ⚠️ 點數的新鮮度由呼叫端負責（先跑一次 sync）——
+        拿舊資料算差額會補過頭，而多補的點數收不回來。
+
+    @node job-scheduler/app/services/myai_sync.py::topup_targets
+    """
+    rows = []
+    # ZH: 🔴 轉出帳號自己要排除。它同時也是一個綁定的平台帳號
+    #     （MYAI_ADMIN_EMAIL 就是某個人的學號信箱），池子一旦低於目標值，
+    #     補點就會變成「自己轉給自己」—— 廠商對這種操作的行為未知，不要試。
+    source = (settings.MYAI_ADMIN_EMAIL or "").strip().lower()
+    accs = (db.query(models.ExternalAiAccount)
+              .filter(models.ExternalAiAccount.status == "active").all())
+    for acc in accs:
+        row = None
+        if acc.myai_vendor_sn:
+            row = (db.query(models.MyaiAccount)
+                     .filter(models.MyaiAccount.vendor_sn == acc.myai_vendor_sn).first())
+        if row is None and acc.vendor_username:
+            row = (db.query(models.MyaiAccount)
+                     .filter(models.MyaiAccount.email.ilike(acc.vendor_username)).first())
+        if row is None:
+            # ZH: 綁了但廠商端查不到 —— 不猜、不補，留給同步或人工處理。
+            logger.info("MYAI 每月補點跳過 %s：廠商端查不到這個帳號", acc.vendor_username)
+            continue
+        email = (row.email or acc.vendor_username or "").strip()
+        if source and email.lower() == source:
+            logger.info("MYAI 每月補點跳過轉出帳號本身（%s）", email)
+            continue
+        have = int(row.points or 0)
+        if have >= target:
+            continue
+        rows.append({"email": email,
+                     "points": target - have,
+                     "remark": "monthly-topup"})
+    return rows
+
+
+async def monthly_topup(db: Session, force: bool = False) -> dict:
+    """
+    ZH: 每月補點主流程。**一個月只會真的送出一次。**
+
+    ZH: `force=True` 只給人工補跑用（跳過「今天是不是補點日」，但**不跳過**
+        「這個月做過了沒」）—— 那道閘門不能繞，繞了就是重複發放。
+
+    ZH: 🔴 送出之後**無論成敗都把這個月標成做過了**。第二段失敗時點數
+        可能已經轉出，重跑一次就是發兩倍。失敗要人去對帳，不是自動重試。
+
+    @node job-scheduler/app/services/myai_sync.py::monthly_topup
+    """
+    target = int(crud.get_setting(db, "myai_monthly_topup_to") or 0)
+    if target <= 0:
+        return {"status": "disabled"}
+
+    month = _taipei_month()
+    if crud.get_system_config(db, TOPUP_MONTH_KEY, "") == month:
+        return {"status": "already_done", "month": month}
+
+    if not force:
+        day = int(crud.get_setting(db, "myai_monthly_topup_day") or 1)
+        # ZH: 用 `!=` —— **只在當天跑**（擁有者裁定：服務 24/7 在線，
+        #     不需要「錯過就補跑」的語意；而補跑會讓「月中才打開這個功能」
+        #     當場補一次，那不是預期的行為）。
+        # ZH: ⚠️ 代價要知道：補點日**整天**服務都沒起來的話，這個月就不補了，
+        #     而且不會有錯誤訊息。真的遇到就用手動補齊（manual_topup）。
+        if _taipei_day() != day:
+            return {"status": "not_today", "day": day}
+
+    # ZH: 先同步一次再算差額 —— 拿舊點數算會補過頭，而多補的收不回來。
+    #     同步失敗就整個放棄：寧可這個月晚幾小時補，也不要照著錯的數字補。
+    #     （這裡**不**標記月份，所以下一輪醒來會再試。）
+    try:
+        await sync(db)
+    except Exception as e:  # noqa: BLE001
+        logger.error("MYAI 每月補點中止：同步失敗，不拿舊點數算差額（%s）", e)
+        return {"status": "sync_failed", "error": str(e)[:200]}
+
+    rows = topup_targets(db, target)
+    if not rows:
+        crud.set_system_config(db, TOPUP_MONTH_KEY, month)
+        logger.info("MYAI 每月補點：沒有人低於 %d 點，本月完成", target)
+        return {"status": "nobody_below", "month": month, "target": target}
+
+    total = sum(r["points"] for r in rows)
+    logger.warning("MYAI 每月補點 %s：%d 人、合計 %d 點（補到 %d）",
+                   month, len(rows), total, target)
+
+    # ZH: 先標月份再送出。順序是刻意的 —— 標記失敗了就別送（還沒動到點數），
+    #     但送出後才標記的話，中間掛掉就會重送。兩種錯法裡這一種安全得多：
+    #     最壞是「這個月沒補到」，而不是「補了兩次」。
+    crud.set_system_config(db, TOPUP_MONTH_KEY, month)
+
+    try:
+        res = await transfer_credit_batch(rows, confirm_grant=True)
+    except Exception as e:  # noqa: BLE001
+        logger.error("MYAI 每月補點失敗 %s：%s —— **不重試**，請人工對帳", month, e)
+        return {"status": "failed", "month": month, "count": len(rows),
+                "points": total, "error": str(e)[:200]}
+
+    if not res.get("granted"):
+        logger.error("MYAI 每月補點狀態未知 %s —— 點數可能已轉出，請到廠商後台對帳", month)
+        return {"status": "unknown", "month": month, "count": len(rows), "points": total}
+
+    logger.info("MYAI 每月補點完成 %s：%d 人、合計 %d 點", month, len(rows), total)
+    return {"status": "done", "month": month, "count": len(rows),
+            "points": total, "target": target}
+
+
+async def manual_topup(db: Session, target: int, admin_id: str,
+                       dry_run: bool = True) -> dict:
+    """
+    ZH: 手動把所有綁定帳號補到指定水位。給例外狀況用（活動、補償、排程漏跑…）。
+
+    ZH: 與每月補點的差別只有兩個，其餘完全共用同一套邏輯：
+          · **不看補點日、不看「這個月做過了沒」** —— 它就是為了例外而存在的
+          · **有真正的執行者** → 稽核寫得進 admin_actions（自動補點沒有管理員，
+            所以那條路只能記在帳號自己身上）
+
+    ZH: 🔴 **重複按不會重複發放** —— 因為是「補到 N」不是「加 N」：
+        第一次跑完所有人都在 N，第二次算差額就是空的。
+        這是「補到固定值」相對於「固定加」最重要的性質，不要改成後者。
+
+    ZH: `dry_run=True`（預設）只回報會補誰、補多少，不送出任何東西。
+
+    @node job-scheduler/app/services/myai_sync.py::manual_topup
+    """
+    target = int(target or 0)
+    if target <= 0:
+        raise MyaiSyncError("補到的點數必須大於 0")
+
+    # ZH: 先同步 —— 拿舊點數算差額會補過頭，而多補的收不回來。
+    #     預覽也要同步：給管理者看的數字必須是他按下確認時會用的那一份。
+    await sync(db)
+
+    rows = topup_targets(db, target)
+    total = sum(r["points"] for r in rows)
+    preview = {"target": target, "count": len(rows), "points": total,
+               "rows": [{"email": r["email"], "points": r["points"]} for r in rows]}
+
+    if dry_run:
+        return {"status": "preview", **preview}
+    if not rows:
+        return {"status": "nobody_below", **preview}
+
+    logger.warning("MYAI 手動補齊：admin=%s 補到 %d 點，%d 人、合計 %d 點",
+                   admin_id, target, len(rows), total)
+
+    import json as _json
+
+    def _audit(outcome: str):
+        """ZH: 不可逆的操作一定要留下軌跡（誰、補到多少、幾個人、結果）。"""
+        db.add(models.AdminAction(
+            admin_id=admin_id, target_user=None, action="myai_manual_topup",
+            payload=_json.dumps({"target": target, "count": len(rows),
+                                 "points": total, "outcome": outcome},
+                                ensure_ascii=False),
+            timestamp=datetime.now(timezone.utc)))
+        db.commit()
+
+    try:
+        res = await transfer_credit_batch(rows, confirm_grant=True)
+    except Exception as e:  # noqa: BLE001
+        # ZH: 中止在預覽階段（對帳不符、餘額不足…）→ 點數確定沒轉出。
+        #     送出後才斷的話也走這裡，所以稽核記 "failed" 而不是 "not_sent" ——
+        #     這兩種我們分不出來，就不要假裝分得出來。
+        _audit(f"failed: {str(e)[:120]}")
+        logger.error("MYAI 手動補齊失敗：%s —— **不重試**，請人工對帳", e)
+        raise
+
+    _audit("ok" if res.get("granted") else "unknown")
+    if not res.get("granted"):
+        logger.error("MYAI 手動補齊狀態未知 —— 點數可能已轉出，請到廠商後台對帳")
+        return {"status": "unknown", **preview}
+    logger.info("MYAI 手動補齊完成：%d 人、合計 %d 點", len(rows), total)
+    return {"status": "done", **preview}
 
 
 def _nickname_for(user) -> str:

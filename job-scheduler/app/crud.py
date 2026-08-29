@@ -1462,6 +1462,14 @@ SYSTEM_SETTINGS = {
     "myai_autoprovision":       {"starred": True, "group": "myai", "type": "int",   "default": lambda: 0,                                    "min": 0,   "max": 1,    "label": "MYAI 首次登入自動開通(1=開, 0=關)", "label_en": "MYAI auto-provision on first login (1 = on, 0 = off)"},
     "myai_init_pwd_days":       {"starred": True, "group": "myai", "type": "int",   "default": lambda: 30,                                   "min": 1,   "max": 180,  "label": "MYAI 初始密碼保存天數(逾期自動清除)", "label_en": "MYAI initial password retention (days; purged when it expires)"},
     "myai_initial_credit":      {"starred": True, "group": "myai", "type": "int",   "default": lambda: 0,                                    "min": 0,   "max": None, "label": "MYAI 新帳號初始點數(0=不發放)", "label_en": "MYAI initial credit for new accounts (0 = none)"},
+    # ZH: v3.9 每月補點（擁有者 2026-08-29 定的三條規則）：
+    #       補到**固定值**（不是固定加）· **所有**綁定帳號 · 每月 1 號
+    #     到期日不管 —— 那是廠商在處理的事（他們的使用者列表有「有效期間」欄）。
+    # ZH: ⚠️ 與 myai_initial_credit 刻意分開：那個是**新帳號**的初始值，
+    #     這個是**每月**補到的水位。兩者將來很可能要調成不同數字，共用會綁死。
+    # ZH: 🔴 上限 28 是因為 29–31 在某些月份不存在 —— 設 31 的話 2 月永遠不會補。
+    "myai_monthly_topup_to":    {"starred": True, "group": "myai", "type": "int",   "default": lambda: 0,                                    "min": 0,   "max": None, "label": "MYAI 每月補到的點數(0=不補)", "label_en": "MYAI monthly top-up target (0 = no top-up)"},
+    "myai_monthly_topup_day":   {"starred": True, "group": "myai", "type": "int",   "default": lambda: 1,                                    "min": 1,   "max": 28,   "label": "MYAI 每月補點日(每月第幾天; 上限 28)", "label_en": "MYAI top-up day of month (max 28)"},
     # v3.3 刪除使用者後 Lab volume 的封存保留天數（逾期背景任務真正刪除）
     "lab_archive_days":         {"starred": True, "public": True, "group": "platform", "type": "int",   "default": lambda: 30,                                   "min": 1,   "max": 365,  "label": "刪除帳號後 Lab 資料封存天數(逾期銷毀)", "label_en": "Lab data archive period after account deletion (days; destroyed when it expires)"},
     # v3.4 有使用者在線時的 MYAI 輪詢間隔（無人在線會完全跳過，不受此值影響）
