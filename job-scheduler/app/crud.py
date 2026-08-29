@@ -1444,7 +1444,7 @@ _GROUP_KEYS = {g["key"] for g in SETTING_GROUPS}
 
 SYSTEM_SETTINGS = {
     "monthly_token_limit":      {"starred": True, "group": "platform", "type": "int",   "default": lambda: settings.DEFAULT_MONTHLY_TOKEN_LIMIT, "min": 0,   "max": None, "label": "每月 Token 額度(新帳號預設；改既有帳號用批量設定)", "label_en": "Monthly token quota (default for new accounts; use bulk edit for existing ones)"},
-    "token_reset_day":          {"starred": True, "public": True, "group": "platform", "type": "int",   "default": lambda: settings.TOKEN_RESET_DAY,             "min": 1,   "max": 28,   "label": "額度重置日(每月第幾天)", "label_en": "Quota reset day (day of the month)"},
+    "token_reset_day":          {"starred": True, "group": "platform", "type": "int",   "default": lambda: settings.TOKEN_RESET_DAY,             "min": 1,   "max": 28,   "label": "額度重置日(每月第幾天)", "label_en": "Quota reset day (day of the month)"},
     "job_timeout_minutes":      {"starred": True, "public": True, "group": "platform", "type": "int",   "default": lambda: settings.JOB_TIMEOUT_MINUTES,         "min": 1,   "max": None, "label": "任務逾時(分鐘)", "label_en": "Job timeout (minutes)"},
     "myai_sync_interval_hours": {"group": "myai", "type": "int",   "default": lambda: settings.MYAI_SYNC_INTERVAL_HOURS,    "min": 0,   "max": 168,  "label": "MYAI 同步間隔(小時, 0=關閉)", "label_en": "MYAI sync interval (hours; 0 = off)"},
     "rag_top_k":                {"group": "assistant", "type": "int",   "default": lambda: settings.RAG_TOP_K,                   "min": 1,   "max": 20,   "label": "小基 RAG 取回片段數", "label_en": "Assistant RAG: chunks retrieved"},

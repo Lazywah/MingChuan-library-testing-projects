@@ -12,11 +12,11 @@ from conftest import make_user, auth_headers
 from app import crud
 
 
-PUBLIC_KEYS = {"token_reset_day", "job_timeout_minutes", "lab_archive_days"}
+PUBLIC_KEYS = {"job_timeout_minutes", "lab_archive_days"}
 
 
 class TestPublicSettingWhitelist:
-    def test_returns_exactly_the_three_whitelisted_keys(self, db):
+    def test_returns_exactly_the_whitelisted_keys(self, db):
         assert set(crud.get_public_settings(db)) == PUBLIC_KEYS
 
     def test_monthly_token_limit_is_not_exposed(self, db):
@@ -39,33 +39,50 @@ class TestPublicSettingWhitelist:
 
     def test_returns_effective_value_not_env_default(self, db):
         """ZH: 管理者改過的值要**當場**反映到前台，否則畫面會停在舊數字。"""
-        before = crud.get_public_settings(db)["token_reset_day"]
-        crud.set_settings(db, {"token_reset_day": before + 1})
-        after = crud.get_public_settings(db)["token_reset_day"]
+        before = crud.get_public_settings(db)["lab_archive_days"]
+        crud.set_settings(db, {"lab_archive_days": before + 1})
+        after = crud.get_public_settings(db)["lab_archive_days"]
         assert after == before + 1, "改了營運設定,前台讀到的仍是舊值"
 
     def test_out_of_range_value_is_clamped_not_rejected(self, db):
         """
-        ZH: 重置日上限 28（29–31 在某些月份不存在）。
+        ZH: 封存天數範圍 1–365。
 
         ZH: ⚠ 超出範圍時 `set_settings` **不拋錯，是靜默夾限** ——
             我原本寫成 `pytest.raises(ValueError)`，測試當場紅了才發現。
             記在這裡是因為這個行為從呼叫端看不出來：
-            管理者輸入 99、畫面不報錯，實際存進去的是 28。
+            管理者輸入 999、畫面不報錯，實際存進去的是 365。
             會拋錯的只有「型別不對」與「choice 不在清單裡」兩種。
 
         ZH: 對前台的意義：白名單送出去的值**保證落在宣告範圍內**，
-            所以那句「額度每月 N 號重置」不會出現 2 月 30 號這種日期。
+            所以畫面上不會出現「封存 0 天」這種自相矛盾的說法。
         """
-        crud.set_settings(db, {"token_reset_day": 99})
-        assert crud.get_public_settings(db)["token_reset_day"] == 28
+        crud.set_settings(db, {"lab_archive_days": 999})
+        assert crud.get_public_settings(db)["lab_archive_days"] == 365
 
-        crud.set_settings(db, {"token_reset_day": 0})
-        assert crud.get_public_settings(db)["token_reset_day"] == 1
+        crud.set_settings(db, {"lab_archive_days": 0})
+        assert crud.get_public_settings(db)["lab_archive_days"] == 1
 
         # ZH: 型別不對才是真的會拋 —— 兩種行為要分清楚,否則上面那段註解只是我的猜測。
         with pytest.raises(ValueError):
-            crud.set_settings(db, {"token_reset_day": "不是數字"})
+            crud.set_settings(db, {"lab_archive_days": "不是數字"})
+
+    def test_token_reset_day_is_no_longer_exposed(self, db):
+        """
+        ZH: 2026-08-29 退出白名單。**這是刻意的，不是漏掉。**
+
+        ZH: 它當初被揭露，只為了在使用量頁面寫一句「額度每月 N 號重置。」
+            —— 而那句話印在 **MYAI 點數**的卡片裡，講的卻是平台自己的
+            Token 重置日。MYAI 的點數不會每月重置（廠商後台根本沒有這個功能），
+            所以那是一句會被當真的錯話。句子拿掉了，這個值就沒有前台讀者。
+
+        ZH: 沒有讀者還留在白名單裡的話，下一個人看到瀏覽器拿得到這個值，
+            很可能又拿它寫回同一句話。所以把入口關掉，並在這裡留下原因。
+        """
+        assert "token_reset_day" not in crud.get_public_settings(db)
+        # ZH: 但它必須仍然是一個存在的旋鈕（平台自己的重置照常運作，
+        #     只是不對使用者講）—— 否則這個測試會因為 key 被改名而恆真。
+        assert "token_reset_day" in crud.SYSTEM_SETTINGS
 
 
 class TestPublicSettingEndpoint:
