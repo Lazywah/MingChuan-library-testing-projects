@@ -149,3 +149,101 @@ def test_unreadable_setting_means_no_limit_not_instant_eviction(db, monkeypatch,
     _session(db, u, gpu=0, minutes_ago=9999)
     L.scan_and_evict(db)
     assert [c for c in stop_calls if c[1] == "gpu_time_limit"] == []
+
+
+# ══════════════════════════════════════════════════════════════════════════
+# ZH: 三、GPU 時限**取代**角色的 hard limit（v3.9，擁有者裁定）
+# ══════════════════════════════════════════════════════════════════════════
+
+def test_student_gpu_session_gets_the_full_gpu_time(db, stop_calls):
+    """
+    ZH: 🔴 學生的 hard_limit_min 是 90 分，比 GPU 的 120 短。
+        兩條都算的話：設定寫 120、學生 90 分就被關，而畫面上的倒數
+        還是照 120 走 —— 他會在「還剩 30 分」時突然被關掉。
+        所以 GPU session 只受 GPU 那條管。
+    """
+    u = make_user(db, username="gg1", email="gg1@example.com")   # student
+    crud.set_system_config(db, "lab_gpu_max_minutes", "120")
+    _session(db, u, gpu=0, minutes_ago=95)       # 過了 90，還沒到 120
+    L.scan_and_evict(db)
+    assert stop_calls == [], "學生的 GPU 實驗室在 95 分就被角色規則關掉了"
+
+
+def test_student_gpu_session_is_still_stopped_at_the_gpu_limit(db, stop_calls):
+    """ZH: 陽性對照 —— 取代不等於取消。到 120 還是要關。"""
+    u = make_user(db, username="gg2", email="gg2@example.com")
+    crud.set_system_config(db, "lab_gpu_max_minutes", "120")
+    _session(db, u, gpu=0, minutes_ago=125)
+    L.scan_and_evict(db)
+    assert [c[1] for c in stop_calls] == ["gpu_time_limit"]
+
+
+def test_cpu_session_still_obeys_the_role_hard_limit(db, stop_calls):
+    """
+    ZH: 陽性對照 —— 取代只對 GPU session 生效。
+        CPU 實驗室照樣受角色的 90 分管，不然這個改動會順手放寬所有人。
+    """
+    u = make_user(db, username="gg3", email="gg3@example.com")
+    crud.set_system_config(db, "lab_gpu_max_minutes", "120")
+    _session(db, u, gpu=None, minutes_ago=95)
+    L.scan_and_evict(db)
+    assert [c[1] for c in stop_calls] == ["hard_limit_reached"]
+
+
+def test_gpu_limit_off_falls_back_to_the_role_limit(db, stop_calls):
+    """ZH: GPU 時限設 0（不限）時，GPU session 回到角色規則管 ——
+       否則「不限」會變成「連 90 分也不管」，那不是關掉一條限制，是關掉兩條。"""
+    u = make_user(db, username="gg4", email="gg4@example.com")
+    crud.set_system_config(db, "lab_gpu_max_minutes", "0")
+    _session(db, u, gpu=0, minutes_ago=95)
+    L.scan_and_evict(db)
+    assert [c[1] for c in stop_calls] == ["hard_limit_reached"]
+
+
+# ══════════════════════════════════════════════════════════════════════════
+# ZH: 四、每日累計額度（執行中也要收）
+# ══════════════════════════════════════════════════════════════════════════
+
+def test_running_session_is_stopped_when_the_daily_quota_runs_out(db, stop_calls):
+    """
+    ZH: 🔴 缺的就是這一段。`can_start_session` 只擋「開新的」——
+        開著不關的話永遠不會被檢查到，而畫面上「今日剩餘 0 分」一直寫著。
+    """
+    from app.services import quota_service
+    u = make_user(db, username="d1", email="d1@example.com")     # student: 360 分
+    usage = quota_service.get_today_usage(db, u.id)
+    usage.total_seconds = 359 * 60
+    db.commit()
+    _session(db, u, gpu=None, minutes_ago=5)     # 359 + 5 = 364 > 360
+    L.scan_and_evict(db)
+    assert [c[1] for c in stop_calls] == ["daily_limit_reached"]
+
+
+def test_the_running_stretch_counts_towards_the_quota(db, stop_calls):
+    """
+    ZH: 🔴 額度是**停止時**才累加的，所以還在跑的這一段不在 total_seconds 裡。
+        不自己加上去的話，一個人可以每天多用「最後一段」的時間，
+        而且那一段可以無限長 —— 永遠差最後一段。
+    """
+    from app.services import quota_service
+    u = make_user(db, username="d2", email="d2@example.com")
+    usage = quota_service.get_today_usage(db, u.id)
+    usage.total_seconds = 100 * 60          # 已用 100 分
+    db.commit()
+    _session(db, u, gpu=None, minutes_ago=59)   # 100 + 59 = 159 < 360 → 不關
+    L.scan_and_evict(db)
+    assert stop_calls == []
+
+    stop_calls.clear()
+    usage.total_seconds = 340 * 60          # 已用 340 分
+    db.commit()
+    L.scan_and_evict(db)                    # 340 + 59 = 399 > 360 → 要關
+    assert [c[1] for c in stop_calls] == ["daily_limit_reached"]
+
+
+def test_unlimited_role_is_not_affected_by_the_daily_rule(db, stop_calls):
+    """ZH: teacher/admin 的 daily_limit_min 是 None —— 不該被這條關掉。"""
+    t = make_user(db, username="d3", email="d3@example.com", role="teacher")
+    _session(db, t, gpu=None, minutes_ago=9999)
+    L.scan_and_evict(db)
+    assert [c for c in stop_calls if c[1] == "daily_limit_reached"] == []

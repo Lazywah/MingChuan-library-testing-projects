@@ -1122,20 +1122,43 @@ def scan_and_evict(db: Session) -> int:
         if last_act and last_act.tzinfo is None:
             last_act = last_act.replace(tzinfo=timezone.utc)
 
-        # ZH: v3.9 GPU 借用時限 —— **先於**角色的 hard limit 檢查。
-        #     兩者是不同的東西：hard_limit_min 是「session 能開多久」的政策
-        #     （teacher/admin 是 None），這個是稀缺資源的分配，**不分角色**。
-        #     放在前面是因為它比較嚴格；放後面的話 admin 永遠走不到這裡。
-        if session.gpu_index is not None and started:
-            gpu_max = _gpu_max_minutes(db)
-            if gpu_max and (now - started).total_seconds() >= gpu_max * 60:
+        # ZH: v3.9 GPU 借用時限。**不分角色**，而且對 GPU session 來說
+        #     它是唯一的時間上限 —— 角色的 hard_limit_min 在這種 session 上不適用。
+        #
+        # ZH: 🔴 為什麼要「取代」而不是「兩條都算、先到先生效」（擁有者裁定 2026-08-29）：
+        #     學生的 hard_limit_min 是 90 分，比 GPU 的 120 短。兩條都算的話，
+        #     設定寫著 120 而學生實際上 90 分就被關 —— 設定值與實際行為不一致，
+        #     而畫面上的倒數還是照 120 算的，使用者會在剩 30 分時突然被關掉。
+        #
+        # ZH: ⚠ 閒置逾時**仍然適用**（下面那段）。閒置的人佔著卡更該早點收回，
+        #     那條規則對 GPU 只會讓卡更早釋放，不會相反。
+        gpu_max = _gpu_max_minutes(db) if session.gpu_index is not None else 0
+        if gpu_max and started:
+            if (now - started).total_seconds() >= gpu_max * 60:
                 stop_session(db, session.user_id, reason="gpu_time_limit",
                              session=session.session_name)
                 closed += 1
                 continue
 
+        # ZH: v3.9 每日累計額度用完 —— **執行中也要收**。
+        #     `can_start_session` 只擋「開新的」，開著不關就永遠不會被檢查到；
+        #     教職員的 hard_limit_min 是 None，於是一個 session 可以跑到天荒地老，
+        #     而畫面上「今日剩餘 0 分」就這樣一直寫著。
+        # ZH: ⚠ 額度是**停止時**才累加的（increment_usage），所以還在跑的這一段
+        #     不在 total_seconds 裡 —— 要自己加上去，不然永遠差最後一段。
+        daily_min = limits.get("daily_limit_min")
+        if daily_min and started:
+            used = quota_service.get_today_usage(db, session.user_id).total_seconds or 0
+            used += int((now - started).total_seconds())
+            if used >= daily_min * 60:
+                stop_session(db, session.user_id, reason="daily_limit_reached",
+                             session=session.session_name)
+                closed += 1
+                continue
+
         # Hard limit 檢查
-        hard_min = limits.get("hard_limit_min")
+        # ZH: ⚠ GPU session 不走這裡（上面已經 continue 掉，或 gpu_max=0 才會落下來）。
+        hard_min = limits.get("hard_limit_min") if not gpu_max else None
         if hard_min and started:
             if (now - started).total_seconds() >= hard_min * 60:
                 # ZH: 🔴 一定要指名存檔。不帶的話預設是 default ——
