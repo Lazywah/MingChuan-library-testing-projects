@@ -45,7 +45,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 RUN curl -fsSL https://go.dev/dl/go1.22.0.linux-amd64.tar.gz | tar -xz -C /usr/local
 
 # ============ Miniconda ============
-RUN curl -fsSL https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh -o /tmp/miniconda.sh \
+RUN curl -fsSL https://repo.anaconda.com/miniconda/Miniconda3-py313_26.5.3-2-Linux-x86_64.sh -o /tmp/miniconda.sh \
     && bash /tmp/miniconda.sh -b -p /opt/conda && rm /tmp/miniconda.sh \
     && /opt/conda/bin/conda config --system --set auto_update_conda false \
     && /opt/conda/bin/conda clean -afy

@@ -33,9 +33,17 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && apt-get update && apt-get install -y --no-install-recommends gh \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 
-# ZH: 安裝 Miniconda3 (Python 3.11)
-# EN: Install Miniconda3 with Python 3.11
-RUN curl -fsSL https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh -o /tmp/miniconda.sh \
+# ZH: 安裝 Miniconda3（**釘住 py313**，2026-08-30 實測為 Python 3.13.14）
+#     🔴 不要改回 `Miniconda3-latest` —— 那是會漂的標的。2026-08 它從 3.13 漂到 3.14，
+#     而 torch 2.7.0 / TF 2.21 都沒有 cp314 wheel，於是 pytorch、pytorch-legacy、
+#     tensorflow 三個 image 同時建不起來（`No matching distribution found for torch==2.7.0`）。
+#     這是同一個根因第二次發作：上一次是 TF 沒有 cp313 wheel，當時逐案升 TF 版本解掉，
+#     沒有人處理「latest 會漂」本身，所以它換個形狀又回來了。
+#     要升 Python 時，請**連同 torch / TF 的 wheel 相容性一起評估**再換這個檔名。
+# EN: Pin Miniconda to the py313 build (measured: Python 3.13.14 on 2026-08-30).
+#     Do NOT revert to `Miniconda3-latest` — it drifted 3.13 → 3.14 in 2026-08 and
+#     broke pytorch / pytorch-legacy / tensorflow (no cp314 wheels).
+RUN curl -fsSL https://repo.anaconda.com/miniconda/Miniconda3-py313_26.5.3-2-Linux-x86_64.sh -o /tmp/miniconda.sh \
     && bash /tmp/miniconda.sh -b -p /opt/conda \
     && rm /tmp/miniconda.sh \
     && /opt/conda/bin/conda config --system --set auto_update_conda false \

@@ -444,6 +444,32 @@ def check_python_compat():
     return PASS, "全部 .py 在 Python 3.9 下都編得過"
 
 
+def check_dockerfile_pins():
+    """ZH: base image 的 Dockerfile 有沒有抓「會漂的標的」（latest）。
+
+    ZH: 為什麼列進部署前健檢：實際發生過兩次，同一個根因換了個形狀 ——
+        `Miniconda3-latest` 在 2026-08 從 Python 3.13 漂到 3.14，
+        而 torch 2.7.0 / TF 2.21 都沒有 cp314 wheel，於是 pytorch、
+        pytorch-legacy、tensorflow 三個 image 同時建不起來。
+
+    ZH: 🔴 這類缺陷**不會在寫程式的當下爆**：Dockerfile 一個字都沒改，
+        昨天建得起來、今天建不起來，差別只在上游把 latest 指到別的地方。
+        而開發機留著舊 image，所以那台永遠不會重現。
+
+    @node scripts/deploy_check.py::check_dockerfile_pins
+    """
+    script = SCRIPTS_DIR / "check_dockerfile_pins.py"
+    if not script.exists():
+        return WARN, "找不到 check_dockerfile_pins.py，略過"
+    r = subprocess.run([sys.executable, str(script)], capture_output=True,
+                       text=True, encoding="utf-8", errors="replace")
+    out = r.stdout or ""
+    if r.returncode != 0:
+        first = next((l.strip() for l in out.splitlines() if l.strip().startswith("-")), "")
+        return FAIL, f"base image 抓了會漂的標的 → python scripts/check_dockerfile_pins.py　{first}"
+    return PASS, "base image 的 Dockerfile 都釘住了版本"
+
+
 def check_nginx_routes():
     """ZH: main.py 挂的 API 前綴，nginx :80 有沒有對應的 location。
 
@@ -606,6 +632,7 @@ def main():
         ("JS 語法",        check_js_syntax()),
         ("nginx 路由",     check_nginx_routes()),
         ("Python 相容",    check_python_compat()),
+        ("base image 釘版", check_dockerfile_pins()),
         ("下拉當布林",     check_select_bool()),
         ("錯誤訊息中文",   check_error_messages()),
         ("HTML 中文標記",  check_untranslated_html()),

@@ -3,7 +3,8 @@
 # EN: aibase/tensorflow:2026-spring — TensorFlow 2.21 + GPU support
 # ==============================================================================
 # 為什麼是 2.21 而非 2.15 / 2.19？
-#   - common-tools 用 Miniconda3-latest → 2026 年實測為 Python 3.13
+#   - common-tools 釘住 Miniconda3-py313 → 實測為 Python 3.13
+#     （原本是 Miniconda3-latest，2026-08 漂到 3.14 就沒有任何 TF wheel 可裝了）
 #   - TF 各版本 wheel 對應 Python：
 #       2.15 (2023-10) → cp39/cp310/cp311      (差兩版)
 #       2.19 (2025-03) → cp39 ~ cp312          (差一版)
