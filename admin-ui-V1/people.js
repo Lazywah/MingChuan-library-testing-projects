@@ -30,6 +30,21 @@
 
     function $(id) { return document.getElementById(id); }
 
+    /* ZH: 組織名稱的中英挑選（v3.9，擁有者裁定 2026-08-30）。
+     *
+     * ZH: 規則：**英文介面且有英文名才用英文，否則一律中文。**
+     *     與公告的 pickLang、models 的 name_en 同一條規則。
+     * ZH: 🔴 判斷用 truthy 不是 `!= null` —— 空字串也算沒有。
+     *     後端已經把空的正規化成 None，但前端不假設後端一定做對：
+     *     漏掉的話畫面上會出現**空白的學系欄**，而且不會有錯誤。
+     * ZH: ⚠ 行政單位**沒有**英文名可挑（後端刻意不送 unit_en，只有 53/97）——
+     *     那一欄一律中文，不是漏做。
+     */
+    function orgName(zh, en) {
+        var isEn = (window.Prefs && window.Prefs.get().ui_lang) === 'en';
+        return (isEn && en) || zh || '';
+    }
+
     function token() {
         return sessionStorage.getItem('ai_hud_token') || localStorage.getItem('ai_hud_token');
     }
@@ -149,7 +164,7 @@
                     + '" data-id="' + esc(u.id) + '" tabindex="0">'
                     + '<td>' + esc(u.username) + '</td>'
                     + '<td>' + esc(shownEmail(u)) + '</td>'
-                    + '<td>' + esc(u.department || '—') + '</td>'
+                    + '<td>' + esc(orgName(u.department, u.department_en) || '—') + '</td>'
                     + '<td>' + esc(T('role_' + u.role, u.role)) + '</td>'
                     + '<td>' + stateCell(u) + '</td>'
                     + '<td>' + esc(u.auth_source || '—') + '</td>'
@@ -417,7 +432,8 @@
         return '<div class="kv"><span class="kv__k">Email</span>'
             + '<span class="kv__v">' + esc(shownEmail(u)) + '</span></div>'
             + '<div class="kv"><span class="kv__k">' + esc(T('pp_c_dept', '學系')) + '</span>'
-            + '<span class="kv__v">' + esc(u.department || '—') + '</span></div>'
+            + '<span class="kv__v">' + esc(orgName(u.department, u.department_en) || '—')
+            +      '</span></div>'
             + '<div class="kv"><span class="kv__k">' + esc(T('pp_c_role', '角色')) + '</span>'
             + '<span class="kv__v">' + esc(T('role_' + u.role, u.role)) + '</span></div>';
     }

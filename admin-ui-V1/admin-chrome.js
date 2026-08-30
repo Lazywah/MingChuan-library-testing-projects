@@ -103,14 +103,29 @@
         // ZH: 版面：只有品牌在左，導覽與帳號選單一起靠右。
         //     跟使用者端一致 —— 那邊也是「LOGO 在左，其餘全部靠右」。
         bar.innerHTML =
-            '<span class="topbar__brand" data-i18n="adm_brand">MCU AI Base 管理端</span>'
+            // ZH: 🔴 用 T() **建的時候就翻好**，不要寫中文等 applyLang 來翻。
+            //     理由見下面導覽那一段的長註解 —— 那一趟不一定會來。
+            '<span class="topbar__brand" data-i18n="adm_brand">'
+            + esc(T('adm_brand', 'MCU AI Base 管理端')) + '</span>'
             + '<span class="topbar__spacer"></span>'
-            + '<nav class="adm-nav" aria-label="管理端導覽" data-i18n-aria="adm_nav_aria">'
+            + '<nav class="adm-nav" aria-label="' + esc(T('adm_nav_aria', '管理端導覽'))
+            +      '" data-i18n-aria="adm_nav_aria">'
+            // ZH: 🔴 用 `T(n.key, n.zh)` 建，**不要**寫成 `esc(n.zh)` 等 applyLang 來翻。
+            //
+            // ZH: applyLang 這一趟不一定會來，而且**畫面上完全看不出來**：
+            //       1. prefs.js 載入時就 apply() 過一次 —— 那時導覽還不存在
+            //       2. build() 建出導覽（若寫中文，這時就是中文）
+            //       3. loadWho() → syncFrom(me)：伺服器存的語言若**與本地快取相同**，
+            //          它會 early return，**不再 apply**
+            //     於是「帳號記得是英文、滑條也顯示 EN，只有導覽是中文」。
+            //     實際回報過（2026-08-30）。
+            // ZH: ⚠ data-i18n 仍然要留 —— 之後**切換**語言時靠它重畫。
+            //     兩者是不同時機：T() 管「建出來的當下」，data-i18n 管「之後改語言」。
             + NAV.map(function (n) {
                 var cur = n.file === here;
                 return '<a class="adm-nav__item' + (cur ? ' is-current' : '') + '"'
                     + ' href="' + n.file + '"' + (cur ? ' aria-current="page"' : '')
-                    + ' data-i18n="' + n.key + '">' + esc(n.zh) + '</a>';
+                    + ' data-i18n="' + n.key + '">' + esc(T(n.key, n.zh)) + '</a>';
             }).join('')
             + '</nav>'
 

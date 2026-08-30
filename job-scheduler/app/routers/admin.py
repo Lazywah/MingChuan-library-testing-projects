@@ -460,6 +460,11 @@ def get_all_users(
     # v2.1 yaml filter: 若使用者已從 yaml 移除，從列表隱藏（DB row 仍保留）
     yaml_usernames = _yaml_mock_usernames()
 
+    # ZH: 學系 → 英文名。一次查完做成表，不要每一列查一次（500 列就是 500 次）。
+    # ZH: department 是**自由字串沒有外鍵**，所以只能靠名字對。對不到就是 None，
+    #     前端退回中文 —— 那是正常情況（打錯字、或還沒進對照表）。
+    dept_en = {d.name: d.name_en for d in db.query(models.OrgDepartment).all() if d.name_en}
+
     result = []
     for u, t in rows:
         if u.auth_source == "sso_mock" and u.username not in yaml_usernames:
@@ -477,6 +482,9 @@ def get_all_users(
                 last_login_time=u.last_login_time,
                 last_login_ip=u.last_login_ip,
                 department=u.department,
+                # ZH: ⚠ 上面那句警告就是在講這裡 —— schema 加了欄位還要在這裡帶上，
+                #     不然它會靜靜地永遠是 None。
+                department_en=dept_en.get(u.department),
                 created_at=u.created_at,
                 tokens_used=t.tokens_used if t else 0,
                 tokens_limit=t.tokens_limit if t else 0,
@@ -1653,9 +1661,22 @@ def get_analytics(
         base_q = base_q.filter(models.User.department == department)
     rows = base_q.group_by(label_col).all()
 
+    # ZH: v3.9 分組名的英文（擁有者裁定 2026-08-30）。
+    # ZH: ⚠ **只做學系與學院**。行政單位的英文名只有 53/97，做了會讓同一欄
+    #     一半英文一半中文 —— 比全中文更難讀。等補齊再把 unit 加進來。
+    group_en = {}
+    if group_by == "department":
+        group_en = {d.name: d.name_en
+                    for d in db.query(models.OrgDepartment).all() if d.name_en}
+    elif group_by == "college":
+        group_en = {d.college: d.college_en
+                    for d in db.query(models.OrgDepartment).all() if d.college_en}
+
     group_stats = [
         {
             "group": r.grp,                    # ZH: None = 未分類，文案由前端決定
+            # ZH: 對不到就是 None，前端退回中文（unit 一律是 None，見上面）。
+            "group_en": group_en.get(r.grp),
             "user_count": r.user_count,
             "total_logins": r.total_logins or 0,
             "total_tokens": r.total_tokens or 0,

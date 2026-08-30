@@ -38,6 +38,21 @@
     //     而那種差异在畫面上看不出來（只會覺得數字好像不太對）。
     var RANGE = { start: '', end: '' };
 
+    /* ZH: 組織名稱的中英挑選（v3.9，擁有者裁定 2026-08-30）。
+     *
+     * ZH: 規則：**英文介面且有英文名才用英文，否則一律中文。**
+     *     與公告的 pickLang、models 的 name_en 同一條規則。
+     * ZH: 🔴 判斷用 truthy 不是 `!= null` —— 空字串也算沒有。
+     *     後端已經把空的正規化成 None，但前端不假設後端一定做對：
+     *     漏掉的話畫面上會出現**空白的學系欄**，而且不會有錯誤。
+     * ZH: ⚠ 行政單位**沒有**英文名可挑（後端刻意不送 unit_en，只有 53/97）——
+     *     那一欄一律中文，不是漏做。
+     */
+    function orgName(zh, en) {
+        var isEn = (window.Prefs && window.Prefs.get().ui_lang) === 'en';
+        return (isEn && en) || zh || '';
+    }
+
     function rangeOn() { return !!(RANGE.start || RANGE.end); }
 
     // ZH: 「用量」有兩種量法，看的是不同的事：
@@ -937,7 +952,11 @@
                 return '<tr>'
                     // ZH: 後端對不到對照表時回 null（不是字串）——
                     //     文案在前端決定,才翻得了中英。
-                    + '<td>' + esc(r.group || T('an_unclassified', '未分類')) + '</td>'
+                    // ZH: 英文介面且該分類有英文名才用英文（見 orgName）。
+                    //     ⚠ 依「行政單位」分組時一律中文 —— 後端刻意不送英文名。
+                    + '<td>'
+                    + esc(orgName(r.group, r.group_en) || T('an_unclassified', '未分類'))
+                    + '</td>'
                     + '<td class="num">' + esc(num(r.user_count)) + '</td>'
                     // ZH: 「有用的人」寫成 45/52 而不是只寫 45 ——
                     //     分母就在旁邊，讀的人不必自己去對上一欄。

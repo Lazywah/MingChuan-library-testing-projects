@@ -583,6 +583,11 @@ class AdminUserListItem(BaseModel):
     last_login_time: Optional[UtcDatetime] = None
     last_login_ip: Optional[str] = None
     department: Optional[str] = None
+    # ZH: v3.9 學系的英文名（org_departments.name_en）。沒有對照或沒填就是 None，
+    #     前端退回中文。
+    # ZH: ⚠ **行政單位刻意沒有 unit_en**：英文名只有 53/97，做了會讓同一欄
+    #     一半英文一半中文，比全中文更難讀。等補齊再開（擁有者裁定 2026-08-30）。
+    department_en: Optional[str] = None
     created_at: Optional[UtcDatetime] = None
     tokens_used: int = 0
     tokens_limit: int = 0
