@@ -65,6 +65,24 @@ else
         echo "    ❌ code-server image build failed"
         exit 1
     fi
+
+    # code-server-gpu：GPU 版程式實驗室（疊在 aibase/pytorch 上，見其 Dockerfile 檔頭）。
+    # 🔴 2026-08-30 之前這一段不存在 —— Dockerfile 寫好了、lab_manager 的
+    #    default_gpu_image 也指著它，但沒有任何東西建它：學生在實驗室勾 GPU
+    #    就會拿到 image pull 失敗。同樣需要 repo root context（讀 vscode-extension/）。
+    echo ""
+    echo "─── Building aibase/code-server-gpu:${TAG} ───"
+    if ! docker image inspect "aibase/pytorch:${TAG}" >/dev/null 2>&1; then
+        echo "    ❌ aibase/pytorch:${TAG} not found — it is the base of code-server-gpu"
+        exit 1
+    fi
+    if docker build -t "aibase/code-server-gpu:${TAG}" \
+                    -f infrastructure/base-images/code-server-gpu/Dockerfile .; then
+        echo "    ✅ aibase/code-server-gpu:${TAG} built successfully"
+    else
+        echo "    ❌ code-server-gpu image build failed"
+        exit 1
+    fi
 fi
 
 echo ""

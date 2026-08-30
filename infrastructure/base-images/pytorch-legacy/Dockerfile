@@ -38,7 +38,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # Miniconda
-RUN curl -fsSL https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh -o /tmp/miniconda.sh \
+RUN curl -fsSL https://repo.anaconda.com/miniconda/Miniconda3-py313_26.5.3-2-Linux-x86_64.sh -o /tmp/miniconda.sh \
     && bash /tmp/miniconda.sh -b -p /opt/conda && rm /tmp/miniconda.sh \
     && /opt/conda/bin/conda config --system --set auto_update_conda false \
     && /opt/conda/bin/conda clean -afy
@@ -77,4 +77,22 @@ LABEL org.opencontainers.image.title="AI Base PyTorch Legacy" \
       aibase.framework_version="2.6" \
       aibase.cuda="11.8"
 
+# ==============================================================================
+# ZH: 開機防呆（2026-08-30，5090 實測後加）—— cu118 kernel 只到 sm_90，
+#     但在更新的卡上 `torch.cuda.is_available()` 照樣回 True、一算才炸。
+#     entrypoint 先驗 GPU 世代再 `exec "$@"`：worker 的 `docker run image bash -euc …`
+#     與互動 `docker run -it image` 兩條路徑都原樣保留（`$@` 沒給時吃 CMD）。
+#     sed 去 CR + chmod：與 code-server/Dockerfile 的 v2.1 前例相同，
+#     防 Windows checkout 把腳本翻成 CRLF。
+# EN: Boot guard — refuse to start on GPUs newer than the cu118 kernels
+#     (sm_90). See aibase-gpu-check.sh. AIBASE_MAX_SM must track the CUDA base.
+# ==============================================================================
+USER root
+COPY aibase-gpu-check.sh /usr/local/bin/aibase-gpu-check.sh
+RUN sed -i 's/\r$//' /usr/local/bin/aibase-gpu-check.sh \
+    && chmod +x /usr/local/bin/aibase-gpu-check.sh
+USER coder
+
+ENV AIBASE_MAX_SM=90
+ENTRYPOINT ["/usr/local/bin/aibase-gpu-check.sh"]
 CMD ["/bin/bash"]
