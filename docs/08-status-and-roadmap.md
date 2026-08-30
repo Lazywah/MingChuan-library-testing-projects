@@ -7,6 +7,11 @@
 | §3 v2.2 Roadmap | 排程中的下一輪 |
 | §4 長期願景 | 還沒排期的想法 |
 
+> ⚠ **維護這份文件的方式：查 `git log`，不要照記憶寫。**
+> 2026-08-30 更新時發現 §2 有一半的議題**早就不成立了**
+> （Hub 的 Coming Soon 已隨 V0 下線、`app.js` 從 1000+ 行變成 156 行），
+> 而它們在文件上還掛著。過期的待辦比沒有待辦更糟 —— 會讓人去修不存在的東西。
+
 ---
 
 ## 1. 完成的衝刺
@@ -66,120 +71,133 @@
 
 ---
 
-## 2. 已知議題（非阻擋）
+### 2026-06 ~ 08 — v2.2 ~ v3.9（196 個 commit）
+
+> 這一段太長，只列**改變了平台形狀**的事。逐項請查 `git log`。
+
+**整合**
+- **MYAI 廠商整合** —— 唯讀同步、email 綁定、交易日誌、Token 餘額、
+  低點數提醒、模型對應表、每月自動補點、**自動開通**（官方批次註冊 xlsx）
+- **SSO OIDC** —— 確認 MCU 是**自建 OIDC**（`auth.mcu.edu.tw`）不是 Entra；
+  discovery 驅動、`username_claim="sub"`。go-live 只差非程式的三項
+- **小基（RAG 助手）** —— 客服模式 + 程式家教模式；嵌入模型換 `bge-m3`、
+  對話模型換 `llama3`（前者在繁中的鑑別差距只有 +0.066，排序接近隨機）
+
+**Lab / GPU**
+- Lab 支援**多份存檔**、**互動式 GPU**（獨佔鎖）、最長借用時間與三段預警、
+  每日額度執行、磁碟配額每日量測
+- **GPU 節點管理** —— 可排程時段、開關、池別覆蓋、撞名偵測
+- 排隊時顯示位置與等待原因（只在真的在排隊時）
+
+**介面**
+- 三個 UI 版本改名 **V0 / V0.5 / V1**，根路徑導向 V1
+- 導覽列改成「首頁 + 三個分類下拉」，**MYAI 獨立成頁**（`myai.html`），
+  `provision.html` 併入後移除
+- 顯示設定（字級 / 語言 / 色系）**跟帳號走**
+- 說明小字收成**資訊 icon**（tooltip 抽成兩端共用的 `tip.js`）
+
+**管理端**
+- 系統設定頁（7 個營運旋鈕，runtime 生效）、組織對照表可編輯與匯出匯入
+- 問題回報（主旨、類別、彈窗、已回覆唯讀）
+- 公告：**中英雙版**、附件、內文網址自動變連結
+- **各系院單位的使用統計** —— 兩種比例（佔比 / 滲透率）
+
+**維運**
+- `.env.example` 單一真相 + `setup_env --check` 漂移稽核
+- `deploy_check.py` 開機前健檢
+- 一整組機械檢查：i18n、JS 語法、共用檔一致、nginx 路由、時區、
+  未翻譯中文、重複定義、錯誤訊息中文、載入的 `<script>`
+
+---
+
+## 2. 已知議題（2026-08-30 逐項查證過）
+
+### 🔴 上線前一定要處理
+
+| 項目 | 現況 | 為什麼要緊 |
+|---|---|---|
+| `myai_provision_email` = 0 | 不寄開通通知 | 學生不知道自己開通了 |
+| `myai_initial_credit` = 0 | 不轉初始點數 | 學生進去是 0 點 |
+| 告警信收件人**空的** | 完全不寄 | 系統出事沒有人知道 |
+| 退信回收 IMAP **未設定** | 沒在跑 | 寄失敗的信會永遠停在「已交付」 |
+| 廠商轉點端 **500** | 所有路徑都失敗 | 自動開通給點做不到（**廠商端問題**，錯誤報告已備妥） |
 
 ### 🟡 中優先
 
 | 議題 | 影響 | 修法 |
 |---|---|---|
-| 11 個 AI Hub 功能為 Coming Soon | 平台功能顯著不完整 | 各需不同後端（圖片生成 API、RAG 知識庫等） |
-| `batch_update_tokens` 迴圈 N+1 | 批次操作慢 | 改 SQLAlchemy bulk UPDATE |
-| 聊天模組無整合測試 | 覆蓋缺口 | 需 mock Portkey 或 httpx Mock Transport |
+| 44 個行政單位缺英文名 | 管理端英文模式下那一欄只能維持中文 | 官網上沒有，要問人 |
+| SSO 尚未 go-live | 只能用本機帳號 | 缺**非程式**三項：正式主機名、TLS+nginx:443、redirect_uri 回報 IT |
+| 台北 30 台 GPU 節點未連接 | 只有桃園一台 5090 | 真正的瓶頸是**映像頻寬**（單張 20G×30 台），台北需前哨 registry cache |
+| GPU 狀態頁尚未實作 | 使用者看不到「現在忙不忙」 | 資料齊了（`/jobs/pool-availability` 等），只差介面 |
+| 聊天模組整合測試單薄 | 覆蓋缺口 | 需 mock Portkey 或 httpx MockTransport |
 
 ### 🟢 低優先 — 技術債
 
-| 議題 | 影響 | 說明 |
-|---|---|---|
-| 真實 CAS SSO 未實作 | 只有 mock + OIDC | `sso_client.py` 有框架無 ticket 驗證 |
-| `app.js` > 1000 行 | 前端維護難度高 | 未來拆 ES6 模組 |
-| `crud.append_job_metric` bare except | 可能掩蓋錯誤 | 改 `logger.warning` |
-| 無 Alembic migration | 結構變更需重啟 | 開發階段 `Base.metadata.create_all` 可接受；上線前導入 |
-| 系統設定 — 輸入框管理 | 移除危險的「直接編輯 .env」後留下 placeholder | `routers/system.py` 已有空 router；前端 `admin-ui/index.html` 已有佔位卡 |
+| 議題 | 說明 |
+|---|---|
+| 無 Alembic migration | 現況靠 `create_all` + `database.py` 的手動 `ALTER TABLE`。⚠ **新增欄位到既有的表一定要加那一行**，漏了會在上線的資料庫上炸 |
+| 「帶 token 下載」有三份實作 | `jobs.js` / `analytics.js` / `platform.js` 各一份；`Chrome.download()` 是第四份的收斂點，但那三份沒動（改了驗不了比留著更危險） |
+| `batch_update_tokens` 迴圈 N+1 | 批次操作慢。改 bulk UPDATE |
+| CAS SSO 只有框架 | **不再需要** —— MCU 是自建 OIDC。留著的 `sso_cas` 分支是死路 |
+| 手機版頂部列佔 22% 畫面 | 固定之後折成三行（375px 時高 175px）。已試過 `nowrap`，量出來更糟 |
 
 ---
 
-## 3. v2.2 Roadmap
+## 3. 下一輪的候選
 
-> 完整文件：歷史 `docs/dev/v2.2-roadmap.md` 已合併到本檔。
+> 沒有排期。依「**做了會改變什麼**」排序，不是依難度。
 
-### 主項目：Lab 容器網路隔離
+### 使用者看得到的
 
-**問題**：所有 lab 容器掛同 `ai-platform-net`，學生 A 可從自己容器內 `curl http://cs-<other_uid>:8080/` 繞過 nginx auth_request 讀別人工作目錄。
+| 事 | 為什麼 |
+|---|---|
+| **GPU 狀態頁** | 「任務沒動」時目前無處可查。資料都有，只差介面 |
+| **未登入看得到公告** | 最需要看公告的時刻正是**登入不了**的時候。要先決定放哪一頁 |
+| 手機版頂部列 | 三選一：維持現狀 / 手機不固定 / 收合式選單 |
 
-**威脅模型評估**：教學平台、低威脅。要求攻擊者 (a) 知道對方 UUID (b) 願意在自己容器內主動 curl 別人 — 明顯異常。
+### 平台體質
 
-**解法選項**：
+| 事 | 為什麼 |
+|---|---|
+| **Lab 容器網路隔離** | 見下方。威脅低但真實 |
+| Alembic | 手動 `ALTER TABLE` 已經踩過一次「漏了就炸」 |
+| 收斂「帶 token 下載」 | 同一條規則四份實作 |
 
-| 方案 | 複雜度 | 工時 | 評估 |
-|---|---|---|---|
-| A. nginx + shared secret header + socat sidecar | 中 | 4-6 hr | code-server 原生不支援 header-based auth，需 OAuth proxy sidecar |
-| **B. per-user docker network**（推薦）| 中 | 4-6 hr | nginx 動態 join、code-server `--auth none` 仍可、不動其他元件 |
-| C. Docker swarm overlay | 高 | 8-12 hr | 跨 host 部署才有意義 |
+### Lab 容器網路隔離（原 v2.2 主項目，仍未做）
 
-**B 方案實作藍圖**：
-1. 新檔 `services/network_manager.py`：`create_user_network() / connect_nginx() / cleanup_orphan()`
-2. `lab_manager.py` `lifecycle.start()`：`network="ai-platform-net"` → `f"lab-net-{user_id}"`
-3. `stop_session()` 加 `network_manager.disconnect_and_cleanup(user_id)`
-4. scheduler 啟動 hook：`cleanup_orphan_networks()`
-5. **nginx 不用動**（DNS 仍解析 `cs-<uid>`，nginx 動態加入 user network 後仍可 proxy）
+**問題**：所有 lab 容器掛同一個 `ai-platform-net`，學生 A 可從自己容器內連到
+學生 B 的 code-server。
 
-**風險點**：
-- nginx 動態 join network → 立即 proxy 之間時序，可能需 retry
-- Orphan 清理（容器死亡但 network 沒清）
-- Docker bridge driver 預設限 30 個網路；user > 30 需 swarm overlay
+**威脅模型**：教學平台、低威脅 —— 要求攻擊者知道對方 UUID 且刻意為之。
 
-**遷移風險**：低 — 不動 nginx config / 前端 / DB schema / API；全在 lab_manager + 新檔。
+**建議解法**：per-user docker network（新檔 `services/network_manager.py`，
+`lab_manager` 啟停時建立／清理）。
 
-### 其他 v2.2 候選
+> ⚠ Docker bridge driver 預設限 30 個網路 —— 同時開超過 30 個實驗室需要
+> swarm overlay。以目前一台 5090 的規模不會遇到，台北接上之後要重新評估。
 
-- **Lab secrets 注入稽核**：誰何時讀取了 secrets（目前注入後即明文，container exec 可讀）
-- **SSO 身分 → role 自動對應**：由 IdP 提供教職員身分欄位 → `role=teacher`（⚠️ MCU 的 userinfo 目前**只回 `sub`（學號）**，無群組/身分欄位，須先與 IT 確認能否加開）（admin 仍需手動提權）
-- **Single Logout (SLO)**：OIDC RP-initiated logout，登出時順便登出 Microsoft session
-- **id_token jwks 簽章驗證**：目前未驗 RSA 簽章（信任 token endpoint 走 HTTPS）；v2.2 加 jwks + 公鑰 cache
-- **CORS 正式環境設定**：上線前必須在 `.env` 填 `CORS_ORIGINS=https://domain.com,...`
-- **批次操作 N+1 → bulk UPDATE**：admin batch tokens / batch reset
-- **Notebook 進階**：單格執行（需常駐 Kernel）、Notebook 分享 URL、資料集預覽
+### 其他候選
+
+- **Lab secrets 注入稽核** —— 誰何時讀取了 secrets（目前注入後即明文）
+- **SSO 身分 → role 自動對應** —— 由 IdP 提供教職員身分欄位
+- **id_token jwks 簽章驗證** —— 目前未驗 RSA 簽章（信任 token endpoint 走 HTTPS）
 
 ---
 
 ## 4. 長期願景（未排期）
 
-- **Slurm 整合**：大叢集 HPC 排程（目前 `gpu_client.py` 有抽象框架，~15% 進度）
-- **NVIDIA DCGM**：GPU 硬體監控 → Prometheus + Grafana
-- **JupyterHub 共存**：保留 v2.0 Lab 為主、JupyterHub 為次（針對既有使用者）
-- **Group claim → role 自動化**：見 v2.2 候選
-- **Storage 自動配額調整**：依使用者活躍度動態升降 disk_quota_gb
-- **Notebook 智慧建議**：依資料集自動推薦 hyperparams（已有部分基於檔案掃描）
-- **多語系擴充**：日文 / 韓文 / 越南文（既有 i18n 框架現成可加）
+- 台北 30 台 GPU 節點併入排程（**先解映像頻寬**，不是先解連線）
+- 跨校區的作業佇列與優先序
+- 文件庫累積到足以當教材
 
 ---
 
-## 5. 建議的立即行動
+## 5. 這份文件怎麼維護
 
-按優先序：
-
-### A. 啟動 Portkey + 填 API 金鑰
-```bash
-docker compose -f docker-compose.ai-models.yml up -d
-# 編輯 docker-compose.ai-models.yml 的 portkey environment 區
-# 填入 ANTHROPIC_API_KEY / OPENAI_API_KEY / GOOGLE_API_KEY
-```
-
-### B. 改 `batch_update_tokens` N+1（2 hr）
-```python
-# admin.py
-db.query(models.TokenUsage)\
-    .filter(models.TokenUsage.user_id.in_(payload.user_ids))\
-    .update({models.TokenUsage.tokens_limit: payload.value}, synchronize_session=False)
-```
-
-### C. 導入 Alembic（1 天）
-```bash
-pip install alembic
-alembic init migrations
-alembic revision --autogenerate -m "initial schema"
-```
-
-### D. Lab 安全強化（v2.2 主項目，4-6 hr）
-見 §3。
-
----
-
-## 6. 完整變更歷史
-
-詳細 commit-level 變更見：
-- `git log --oneline` — 所有 commit
-- [`archive/AUDIT-2026-05-14.md`](archive/AUDIT-2026-05-14.md) — 早期程式碼審查報告
-- [`archive/PLAN-v2.0-lab.md`](archive/PLAN-v2.0-lab.md) — v2.0 Lab 詳細設計
-- [`archive/PLAN-v2.1-sso-oidc.md`](archive/PLAN-v2.1-sso-oidc.md) — v2.1 SSO 詳細設計
-- [`archive/v2.1-roadmap.md`](archive/v2.1-roadmap.md) — v2.1 預先計畫（已實作完成）
+1. **查 `git log`，不要照記憶寫。**
+2. 每一項議題寫的時候**去程式碼確認它還在**。2026-08-30 這次就刪掉了
+   四項早就不存在的（Hub Coming Soon、`app.js` 過長、系統設定輸入框、
+   CAS 未實作）。
+3. 「刻意不做」的事**不要寫進議題** —— 那些在
+   [12-功能說明.md](12-功能說明.md) §3。混在一起會讓人去「修」一個決定。
