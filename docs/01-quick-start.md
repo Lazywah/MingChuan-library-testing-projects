@@ -77,17 +77,17 @@ python scripts/setup_env.py
 
 ## 5. 啟動服務
 
-> 🔴 **兩層有先後：AI 推理層要先起，否則第一次 `up` 一定失敗。**
-> `job-scheduler` 開機時會連 Ollama 匯入知識庫，而這段在服務開始聽埠**之前**。
-> Ollama 不在時每個片段要等 DNS 逾時（實測 ~2.3 秒 × 40 片段 ≈ 93 秒），
-> 但 healthcheck 是 `start_period=10s` + `interval=30s` + `retries=3`（約 70 秒判死），
-> 於是 nginx 的 `depends_on: service_healthy` 直接放棄：
+> **兩層有先後：AI 推理層先起，核心層後起。**
+> `job-scheduler` 開機時會連 Ollama 匯入知識庫。先起 Ollama 的話，
+> 知識庫在服務就緒後幾十秒內就補完；反過來的話它會匯不到東西，
+> 小基要等到你補做 reindex 或重啟 scheduler 才有資料。
 >
-> ```
-> dependency failed to start: container ai-platform-scheduler is unhealthy
-> ```
->
-> 先起 Ollama 後同樣 40 次失敗變成秒回的 404，啟動降到 2 秒、冷啟動一次過（2026-08-22 實測）。
+> ⚠️ **v3.8 之前這個順序是「錯了就起不來」**：匯入卡在服務開始聽埠**之前**，
+> Ollama 不在時 40 個片段各等一次 DNS 逾時（實測 ~2.3 秒）≈ 93 秒，
+> 超過 healthcheck 判死的約 70 秒，於是 nginx 的 `depends_on: service_healthy`
+> 直接放棄，整個平台起不來。v3.8 把匯入搬進背景 task
+> （`main.py::lifespan._ingest_kb_in_background`）之後就不會了 ——
+> 順序仍然建議照做，但**弄反不再是故障**。
 
 ### 5.1 先起 AI 推理層（Portkey + Ollama）
 
@@ -125,9 +125,10 @@ docker compose ps
 curl http://localhost/health      # → "OK"
 ```
 
-> **已經先跑了核心層才看到這段？** 再跑一次 `docker compose up -d` 就會把 nginx 補起來
-> （scheduler 那時已經 healthy）。知識庫則是空的，補跑 `docker compose restart job-scheduler`，
+> **已經先跑了核心層才看到這段？** 平台會正常起來，只是知識庫是空的。
+> 起完 Ollama 並 pull 好模型之後，`docker compose restart job-scheduler` 就會補匯入，
 > 或用 admin token 打 `POST /api/v1/assistant/reindex`。
+> 匯完沒有？看 `GET /api/v1/assistant/status` 的 `kb_ready` 與 `chunks`。
 
 ---
 
