@@ -619,3 +619,21 @@ html.aibot-docked #aibot-fab { display: none; }
 .post__file:hover:not(:disabled) { background-color: var(--surface-2); border-color: var(--link); }
 .post__file:focus-visible { outline: var(--focus-ring); outline-offset: 2px; }
 .post__file:disabled { opacity: 0.6; cursor: default; }
+
+/* ==========================================================================
+ * ZH: 頂部列固定在畫面上（v3.9，擁有者裁定 2026-08-30）
+ *
+ * ZH: 用 `sticky` 不用 `fixed`：sticky 仍然佔著版面空間，所以底下的內容
+ *     不必補一段 padding 去讓位。**而讓位的高度是會變的** ——
+ *     這條列在窄視窗會折成兩三行（實測 375px 時高 175px），
+ *     用 fixed 的話那個補償值得跟著算，算錯就是內容被蓋住或多一塊空白。
+ *
+ * ZH: 放 web.css 不放 styles.css —— styles.css 與管理端逐位元組相同，
+ *     而擁有者只要求使用者端。管理端要的話再說。
+ *
+ * ZH: z-index 30 的位置：高於頁面內容（沒有 z-index），低於小基（900）
+ *     與初次設定彈窗（1000）。導覽的下拉與泡泡是 20，它們在這一層**裡面**，
+ *     所以照樣蓋得住內容。
+ * ZH: .topbar 本來就有底色與下框線 —— 沒有底色的 sticky 會透出底下的字。
+ * ========================================================================== */
+.topbar { position: sticky; top: 0; z-index: 30; }
