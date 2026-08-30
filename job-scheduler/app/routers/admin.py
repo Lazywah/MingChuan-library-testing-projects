@@ -31,9 +31,9 @@ ZH: 端點清單：
 from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, Query, Body, Request
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
-from sqlalchemy import func
+from sqlalchemy import case, func
 from sqlalchemy.exc import IntegrityError
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta, timezone, date as ddate, time as dtime
 from typing import Any, Optional
 import csv
 import io
@@ -1586,10 +1586,27 @@ def get_user_analytics(
     }
 
 
+def _analytics_day(v):
+    """ZH: "YYYY-MM-DD" → date；空的或格式不對回 None（不要拋，回退成「不篩」）。
+
+    ZH: ⚠ 格式錯就當成沒給，不要回 400 —— 這個參數來自網址列，
+        手打錯一個字就整頁壞掉太脆。看得到全部資料，比看到一個錯誤畫面好。
+    """
+    if not v:
+        return None
+    try:
+        return ddate.fromisoformat(str(v)[:10])
+    except ValueError:
+        return None
+
+
 @router.get("/analytics")
 def get_analytics(
     group_by: str = Query("department", description="department / college / unit"),
     department: Optional[str] = Query("all"),
+    days: int = Query(30, ge=0, le=3650, description="ZH: 0 = 全部 | EN: 0 = all time"),
+    start: Optional[str] = Query(None, description="YYYY-MM-DD"),
+    end: Optional[str] = Query(None, description="YYYY-MM-DD"),
     db: Session = Depends(get_db),
     _: models.User = Depends(require_admin),
 ) -> Any:
@@ -1646,6 +1663,171 @@ def get_analytics(
         for r in rows
     ]
 
+    # ══════════════════════════════════════════════════════════════════
+    # ZH: v3.9 各分類的實際使用（擁有者裁定 2026-08-30）
+    #
+    # ZH: 上面那三個數字回答的是「有沒有人」與「有沒有登入」。
+    #     下面這些回答的是**「有沒有在用」** —— 那是完全不同的問題，
+    #     而後者才決定要去哪個系推廣。
+    #
+    # ZH: 🔴 每一項都由 user_id 接回 users.department，再依 group_by 分組。
+    #     所以改組織對照表就會全站生效，不必回填任何一筆使用紀錄。
+    # ══════════════════════════════════════════════════════════════════
+    d_start, d_end = _analytics_day(start), _analytics_day(end)
+    if d_start and d_end and d_start > d_end:
+        # ZH: 選反了就幫他換過來，不要回一張空表（與 MYAI 那支同一個做法）
+        d_start, d_end = d_end, d_start
+
+    def _win(q, col, *, naive_vendor_time: bool = False):
+        """ZH: 套上期間。
+
+        ZH: 🔴 `naive_vendor_time` 是給 myai_transactions 用的 ——
+            那張表的 occurred_at 是**廠商當地時間**不是 UTC。
+            用 UTC 的 now() 去比會差 8 小時，日界附近的筆數就會跑掉。
+        """
+        now = datetime.now() if naive_vendor_time else datetime.now(timezone.utc)
+        if d_start or d_end:
+            if d_start:
+                q = q.filter(col >= datetime.combine(d_start, dtime.min))
+            if d_end:
+                q = q.filter(col <= datetime.combine(d_end, dtime.max))
+        elif days > 0:
+            q = q.filter(col >= now - timedelta(days=days))
+        return q
+
+    def _by_group(q, join_user_on):
+        """ZH: 把任何一張帶 user_id 的表接回分組欄位。"""
+        q = q.join(models.User, join_user_on == models.User.id)
+        if group_by == "college":
+            q = q.outerjoin(models.OrgDepartment,
+                            models.User.department == models.OrgDepartment.name)
+        if department != "all":
+            q = q.filter(models.User.department == department)
+        return q.group_by(label_col)
+
+    def _counts(model, user_col, time_col, *, extra=None, naive=False):
+        """ZH: {分組 -> 筆數}。統一走這一支，四張表就不會各寫一份 join。"""
+        # ZH: 🔴 `select_from` 不能省。第一個 query 欄位是 users.department，
+        #     SQLAlchemy 會據此把 `users` 當成 FROM，接著 _by_group 又 join 一次
+        #     users —— 於是 `ambiguous column name: users.department`。
+        #     明確講出「從這張事件表出發」就不會猜。
+        q = (db.query(label_col.label("grp"), func.count(model.id).label("n"))
+             .select_from(model))
+        q = _by_group(q, user_col)
+        q = _win(q, time_col, naive_vendor_time=naive)
+        if extra is not None:
+            q = q.filter(extra)
+        return {r.grp: r.n for r in q.all()}
+
+    def _actives(model, user_col, time_col, *, naive=False):
+        """ZH: {分組 -> 有幾個**不同的人**}。滲透率的分子。"""
+        q = (db.query(label_col.label("grp"),
+                      func.count(func.distinct(user_col)).label("n"))
+             .select_from(model))
+        q = _by_group(q, user_col)
+        q = _win(q, time_col, naive_vendor_time=naive)
+        return {r.grp: r.n for r in q.all()}
+
+    visits = _counts(models.MyaiVisit, models.MyaiVisit.user_id,
+                     models.MyaiVisit.occurred_at)
+    jobs = _counts(models.TrainingJob, models.TrainingJob.user_id,
+                   models.TrainingJob.created_at)
+    lab_gpu = _counts(models.LabUsageLog, models.LabUsageLog.user_id,
+                      models.LabUsageLog.started_at,
+                      extra=(models.LabUsageLog.used_gpu == 1))
+    lab_cpu = _counts(models.LabUsageLog, models.LabUsageLog.user_id,
+                      models.LabUsageLog.started_at,
+                      extra=(models.LabUsageLog.used_gpu == 0))
+
+    # ZH: MYAI 的交易接不到 user_id —— 要繞 external_ai_accounts 的綁定表
+    #     （vendor_sn 對得起來的才算）。沒綁定的廠商帳號算不進任何分類，
+    #     那是**事實**不是漏算：平台不知道那個帳號是誰的。
+    tx_q = (db.query(label_col.label("grp"),
+                     func.count(models.MyaiTransaction.id).label("n"),
+                     # ZH: 🔴 **在 SQL 裡就只加負的**。先全部加總再取負值是錯的：
+                     #     `-500 + 9000` 會變成 +8500，取 min(0, …) 之後是 0 ——
+                     #     於是「有用又被補過點的系」顯示成完全沒用。
+                     #     第一版就是這樣寫的，測試抓到了。
+                     func.sum(case(
+                         (models.MyaiTransaction.points_delta < 0,
+                          -models.MyaiTransaction.points_delta),
+                         else_=0)).label("pts"))
+            .select_from(models.MyaiTransaction)
+            .join(models.ExternalAiAccount,
+                  models.MyaiTransaction.vendor_sn == models.ExternalAiAccount.myai_vendor_sn))
+    tx_q = _by_group(tx_q, models.ExternalAiAccount.user_id)
+    tx_q = _win(tx_q, models.MyaiTransaction.occurred_at, naive_vendor_time=True)
+    tx_rows = {r.grp: (r.n, r.pts or 0) for r in tx_q.all()}
+
+    myai_actives_q = (db.query(label_col.label("grp"),
+                               func.count(func.distinct(models.ExternalAiAccount.user_id)).label("n"))
+                      .select_from(models.MyaiTransaction)
+                      .join(models.ExternalAiAccount,
+                            models.MyaiTransaction.vendor_sn == models.ExternalAiAccount.myai_vendor_sn))
+    myai_actives_q = _by_group(myai_actives_q, models.ExternalAiAccount.user_id)
+    myai_actives_q = _win(myai_actives_q, models.MyaiTransaction.occurred_at,
+                          naive_vendor_time=True)
+    myai_actives = {r.grp: r.n for r in myai_actives_q.all()}
+
+    visit_actives = _actives(models.MyaiVisit, models.MyaiVisit.user_id,
+                             models.MyaiVisit.occurred_at)
+    job_actives = _actives(models.TrainingJob, models.TrainingJob.user_id,
+                           models.TrainingJob.created_at)
+    lab_actives = _actives(models.LabUsageLog, models.LabUsageLog.user_id,
+                           models.LabUsageLog.started_at)
+
+    for g in group_stats:
+        k = g["group"]
+        n_tx, pts = tx_rows.get(k, (0, 0))
+        g["myai_tx"] = n_tx
+        # ZH: pts 已經是「用掉的點數」（正數）—— 只加負的 delta，見上面的 case。
+        #     加點（管理員補點）不是使用量，混進來會讓「補過點的系」
+        #     看起來用得特別多，而那正好是用得少所以要補的那些系。
+        g["myai_points"] = int(pts or 0)
+        g["myai_visits"] = visits.get(k, 0)
+        g["jobs"] = jobs.get(k, 0)
+        g["lab_gpu"] = lab_gpu.get(k, 0)
+        g["lab_cpu"] = lab_cpu.get(k, 0)
+        # ZH: 🔴 滲透率的分子是「**至少做過一件事**的人數」，不是各項相加 ——
+        #     同一個人既跳轉又開實驗室，相加會把他算兩次，
+        #     於是「有用的人」可能超過「總人數」。
+        #     ⚠ 這裡取各項的最大值當**下限**（無法在 SQL 端跨表 distinct union
+        #     而不引入一個很貴的子查詢）。所以這個數字是保守的：
+        #     真實的活躍人數 ≥ 這個值。欄位名用 active_users_min 講明它是下限。
+        g["active_users_min"] = max(
+            myai_actives.get(k, 0), visit_actives.get(k, 0),
+            job_actives.get(k, 0), lab_actives.get(k, 0),
+        )
+
+    # ZH: 🔴 兩種比例的分母不同，前端不要自己算 —— 算錯了看不出來。
+    #       share_*  = 這一組佔全平台的幾 %（大系一定贏）
+    #       adoption = 這一組有多少 % 的人在用（滲透率，看得出哪裡還沒推開）
+    # ZH: ⚠ adoption 的分母是「**平台上**這一組的人數」，不是全系人數。
+    #     SSO 是第一次登入才建帳號，所以完全沒來過的人不在分母裡 ——
+    #     這個數字會**高估**滲透率，文案上要講明。
+    def _share(v, total):
+        return round(v * 100.0 / total, 1) if total else 0.0
+
+    tot_points = sum(g["myai_points"] for g in group_stats)
+    tot_visits = sum(g["myai_visits"] for g in group_stats)
+    tot_jobs = sum(g["jobs"] for g in group_stats)
+    tot_lab = sum(g["lab_gpu"] + g["lab_cpu"] for g in group_stats)
+    for g in group_stats:
+        g["share_points"] = _share(g["myai_points"], tot_points)
+        g["share_visits"] = _share(g["myai_visits"], tot_visits)
+        g["share_jobs"] = _share(g["jobs"], tot_jobs)
+        g["share_lab"] = _share(g["lab_gpu"] + g["lab_cpu"], tot_lab)
+        g["adoption"] = _share(g["active_users_min"], g["user_count"])
+
+    # ZH: 這兩張表是 v3.9 才開始記的，**沒有歷史**。選的期間比第一筆還早時，
+    #     前端要能講出「自 X 日起才有資料」—— 不講的話那兩欄的 0 會被當成
+    #     「這個系都沒在用」，而其實是「那時候還沒開始記」。
+    # ZH: 日期由資料本身推，不寫死 —— 寫死的話換一台機器部署就錯了。
+    tracking_since = {
+        "myai_visits": db.query(func.min(models.MyaiVisit.occurred_at)).scalar(),
+        "lab_usage": db.query(func.min(models.LabUsageLog.started_at)).scalar(),
+    }
+
     tool_q = db.query(
         models.ChatHistory.tool_type,
         func.count(models.ChatHistory.id).label("usage_count"),
@@ -1659,6 +1841,12 @@ def get_analytics(
     return {
         "group_by": group_by,
         "department_filter": department,
+        "period": {"days": days, "start": start, "end": end},
+        # ZH: 兩張新表的第一筆時間（沒有資料就是 None）。見上面的說明。
+        "tracking_since": {
+            k: (v.isoformat() if v is not None else None)
+            for k, v in tracking_since.items()
+        },
         "group_stats": group_stats,
         "tools_breakdown": [
             {"tool_type": s.tool_type or "chat", "usage_count": s.usage_count}
