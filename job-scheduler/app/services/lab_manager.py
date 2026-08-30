@@ -796,6 +796,15 @@ def start_session(db: Session, user_id: str, base_image: Optional[str] = None,
     row.gpu_index = gpu_index
     row.started_at = datetime.now(timezone.utc)
     row.last_activity = datetime.now(timezone.utc)
+    # ZH: v3.9 每一次啟動記一列（統計用，見 models.LabUsageLog）。
+    # ZH: 🔴 **不能**事後從 lab_sessions 算 —— 那張表每次啟動都覆寫同一列，
+    #     只留得住最後一次。這裡是唯一記得住「開過幾次」的地方。
+    # ZH: used_gpu 記的是**這一次**有沒有借到卡，不是「這個人有沒有用過 GPU」。
+    db.add(models.LabUsageLog(
+        user_id=user_id,
+        used_gpu=1 if gpu_index is not None else 0,
+        gpu_index=gpu_index,
+    ))
     if not existing:
         db.add(row)
     db.commit()
@@ -875,6 +884,20 @@ def stop_session(db: Session, user_id: str, reason: str = "user_requested",
 
     row.status = "stopped"
     row.container_id = None
+    # ZH: v3.9 收掉這一次的使用紀錄（統計用，見 models.LabUsageLog）。
+    # ZH: ⚠ 收「這個人最新一列還沒結束的」。用 user_id 不用 session 名 ——
+    #     `lab_sessions` 會被 reuse，一列對多次；log 是一次一列，兩者對不起來。
+    # ZH: 收不到不要讓停止失敗 —— 統計比不上「使用者關得掉他的實驗室」。
+    try:
+        _log = (db.query(models.LabUsageLog)
+                .filter(models.LabUsageLog.user_id == user_id,
+                        models.LabUsageLog.ended_at.is_(None))
+                .order_by(models.LabUsageLog.started_at.desc())
+                .first())
+        if _log:
+            _log.ended_at = datetime.now(timezone.utc)
+    except Exception:                                    # pragma: no cover
+        logger.warning("ZH: Lab 使用紀錄收尾失敗（不影響停止）")
     # ZH: v3.9 還卡。`gpus_held_by_labs` 只看 starting/running，所以不清也不會漏派；
     #     但留著舊卡號會讓查問題的人看不出這一列現在到底佔不佔卡，
     #     而且下次 reuse 這一列時會帶著它。清掉最不會騙人。

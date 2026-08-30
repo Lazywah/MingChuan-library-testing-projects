@@ -63,6 +63,15 @@ async function goMyai() {
     box.hidden = false;
     box.textContent = T('myai_going', '正在帶你前往 MYAI…（會另開分頁，並需要登入一次）');
 
+    // ZH: v3.9 記一次跳轉（統計用）。
+    // ZH: 🔴 **不 await**，而且失敗完全不管 —— 這一步是統計，
+    //     讓它擋在「開新分頁」前面的話，後端慢一秒使用者就等一秒，
+    //     後端掛掉他就去不了 MYAI。統計比不上那件事。
+    // ZH: ⚠ 按下去就記，不管新分頁後來有沒有被瀏覽器擋掉 ——
+    //     那是「他想去」的事實。
+    fetch(`${API}/external-ai/visit`, { method: 'POST', headers: authHeaders() })
+        .catch(() => { /* 統計失敗不影響任何事 */ });
+
     let logoutUrl = 'https://www.myai168.com/mcu/ai/user/logout_info';
     try {
         const me = await get('/external-ai/me');

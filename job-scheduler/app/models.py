@@ -686,6 +686,60 @@ class AnnouncementFile(Base):
     uploaded_at    = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
 
+class MyaiVisit(Base):
+    """ZH: 使用者從平台跳去 MYAI 的紀錄（v3.9）| EN: Platform → MYAI redirect log
+
+    ZH: 為什麼要有這張表：`goMyai()` 只是開一個新分頁，**不留下任何痕跡**。
+        於是「有多少人從平台走進 MYAI」在這之前是查不到的。
+
+    ZH: ⚠ 這與 `myai_transactions` 測的**不是同一件事**：
+          這張表 = 有多少人走進去（入口流量）
+          交易日誌 = 進去之後真的用了幾次（實際使用）
+        一個人跳進去發呆五分鐘就關掉，這裡 +1、交易 +0。
+
+    ZH: 🔴 **不存 IP**。統計要回答的是「哪個系在用」，而那由 user_id 就推得出來
+        （users.department → org_departments）。存 IP 對這個問題沒有任何貢獻，
+        只是多留一份可以反推位置的資料。與問題回報同一條原則。
+
+    ZH: ⚠ 按下按鈕就記，**不管新分頁有沒有被瀏覽器擋掉** ——
+        那是「他想去」的事實，而彈窗被擋是我們這邊的問題，
+        不該讓他從統計裡消失。
+    """
+    __tablename__ = "myai_visits"
+
+    id          = Column(Integer, primary_key=True, autoincrement=True)
+    user_id     = Column(String, ForeignKey("users.id", ondelete="CASCADE"),
+                         nullable=False, index=True)
+    occurred_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), index=True)
+
+
+class LabUsageLog(Base):
+    """ZH: Lab 每一次啟動的紀錄（v3.9）| EN: One row per lab session start
+
+    ZH: 🔴 為什麼不能用 `lab_sessions` 算：**那張表是狀態不是歷史**。
+        每次啟動都覆寫同一列的 `started_at` 與 `gpu_index`，停止時把
+        `gpu_index` 清成 None。所以它回答的是「**現在**有幾張卡被借走」，
+        不是「這段期間被借了幾次」。拿它做日期分群會得到一個看起來合理
+        但其實錯的數字。
+
+    ZH: ⚠ `user_session_usage` 有每日的 session_count，但**不分 CPU/GPU** ——
+        開實驗室寫程式與借卡跑訓練被算在一起。這張表就是為了分開它們。
+
+    ZH: `ended_at` 為 NULL = 還在跑（或平台在它結束前重啟過）。
+        算時長時要把 NULL 排除掉，不要當成 0 —— 那會把還在跑的長工作
+        算成「用了 0 秒」。
+    """
+    __tablename__ = "lab_usage_log"
+
+    id         = Column(Integer, primary_key=True, autoincrement=True)
+    user_id    = Column(String, ForeignKey("users.id", ondelete="CASCADE"),
+                        nullable=False, index=True)
+    started_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), index=True)
+    ended_at   = Column(DateTime, nullable=True)
+    used_gpu   = Column(Integer, default=0, index=True)   # ZH: 1 = 這次借了 GPU
+    gpu_index  = Column(Integer, nullable=True)
+
+
 # ==============================================================================
 # ZH: 表 14: UserSessionUsage - 使用者每日 session 累積時長
 # EN: Table 14: UserSessionUsage - Per-user daily session usage

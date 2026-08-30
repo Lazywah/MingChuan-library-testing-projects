@@ -215,6 +215,34 @@ from ..auth import require_admin  # noqa: E402  ZH: 位置貼著原本的定義,
 # ZH: 使用者端 | EN: User-facing
 # ==============================================================================
 
+
+@router.post("/visit", status_code=204)
+def record_visit(
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+) -> None:
+    """ZH: 記一次「從平台跳去 MYAI」| EN: Record one platform → MYAI redirect
+
+    ZH: 這支存在的理由：`goMyai()` 只是開一個新分頁，在這之前**不留任何痕跡**，
+        所以「哪個系在用 MYAI」查不到入口流量這一面。
+
+    ZH: 🔴 **不存 IP**。要回答的是「哪個系在用」，而那由 user_id 推得出來
+        （users.department → org_departments）。存 IP 對這個問題沒有貢獻，
+        只是多留一份可以反推位置的資料。與問題回報同一條原則。
+
+    ZH: ⚠ 記不起來**不要讓使用者的動作失敗**。前端是「先記、再開分頁」，
+        這支回 500 的話他就去不了 MYAI 了 —— 統計比不上那件事。
+        所以吞掉例外，回 204。
+
+    @node job-scheduler/app/routers/external_ai.py::record_visit
+    """
+    try:
+        db.add(models.MyaiVisit(user_id=current_user.id))
+        db.commit()
+    except Exception:                                     # pragma: no cover
+        db.rollback()
+        logger.warning("ZH: MYAI 跳轉紀錄寫入失敗（不影響使用者）")
+
 @router.get("/me", response_model=schemas.ExternalAiMe)
 def get_my_external_ai(
     db: Session = Depends(get_db),
