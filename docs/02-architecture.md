@@ -413,6 +413,27 @@ erDiagram
 
 ---
 
+### 4.1 ER 圖之外的表（依用途分）
+
+上面的圖只畫**核心表**。以下是後來加的，各自解決一個具體問題：
+
+| 表 | 為什麼存在 |
+|---|---|
+| `announcements` | 公告。`title_en` / `body_en` 為英文版，**空的退回中文** |
+| `announcement_files` | 公告附件。`filename`（原始，顯示用）與 `stored_name`（磁碟上的安全檔名）**刻意分開** |
+| `myai_visits` | 「從平台跳去 MYAI」的紀錄。⚠ **不存 IP** —— 統計要回答的是「哪個系在用」，`user_id` 就推得出來 |
+| `lab_usage_log` | Lab 每一次啟動一列，含 `used_gpu`。🔴 **不能用 `lab_sessions` 代替** —— 那張表每次啟動都覆寫同一列，只答得出「現在」不是「這段期間」 |
+| `user_session_usage` | 每人每日的 Lab 累積時長與次數（**不分 CPU/GPU**，那是 `lab_usage_log` 的工作） |
+| `org_departments` / `org_units` | 學系→學院／行政單位對照。`name_en` 為英文名 |
+| `myai_accounts` / `myai_transactions` | 廠商端的帳號與交易日誌 |
+| `external_ai_accounts` | 平台帳號 ↔ 廠商帳號的綁定（`myai_transactions` 要靠它才接得回 `user_id`） |
+
+> ⚠ **新增欄位到既有的表**要在 `database.py` 的手動遷移區加 `ALTER TABLE` ——
+> `create_all` 只建新表，不會替既有的表加欄位。漏了的話，已經上線的資料庫
+> 讀那個欄位會直接炸。
+
+---
+
 ## 5. 檔案結構樹
 
 ```mermaid

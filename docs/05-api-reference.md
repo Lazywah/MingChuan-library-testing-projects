@@ -248,6 +248,57 @@ GET /api/v1/admin/analytics?department=...   # 學系 / 工具用量分布
 
 ---
 
+## 公告 Announcements
+
+```bash
+# 列表（要登入）
+GET /api/v1/announcements?limit=20
+
+# 下載附件（要登入；草稿的附件一律 404）
+GET /api/v1/announcements/{ann_id}/files/{file_id}
+```
+
+回應一律帶 `Content-Disposition: attachment` 與 `X-Content-Type-Options: nosniff`
+—— 不讓瀏覽器內嵌開啟。
+
+管理端（需 admin）：
+
+```bash
+POST   /api/v1/admin/announcements                     # 新增（含 title_en / body_en）
+PUT    /api/v1/admin/announcements/{id}
+DELETE /api/v1/admin/announcements/{id}                # ⚠ 附件檔案一併刪除
+POST   /api/v1/admin/announcements/{id}/files          # 上傳附件（multipart，30/hour）
+DELETE /api/v1/admin/announcements/{id}/files/{fid}
+```
+
+---
+
+## 使用統計 Usage tracking
+
+```bash
+# 記一次「從平台跳去 MYAI」（要登入，回 204）
+POST /api/v1/external-ai/visit
+```
+
+> ⚠ 這支**吞掉所有例外**。記不起來不可以讓使用者去不了 MYAI ——
+> 統計比不上那件事。前端也是 fire-and-forget，不 await。
+
+```bash
+# 各分類的使用數據（需 admin）
+GET /api/v1/admin/analytics?group_by=department|college|unit&days=30
+GET /api/v1/admin/analytics?group_by=department&start=2026-08-01&end=2026-08-31
+```
+
+每一組回傳：`user_count` / `active_users_min` / `adoption` /
+`myai_visits` / `myai_points` / `jobs` / `lab_gpu` / `lab_cpu` /
+`share_*` / `group_en`，另外整體回一個 `tracking_since`。
+
+> ⚠ `active_users_min` 是**下限**（跨表去重在 SQL 端做不到，取各項最大值）。
+> ⚠ `adoption` 的分母是「平台上這一組的人數」，不是全系人數。
+> ⚠ `group_en` 只在依**學系／學院**分組時有值；行政單位一律 `null`。
+
+---
+
 ## Worker（給 GPU 節點用）
 
 > 認證使用 `Authorization: Bearer <WORKER_API_TOKEN>`（與 user JWT 不同；token 在 `.env`）。

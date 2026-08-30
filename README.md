@@ -42,9 +42,9 @@ docker compose up -d --build
 docker compose exec job-scheduler python -c "..."
 
 # 4. 開瀏覽器
-#    http://localhost/V0/       → 使用者介面
-#    http://localhost:8888/         → admin 介面
-#    http://localhost:8002/docs     → API Swagger
+#    http://localhost/               → 使用者介面（自動轉 /V1/）
+#    http://localhost:8888/          → 管理端（自動轉 /V1/）
+#    http://localhost:8002/docs      → API Swagger
 ```
 
 詳細步驟見 **[`docs/01-quick-start.md`](docs/01-quick-start.md)**。
@@ -60,20 +60,30 @@ docker compose exec job-scheduler python -c "..."
 | [`03-deployment.md`](docs/03-deployment.md) | GPU 節點 / SSO / 正式上線 / 跨 OS 注意事項 | 部署者 |
 | [`04-operations.md`](docs/04-operations.md) | 日常維運：備份、監控、Token 重置、Portkey/DCGM 工具 | 管理員 |
 | [`05-api-reference.md`](docs/05-api-reference.md) | API endpoints / curl 範例 / 錯誤碼 | 後端開發 |
-| [`06-user-guide.md`](docs/06-user-guide.md) | 使用者介面操作手冊 | 學生 / 老師 |
+| [`06-user-guide.md`](docs/06-user-guide.md) | **使用者操作手冊** —— 怎麼登入、怎麼用 | 學生 / 老師 / 職員 |
 | [`07-development.md`](docs/07-development.md) | 開發指南、檔案結構、新增模組、i18n、方法學 | 開發者 |
-| [`08-status-and-roadmap.md`](docs/08-status-and-roadmap.md) | 專案現況、已知 bug、v2.2 計畫 | 所有人 |
-| [`archive/`](docs/archive/) | 歷史 plan / audit（v2.0 Lab、v2.1 SSO、AUDIT 等）| 想了解設計脈絡的人 |
+| [`08-status-and-roadmap.md`](docs/08-status-and-roadmap.md) | 專案現況、已知議題、計畫 | 所有人 |
+| [`12-功能說明.md`](docs/12-功能說明.md) | **有什麼功能、各在哪、邊界在哪** | 所有人 |
+| [`13-操作手冊-管理員.md`](docs/13-操作手冊-管理員.md) | **管理員操作手冊** —— 含上線前檢查清單 | 管理員 |
+| [`design/`](docs/design/) | 介面設計紀錄（為什麼長這樣） | 想改介面的人 |
+| [`archive/`](docs/archive/) | 歷史 plan / audit | 想了解設計脈絡的人 |
+
+> 第一次接手這個平台：先看 **12-功能說明**（知道有什麼），
+> 再看 **13-操作手冊-管理員**（知道怎麼操作），最後才是架構與開發。
 
 ---
 
-## 核心功能（v2.1）
+## 核心功能
 
-- **SSO 登入**：Microsoft Entra ID OIDC、Mock SSO、CAS（3 種 provider，yaml 切換）
-- **AI 助手**：LLM 對話、Token 額度管理、SSE 串流
-- **GPU 任務排程**：Pull 架構、Worker 主動領取、隔離容器執行
-- **v2.0 Lab**：code-server (VS Code in Browser) + Secrets (AES-256-GCM) + per-user volume
-- **管理員介面**：使用者管理（3-tab 依 auth_source）、配額、Storage 生命週期、Audit log
+> 完整清單與邊界見 **[`docs/12-功能說明.md`](docs/12-功能說明.md)**。
+
+- **SSO 登入** —— MCU 自建 OIDC（`auth.mcu.edu.tw`），首次登入自動建帳號
+- **MYAI 整合** —— 導向學校採購的 AI 平台，管理點數、初始密碼、自動開通
+- **GPU 任務排程** —— 純拉取式，worker 主動領工作，隔離容器執行
+- **程式實驗室** —— 瀏覽器裡的 VS Code，多份存檔、可選 GPU、時間與磁碟限制
+- **站內助手「小基」** —— RAG 客服（不用登入）+ 程式家教（登入後讀自己的檔案）
+- **公告** —— 中英雙版、附件、內文網址自動變連結
+- **管理端** —— 帳號、平台設定、問題回報、公告、**各系院單位的使用統計**
 
 ---
 
