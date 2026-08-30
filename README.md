@@ -65,6 +65,7 @@ docker compose exec job-scheduler python -c "..."
 | [`08-status-and-roadmap.md`](docs/08-status-and-roadmap.md) | 專案現況、已知議題、計畫 | 所有人 |
 | [`12-功能說明.md`](docs/12-功能說明.md) | **有什麼功能、各在哪、邊界在哪** | 所有人 |
 | [`13-操作手冊-管理員.md`](docs/13-操作手冊-管理員.md) | **管理員操作手冊** —— 含上線前檢查清單 | 管理員 |
+| [`14-正式環境建置.md`](docs/14-正式環境建置.md) | **從零把正式環境架起來** —— 逐項打勾 | 部署正式機的人 |
 | [`design/`](docs/design/) | 介面設計紀錄（為什麼長這樣） | 想改介面的人 |
 | [`archive/`](docs/archive/) | 歷史 plan / audit | 想了解設計脈絡的人 |
 
