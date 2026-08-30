@@ -189,11 +189,31 @@
     // ZH: 🔴 密碼**只會出現這一次** —— 這種帳號通常沒有信箱可寄，
     //     所以畫面必須把「現在就抄走」講得很明白。做不到這件事的話，
     //     管理者會關掉視窗然後回來問「密碼在哪」，而答案是沒有了。
+    //
+    // ZH: 2026-08-30 從頁內卡片改成 <dialog>（與公告 / 問題回報同一套）。
+    //     表單階段 ESC 可關（沒填完就想放棄是正當操作）；
+    //     **密碼階段攔掉 ESC**（_tempGuard 接 cancel 事件）——
+    //     一次性密碼被手滑 ESC 收走的話，上面那段警告等於白寫。
+    var _tempGuard = null;
+
+    function _tempDlg(guardEsc) {
+        var dlg = $('temp-dialog');
+        if (_tempGuard) { dlg.removeEventListener('cancel', _tempGuard); _tempGuard = null; }
+        if (guardEsc) {
+            _tempGuard = function (ev) { ev.preventDefault(); };
+            dlg.addEventListener('cancel', _tempGuard);
+        }
+        return dlg;
+    }
+
     function openTempForm() {
-        var box = $('temp-box');
-        box.hidden = false;
-        box.innerHTML =
-            '<div class="adm-card__title">' + esc(T('tmp_title', '建立臨時帳號')) + '</div>'
+        var dlg = _tempDlg(false);
+        dlg.innerHTML =
+            // ZH: 右上角的關閉。`method="dialog"` 讓它不必接事件就能關（同 reports.js）。
+            '<form method="dialog" class="rmod__x">'
+            +   '<button class="btn btn--minor" type="submit" aria-label="'
+            +   esc(T('pf_close', '關閉')) + '">✕</button></form>'
+            + '<h2 class="rmod__title">' + esc(T('tmp_title', '建立臨時帳號')) + '</h2>'
             + '<p class="footnote">' + esc(T('tmp_why',
                 '給校外人士、長官視察或其他例外用途。到期會自動停用，帳號與紀錄都留著。')) + '</p>'
             + field('t-user', T('tmp_user', '帳號名稱'), '')
@@ -205,7 +225,7 @@
             + '<p class="footnote">' + esc(T('tmp_expires_hint',
                 '選到哪一天，帳號就用到那天結束（台灣時間）。最多 90 天。')) + '</p>'
             + field('t-email', T('tmp_email', 'Email（可留空，平台不會寄信）'), '', 'email')
-            + '<div class="ds__actions">'
+            + '<div class="adm-inline rmod__foot">'
             + '<button class="btn btn--primary" type="button" id="t-go">'
             + esc(T('tmp_create', '建立')) + '</button>'
             + '<button class="btn btn--minor" type="button" id="t-cancel">'
@@ -213,7 +233,8 @@
             + '</div>'
             + '<div class="inline-error" id="t-msg" hidden></div>';
 
-        $('t-cancel').addEventListener('click', function () { box.hidden = true; });
+        dlg.showModal();
+        $('t-cancel').addEventListener('click', function () { dlg.close(); });
         $('t-go').addEventListener('click', createTemp);
         $('t-user').focus();
     }
@@ -244,9 +265,13 @@
     }
 
     function showPassword(out) {
-        var box = $('temp-box');
-        box.innerHTML =
-            '<div class="adm-card__title">' + esc(T('tmp_done', '帳號建好了')) + '</div>'
+        // ZH: 🔴 密碼階段：攔掉 ESC（見 _tempDlg）。只能按「知道了」或 ✕ 主動關。
+        var dlg = _tempDlg(true);
+        dlg.innerHTML =
+            '<form method="dialog" class="rmod__x">'
+            +   '<button class="btn btn--minor" type="submit" aria-label="'
+            +   esc(T('pf_close', '關閉')) + '">✕</button></form>'
+            + '<h2 class="rmod__title">' + esc(T('tmp_done', '帳號建好了')) + '</h2>'
             // ZH: 警告放在密碼**上面** —— 放下面的話，人已經在複製了才讀到。
             + '<div class="adm-alert adm-alert--error"><span>'
             + esc(T('tmp_pw_once',
@@ -258,7 +283,7 @@
             + '<span class="kv__v mono" id="t-pw">' + esc(out.password) + '</span></div>'
             + '<div class="kv"><span class="kv__k">' + esc(T('tmp_expires', '到期')) + '</span>'
             + '<span class="kv__v">' + esc(TW.dateTime(out.expires_at)) + '</span></div>'
-            + '<div class="ds__actions">'
+            + '<div class="adm-inline rmod__foot">'
             + '<button class="btn btn--primary" type="button" id="t-copy">'
             + esc(T('tmp_copy', '複製帳號與密碼')) + '</button>'
             + '<button class="btn btn--minor" type="button" id="t-close">'
@@ -282,7 +307,10 @@
                     '這個瀏覽器不允許自動複製。已經幫你選起來了，按 Ctrl+C 複製。'));
             }
         });
-        $('t-close').addEventListener('click', function () { box.hidden = true; });
+        $('t-close').addEventListener('click', function () { dlg.close(); });
+        // ZH: 正常路徑 dialog 已開（從表單階段換內容過來）；
+        //     對開著的 dialog 再 showModal() 會丟 InvalidStateError，所以要判。
+        if (!dlg.open) dlg.showModal();
     }
 
 
@@ -542,11 +570,11 @@
     function applyView(next) {
         if (next) VIEW = next;
         // ZH: 🔴 **不要動 `hidden` 屬性。** 這一頁有元素自己在管 hidden
-        //     （#temp-box 預設收著,按「建立臨時帳號」才打開）——
-        //     檢視篩選去寫同一個屬性的話,切到平台檢視就把它**強制打開**,
-        //     畫面上會多出一個空的、有外框的盒子,看起來像搜尋框上面多一條線。
-        //     （實測踩到過。）
+        //     （例如 #t-msg 這類訊息列）—— 檢視篩選去寫同一個屬性的話,
+        //     會把別人的顯示狀態**強制蓋掉**（當年 #temp-box 還是頁內卡片時
+        //     實測踩到過：切檢視把收著的空盒子強制打開）。
         //     用獨立的屬性,兩套顯示邏輯就不會互相覆蓋。
+        //     （臨時帳號 2026-08-30 已改成 <dialog>,不在這條流程裡,但原則不變。）
         document.querySelectorAll('[data-view]').forEach(function (el) {
             var on = el.dataset.view === 'both' || el.dataset.view === VIEW;
             el.toggleAttribute('data-view-off', !on);

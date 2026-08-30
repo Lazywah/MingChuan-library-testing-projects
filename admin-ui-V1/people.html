@@ -46,7 +46,12 @@
     </div>
 
     <!-- ZH: 預設收著。這是例外用途，不該佔掉每天都會看的版面。 -->
-    <section class="adm-card adm-card--temp adm-sec" id="temp-box" data-view="platform" hidden></section>
+    <!-- ZH: 建立臨時帳號的彈窗（2026-08-30 從頁內卡片改成 <dialog>，
+             與公告 / 問題回報同一套：原生 showModal()、top layer、單一 dialog 重複填。
+             內容由 people.js 的 openTempForm() / showPassword() 產生。
+         ZH: 🔴 密碼顯示階段會攔掉 ESC（cancel 事件）——密碼只出現一次，
+             手滑 ESC 關掉就再也看不到了，只能按「知道了」或 ✕ 主動關。 -->
+    <dialog class="rmod" id="temp-dialog"></dialog>
 
     <label class="field" data-view="platform">
         <!-- ZH: 標籤用**短的**，長句留給 placeholder ——
@@ -116,6 +121,6 @@
 <script src="tip.js?v=0699f4a2"></script>
 <script src="prefs.js?v=00b43387"></script>
 <script src="admin-chrome.js?v=ce2fd362"></script>
-<script src="people.js?v=5ea6f48c"></script>
+<script src="people.js?v=6eff8c06"></script>
 </body>
 </html>
