@@ -597,3 +597,25 @@ html.aibot-docked #aibot-fab { display: none; }
     background-color: var(--accent-soft);
 }
 .gcard--lead:hover { background-color: var(--surface); }
+
+/* ZH: 公告附件（v3.9）。做成按鈕（見 news.js），但視覺上要像可點的東西
+ *     而不是主要動作 —— 一則公告可能有好幾個附件，全部做成實心鈕會蓋過內文。 */
+.post__files { margin-top: var(--space-3); display: flex; flex-wrap: wrap;
+               align-items: center; gap: var(--space-2); }
+.post__files-label { font-size: 0.8125rem; color: var(--text-muted); }
+.post__file {
+    display: inline-flex;
+    align-items: center;
+    min-height: var(--tap-min);
+    padding: 0 var(--space-3);
+    border: 1px solid var(--hairline);
+    border-radius: var(--radius-md);
+    background: transparent;
+    color: var(--link);
+    font: inherit;
+    font-size: 0.875rem;
+    cursor: pointer;
+}
+.post__file:hover:not(:disabled) { background-color: var(--surface-2); border-color: var(--link); }
+.post__file:focus-visible { outline: var(--focus-ring); outline-offset: 2px; }
+.post__file:disabled { opacity: 0.6; cursor: default; }

@@ -653,6 +653,33 @@ class Announcement(Base):
     is_visible  = Column(Integer, default=1)                                # ZH: 0 = 隱藏 (草稿/已下架)
 
 
+class AnnouncementFile(Base):
+    """ZH: 公告附件 | EN: Announcement attachment
+
+    ZH: 為什麼是一張表而不是公告上的一個欄位：一則公告可能夾好幾個檔案。
+
+    ZH: ⚠ `filename` 與 `stored_name` **刻意分開**：
+        前者是管理員上傳時的原始檔名（畫面上要顯示的），
+        後者是磁碟上真正的檔名（只留安全字元）。
+        合成一個的話，要嘛畫面上出現一串沒人看得懂的字，
+        要嘛檔名裡的路徑符號會變成安全問題。資料集那邊是同一套做法。
+
+    ZH: 🔴 `ondelete="CASCADE"` 只清資料庫的列，**磁碟上的檔案不會跟著消失**。
+        刪公告的路徑必須自己刪檔（見 routers/announcements.py），
+        否則就是製造下一個孤兒類別。
+    """
+    __tablename__ = "announcement_files"
+
+    id             = Column(Integer, primary_key=True, autoincrement=True)
+    announcement_id = Column(Integer, ForeignKey("announcements.id", ondelete="CASCADE"),
+                             nullable=False, index=True)
+    filename       = Column(String, nullable=False)      # ZH: 原始檔名（顯示用）
+    stored_name    = Column(String, nullable=False)      # ZH: 磁碟上的檔名（安全字元）
+    size_bytes     = Column(Integer, nullable=False, default=0)
+    content_type   = Column(String, nullable=True)
+    uploaded_at    = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+
+
 # ==============================================================================
 # ZH: 表 14: UserSessionUsage - 使用者每日 session 累積時長
 # EN: Table 14: UserSessionUsage - Per-user daily session usage

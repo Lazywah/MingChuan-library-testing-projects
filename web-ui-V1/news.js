@@ -84,6 +84,7 @@ function render(list) {
         linkify(body, a.body || '');
 
         art.append(head, h, body);
+        if (a.files && a.files.length) art.appendChild(fileList(a));
         box.appendChild(art);
     });
 
@@ -169,6 +170,55 @@ function linkify(el, text) {
 }
 
 
+/* ZH: 附件（v3.9）。
+ *
+ * ZH: 做成**按鈕不是連結**：下載要帶 Authorization 標頭（見 Chrome.download 的
+ *     說明），而 <a href> 帶不了。做成看起來像連結卻點了 401 更糟 ——
+ *     使用者會以為檔案壞了。
+ * ZH: 檔名用 textContent 放，不進 innerHTML —— 那是管理員上傳時的原始檔名。
+ */
+function fileList(a) {
+    const wrap = document.createElement('div');
+    wrap.className = 'post__files';
+
+    const label = document.createElement('span');
+    label.className = 'post__files-label';
+    label.textContent = T('news_files', '附件');
+    wrap.appendChild(label);
+
+    a.files.forEach((f) => {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'post__file';
+        btn.textContent = f.filename + '（' + fmtSize(f.size_bytes) + '）';
+        btn.addEventListener('click', async () => {
+            const before = btn.textContent;
+            btn.disabled = true;
+            btn.textContent = T('news_downloading', '下載中…');
+            try {
+                await window.Chrome.download(
+                    '/announcements/' + encodeURIComponent(a.id)
+                    + '/files/' + encodeURIComponent(f.id), f.filename);
+                btn.textContent = before;
+            } catch (e) {
+                // ZH: 失敗要講出來。靜默失敗時使用者只會一直按同一顆按鈕。
+                btn.textContent = T('news_dl_fail', '下載失敗，請再試一次');
+            }
+            btn.disabled = false;
+        });
+        wrap.appendChild(btn);
+    });
+    return wrap;
+}
+
+// ZH: 位元組轉人看得懂的大小。附件多半是 MB 等級，KB 以下就寫 KB。
+function fmtSize(n) {
+    const b = Number(n) || 0;
+    if (b >= 1024 * 1024) return (b / 1024 / 1024).toFixed(1) + ' MB';
+    return Math.max(1, Math.round(b / 1024)) + ' KB';
+}
+
+
 async function load() {
     if (FORCED === 'loading') return;
     try {
@@ -198,9 +248,16 @@ function mock(kind) {
     if (kind === 'empty') return [];
     const one = (i, pinned) => ({
         id: i, title: `示範公告第 ${i} 則：系統維護與功能更新說明`,
-        body: '這是公告內容。第二段說明維護時間與影響範圍，以及使用者需要做什麼。',
+        body: '這是公告內容。詳情請看 https://www.mcu.edu.tw/announcement。第二段說明維護時間與影響範圍。',
         posted_by: 'admin', posted_at: `2026-08-${String((i % 28) + 1).padStart(2, '0')}T09:00:00`,
         is_pinned: pinned ? 1 : 0, is_visible: 1,
+        // ZH: 第一則帶附件與網址，好讓 ?state= 看得到那兩塊的樣子。
+        //     沒有這個的話，附件與自動連結**只有真的有資料時才驗得到** ——
+        //     而那正是最容易改壞卻沒人發現的兩塊。
+        files: i === 1
+            ? [{ id: 1, filename: '維護說明.pdf', size_bytes: 1258291 },
+               { id: 2, filename: '時程表.xlsx', size_bytes: 20480 }]
+            : [],
     });
     if (kind === 'overflow') return Array.from({ length: LIMIT }, (_, i) => one(i + 1, i === 0));
     return [one(1, true), one(2, false), one(3, false)];

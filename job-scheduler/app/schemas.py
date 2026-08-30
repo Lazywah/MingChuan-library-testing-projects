@@ -675,6 +675,20 @@ class AnnouncementCreate(BaseModel):
     is_visible: int = 1         # 0 / 1
 
 
+class AnnouncementFileOut(BaseModel):
+    """ZH: 公告附件 | EN: Announcement attachment
+
+    ZH: ⚠ **不回 stored_name。** 那是磁碟上的路徑片段，前端用不到，
+        送出去只是多給一個猜檔案位置的線索。下載一律用 id。
+    """
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    filename: str
+    size_bytes: int = 0
+    content_type: Optional[str] = None
+
+
 class AnnouncementResponse(BaseModel):
     """ZH: 公告回應 | EN: Announcement response"""
     model_config = ConfigDict(from_attributes=True)
@@ -687,6 +701,7 @@ class AnnouncementResponse(BaseModel):
     updated_at: Optional[UtcDatetime] = None
     is_pinned: int = 0
     is_visible: int = 1
+    files: list[AnnouncementFileOut] = []
 
 
 # ==============================================================================

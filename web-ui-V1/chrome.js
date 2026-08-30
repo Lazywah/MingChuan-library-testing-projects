@@ -1050,7 +1050,42 @@
     //     （goMyai 已搬回 app.js：MYAI 改成回首頁之後，只剩首頁那顆按鈕在用它。）
     // ZH: safeUrl 對外開放是因為 app.js / usage.js 都要畫「申請額度」那個連結。
     //     兩邊各寫一份的話,只有一邊會被記得補上 javascript: 的防線。
-    window.Chrome = { logout: logout, publicSettings: publicSettings,
+    /* ZH: 帶 token 的檔案下載。
+     *
+     * ZH: 🔴 為什麼不能直接用 `<a href="/api/...">`：這個平台的認證是
+     *     **Authorization 標頭**（token 存在 localStorage），不是 cookie。
+     *     瀏覽器自己發的下載請求不會帶那個標頭 —— 點下去只會拿到 401，
+     *     而畫面上看起來像「這個檔案壞了」。
+     *
+     * ZH: 所以要自己 fetch、轉成 blob、再用一個暫時的 <a> 觸發下載。
+     * ZH: ⚠ 檔名優先用伺服器給的 `filename*=UTF-8''…`（中文檔名走這條），
+     *     其次 `filename="…"`，都沒有才用呼叫端給的。
+     * ZH: ⚠ revokeObjectURL 要延遲 —— 立刻撤銷的話，慢一點的瀏覽器
+     *     還沒開始讀就沒了，下載會是空檔。
+     */
+    async function download(path, fallbackName) {
+        const t = sessionStorage.getItem('ai_hud_token') || localStorage.getItem('ai_hud_token');
+        const r = await fetch(API + path, { headers: t ? { Authorization: 'Bearer ' + t } : {} });
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+
+        const cd = r.headers.get('content-disposition') || '';
+        let name = fallbackName || 'download';
+        const star = cd.match(/filename\*=UTF-8''([^;]+)/i);
+        const plain = cd.match(/filename="([^"]+)"/i);
+        if (star) { try { name = decodeURIComponent(star[1]); } catch (e) { /* 用下面那個 */ } }
+        else if (plain) { name = plain[1]; }
+
+        const url = URL.createObjectURL(await r.blob());
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = name;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        setTimeout(function () { URL.revokeObjectURL(url); }, 60000);
+    }
+
+    window.Chrome = { logout: logout, publicSettings: publicSettings, download: download,
                      safeUrl: safeUrl, httpUrl: httpUrl };
 
     if (document.readyState === 'loading') {

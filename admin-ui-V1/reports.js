@@ -548,9 +548,14 @@
                 }).join('')
                 + '</select></label>';
         };
-        $('news-form').innerHTML =
-            '<div class="adm-card__title">'
-            + esc(a ? T('rp_news_edit', '編輯公告') : T('rp_news_new', '寫一則公告')) + '</div>'
+        var dlg = $('news-dialog');
+        dlg.innerHTML =
+            // ZH: 右上角的關閉。`method="dialog"` 讓它不必接事件就能關。
+            '<form method="dialog" class="rmod__x">'
+            +   '<button class="btn btn--minor" type="submit" aria-label="'
+            +   esc(T('pf_close', '關閉')) + '">✕</button></form>'
+            + '<h2 class="rmod__title">'
+            + esc(a ? T('rp_news_edit', '編輯公告') : T('rp_news_new', '寫一則公告')) + '</h2>'
             + '<label class="field"><span class="field__label" for="nw-title">'
             + esc(T('rp_news_title', '標題')) + '</span>'
             + '<input class="field__input" id="nw-title" type="text" value="'
@@ -564,15 +569,71 @@
                 '純文字，會原樣顯示給使用者。貼 HTML 進來不會變成排版，會看到標籤本身。')) + '</p>'
             + pick('nw-pin', 'rp_news_pin', '置頂', e.is_pinned)
             + pick('nw-vis', 'rp_news_vis', '公開', a ? e.is_visible : 1)
-            + '<div class="ds__actions">'
+            // ZH: 附件。新公告還沒有 id，所以檔案是**存檔之後**才送上去的
+            //     （見 saveNews）——這裡先收在 input 裡。
+            + '<label class="field"><span class="field__label" for="nw-files">'
+            + esc(T('rp_news_attach', '附件')) + '</span>'
+            + '<input class="field__input" id="nw-files" type="file" multiple '
+            + 'accept=".pdf,.docx,.xlsx,.pptx,.png,.jpg,.jpeg,.zip"></label>'
+            + '<p class="footnote">' + esc(T('rp_news_attach_hint',
+                '可以放 pdf / docx / xlsx / pptx / png / jpg / zip。單檔上限見系統設定。')) + '</p>'
+            + '<div id="nw-have"></div>'
+            + '<div class="adm-inline rmod__foot">'
             + '<button class="btn btn--primary" type="button" id="nw-ok">'
             + esc(T('pp_save', '儲存')) + '</button>'
             + '<button class="btn btn--minor" type="button" id="nw-x">'
             + esc(T('pf_cancel', '取消')) + '</button></div>';
-        $('news-form').hidden = false;
+
+        renderHave(a);
+        dlg.showModal();
         $('nw-ok').addEventListener('click', function () { saveNews(a); });
-        $('nw-x').addEventListener('click', function () { $('news-form').hidden = true; });
+        $('nw-x').addEventListener('click', function () { dlg.close(); });
         $('nw-title').focus();
+    }
+
+    /* ZH: 已經上傳的附件（只有編輯既有公告時才有）。
+     * ZH: 每一個都給一顆刪除 —— 附件放錯了要有辦法拿掉，
+     *     不然只能整則公告刪掉重寫。
+     */
+    function renderHave(a) {
+        var box = $('nw-have');
+        if (!box) return;
+        var files = (a && a.files) || [];
+        if (!files.length) { box.innerHTML = ''; return; }
+        box.innerHTML = '<p class="footnote">'
+            + esc(T('rp_news_have', '已上傳')) + '</p>';
+        files.forEach(function (fobj) {
+            var row = document.createElement('div');
+            row.className = 'adm-inline';
+            var name = document.createElement('span');
+            // ZH: 檔名是管理員上傳時的原始字串 —— 用 textContent，不進 innerHTML。
+            name.textContent = fobj.filename + '（' + fmtKb(fobj.size_bytes) + '）';
+            var del = document.createElement('button');
+            del.className = 'btn btn--minor';
+            del.type = 'button';
+            del.textContent = T('pp_delete', '刪除');
+            del.addEventListener('click', async function () {
+                if (!confirm(T('rp_news_file_del', '要刪掉這個附件嗎？無法復原。'))) return;
+                try {
+                    await api('/admin/announcements/' + encodeURIComponent(a.id)
+                              + '/files/' + encodeURIComponent(fobj.id), { method: 'DELETE' });
+                    a.files = files.filter(function (x) { return x.id !== fobj.id; });
+                    renderHave(a);
+                    await loadNews();
+                } catch (e) {
+                    say('news-msg', e.message);
+                }
+            });
+            row.appendChild(name);
+            row.appendChild(del);
+            box.appendChild(row);
+        });
+    }
+
+    function fmtKb(n) {
+        var b = Number(n) || 0;
+        if (b >= 1024 * 1024) return (b / 1024 / 1024).toFixed(1) + ' MB';
+        return Math.max(1, Math.round(b / 1024)) + ' KB';
     }
 
     async function saveNews(a) {
@@ -589,14 +650,45 @@
             is_visible: $('nw-vis').value === '1' ? 1 : 0,
         };
         try {
-            await api(a ? '/admin/announcements/' + encodeURIComponent(a.id)
-                        : '/admin/announcements', {
+            var saved = await api(a ? '/admin/announcements/' + encodeURIComponent(a.id)
+                                    : '/admin/announcements', {
                 method: a ? 'PUT' : 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(payload),
             });
-            $('news-form').hidden = true;
-            flash('news-msg', T('rp_news_saved', '公告已更新。'), 5000);
+
+            // ZH: 🔴 附件**存完公告才送** —— 新公告在存檔之前沒有 id，
+            //     沒有 id 就沒有可以掛附件的地方。
+            // ZH: ⚠ 一個一個送，不併成一個請求：後端一次收一個檔，
+            //     而且逐個送才知道是**哪一個**失敗（例如只有其中一個超過上限）。
+            var annId = (a && a.id) || (saved && saved.id);
+            var picked = $('nw-files') ? $('nw-files').files : null;
+            var failed = [];
+            if (annId && picked && picked.length) {
+                for (var i = 0; i < picked.length; i++) {
+                    var fd = new FormData();
+                    fd.append('file', picked[i]);
+                    try {
+                        // ZH: ⚠ **不要**自己設 Content-Type —— FormData 的
+                        //     multipart 邊界字串是瀏覽器產生的，手動設會少掉它，
+                        //     後端就解不出檔案（而錯誤訊息看起來像「沒有收到檔名」）。
+                        await api('/admin/announcements/' + encodeURIComponent(annId) + '/files',
+                                  { method: 'POST', body: fd });
+                    } catch (e2) {
+                        failed.push(picked[i].name + '：' + e2.message);
+                    }
+                }
+            }
+
+            $('news-dialog').close();
+            if (failed.length) {
+                // ZH: 公告存成功了、附件有的沒上去 —— 要分開講。
+                //     合成一句「儲存失敗」會讓人以為公告也沒存到而重寫一次。
+                say('news-msg', T('rp_news_file_fail', '公告已儲存，但有附件沒有上傳成功：')
+                    + failed.join('；'));
+            } else {
+                flash('news-msg', T('rp_news_saved', '公告已更新。'), 5000);
+            }
             await loadNews();
         } catch (e) {
             say('news-msg', e.message);

@@ -1444,7 +1444,18 @@ textarea.field__input {
 /* ZH: 關閉鈕改成絕對定位貼右上角。
  *     原本它自己佔一整列，把主旨往下推了一行 —— 而主旨才是這個彈窗的標題，
  *     它應該在最上面。 */
-.rmod { position: relative; }
+/* ZH: 🔴 這裡原本寫 `position: relative`，而那**蓋掉了 `dialog:modal` 的
+ *     `position: fixed`** —— 彈窗因此回到文件流裡，捲動頁面時會跟著跑掉。
+ *     加那一行的目的只是給 .rmod__x 一個定位基準，而 fixed 一樣是
+ *     絕對定位子元素的 containing block，所以改成 fixed 兩件事都成立。
+ * ZH: `inset: 0` + `margin: auto` 是自己把置中寫明，不依賴各家瀏覽器的
+ *     UA 樣式表 —— 改了 position 之後那些預設值還在不在，不是可以假設的事。
+ * ZH: ⚠ 這條同時修好問題回報的彈窗（同一個 class）。 */
+.rmod {
+    position: fixed;
+    inset: 0;
+    margin: auto;
+}
 .rmod__x { position: absolute; top: var(--space-4); right: var(--space-4); margin: 0; }
 
 /* ZH: 主旨在最上面靠左。右邊留出關閉鈕的位置，長主旨才不會鑽到 ✕ 底下。 */
