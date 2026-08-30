@@ -56,16 +56,42 @@ def backend_prefixes(src: str) -> set:
 def nginx_blocks(conf: str) -> dict:
     """ZH: 把 nginx.conf 依 server 區塊切開，回 {埠號: 該區塊原始碼}。
 
-    ZH: 用 `listen <port>` 的位置切。結構若被改動而切不出來，呼叫端會**大聲失敗**
-        而不是安靜通過 —— 解析不到就當作檢查失效，不能當作沒問題。
+    ZH: 結構若被改動而切不出來，呼叫端會**大聲失敗**而不是安靜通過 ——
+        解析不到就當作檢查失效，不能當作沒問題。
+
+    ZH: 🔴 v2（2026-08-30）改成「剝註解 → 大括號配對找 server 區塊 →
+        區塊掛在它**所有** listen 埠下」。第一版用 `listen \\d+` 的字面位置切，
+        兩個地方會壞：
+          1. **註解裡的 listen 也被當邊界** —— 443/TLS 預埋註解一寫進去，
+             `# listen 443 ssl;` 就把 :80 區塊切到只剩幾行，守門直接失明。
+          2. **同一個 server 掛兩個 listen**（:80 + :443 共用路由，刻意設計，
+             理由見 nginx.conf）—— 天真切法會把全部 location 算給後面那個埠。
+        與 check_dockerfile_pins 剝註解免得報到自己，是同一個教訓。
 
     @node scripts/check_nginx_routes.py::nginx_blocks
     """
-    marks = [(m.group(1), m.start()) for m in re.finditer(r"listen\s+(\d+)", conf)]
+    # ZH: 剝註解（nginx 註解 = `#` 到行尾）。結構判定一律用剝過的文字。
+    stripped = "\n".join(line.split("#", 1)[0] for line in conf.splitlines())
+
     out = {}
-    for i, (port, start) in enumerate(marks):
-        end = marks[i + 1][1] if i + 1 < len(marks) else len(conf)
-        out[port] = conf[start:end]
+    for m in re.finditer(r"\bserver\s*\{", stripped):
+        # ZH: 從 `{` 開始配對大括號，找到這個 server 區塊的結尾。
+        depth = 0
+        start = stripped.index("{", m.start())
+        end = None
+        for i in range(start, len(stripped)):
+            if stripped[i] == "{":
+                depth += 1
+            elif stripped[i] == "}":
+                depth -= 1
+                if depth == 0:
+                    end = i + 1
+                    break
+        if end is None:
+            continue        # ZH: 括號不平衡 —— 留給 caller 的「找不到 :80」大聲失敗
+        block = stripped[m.start():end]
+        for port in re.findall(r"\blisten\s+(\d+)", block):
+            out[port] = block
     return out
 
 

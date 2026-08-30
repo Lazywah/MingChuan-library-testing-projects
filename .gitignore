@@ -67,3 +67,6 @@ docs/dev
 
 # apm：.claude/settings.local.json 是本機設定（apm 的 hook 指令帶絕對路徑）
 .claude/settings.local.json
+
+# ZH: TLS 憑證與私鑰（nginx :443 用）—— 絕不進版控
+infrastructure/certs/
