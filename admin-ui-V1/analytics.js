@@ -869,20 +869,69 @@
         // ZH: 🔴 欄位順序是刻意的：**人數 → 有多少人在用 → 各項用了多少**。
         //     先答「這一組推得開嗎」，再答「用在哪」。
         //     把使用量放前面的話，大系永遠在最上面，而那不是要看的事。
+        //
+        // ZH: v3.9 加了**兩層表頭**（擁有者裁定 2026-08-30）——
+        //     「有用的人」「滲透率」單獨看不出在講什麼。上面那一列
+        //     把欄位分成「這一組的人」與「用了多少」兩塊，一眼看得出
+        //     哪幾欄是同一件事的不同切面。
+        //
+        // ZH: 第三個欄位是 tip：難懂的欄位掛一顆資訊 icon（tip.js）。
+        //     ⚠ 只掛在**真的會誤解**的欄位上。每一欄都掛的話，
+        //     icon 就變成背景，需要它的那幾欄反而不顯眼了。
         var head = [
-            groupHeadKey(), ['an_users', '人數'],
-            ['an_active', '有用的人'], ['an_adoption', '滲透率'],
-            ['an_c_visits', 'MYAI 次數'], ['an_c_points', 'MYAI 點數'],
+            [groupHeadKey(), null],
+            [['an_users', '人數'], null],
+            [['an_active', '有用的人'],
+             ['an_tip_active',
+              '這段期間內，至少做過一件事的人數：跳去 MYAI、開實驗室、或送出訓練。'
+              + '同一個人只算一次。⚠ 這是**下限** —— 跨四張表去重在資料庫端做不到，'
+              + '所以取各項的最大值。真實人數只會更多，不會更少。']],
+            [['an_adoption', '滲透率'],
+             ['an_tip_adoption',
+              '「有用的人」÷「這一組在平台上的人數」。用來看**哪一組還沒推開** ——'
+              + '與旁邊的佔比不同，它不會因為系大就比較高。'
+              + '⚠ 分母是**登入過平台**的人，不是全系人數：完全沒來過的人不在分母裡，'
+              + '所以這個數字偏高。']],
+            [['an_c_visits', 'MYAI 次數'],
+             ['an_tip_visits',
+              '從平台按「前往 MYAI」的次數。'
+              + '⚠ 這只代表他**走進去了**，不代表真的用了 AI —— 那要看旁邊的點數。'
+              + '括號裡是佔全平台的百分比。']],
+            [['an_c_points', 'MYAI 點數'],
+             ['an_tip_points',
+              '這段期間**用掉**的點數。管理員補的點不算在內 ——'
+              + '算進去的話，補過點的系會看起來用得特別多，而那正好是用得少才要補的那些。']],
             // ZH: Lab·GPU / Lab·CPU 中英一樣，**不給 key** —— 給了會被
             //     check_i18n 報成「字典有但沒人用」（它的判準是 key 後面
-            //     緊接一個含中文的 fallback）。與上面 Token 那欄同一個處理。
-            ['an_c_jobs', '訓練'], ['', 'Lab·GPU'], ['', 'Lab·CPU'],
-            ['an_dept_logins', '登入次數'], ['', 'Token'],   // ZH: 中英一樣，不給 key
+            //     緊接一個含中文的 fallback）。與 Token 那欄同一個處理。
+            [['an_c_jobs', '訓練'], null],
+            [['', 'Lab·GPU'],
+             ['an_tip_lab',
+              '開實驗室的次數，依**當次有沒有勾 GPU** 分成兩欄。'
+              + '⚠ 這兩欄自 v3.9 才開始記，在那之前的 0 是「還沒開始記」。']],
+            [['', 'Lab·CPU'], null],
+            [['an_dept_logins', '登入次數'], null],
+            [['', 'Token'],
+             ['an_tip_token',
+              '平台**自己的** Token 額度用量，與 MYAI 點數完全無關 ——'
+              + '兩者是不同的東西，不要拿來互相比較。']],
         ];
+        // ZH: 分隔線落在「有用的人」與「MYAI 次數」之前 —— 那是兩塊的交界。
+        var SEP = { 2: 1, 4: 1 };
         $('platform').innerHTML =
             trackingNote(a)
-            + '<div class="adm-tablewrap"><table class="adm-table"><thead><tr>'
-            + head.map(function (h) { return '<th>' + esc(T(h[0], h[1])) + '</th>'; }).join('')
+            + '<div class="adm-tablewrap"><table class="adm-table">'
+            + '<thead>'
+            + '<tr class="an-grouphead">'
+            +   '<th></th>'
+            +   '<th colspan="3">' + esc(T('an_g_people', '這一組的人')) + '</th>'
+            +   '<th colspan="7" class="an-sep">' + esc(T('an_g_usage', '用了多少')) + '</th>'
+            + '</tr>'
+            + '<tr>'
+            + head.map(function (h, i) {
+                var cls = SEP[i] ? ' class="an-sep"' : '';
+                return '<th' + cls + '>' + esc(T(h[0][0], h[0][1])) + tipHtml(h[1]) + '</th>';
+            }).join('')
             + '</tr></thead><tbody>'
             + rows.map(function (r) {
                 return '<tr>'
@@ -892,10 +941,11 @@
                     + '<td class="num">' + esc(num(r.user_count)) + '</td>'
                     // ZH: 「有用的人」寫成 45/52 而不是只寫 45 ——
                     //     分母就在旁邊，讀的人不必自己去對上一欄。
-                    + '<td class="num">' + esc(num(r.active_users_min))
+                    // ZH: 分隔線在每一列都要畫，只畫表頭的話中間就斷了。
+                    + '<td class="num an-sep">' + esc(num(r.active_users_min))
                     +     ' / ' + esc(num(r.user_count)) + '</td>'
                     + '<td class="num">' + esc(pct(r.adoption)) + '</td>'
-                    + cell(r.myai_visits, r.share_visits)
+                    + cell(r.myai_visits, r.share_visits, true)
                     + cell(r.myai_points, r.share_points)
                     + cell(r.jobs, r.share_jobs)
                     // ZH: Lab 的兩欄共用同一個佔比（share_lab 是兩者相加算的）——
@@ -914,10 +964,27 @@
     }
 
     // ZH: 數字 + 佔比。佔比為 0 時只寫數字 —— 「0（0.0%）」是兩次噪音。
-    function cell(n, share) {
+    function cell(n, share, sep) {
         var v = esc(num(n));
         if (share) v += ' <span class="an-share">(' + esc(pct(share)) + ')</span>';
-        return '<td class="num">' + v + '</td>';
+        return '<td class="num' + (sep ? ' an-sep' : '') + '">' + v + '</td>';
+    }
+
+    /* ZH: 表頭上的資訊 icon。用共用的 tip.js（行為、樣式都在那邊）。
+     * ZH: 泡泡的 id 由 key 推出來 —— 表頭有好幾顆，寫死一個 id 的話
+     *     只有第一顆打得開（aria-controls 只會指到第一個相同的 id）。
+     * ZH: 傳 null 就不掛 —— 只有真的會誤解的欄位才需要。
+     */
+    function tipHtml(spec) {
+        if (!spec) return '';
+        var id = 'tip-' + spec[0];
+        return '<span class="tip">'
+            + '<button type="button" class="tip__btn" aria-expanded="false"'
+            + ' aria-controls="' + esc(id) + '"'
+            + ' aria-label="' + esc(T('tip_more', '這是什麼')) + '">i</button>'
+            + '<span class="tip__body tip__body--wide" id="' + esc(id) + '"'
+            + ' role="tooltip" hidden>' + esc(T(spec[0], spec[1])) + '</span>'
+            + '</span>';
     }
 
     function pct(v) {

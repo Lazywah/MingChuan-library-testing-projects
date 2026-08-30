@@ -1505,3 +1505,15 @@ textarea.field__input {
  *     主要的是次數，佔比只是幫忙換算。做成同樣大小的話，
  *     一整欄兩個數字會讓人分不出哪個是哪個。 */
 .an-share { color: var(--text-muted); font-size: 0.8125rem; }
+
+/* ZH: 數據表的兩層表頭與分隔（v3.9）。
+ * ZH: 上面那一列只是分組標籤 —— 弱一點，不要跟真正的欄名搶。 */
+.an-grouphead th {
+    font-weight: 400;
+    font-size: 0.8125rem;
+    color: var(--text-muted);
+    text-align: left;
+    padding-bottom: 2px;
+}
+/* ZH: 分隔線畫在**每一列**的那一格上，只畫表頭的話中間會斷掉。 */
+.adm-table .an-sep { border-left: 1px solid var(--hairline); }

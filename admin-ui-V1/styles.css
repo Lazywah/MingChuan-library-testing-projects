@@ -1266,11 +1266,19 @@ textarea.field__input { resize: vertical; min-height: 6rem; }
 
 /* ZH: 泡泡。定位在 icon 下方靠左，寬度固定 —— 跟著內容伸縮的話，
  *     一句話的泡泡會變成很寬的一條，兩句話的又擠成一柱。 */
+/* ZH: ⚠ 這裡的 absolute 只是**沒有 JS 時的退路**。實際打開時 tip.js 會改成
+ *     `position: fixed` 並算好座標 —— absolute 會被有 overflow 的祖先切掉
+ *     （數據頁的表格就是，見 tip.js 的說明）。
+ * ZH: 兩邊都留著是刻意的：JS 掛掉時泡泡仍然出得來，只是可能被切到。
+ *     那比「完全看不到」好。 */
 .tip__body {
     position: absolute;
     top: calc(100% + var(--space-1));
     left: 0;
-    z-index: 20;
+    /* ZH: 🔴 要高於使用者端那條**固定的頂部列**（web.css，z-index: 30）——
+     *     泡泡改成往上長之後會滑到頂部列底下，低於它就整個被蓋住。
+     * ZH: 仍然低於小基（900）與初次設定彈窗（1000）。 */
+    z-index: 40;
     width: max-content;
     max-width: min(20rem, 80vw);
     padding: var(--space-3);
