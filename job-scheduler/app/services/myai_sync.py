@@ -1456,18 +1456,25 @@ async def provision_user(db: Session, user) -> dict:
     """
     ZH: v3.3 自動開通主流程（首次 SSO 登入後以背景任務呼叫，**不阻塞登入**）。
         狀態機（每一步都可安全重入，重複呼叫不會重複建號）：
-          disabled      → 功能旗標關閉
           bound         → 已有綁定，什麼都不用做
           linked_only   → 廠商端已有此 email（先前已註冊）→ 只補綁定，不建號
+          disabled      → 建號開關關閉（🔴 v4.0 起**只擋建號**，見下）
           created       → 呼叫廠商批次註冊建號 + 綁定 + 暫存初始密碼
           failed        → 廠商端失敗（保留錯誤訊息供 admin 檢視）
-    EN: Auto-provision orchestrator; idempotent, runs in background after SSO login.
+
+    ZH: 🔴 v4.0（2026-08-30）把 `myai_autoprovision` 的檢查**移到綁定之後**。
+        原本它在第一行，於是「綁廠商端既有帳號」也被一起擋掉 ——
+        實際發生過：學生 SSO 首次登入，廠商鏡像裡明明有他的 email，
+        卻因開關預設 0 靜默跳過，登入後上不了 MYAI，要等人工觸發配對。
+        綁定只寫本平台 DB（無廠商呼叫、不花點數、不寄信），
+        本來就不是「開通」；開關的責任只在**會動廠商的建號**那一段。
+    EN: Auto-provision orchestrator; idempotent. Since v4.0 the
+        `myai_autoprovision` switch gates only vendor-side account creation;
+        binding to an already-existing vendor account always runs (DB-only).
 
     @node job-scheduler/app/services/myai_sync.py::provision_user
     """
     from .. import crud
-    if not crud.get_setting(db, "myai_autoprovision"):
-        return {"status": "disabled"}
 
     email = (user.email or "").strip()
     if not email or email.endswith("@unknown"):
@@ -1511,6 +1518,15 @@ async def provision_user(db: Session, user) -> dict:
         acc.myai_vendor_sn = exist.vendor_sn
         db.commit()
         return {"status": "linked_only", "email": email}
+
+    # ==========================================================================
+    # ZH: 走到這裡 = 廠商端沒有既有帳號，接下來就是**真的建號**（動廠商、
+    #     可能發點數、寄信）—— 開關只管這一段。v4.0 前它在函式第一行，
+    #     連上面的純 DB 綁定都擋，造成首次登入配不上的缺口。
+    # EN: Everything below touches the vendor. The switch gates only this part.
+    # ==========================================================================
+    if not crud.get_setting(db, "myai_autoprovision"):
+        return {"status": "disabled"}
 
     # ZH: ② 唯一的前置條件 —— **有沒有信箱**（事實），不是「信箱像不像真的」（預測）。
     #     沒有地址就無從建號；有地址就照建、照寄，帳號到底存不存在交給退件告訴我們

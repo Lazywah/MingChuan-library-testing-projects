@@ -20,6 +20,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(
     os.path.abspath(__file__))), "job-scheduler"))
 
 from app.services import myai_sync as M  # noqa: E402
+from app import models  # noqa: E402
 
 
 # ══════════════════════════════════════════════════════════════════════════
@@ -344,3 +345,58 @@ def test_provision_email_is_suppressed_when_disabled(monkeypatch, db):
     res = asyncio.run(M.provision_user(db, user))
     assert res["status"] == "created", "關掉通知信不應影響開通"
     assert sent == [], "設定為 0 卻還是寄了"
+
+
+# ══════════════════════════════════════════════════════════════════════════
+# ZH: 六、v4.0 —— myai_autoprovision 只擋「建號」，不擋「綁既有帳號」
+# ══════════════════════════════════════════════════════════════════════════
+# ZH: 實際發生過（2026-08-30）：開關預設 0，學生 SSO 首次登入，
+#     廠商鏡像裡明明有他的 email，卻被第一行的開關整個擋掉、而且靜默 ——
+#     登入後上不了 MYAI，要等人工觸發配對。這組把修正後的邊界釘住。
+
+def _switch_off_env(monkeypatch, db):
+    """ZH: 開關=0 + 廠商呼叫裝上「絕不可被碰」的哨兵，回傳建好的 user。"""
+    async def must_not_be_called(rows):
+        raise AssertionError("開關關閉時不可呼叫廠商建號 register_batch")
+
+    monkeypatch.setattr(M, "register_batch", must_not_be_called)
+
+    real_get_setting = M.crud.get_setting
+
+    def patched(_db, key):
+        if key == "myai_autoprovision":
+            return 0
+        return real_get_setting(_db, key)
+
+    monkeypatch.setattr(M.crud, "get_setting", patched)
+
+    from conftest import make_user
+    return make_user(db, username="12360014", email="12360014@example.com")
+
+
+def test_switch_off_still_links_existing_vendor_account(monkeypatch, db):
+    """ZH: 開關=0 + 鏡像有此 email → 仍須 linked_only 並建立綁定（純 DB，無廠商呼叫）。"""
+    user = _switch_off_env(monkeypatch, db)
+    db.add(models.MyaiAccount(vendor_sn="SN-9014", email="12360014@example.com"))
+    db.commit()
+
+    res = asyncio.run(M.provision_user(db, user))
+
+    assert res["status"] == "linked_only", "綁既有帳號不該被建號開關擋住"
+    acc = (db.query(models.ExternalAiAccount)
+             .filter(models.ExternalAiAccount.user_id == user.id).one())
+    assert acc.vendor_username == "12360014@example.com"
+    assert acc.myai_vendor_sn == "SN-9014", "穩定鍵要一併回填"
+
+
+def test_switch_off_blocks_creation_only(monkeypatch, db):
+    """ZH: 開關=0 + 鏡像沒有此 email → disabled，且不建綁定、不碰廠商。
+        （哨兵 register_batch 一被呼叫就會 AssertionError，這裡是雙保險。）"""
+    user = _switch_off_env(monkeypatch, db)
+
+    res = asyncio.run(M.provision_user(db, user))
+
+    assert res["status"] == "disabled"
+    n = (db.query(models.ExternalAiAccount)
+           .filter(models.ExternalAiAccount.user_id == user.id).count())
+    assert n == 0, "disabled 不該留下任何綁定"

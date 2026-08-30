@@ -1515,7 +1515,7 @@ SYSTEM_SETTINGS = {
     "rag_min_score":            {"group": "assistant", "type": "float", "default": lambda: settings.RAG_MIN_SCORE,               "min": 0.0, "max": 1.0,  "label": "小基 RAG 相似度門檻", "label_en": "Assistant RAG: similarity threshold"},
     "rag_history_turns":        {"group": "assistant", "type": "int",   "default": lambda: settings.RAG_HISTORY_TURNS,           "min": 0,   "max": 20,   "label": "小基 RAG 帶入對話輪數", "label_en": "Assistant RAG: conversation turns included"},
     # v3.3 MYAI 自動開通
-    "myai_autoprovision":       {"starred": True, "group": "myai", "type": "int",   "default": lambda: 0,                                    "min": 0,   "max": 1,    "label": "MYAI 首次登入自動開通(1=開, 0=關)", "label_en": "MYAI auto-provision on first login (1 = on, 0 = off)"},
+    "myai_autoprovision":       {"starred": True, "group": "myai", "type": "int",   "default": lambda: 0,                                    "min": 0,   "max": 1,    "label": "MYAI 首次登入自動建號(1=開, 0=關；綁定既有帳號不受此限)", "label_en": "MYAI auto-create vendor account on first login (1 = on, 0 = off; linking existing accounts is always on)"},
     "myai_init_pwd_days":       {"starred": True, "group": "myai", "type": "int",   "default": lambda: 30,                                   "min": 1,   "max": 180,  "label": "MYAI 初始密碼保存天數(逾期自動清除)", "label_en": "MYAI initial password retention (days; purged when it expires)"},
     "myai_initial_credit":      {"starred": True, "group": "myai", "type": "int",   "default": lambda: 0,                                    "min": 0,   "max": None, "label": "MYAI 新帳號初始點數(0=不發放)", "label_en": "MYAI initial credit for new accounts (0 = none)"},
     # ZH: v3.9 每月補點（擁有者 2026-08-29 定的三條規則）：

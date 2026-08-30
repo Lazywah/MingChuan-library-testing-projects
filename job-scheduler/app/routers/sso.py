@@ -343,7 +343,13 @@ async def _provision_myai_bg(username: str) -> None:
         if user is None:
             return
         res = await myai_sync.provision_user(db, user)
-        if res.get("status") not in ("disabled", "bound"):
+        # ZH: v4.0 disabled 不再靜默 —— 實際發生過：開關預設 0，首次登入
+        #     配不上 MYAI 卻連一行 log 都沒有，查了半天才想起有這個開關。
+        if res.get("status") == "disabled":
+            logger.info(
+                f"MYAI 建號略過 {username}：myai_autoprovision 開關關閉"
+                "（廠商端既有帳號的綁定不受此限，已在前面執行）")
+        elif res.get("status") != "bound":
             logger.info(f"MYAI 自動開通結果 {username}: {res}")
     except Exception as e:  # noqa: BLE001 - 開通失敗絕不影響登入
         logger.error(f"MYAI 自動開通背景任務錯誤 {username}: {e}")
