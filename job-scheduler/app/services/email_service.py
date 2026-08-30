@@ -176,10 +176,22 @@ def send_email(to_email, subject: str, html_content: str,
         part = MIMEText(html_content, "html")
         msg.attach(part)
 
-        server = smtplib.SMTP(cfg["server"], cfg["port"])
+        # ZH: 465 = 隱含 SSL（連線即加密）；其他埠（587）維持 STARTTLS。
+        #     為什麼要支援 465：2026-08-30 於 5090 節點實測，校園網路對
+        #     smtp.gmail.com:587 的 STARTTLS **升級握手會被掐斷**
+        #     （明文 EHLO 通、starttls() 後 TLS handshake 逾時 / UNEXPECTED_EOF，
+        #     主機與容器內皆然），而 465 全程加密可通。
+        #     被擋的網路把 .env 的 SMTP_PORT 改 465 即可，不用動程式。
+        # EN: Port 465 = implicit SSL. Campus networks that kill STARTTLS
+        #     upgrades on 587 (measured 2026-08-30) can switch SMTP_PORT to 465.
+        if int(cfg["port"]) == 465:
+            server = smtplib.SMTP_SSL(cfg["server"], cfg["port"])
+        else:
+            server = smtplib.SMTP(cfg["server"], cfg["port"])
         try:
             server.ehlo()
-            server.starttls()
+            if int(cfg["port"]) != 465:
+                server.starttls()
             if cfg["username"] and cfg["password"]:
                 server.login(cfg["username"], cfg["password"])
 
