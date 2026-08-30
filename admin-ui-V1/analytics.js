@@ -847,6 +847,17 @@
             || ['an_dept', '學系'];
     }
 
+    // ZH: 平台統計的網址。期間參數與 MYAI 那支**同一套寫法** ——
+    //     兩邊不一致的話，同一個畫面上兩張表會是不同期間的數字，
+    //     而畫面上完全看不出來。
+    function platformUrl() {
+        return '/admin/analytics?group_by=' + encodeURIComponent(groupBy())
+            + '&' + (rangeOn()
+                ? 'start=' + encodeURIComponent(RANGE.start || '')
+                  + '&end=' + encodeURIComponent(RANGE.end || '')
+                : 'days=' + DAYS);
+    }
+
     function renderPlatform(a) {
         if (failed(a)) { $('platform').innerHTML = failBox(a); return; }
         var rows = a.group_stats || [];
@@ -855,12 +866,22 @@
                 + esc(T('an_platform_none', '還沒有足夠的資料。')) + '</p>';
             return;
         }
+        // ZH: 🔴 欄位順序是刻意的：**人數 → 有多少人在用 → 各項用了多少**。
+        //     先答「這一組推得開嗎」，再答「用在哪」。
+        //     把使用量放前面的話，大系永遠在最上面，而那不是要看的事。
         var head = [
             groupHeadKey(), ['an_users', '人數'],
-            ['an_dept_logins', '登入次數'], ['', 'Token'],       // ZH: 中英一樣，不需要 key
+            ['an_active', '有用的人'], ['an_adoption', '滲透率'],
+            ['an_c_visits', 'MYAI 次數'], ['an_c_points', 'MYAI 點數'],
+            // ZH: Lab·GPU / Lab·CPU 中英一樣，**不給 key** —— 給了會被
+            //     check_i18n 報成「字典有但沒人用」（它的判準是 key 後面
+            //     緊接一個含中文的 fallback）。與上面 Token 那欄同一個處理。
+            ['an_c_jobs', '訓練'], ['', 'Lab·GPU'], ['', 'Lab·CPU'],
+            ['an_dept_logins', '登入次數'], ['', 'Token'],   // ZH: 中英一樣，不給 key
         ];
         $('platform').innerHTML =
-            '<div class="adm-tablewrap"><table class="adm-table"><thead><tr>'
+            trackingNote(a)
+            + '<div class="adm-tablewrap"><table class="adm-table"><thead><tr>'
             + head.map(function (h) { return '<th>' + esc(T(h[0], h[1])) + '</th>'; }).join('')
             + '</tr></thead><tbody>'
             + rows.map(function (r) {
@@ -869,11 +890,70 @@
                     //     文案在前端決定,才翻得了中英。
                     + '<td>' + esc(r.group || T('an_unclassified', '未分類')) + '</td>'
                     + '<td class="num">' + esc(num(r.user_count)) + '</td>'
+                    // ZH: 「有用的人」寫成 45/52 而不是只寫 45 ——
+                    //     分母就在旁邊，讀的人不必自己去對上一欄。
+                    + '<td class="num">' + esc(num(r.active_users_min))
+                    +     ' / ' + esc(num(r.user_count)) + '</td>'
+                    + '<td class="num">' + esc(pct(r.adoption)) + '</td>'
+                    + cell(r.myai_visits, r.share_visits)
+                    + cell(r.myai_points, r.share_points)
+                    + cell(r.jobs, r.share_jobs)
+                    // ZH: Lab 的兩欄共用同一個佔比（share_lab 是兩者相加算的）——
+                    //     所以只在 GPU 那欄顯示 %，CPU 那欄只給次數。
+                    //     兩欄都掛同一個百分比會讓人以為那是各自的佔比。
+                    + '<td class="num">' + esc(num(r.lab_gpu)) + '</td>'
+                    + '<td class="num">' + esc(num(r.lab_cpu)) + '</td>'
                     + '<td class="num">' + esc(num(r.total_logins)) + '</td>'
+                    // ZH: ⚠ Token 是**平台自己的**額度，與 MYAI 點數完全無關。
+                    //     這一欄在 v3.9 加新欄位時被我改表頭時弄丟過一次 ——
+                    //     欄位對帳（後端送了前端沒用）才抓出來。
                     + '<td class="num">' + esc(num(r.total_tokens)) + '</td>'
                     + '</tr>';
             }).join('')
             + '</tbody></table></div>';
+    }
+
+    // ZH: 數字 + 佔比。佔比為 0 時只寫數字 —— 「0（0.0%）」是兩次噪音。
+    function cell(n, share) {
+        var v = esc(num(n));
+        if (share) v += ' <span class="an-share">(' + esc(pct(share)) + ')</span>';
+        return '<td class="num">' + v + '</td>';
+    }
+
+    function pct(v) {
+        var n = Number(v) || 0;
+        return n.toFixed(1) + '%';
+    }
+
+    /* ZH: 🔴 「自 X 日起才有資料」的註記。
+     *
+     * ZH: MYAI 跳轉與 Lab 的 CPU/GPU 之分是 v3.9 才開始記的。選的期間比第一筆
+     *     還早時，那幾欄的 0 會被讀成「這個系都沒在用」—— 而其實是
+     *     「那時候還沒開始記」。兩者在畫面上長得一模一樣。
+     * ZH: 日期由後端從資料本身推（最早一筆），不是寫死的 ——
+     *     寫死的話換一台機器部署就錯了。
+     */
+    function trackingNote(a) {
+        var since = (a && a.tracking_since) || {};
+        var first = since.myai_visits || since.lab_usage;
+        if (!first) return '';
+        var d = String(first).slice(0, 10);
+        // ZH: 只在「選的期間比它早」時才提醒。期間完全在記錄之後的話，
+        //     這句話是多餘的，而多餘的警語會讓人開始略過所有警語。
+        var startsBefore = rangeOn()
+            ? (RANGE.start && RANGE.start < d)
+            : (DAYS === 0 || daysAgo(DAYS) < d);
+        if (!startsBefore) return '';
+        return '<p class="footnote">'
+            + esc(T('an_tracking_since',
+                    'MYAI 次數與 Lab 的 GPU／CPU 之分自 {d} 起才有紀錄；'
+                    + '在那之前的 0 代表「還沒開始記」，不是「沒有人用」。')
+                .replace('{d}', d))
+            + '</p>';
+    }
+
+    function daysAgo(n) {
+        return new Date(Date.now() - n * 86400000).toISOString().slice(0, 10);
     }
 
     // ── 期間 ──────────────────────────────────────────────────────────────
@@ -923,7 +1003,7 @@
                       + '&end=' + encodeURIComponent(RANGE.end)
                     : 'days=' + DAYS))),
             safe(get('/admin/jobs?limit=500')),
-            safe(get('/admin/analytics?group_by=' + encodeURIComponent(groupBy()))),
+            safe(get(platformUrl())),
         ]);
         renderMyai(out[0]);
         renderJobs(out[1]);
@@ -938,7 +1018,7 @@
         if (!el) return;
         el.addEventListener('change', async function () {
             renderPlatform(await safe(
-                get('/admin/analytics?group_by=' + encodeURIComponent(groupBy()))));
+                get(platformUrl())));
         });
     })();
 

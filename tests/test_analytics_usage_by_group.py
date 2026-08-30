@@ -89,9 +89,11 @@ def test_topups_are_not_counted_as_usage(client, db, admin_headers):
 
     g = _get(client, admin_headers, group_by="department", days=30)
 
-    # ZH: 只有那 500 是「用掉的」
+    # ZH: 只有那 500 是「用掉的」；那筆 +9000 是管理員補的，不算使用量
     assert g["資管系"]["myai_points"] == 500
-    assert g["資管系"]["myai_tx"] == 2      # ZH: 筆數照算兩筆，那是事實
+    # ZH: ⚠ 交易**筆數**刻意不送（畫面上沒有那一欄）——
+    #     送出去卻沒有人讀等於死欄位。要的話後端一行就加得回來。
+    assert "myai_tx" not in g["資管系"]
 
 
 def test_active_users_never_exceeds_user_count(client, db, admin_headers):

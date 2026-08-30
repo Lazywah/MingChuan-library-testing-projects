@@ -1778,8 +1778,10 @@ def get_analytics(
 
     for g in group_stats:
         k = g["group"]
-        n_tx, pts = tx_rows.get(k, (0, 0))
-        g["myai_tx"] = n_tx
+        _n_tx, pts = tx_rows.get(k, (0, 0))
+        # ZH: 交易**筆數**刻意不送。它與點數高度相關（用得多筆數就多），
+        #     而畫面上已經有九欄 —— 多一欄只增加寬度不增加資訊。
+        #     要的話一行就加得回來，但送出去卻沒有人讀等於死欄位。
         # ZH: pts 已經是「用掉的點數」（正數）—— 只加負的 delta，見上面的 case。
         #     加點（管理員補點）不是使用量，混進來會讓「補過點的系」
         #     看起來用得特別多，而那正好是用得少所以要補的那些系。
@@ -1811,12 +1813,12 @@ def get_analytics(
     tot_points = sum(g["myai_points"] for g in group_stats)
     tot_visits = sum(g["myai_visits"] for g in group_stats)
     tot_jobs = sum(g["jobs"] for g in group_stats)
-    tot_lab = sum(g["lab_gpu"] + g["lab_cpu"] for g in group_stats)
     for g in group_stats:
         g["share_points"] = _share(g["myai_points"], tot_points)
         g["share_visits"] = _share(g["myai_visits"], tot_visits)
         g["share_jobs"] = _share(g["jobs"], tot_jobs)
-        g["share_lab"] = _share(g["lab_gpu"] + g["lab_cpu"], tot_lab)
+        # ZH: Lab 的佔比不送 —— GPU 與 CPU 分兩欄顯示，掛一個合計的百分比
+        #     在其中任一欄都會被讀成「那一欄自己的佔比」。
         g["adoption"] = _share(g["active_users_min"], g["user_count"])
 
     # ZH: 這兩張表是 v3.9 才開始記的，**沒有歷史**。選的期間比第一筆還早時，

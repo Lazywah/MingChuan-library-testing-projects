@@ -1500,3 +1500,8 @@ textarea.field__input {
 @media (max-width: 720px) {
     .nw-cols { grid-template-columns: 1fr; }
 }
+
+/* ZH: 表格裡的佔比（v3.9）。小一號的灰字 —— 它是**次要**資訊：
+ *     主要的是次數，佔比只是幫忙換算。做成同樣大小的話，
+ *     一整欄兩個數字會讓人分不出哪個是哪個。 */
+.an-share { color: var(--text-muted); font-size: 0.8125rem; }
