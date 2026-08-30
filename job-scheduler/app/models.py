@@ -645,6 +645,12 @@ class Announcement(Base):
     id          = Column(Integer, primary_key=True, autoincrement=True)
     title       = Column(String, nullable=False)
     body        = Column(Text, nullable=False)
+    # ZH: v3.9 英文版（擁有者裁定 2026-08-30）。**空的退回中文** ——
+    #     與 name_en 同一條規則。強制要填英文的話，結果是公告乾脆不發。
+    # ZH: ⚠ 中文欄位仍然是必填。英文版是「額外的」，不是「另一則公告」——
+    #     兩邊都可空的話，會出現一則兩種語言都看不到內容的公告。
+    title_en    = Column(String, nullable=True)
+    body_en     = Column(Text, nullable=True)
     posted_by   = Column(String, ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
     posted_at   = Column(DateTime, default=lambda: datetime.now(timezone.utc), index=True)
     updated_at  = Column(DateTime, default=lambda: datetime.now(timezone.utc),

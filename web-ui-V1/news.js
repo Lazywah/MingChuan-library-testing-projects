@@ -77,11 +77,11 @@ function render(list) {
 
         const h = document.createElement('h2');
         h.className = 'post__title';
-        h.textContent = a.title || T('news_untitled', '(無標題)');
+        h.textContent = pickLang(a, 'title') || T('news_untitled', '(無標題)');
 
         const body = document.createElement('p');
         body.className = 'post__body';
-        linkify(body, a.body || '');
+        linkify(body, pickLang(a, 'body'));
 
         art.append(head, h, body);
         if (a.files && a.files.length) art.appendChild(fileList(a));
@@ -95,6 +95,23 @@ function render(list) {
             .replace('{n}', LIMIT);
     }
 }
+
+/* ZH: 挑語言版本（v3.9）。
+ *
+ * ZH: 規則：**英文介面且有英文版才用英文，否則一律中文。**
+ *     與 name_en 同一條規則 —— 英文是「額外的」，不是「另一則公告」。
+ * ZH: 🔴 判斷用 truthy 而不是 `!= null`：空字串也算沒有。
+ *     後端已經把 "" 正規化成 None，但前端不假設後端一定做對 ——
+ *     漏掉的話畫面上會出現一則**標題空白**的公告，而且不會有錯誤。
+ * ZH: ⚠ 中英是**分別**退回的。只翻了標題沒翻內文是常有的事，
+ *     整則綁在一起判斷的話，那種公告的標題就白翻了。
+ */
+function pickLang(a, key) {
+    const en = (window.Prefs && window.Prefs.get().ui_lang) === 'en';
+    if (en && a[key + '_en']) return a[key + '_en'];
+    return a[key] || '';
+}
+
 
 /* ==========================================================================
  * ZH: 內文裡的網址自動變連結（v3.9，擁有者裁定 2026-08-30）
@@ -250,6 +267,8 @@ function mock(kind) {
         id: i, title: `示範公告第 ${i} 則：系統維護與功能更新說明`,
         body: '這是公告內容。詳情請看 https://www.mcu.edu.tw/announcement。第二段說明維護時間與影響範圍。',
         posted_by: 'admin', posted_at: `2026-08-${String((i % 28) + 1).padStart(2, '0')}T09:00:00`,
+        title_en: `Demo announcement ${i}: maintenance and feature updates`,
+        body_en: 'This is the announcement body. See https://www.mcu.edu.tw/announcement for details.',
         is_pinned: pinned ? 1 : 0, is_visible: 1,
         // ZH: 第一則帶附件與網址，好讓 ?state= 看得到那兩塊的樣子。
         //     沒有這個的話，附件與自動連結**只有真的有資料時才驗得到** ——

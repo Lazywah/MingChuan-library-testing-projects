@@ -671,6 +671,9 @@ class AnnouncementCreate(BaseModel):
     """ZH: admin 建立 / 編輯公告的請求 | EN: Admin create/edit announcement"""
     title: str
     body: str
+    # ZH: 英文版可空 —— 空的時候使用者端退回中文（見 news.js 的 pick）。
+    title_en: Optional[str] = None
+    body_en: Optional[str] = None
     is_pinned: int = 0          # 0 / 1
     is_visible: int = 1         # 0 / 1
 
@@ -696,6 +699,8 @@ class AnnouncementResponse(BaseModel):
     id: int
     title: str
     body: str
+    title_en: Optional[str] = None
+    body_en: Optional[str] = None
     posted_by: Optional[str] = None
     posted_at: UtcDatetime
     updated_at: Optional[UtcDatetime] = None

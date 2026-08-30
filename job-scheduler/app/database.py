@@ -156,6 +156,14 @@ def init_db():
             try: conn.execute(text("ALTER TABLE users ADD COLUMN lifetime_tokens_used INTEGER DEFAULT 0"))
             except Exception: pass
 
+            # --- announcements 表遷移（v3.9 中英雙語）---
+            # ZH: ⚠ create_all 只建**新表**，不會替既有的表加欄位。
+            #     漏了這兩行的話，已經上線的資料庫讀 title_en 會直接炸。
+            try: conn.execute(text("ALTER TABLE announcements ADD COLUMN title_en VARCHAR"))
+            except Exception: pass
+            try: conn.execute(text("ALTER TABLE announcements ADD COLUMN body_en TEXT"))
+            except Exception: pass
+
             # --- models 表遷移 | models table migrations ---
             try: conn.execute(text("ALTER TABLE models ADD COLUMN model_type VARCHAR DEFAULT 'local'"))
             except Exception: pass

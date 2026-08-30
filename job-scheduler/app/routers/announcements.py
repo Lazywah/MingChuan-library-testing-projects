@@ -180,6 +180,11 @@ def admin_create_announcement(
     a = models.Announcement(
         title=payload.title,
         body=payload.body,
+        # ZH: 空字串正規化成 None —— 前端的空欄位送過來是 ""，
+        #     而使用者端判斷「有沒有英文版」看的是 truthy，
+        #     "" 與 None 都算沒有。存成 None 是為了讓資料庫裡看得出差別。
+        title_en=(payload.title_en or "").strip() or None,
+        body_en=(payload.body_en or "").strip() or None,
         posted_by=current_admin.id,
         is_pinned=payload.is_pinned,
         is_visible=payload.is_visible,
@@ -204,6 +209,8 @@ def admin_update_announcement(
         raise HTTPException(status_code=404, detail="ZH: 找不到這則公告 | EN: Announcement not found")
     a.title = payload.title
     a.body = payload.body
+    a.title_en = (payload.title_en or "").strip() or None
+    a.body_en = (payload.body_en or "").strip() or None
     a.is_pinned = payload.is_pinned
     a.is_visible = payload.is_visible
     db.commit(); db.refresh(a)

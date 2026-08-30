@@ -556,14 +556,33 @@
             +   esc(T('pf_close', '關閉')) + '">✕</button></form>'
             + '<h2 class="rmod__title">'
             + esc(a ? T('rp_news_edit', '編輯公告') : T('rp_news_new', '寫一則公告')) + '</h2>'
-            + '<label class="field"><span class="field__label" for="nw-title">'
-            + esc(T('rp_news_title', '標題')) + '</span>'
-            + '<input class="field__input" id="nw-title" type="text" value="'
-            + esc(e.title || '') + '"></label>'
-            + '<label class="field"><span class="field__label" for="nw-body">'
-            + esc(T('rp_news_body', '內容')) + '</span>'
-            + '<textarea class="field__input" id="nw-body" rows="8">'
-            + esc(e.body || '') + '</textarea></label>'
+            // ZH: v3.9 中英並排（擁有者裁定 2026-08-30）。
+            //     並排不是上下排的理由：翻譯時眼睛要在兩邊來回對照，
+            //     上下排的話長內文會讓對照的兩段隔了一整個畫面。
+            // ZH: ⚠ 英文可以空著 —— 空的時候使用者端顯示中文版。
+            //     做成必填的話，結果會是公告乾脆不發。
+            + '<div class="nw-cols">'
+            +   '<div>'
+            +     '<label class="field"><span class="field__label" for="nw-title">'
+            +     esc(T('rp_news_title', '標題')) + '</span>'
+            +     '<input class="field__input" id="nw-title" type="text" value="'
+            +     esc(e.title || '') + '"></label>'
+            +     '<label class="field"><span class="field__label" for="nw-body">'
+            +     esc(T('rp_news_body', '內容')) + '</span>'
+            +     '<textarea class="field__input" id="nw-body" rows="8">'
+            +     esc(e.body || '') + '</textarea></label>'
+            +   '</div>'
+            +   '<div>'
+            +     '<label class="field"><span class="field__label" for="nw-title-en">'
+            +     esc(T('rp_news_title_en', '標題（英文，可留空）')) + '</span>'
+            +     '<input class="field__input" id="nw-title-en" type="text" value="'
+            +     esc(e.title_en || '') + '"></label>'
+            +     '<label class="field"><span class="field__label" for="nw-body-en">'
+            +     esc(T('rp_news_body_en', '內容（英文，可留空）')) + '</span>'
+            +     '<textarea class="field__input" id="nw-body-en" rows="8">'
+            +     esc(e.body_en || '') + '</textarea></label>'
+            +   '</div>'
+            + '</div>'
             // ZH: 明講會原樣顯示 —— 有人會想貼 HTML 進來。
             + '<p class="footnote">' + esc(T('rp_news_plain',
                 '純文字，會原樣顯示給使用者。貼 HTML 進來不會變成排版，會看到標籤本身。')) + '</p>'
@@ -646,6 +665,9 @@
         // ZH: 下拉的值是字串，'0' 是 truthy —— 要明確比對，不能用 !!。
         var payload = {
             title: title, body: body,
+            // ZH: 空字串照送，後端會正規化成 null（見 admin_create_announcement）。
+            title_en: $('nw-title-en').value.trim(),
+            body_en: $('nw-body-en').value.trim(),
             is_pinned: $('nw-pin').value === '1' ? 1 : 0,
             is_visible: $('nw-vis').value === '1' ? 1 : 0,
         };

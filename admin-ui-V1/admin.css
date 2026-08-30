@@ -1492,3 +1492,11 @@ textarea.field__input {
     padding: var(--space-3);
 }
 .rmod__foot { margin-top: var(--space-4); }
+
+/* ZH: 公告的中英並排（v3.9）。
+ * ZH: 窄視窗折成一欄 —— 兩欄各 360px 以下時，中文一行放不了幾個字，
+ *     對照反而更難看。彈窗本身最寬 720px，所以門檻抓在那附近。 */
+.nw-cols { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-4); }
+@media (max-width: 720px) {
+    .nw-cols { grid-template-columns: 1fr; }
+}

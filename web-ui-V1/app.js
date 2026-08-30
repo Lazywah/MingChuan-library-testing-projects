@@ -93,7 +93,10 @@ async function loadNews() {
             const t = document.createElement('span');
             t.className = 'news__title';
             // ZH: 用 textContent 不用 innerHTML —— 公告是管理端打進來的自由文字。
-            t.textContent = a.title || '';
+            // ZH: 英文介面且有英文標題才用英文（見 news.js 的 pickLang）。
+            //     這裡只有標題，內文不在首頁上。
+            const en = (window.Prefs && window.Prefs.get().ui_lang) === 'en';
+            t.textContent = (en && a.title_en) || a.title || '';
             li.appendChild(t);
 
             list.appendChild(li);
