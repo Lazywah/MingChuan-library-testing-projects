@@ -278,10 +278,14 @@ ZH: ⚠ 已知限制（擁有者 2026-08-28 裁定接受）：V1 的 Lab 走**�
     //     不記的話每換一頁側欄就自己彈回來，會很煩。
     // ==========================================================================
     const DOCK_KEY = 'ai_hud_bot_open';
-    // ZH: 預設**開著** —— 擁有者的出發點就是「版面太空」。
-    //     使用者關掉之後就會記住，不會再自己打開。
+    // ZH: 預設**關著**，只留右下角的泡泡按鈕（擁有者裁定 2026-08-31，
+    //     推翻先前「版面太空所以預設開」的出發點）。
+    //     使用者自己打開過（'1'）就記住；沒動過或關過都維持收合。
+    //     ⚠ 改這裡要**連 12 個 html 的 head inline script 一起改**（判斷式相同），
+    //     那段是為了首次繪製前就套 padding、避免換頁閃動 —— 兩邊不一致的話，
+    //     頁面會先讓位再收回，每換一頁閃一次。
     function _wantOpen() {
-        try { return localStorage.getItem(DOCK_KEY) !== '0'; } catch (_) { return true; }
+        try { return localStorage.getItem(DOCK_KEY) === '1'; } catch (_) { return false; }
     }
     function _remember(open) {
         try { localStorage.setItem(DOCK_KEY, open ? '1' : '0'); } catch (_) {}

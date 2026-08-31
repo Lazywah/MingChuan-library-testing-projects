@@ -102,6 +102,7 @@
             // ── 首頁 ─────────────────────────────────────────────
             idx_title: 'MCU AI Base',
             idx_go_myai: '前往 MYAI 問 AI',
+            idx_early_balance: '額度開始變少（低於 {n}），留意用量',
             idx_low_balance: '額度偏低（低於 {n}）',
             idx_no_balance: '額度已用完',
             idx_see_where: '看用在哪',
@@ -565,6 +566,7 @@
             // ── Home ─────────────────────────────────────────────
             idx_title: 'MCU AI Base',
             idx_go_myai: 'Go to MYAI and ask',
+            idx_early_balance: 'Credits getting lower (under {n}) - keep an eye on usage',
             idx_low_balance: 'Balance is low (under {n})',
             idx_no_balance: 'Your credits are used up',
             idx_see_where: 'See where it went',

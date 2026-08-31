@@ -16,7 +16,7 @@
              內容滑出去讓位（widget 的 JS 在 body 尾端才跑，那時已經畫過一次了）。
          ZH: 與 CSS 的對應：`html.aibot-docked body { padding-right: … }`。
              key 與 assistant-widget.js 的 DOCK_KEY 相同，改一邊要改兩邊。 -->
-    <script>try{if(localStorage.getItem('ai_hud_bot_open')!=='0')document.documentElement.classList.add('aibot-docked')}catch(e){}</script>
+    <script>try{if(localStorage.getItem('ai_hud_bot_open')==='1')document.documentElement.classList.add('aibot-docked')}catch(e){}</script>
 </head>
 <body>
 
@@ -140,7 +140,7 @@
 <script src="i18n.js?v=ae803216"></script>
 <script src="prefs.js?v=00b43387"></script>
 <!-- ZH: 小基（浮動助手）。客服模式公開，登入頁也放 —— 設計文件的使用者需求是「不會用這個平台時想直接問」。 -->
-<script src="assistant-widget.js?v=4e71c750"></script>
+<script src="assistant-widget.js?v=935ff5a5"></script>
 <script src="chrome.js?v=11c0fcb4"></script>
 <script src="myai.js?v=cecae282"></script>
 </body>
