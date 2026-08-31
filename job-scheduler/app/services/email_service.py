@@ -474,6 +474,14 @@ def send_lab_purge_reminder(to_email: str, username: str, days_left: int,
 MYAI_BALANCE_KIND_PREFIX = "myai_balance:"
 
 _MYAI_BALANCE_TEXT = {
+    # ZH: v4.0 早期提醒 —— 語氣是「留意」不是「警告」：這段的人還有很多點數，
+    #     嚇他只會讓後面真正的警告失去分量。
+    "low_early": (
+        "你的 AI 額度開始變少了",
+        "目前剩下 <b>{points}</b> 點（低於 {threshold} 點時會先提醒一次）。不影響使用，留意用量即可。",
+        "Your AI credits are getting lower",
+        "You have <b>{points}</b> credits left (we send an early note below {threshold}). Nothing is blocked - just keep an eye on it.",
+    ),
     "low": (
         "你的 AI 額度快用完了",
         "目前剩下 <b>{points}</b> 點（低於 {threshold} 點就會提醒）。",
@@ -493,7 +501,7 @@ def send_myai_balance_alert(to_email: str, username: str, user_id: str,
                             stage: str, points: int, threshold: int,
                             guide_url: str = ""):
     """
-    ZH: MYAI 點數的兩段提醒。stage ∈ low / empty。
+    ZH: MYAI 點數的三段提醒。stage ∈ low_early / low / empty。
 
     ZH: 🔴 **一定要附「怎麼申請」的連結。** 只說「額度快用完了」是一句沒有下一步的話 ——
         他知道了,然後呢？那個連結管理端本來就設定得了（申請教學連結）,

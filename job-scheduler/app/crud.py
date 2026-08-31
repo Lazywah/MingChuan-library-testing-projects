@@ -2033,9 +2033,26 @@ def myai_low_balance_threshold(db: Session) -> int:
         return DEFAULT_LOW_BALANCE
 
 
-def myai_balance_state(points, threshold) -> str:
+# ZH: v4.0 三段式 —— 「開始變少」的**早期**門檻（在「快用完」之前先輕聲提醒一次）。
+#     0 = 關掉這一段（回到兩段式）。擁有者 2026-08-31 提的需求，數字可在管理端調。
+MYAI_EARLY_BALANCE_KEY = "myai_low_balance_early_threshold"
+DEFAULT_EARLY_BALANCE  = 10000
+
+
+def myai_low_balance_early_threshold(db: Session) -> int:
+    """ZH: 「開始變少」的早期門檻點數（0 = 關閉這一段）。位置理由同上面那支。
+
+    @node job-scheduler/app/crud.py::myai_low_balance_early_threshold
     """
-    ZH: MYAI 點數落在哪一段：`unknown` / `empty` / `low` / `ok`。
+    try:
+        return int(get_system_config(db, MYAI_EARLY_BALANCE_KEY, str(DEFAULT_EARLY_BALANCE)) or 0)
+    except (TypeError, ValueError):
+        return DEFAULT_EARLY_BALANCE
+
+
+def myai_balance_state(points, threshold, early_threshold=None) -> str:
+    """
+    ZH: MYAI 點數落在哪一段：`unknown` / `empty` / `low` / `low_early` / `ok`。
 
     ZH: 🔴 **全站唯一的判定點。** 畫面與寄信共用它 ——
         兩邊各判一次的話,信裡說「已用完」而畫面說「偏低」是遲早的事,
@@ -2046,6 +2063,11 @@ def myai_balance_state(points, threshold) -> str:
 
     ZH: 用完的判準是 `<= 0` 不是 `== 0`：廠商回過負數（扣到透支）。
 
+    ZH: v4.0 三段式：`early_threshold`（開始變少）在 `threshold`（快用完）之前
+        先輕聲提醒一次。**early ≤ low 視同關閉** —— 兩個門檻交叉是設定錯誤,
+        與其產生一個永遠輪不到的階段,不如把行為退回兩段式。
+        不傳（None/0）也是兩段式,所有舊呼叫端行為不變。
+
     @node job-scheduler/app/crud.py::myai_balance_state
     """
     if points is None:
@@ -2054,6 +2076,8 @@ def myai_balance_state(points, threshold) -> str:
         return "empty"
     if threshold and points < threshold:
         return "low"
+    if early_threshold and early_threshold > (threshold or 0) and points < early_threshold:
+        return "low_early"
     return "ok"
 
 

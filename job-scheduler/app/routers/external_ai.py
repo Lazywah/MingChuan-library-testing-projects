@@ -46,6 +46,7 @@ DEFAULT_LOW_BALANCE = crud.DEFAULT_LOW_BALANCE
 
 class AlertConfig(BaseModel):
     low_balance_threshold: int | None = None
+    early_balance_threshold: int | None = None   # ZH: v4.0 三段式的早期門檻（0=關）
     apply_guide_url: str | None = None
 
 
@@ -345,15 +346,17 @@ def get_my_balance(
     """
     points = _current_myai_points(db, current_user)
     threshold = _low_balance_threshold(db)
+    early = crud.myai_low_balance_early_threshold(db)
     guide = crud.get_system_config(db, MYAI_APPLY_GUIDE_KEY, "")
     return {
         "points": points,
         "threshold": threshold,
+        "early_threshold": early,
         # ZH: v3.8 #9 —— 兩段式。`below` 分不出「快用完」與「已經用完」,
         #     而那是兩件不同的事：前者要提醒他去申請,後者是他現在就用不了。
         #     判定集中在 crud.myai_balance_state,寄信與畫面共用同一份規則 ——
         #     兩邊各判一次的話,信裡說「已用完」而畫面說「偏低」是遲早的事。
-        "state": crud.myai_balance_state(points, threshold),
+        "state": crud.myai_balance_state(points, threshold, early),
         "below": (points is not None and points < threshold),   # ZH: 保留給既有呼叫端
         "apply_guide_url": (guide or None),
     }
@@ -470,6 +473,7 @@ def get_alert_config(
     """
     return {
         "low_balance_threshold": _low_balance_threshold(db),
+        "early_balance_threshold": crud.myai_low_balance_early_threshold(db),
         "apply_guide_url": crud.get_system_config(db, MYAI_APPLY_GUIDE_KEY, ""),
     }
 
@@ -486,6 +490,11 @@ def set_alert_config(
             db, MYAI_LOW_BALANCE_KEY, str(max(0, int(payload.low_balance_threshold))),
             description="外部 AI 低點數提醒門檻（低於此絕對點數 → 提醒學生）",
         )
+    if payload.early_balance_threshold is not None:
+        crud.set_system_config(
+            db, crud.MYAI_EARLY_BALANCE_KEY, str(max(0, int(payload.early_balance_threshold))),
+            description="外部 AI 早期提醒門檻（開始變少；0=關閉此段，回到兩段式）",
+        )
     if payload.apply_guide_url is not None:
         crud.set_system_config(
             db, MYAI_APPLY_GUIDE_KEY, payload.apply_guide_url.strip(),
@@ -493,6 +502,7 @@ def set_alert_config(
         )
     return {
         "low_balance_threshold": _low_balance_threshold(db),
+        "early_balance_threshold": crud.myai_low_balance_early_threshold(db),
         "apply_guide_url": crud.get_system_config(db, MYAI_APPLY_GUIDE_KEY, ""),
     }
 

@@ -175,6 +175,8 @@ async function loadBalance() {
         //     前端不自己比門檻 —— 兩邊各判一次的話，信裡說「已用完」而畫面說「偏低」
         //     是遲早的事，而那種不一致沒有任何錯誤訊息。
         const stage = bal.state || (bal.below ? 'low' : 'ok');   // ZH: 舊版後端沒有 state 時的退路
+        // ZH: v4.0 low_early（開始變少）**不變色**（data-low 維持 0）——
+        //     變色留給真的該緊張的 low / empty，早期提醒只是一行字。
         card.dataset.low = stage === 'empty' ? '2' : stage === 'low' ? '1' : '0';
         // ZH: 一般狀態**不再**掛「使用量明細」——底部次要區與帳號選單都已經有了，
         //     同一頁三個入口通往同一個地方，是雜訊不是方便（擁有者裁定 2026-08-21）。
@@ -182,12 +184,15 @@ async function loadBalance() {
         //     回答的是「為什麼變低」。把它一起拿掉會讓警示變成一句沒有下一步的話。
         // ZH: 🔴 申請連結：管理端本來就設定得了，但在 v3.8 之前**前後台都沒有地方顯示它** ——
         //     一個設定好卻永遠看不到的連結。已用完的人最需要的就是這個下一步。
-        if (stage === 'ok') {
+        if (stage === 'ok' || stage === 'unknown') {
             meta.innerHTML = '';
         } else {
             const parts = [
                 stage === 'empty'
                     ? T('idx_no_balance', '額度已用完')
+                    : stage === 'low_early'
+                    ? T('idx_early_balance', '額度開始變少（低於 {n}），留意用量')
+                          .replace('{n}', (bal.early_threshold || 0).toLocaleString('en-US'))
                     : T('idx_low_balance', '額度偏低（低於 {n}）')
                           .replace('{n}', (bal.threshold || 0).toLocaleString('en-US')),
                 `<a href="#" id="link-usage-inline">${T('idx_see_where', '看用在哪')}</a>`,

@@ -1979,7 +1979,7 @@ def _alerted_recently(db: Session, user_id: str, stage: str, days: int) -> bool:
 
 def notify_balance_alerts(db: Session) -> dict:
     """
-    ZH: MYAI 點數的兩段提醒（快用完／已用完）—— 寄信的部分。畫面提示走 /external-ai/my-balance。
+    ZH: MYAI 點數的三段提醒（開始變少／快用完／已用完）—— 寄信的部分。畫面提示走 /external-ai/my-balance。
 
     ZH: 只寄給**啟用中、有信箱、且真的綁得到 MYAI 帳號**的人。
         `state == "unknown"`（沒綁帳號）不寄 —— 那個人根本還沒開始用,
@@ -1995,6 +1995,7 @@ def notify_balance_alerts(db: Session) -> dict:
 
     days = int(days)
     threshold = crud.myai_low_balance_threshold(db)
+    early = crud.myai_low_balance_early_threshold(db)   # ZH: v4.0 三段式（0=關）
     guide = crud.get_system_config(db, "myai_apply_guide_url", "")
     sent = skipped = 0
 
@@ -2007,16 +2008,18 @@ def notify_balance_alerts(db: Session) -> dict:
         row = account_for_user(db, u)
         if row is None:
             continue
-        stage = crud.myai_balance_state(row.points, threshold)
-        if stage not in ("low", "empty"):
+        stage = crud.myai_balance_state(row.points, threshold, early)
+        if stage not in ("low_early", "low", "empty"):
             continue
         if _alerted_recently(db, u.id, stage, days):
             skipped += 1
             continue
         try:
+            # ZH: 信裡引用的門檻要對到**它自己那一段**（early 段講 early 的數字）
             email_service.send_myai_balance_alert(
                 u.email, u.username or u.email, u.id, stage,
-                int(row.points or 0), threshold, guide or "")
+                int(row.points or 0),
+                early if stage == "low_early" else threshold, guide or "")
             sent += 1
         except Exception as e:
             # ZH: 一個人寄失敗不該讓其餘的人收不到 —— 這是批次,不是交易。

@@ -201,10 +201,14 @@ def test_zero_days_disables_email_entirely(db, outbox):
 
 
 def test_healthy_balance_sends_nothing(db, outbox):
+    # ZH: v4.0 起「健康」要高於**早期**門檻（預設 10000 且預設開啟）。
+    #     這個測試原本給 9000 —— 三段式上線後那是 low_early、會寄信，
+    #     測試紅掉的當下就證明了早期段真的有作用。
     crud.set_system_config(db, crud.MYAI_LOW_BALANCE_KEY, "500")
+    crud.set_system_config(db, crud.MYAI_EARLY_BALANCE_KEY, "10000")
     crud.set_settings(db, {"myai_balance_alert_days": "7"})
     u = make_user(db, username="fine", email="fine@example.com")
-    _bind(db, u, 9000)
+    _bind(db, u, 20000)
 
     res = myai_sync.notify_balance_alerts(db)
     assert res["sent"] == 0 and outbox.kinds() == []
@@ -232,3 +236,56 @@ def test_email_carries_the_apply_link(db, monkeypatch):
     myai_sync.notify_balance_alerts(db)
     assert len(box) == 1, "沒有寄出提醒信"
     assert "https://apply.example.com/x" in box[0]
+
+
+# ══════════════════════════════════════════════════════════════════════════
+# ZH: v4.0 三段式 —— 早期門檻（開始變少）
+# ══════════════════════════════════════════════════════════════════════════
+
+@pytest.mark.parametrize("points,threshold,early,expected", [
+    (9999,  500, 10000, "low_early"),   # ZH: 落在早期段
+    (10000, 500, 10000, "ok"),          # ZH: 等於早期門檻不算（語意是「低於」）
+    (499,   500, 10000, "low"),         # ZH: 低於快用完門檻 → low 優先於 low_early
+    (0,     500, 10000, "empty"),
+    (None,  500, 10000, "unknown"),
+    (9999,  500, 0,     "ok"),          # ZH: early=0 = 關掉這段 → 回到兩段式
+    (9999,  500, None,  "ok"),          # ZH: 舊呼叫端不傳 early → 行為不變
+    (300,   500, 400,   "low"),         # ZH: 🔴 early ≤ low（設定交叉）→ 視同關閉
+    (450,   500, 400,   "low"),
+    (600,   500, 400,   "ok"),          # ZH: 交叉時不得出現永遠輪不到的 low_early
+])
+def test_balance_state_three_tiers(points, threshold, early, expected):
+    assert crud.myai_balance_state(points, threshold, early) == expected
+
+
+def test_early_reminder_sends_and_all_three_stages_are_independent(db, outbox):
+    """ZH: 早期段會寄；而且 early → low → empty 三段各自獨立，一定寄得出三封。"""
+    crud.set_system_config(db, crud.MYAI_LOW_BALANCE_KEY, "500")
+    crud.set_system_config(db, crud.MYAI_EARLY_BALANCE_KEY, "10000")
+    crud.set_settings(db, {"myai_balance_alert_days": "7"})
+    u = make_user(db, username="tiers1", email="tiers1@example.com")
+    row = _bind(db, u, 8000)
+
+    assert myai_sync.notify_balance_alerts(db)["sent"] == 1
+    assert outbox.kinds() == ["myai_balance:low_early"]
+
+    row.points = 300; db.commit()
+    assert myai_sync.notify_balance_alerts(db)["sent"] == 1, "掉進 low 段要能再寄"
+
+    row.points = 0; db.commit()
+    assert myai_sync.notify_balance_alerts(db)["sent"] == 1, "掉到 empty 要能再寄"
+    assert outbox.kinds() == ["myai_balance:low_early", "myai_balance:low",
+                              "myai_balance:empty"]
+
+
+def test_early_stage_is_throttled_like_the_others(db, outbox):
+    """ZH: 同一人同一段（early）在間隔內只寄一封。"""
+    crud.set_system_config(db, crud.MYAI_LOW_BALANCE_KEY, "500")
+    crud.set_system_config(db, crud.MYAI_EARLY_BALANCE_KEY, "10000")
+    crud.set_settings(db, {"myai_balance_alert_days": "7"})
+    u = make_user(db, username="tiers2", email="tiers2@example.com")
+    _bind(db, u, 8000)
+
+    assert myai_sync.notify_balance_alerts(db)["sent"] == 1
+    res = myai_sync.notify_balance_alerts(db)
+    assert res["sent"] == 0 and res["skipped"] == 1, "早期段也要吃節流"

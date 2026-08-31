@@ -1355,6 +1355,9 @@
          '留空＝平台上不顯示外部 AI 的入口。'],
         ['logout_url', 'pf_ext_logout', '廠商登出網址', 'text', 'pf_ext_logout_why',
          '共用機台換手時用它殺掉廠商那邊的登入狀態。'],
+        // ZH: v4.0 三段式 —— 早期門檻在「快用完」之前先輕聲提醒一次。0=關掉這段。
+        ['early_balance_threshold', 'pf_ext_thr_early', '早期提醒門檻（開始變少）', 'number', 'pf_ext_thr_early_why',
+         '點數低於這個數字先輕聲提醒一次（不變色、不擋使用）。0 = 關掉這一段。要大於下面的門檻才有效。'],
         ['low_balance_threshold', 'pf_ext_thr', '低點數提醒門檻', 'number', 'pf_ext_thr_why',
          '學生點數低於這個數字就在平台內提醒，每次登入只提醒一次。'],
         ['apply_guide_url', 'pf_ext_guide', '申請教學連結', 'text', 'pf_ext_guide_why',
@@ -1429,6 +1432,8 @@
                 body: JSON.stringify({
                     // ZH: 空字串送過去會變成 0（等於關掉提醒）。留空就不動這個值。
                     low_balance_threshold: thr === '' ? null : Number(thr),
+                    early_balance_threshold: get('early_balance_threshold') === ''
+                        ? null : Number(get('early_balance_threshold')),
                     apply_guide_url: get('apply_guide_url'),
                 }),
             });
