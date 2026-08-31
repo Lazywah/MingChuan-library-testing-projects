@@ -257,6 +257,9 @@ async def sync(db: Session) -> dict:
     db.commit()
     logger.info("MYAI sync: total=%d created=%d updated=%d", len(records), created, updated)
 
+    # ZH: v4.0 對帳刪除 —— 廠商端消失的帳號要從鏡像移除（見函式 docstring）
+    recon = reconcile_removed(db, records)
+
     # ZH: 同步後自動以 email 配對綁定 | EN: auto-bind by email after sync
     match = auto_match(db)
 
@@ -275,22 +278,81 @@ async def sync(db: Session) -> dict:
         "updated": updated,
         "matched_created": match["matched_created"],
         "backfilled": match["backfilled"],
+        "relinked": match.get("relinked", 0),
+        "removed": recon["removed"],
+        "marked_deleted": recon["marked_deleted"],
         "tx_fetched": tx.get("fetched", 0),
         "tx_created": tx.get("created", 0),
         "synced_at": now.isoformat(),
     }
 
 
+def reconcile_removed(db: Session, records: list) -> dict:
+    """ZH: v4.0 對帳刪除 —— 鏡像裡「這次全量匯出沒出現」的帳號，代表廠商端已刪。
+
+    ZH: 為什麼需要：sync() 原本是純 upsert（只進不出），廠商端刪掉的帳號
+        會在鏡像裡留成**鬼影**。實際發生過（2026-08-31）：廠商端刪了帳號、
+        平台帳號也刪掉重登，provision_user 查到鬼影 → 走 linked_only
+        綁到一個不存在的 vendor_sn → 永遠不會重新建號。
+
+    ZH: 做兩件事：
+        1. 鬼影自鏡像**刪除**（鏡像就是鏡子，廠商沒有的東西不該照出來）。
+        2. 指著鬼影 sn 的綁定改標 `status="vendor_deleted"`（**不刪綁定** ——
+           那是使用者的歷史；provision_user 看到這個狀態會重新走建號）。
+
+    ZH: 🔴 安全閥：`records` 為空時**整段跳過**並大聲警告 ——
+        廠商匯出 API 哪天壞掉回空名單，不能把整個鏡像清空、
+        再把所有人的綁定都標成 vendor_deleted。
+        （代價：真的「全部刪光」的極端情境要等 API 正常回報非空名單才對得到帳，
+        或由管理者手動處理 —— 這比誤刪全鏡像便宜得多。）
+
+    ZH: 廠商刪帳號在本平台的維運裡**很少發生** —— 所以每一筆都用 warning 記，
+        發生了就該被看見，不是安靜地收掉。
+
+    EN: Remove mirror rows absent from a non-empty full export; mark their
+        bindings vendor_deleted (never delete bindings). Skips loudly on an
+        empty export so a broken vendor API can't wipe the mirror.
+
+    @node job-scheduler/app/services/myai_sync.py::reconcile_removed
+    """
+    if not records:
+        logger.warning("MYAI 對帳跳過：匯出 0 筆（廠商 API 異常？）——不移除任何鏡像列")
+        return {"removed": 0, "marked_deleted": 0, "skipped": True}
+
+    seen = {rec["vendor_sn"] for rec in records}
+    removed = marked = 0
+    ghosts = (db.query(models.MyaiAccount)
+                .filter(~models.MyaiAccount.vendor_sn.in_(seen)).all())
+    for g in ghosts:
+        bindings = (db.query(models.ExternalAiAccount)
+                      .filter(models.ExternalAiAccount.myai_vendor_sn == g.vendor_sn,
+                              models.ExternalAiAccount.status != "vendor_deleted")
+                      .all())
+        for b in bindings:
+            b.status = "vendor_deleted"
+            b.note = ((b.note + " | ") if b.note else "") + "廠商端帳號已刪除（對帳偵測）"
+            marked += 1
+        logger.warning("MYAI 對帳：廠商端已無 %s (sn=%s) → 自鏡像移除%s",
+                       g.email, g.vendor_sn,
+                       "，%d 筆綁定標記 vendor_deleted" % len(bindings) if bindings else "")
+        db.delete(g)
+        removed += 1
+    if removed or marked:
+        db.commit()
+    return {"removed": removed, "marked_deleted": marked, "skipped": False}
+
+
 def auto_match(db: Session) -> dict:
     """ZH: 以 email 自動配對「myai 帳號 ↔ 平台使用者」，建立/回填 external_ai_accounts 綁定。
        規則：myai.email == user.email(不分大小寫) 且該使用者尚未綁定 → 自動建綁定
-       (vendor_username=email, myai_vendor_sn=vendor_sn)；已綁且 email 相符但缺 sn → 回填 sn。
-       只寫本平台 DB；絕不碰廠商。回傳 {matched_created, backfilled}。
+       (vendor_username=email, myai_vendor_sn=vendor_sn)；已綁且 email 相符但缺 sn → 回填 sn；
+       v4.0：綁定是 vendor_deleted 而鏡像又出現同 email → 復活（管理者在廠商端重建帳號的情境）。
+       只寫本平台 DB；絕不碰廠商。回傳 {matched_created, backfilled, relinked}。
        EN: Auto-bind myai accounts to platform users by email. Writes our DB only.
 
     @node job-scheduler/app/services/myai_sync.py::auto_match
     """
-    created = backfilled = 0
+    created = backfilled = relinked = 0
     myai_rows = (
         db.query(models.MyaiAccount)
         .filter(models.MyaiAccount.email.isnot(None))
@@ -314,12 +376,20 @@ def auto_match(db: Session) -> dict:
                 myai_vendor_sn=m.vendor_sn, status="active", note="auto-matched",
             ))
             created += 1
+        elif (acc.status == "vendor_deleted"
+              and (acc.vendor_username or "").strip().lower() == email.lower()):
+            # ZH: v4.0 —— 廠商端把帳號**重建**回來了（同 email、新 sn）：
+            #     綁定復活並換上新 sn，不必等使用者重新登入。
+            acc.myai_vendor_sn = m.vendor_sn
+            acc.status = "active"
+            relinked += 1
         elif not acc.myai_vendor_sn and (acc.vendor_username or "").strip().lower() == email.lower():
             acc.myai_vendor_sn = m.vendor_sn  # ZH: 既有綁定回填穩定鍵 | backfill stable key
             backfilled += 1
     db.commit()
-    logger.info("MYAI auto-match: created=%d backfilled=%d", created, backfilled)
-    return {"matched_created": created, "backfilled": backfilled}
+    logger.info("MYAI auto-match: created=%d backfilled=%d relinked=%d",
+                created, backfilled, relinked)
+    return {"matched_created": created, "backfilled": backfilled, "relinked": relinked}
 
 
 # ==============================================================================
@@ -1482,7 +1552,11 @@ async def provision_user(db: Session, user) -> dict:
 
     acc = (db.query(models.ExternalAiAccount)
              .filter(models.ExternalAiAccount.user_id == user.id).first())
-    if acc and acc.vendor_username:
+    # ZH: v4.0 —— `vendor_deleted` 的綁定不算「已綁定」：那是對帳偵測到
+    #     廠商端把帳號刪了（見 reconcile_removed）。擋在這裡的話，
+    #     這個使用者永遠不會被重新開通。往下走：鏡像查不到 → 正常建號，
+    #     同一筆綁定會被更新回 active。
+    if acc and acc.vendor_username and acc.status != "vendor_deleted":
         return {"status": "bound"}
 
     # ==========================================================================
@@ -1516,6 +1590,7 @@ async def provision_user(db: Session, user) -> dict:
             db.add(acc)
         acc.vendor_username = email
         acc.myai_vendor_sn = exist.vendor_sn
+        acc.status = "active"     # ZH: v4.0 —— vendor_deleted 的綁定重新接上時要復活
         db.commit()
         return {"status": "linked_only", "email": email}
 
@@ -1556,6 +1631,11 @@ async def provision_user(db: Session, user) -> dict:
                                        status="active", note="auto-provision")
         db.add(acc)
     acc.vendor_username = email
+    # ZH: v4.0 —— 重新開通（原綁定是 vendor_deleted）時：復活狀態、**清掉舊 sn**。
+    #     舊 sn 屬於已刪除的廠商帳號，留著的話下一輪對帳又會把這筆標回
+    #     vendor_deleted；清空後 auto_match 會在下一輪 sync 回填新帳號的 sn。
+    acc.status = "active"
+    acc.myai_vendor_sn = None
     db.commit()
     db.refresh(acc)
     store_initial_password(db, acc, password)

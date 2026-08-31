@@ -203,6 +203,8 @@
         pp_q_revoke: '收回',
 
         st_active: '正常',
+        // ZH: v4.0 對帳偵測：廠商端把帳號刪了（provision 會自動重建並復活這筆）
+        st_vendor_deleted: '廠商端已刪除',
         pp_ext: '外部 AI（MYAI）',
         pp_ext_vendor: '廠商帳號',
         pp_ext_sn: '序號',
@@ -787,6 +789,7 @@
         pp_q_revoke: 'Revoke',
 
         st_active: 'Active',
+        st_vendor_deleted: 'Deleted at vendor',
         pp_ext: 'External AI (MYAI)',
         pp_ext_vendor: 'Vendor account',
         pp_ext_sn: 'Serial',

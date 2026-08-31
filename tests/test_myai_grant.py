@@ -400,3 +400,73 @@ def test_switch_off_blocks_creation_only(monkeypatch, db):
     n = (db.query(models.ExternalAiAccount)
            .filter(models.ExternalAiAccount.user_id == user.id).count())
     assert n == 0, "disabled 不該留下任何綁定"
+
+
+# ══════════════════════════════════════════════════════════════════════════
+# ZH: 七、v4.0 —— 廠商端刪帳號的對帳與重新開通
+# ══════════════════════════════════════════════════════════════════════════
+# ZH: 實際發生過（2026-08-31）：廠商端刪了帳號，鏡像留成鬼影（sync 只進不出），
+#     平台帳號刪掉重登後 provision 查到鬼影 → linked_only 綁到不存在的 sn →
+#     永遠不會重新建號。這組釘住三段修正：對帳刪除、重新開通、自動復活。
+
+def test_reconcile_removes_ghost_and_marks_binding(db):
+    """ZH: 匯出名單裡消失的帳號 → 鏡像移除、綁定標 vendor_deleted（不刪綁定）。"""
+    from conftest import make_user
+    user = make_user(db, username="12360015", email="12360015@example.com")
+    db.add(models.MyaiAccount(vendor_sn="SN-A", email="stay@example.com"))
+    db.add(models.MyaiAccount(vendor_sn="SN-B", email="12360015@example.com"))
+    db.add(models.ExternalAiAccount(user_id=user.id, vendor_username="12360015@example.com",
+                                    myai_vendor_sn="SN-B", status="active"))
+    db.commit()
+
+    res = M.reconcile_removed(db, [{"vendor_sn": "SN-A"}])   # ZH: 匯出只剩 SN-A
+
+    assert res == {"removed": 1, "marked_deleted": 1, "skipped": False}
+    assert db.query(models.MyaiAccount).filter_by(vendor_sn="SN-B").first() is None
+    assert db.query(models.MyaiAccount).filter_by(vendor_sn="SN-A").first() is not None
+    acc = db.query(models.ExternalAiAccount).filter_by(user_id=user.id).one()
+    assert acc.status == "vendor_deleted", "綁定要標記，不能刪"
+    assert "廠商端帳號已刪除" in (acc.note or "")
+
+
+def test_reconcile_skips_on_empty_export(db):
+    """ZH: 安全閥 —— 匯出 0 筆時不得移除任何鏡像列（廠商 API 壞掉不能清空鏡像）。"""
+    db.add(models.MyaiAccount(vendor_sn="SN-C", email="keep@example.com"))
+    db.commit()
+
+    res = M.reconcile_removed(db, [])
+
+    assert res["skipped"] is True and res["removed"] == 0
+    assert db.query(models.MyaiAccount).filter_by(vendor_sn="SN-C").first() is not None
+
+
+def test_provision_recreates_after_vendor_deleted(monkeypatch, db):
+    """ZH: vendor_deleted 的綁定不算已綁 → 重新建號、同一筆綁定復活、舊 sn 清掉。"""
+    sent = []
+    user = _provision_env(monkeypatch, db, 0, sent)   # ZH: 開關=1、廠商呼叫=假成功
+    db.add(models.ExternalAiAccount(user_id=user.id, vendor_username="12360013@example.com",
+                                    myai_vendor_sn="SN-DEAD", status="vendor_deleted"))
+    db.commit()   # ZH: 鏡像刻意不放這個 email —— 廠商端真的沒有了
+
+    res = asyncio.run(M.provision_user(db, user))
+
+    assert res["status"] == "created", "vendor_deleted 不該被當成已綁定而擋下重建"
+    acc = db.query(models.ExternalAiAccount).filter_by(user_id=user.id).one()
+    assert acc.status == "active"
+    assert acc.myai_vendor_sn is None, "舊 sn 屬於死帳號，留著會被對帳再標一次"
+
+
+def test_auto_match_relinks_recreated_vendor_account(db):
+    """ZH: 廠商端同 email 重建（新 sn）→ 下一輪 auto_match 自動復活綁定。"""
+    from conftest import make_user
+    user = make_user(db, username="12360016", email="12360016@example.com")
+    db.add(models.ExternalAiAccount(user_id=user.id, vendor_username="12360016@example.com",
+                                    myai_vendor_sn="SN-OLD", status="vendor_deleted"))
+    db.add(models.MyaiAccount(vendor_sn="SN-NEW", email="12360016@example.com"))
+    db.commit()
+
+    res = M.auto_match(db)
+
+    assert res["relinked"] == 1
+    acc = db.query(models.ExternalAiAccount).filter_by(user_id=user.id).one()
+    assert acc.status == "active" and acc.myai_vendor_sn == "SN-NEW"

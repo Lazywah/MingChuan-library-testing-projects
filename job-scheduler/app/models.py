@@ -776,7 +776,7 @@ class ExternalAiAccount(Base):
                              unique=True, index=True, nullable=False)          # ZH: 一位平台使用者一筆 | EN: one row per platform user
     vendor_username = Column(String, nullable=False)                          # ZH: 廠商端帳號 = myai email (非密碼) | EN: vendor account = myai email (not password)
     myai_vendor_sn  = Column(String, nullable=True, index=True)                # ZH: v2.8 對應 myai_accounts.vendor_sn 的穩定鍵 (email 改了也追得到) | EN: stable FK to myai_accounts.vendor_sn
-    status          = Column(String, default="active", nullable=False)        # ZH: active / disabled | EN: active / disabled
+    status          = Column(String, default="active", nullable=False)        # ZH: active / disabled / vendor_deleted(v4.0 對帳偵測到廠商端已刪；provision 會重建並復活) | EN: active / disabled / vendor_deleted
     note            = Column(Text, nullable=True)                             # ZH: 備註 | EN: note
     created_at      = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     updated_at      = Column(DateTime, default=lambda: datetime.now(timezone.utc),
