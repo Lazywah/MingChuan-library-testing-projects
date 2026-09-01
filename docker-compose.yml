@@ -41,6 +41,8 @@ services:
       # ZH: 🔒 TLS 憑證掛載 —— 與上面的 443 埠同一天解開。
       #     憑證放 infrastructure/certs/（gitignore 擋著，絕不進版控）。
       - ./infrastructure/certs:/etc/nginx/certs:ro
+      # ZH: Let's Encrypt 憑證（certbot 服務續期後寫入這個 volume；live/ 指向最新版）
+      - letsencrypt-data:/etc/letsencrypt:ro
       - ./web-ui-V0:/usr/share/nginx/html/V0:ro
       - ./admin-ui-V0:/usr/share/nginx/html/admin-ui-V0:ro
       # ZH: UI v1.5 —— 與上面兩份並存，供新舊對照。改完版本定案後再決定要不要取代。
@@ -49,11 +51,33 @@ services:
       - ./admin-ui-V0.5:/usr/share/nginx/html/admin-ui-V0.5:ro
       # ZH: 管理端 UI V1（規格 docs/10-admin-ui-V1-design.md）。
       - ./admin-ui-V1:/usr/share/nginx/html/admin-ui-V1:ro
+    # ZH: 🔄 每 6 小時優雅 reload —— 唯一目的：撿起 certbot 剛續好的新憑證。
+    #     reload 零中斷（舊連線走完、新連線用新設定），不需要 docker 權限，
+    #     比「certbot 掛 docker.sock 來重啟 nginx」乾淨得多。
+    command: ["/bin/sh", "-c", "(while :; do sleep 6h; nginx -s reload; done) & exec nginx -g 'daemon off;'"]
     depends_on:
       job-scheduler:
         condition: service_healthy
     networks:
       - ai-platform-net
+    restart: unless-stopped
+
+  # ==========================================================================
+  # ZH: 🔄 certbot —— Let's Encrypt 自動續期（2026-09-01）。
+  #     每 12 小時醒來檢查，到期前 30 天內自動續（LE 憑證效期 90 天）。
+  #     webroot 驗證走 nginx 的 /.well-known/（80 埠須維持對網際網路開放，
+  #     擁有者裁定 2026-09-01 常開）。續期參數記在 volume 的 renewal conf，
+  #     不用重複給。續好的憑證由 nginx 的 6h reload 自動撿起。
+  # EN: certbot auto-renew daemon; nginx picks up renewed certs via its own
+  #     6-hour graceful reload loop. Port 80 must stay internet-reachable.
+  # ==========================================================================
+  certbot:
+    image: certbot/certbot
+    container_name: ai-platform-certbot
+    volumes:
+      - letsencrypt-data:/etc/letsencrypt
+      - ./infrastructure/webroot:/webroot
+    entrypoint: ["/bin/sh", "-c", "trap exit TERM; while :; do certbot renew --webroot -w /webroot; sleep 12h & wait $${!}; done"]
     restart: unless-stopped
 
   job-scheduler:
@@ -203,6 +227,10 @@ networks:
 
 
 volumes:
+  # ZH: Let's Encrypt 帳號與憑證（certbot 建立；名稱固定，docker volume 已存在）
+  letsencrypt-data:
+    external: true
+
   shared_models:
     name: shared_models
     # ZH: 由管理員用 preload-models.sh 預下載熱門模型至此 volume
