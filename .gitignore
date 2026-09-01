@@ -24,6 +24,8 @@
 #     而同一條路徑在正式環境裝的是學生上傳的檔案。
 # EN: User-uploaded datasets must never be committed.
 **/data/datasets/
+# ZH: 公告附件（管理端上傳的使用者內容，與 datasets 同理絕不進版控）
+**/data/announcements/
 
 # ZH: 私有 registry 的帳密檔（bcrypt 雜湊，仍然不該進版控）
 infrastructure/registry/auth/
