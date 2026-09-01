@@ -105,7 +105,9 @@ ZH: ⚠ 已知限制（擁有者 2026-08-28 裁定接受）：V1 的 Lab 走**�
     root.id = 'aibot-root';
     root.innerHTML = `
         <button id="aibot-fab" aria-label="${T('bot_open', '開啟小基助手')}" title="${T('bot_title', '小基助手')}">
-            <span class="aibot-fab-icon">💬</span>
+<!-- ZH: 圖示用單色線條 SVG 不用 emoji（擁有者裁定 2026-09-01：要低調、顏色少）。
+     線條吃 currentColor —— 黃底時是白線，面板開著（.aibot-open 灰底）時自動變深色。 -->
+            <span class="aibot-fab-icon" aria-hidden="true"><svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="8" width="14" height="10" rx="3"/><line x1="12" y1="8" x2="12" y2="5.5"/><circle cx="12" cy="4.2" r="1.1" fill="currentColor" stroke="none"/><circle cx="9.5" cy="13" r="1.15" fill="currentColor" stroke="none"/><circle cx="14.5" cy="13" r="1.15" fill="currentColor" stroke="none"/></svg></span>
         </button>
         <section id="aibot-panel" class="aibot-hidden" role="dialog" aria-label="${T('bot_title', '小基助手')}">
             <header class="aibot-header">

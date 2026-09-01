@@ -63,10 +63,13 @@ body { transition: padding-right 0.18s ease; }
 }
 
 /* ── 泡泡按鈕 ───────────────────────────────────────────────────────── */
+/* ZH: v4.2 換造型（擁有者裁定 2026-09-01）：正圓＋💬 → 對話泡泡形＋🤖。
+ *     右下角收小圓角 = 泡泡尾巴指向角落；圖示與面板頭像同一顆，
+ *     「按這顆=找小基」的對應更直接。尺寸不動（56px，tap 目標夠大）。 */
 #aibot-fab {
     width: 56px;
     height: 56px;
-    border-radius: var(--radius-pill);
+    border-radius: 18px 18px 4px 18px;
     border: 1px solid var(--hairline);
     cursor: pointer;
     background-color: var(--accent);
@@ -83,7 +86,7 @@ body { transition: padding-right 0.18s ease; }
 #aibot-fab:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
 /* ZH: 面板開著時泡泡換成關閉的樣子（JS 會加 .aibot-open）。 */
 #aibot-fab.aibot-open { background-color: var(--surface-2); color: var(--text-strong); }
-.aibot-fab-icon { pointer-events: none; }
+.aibot-fab-icon { pointer-events: none; display: inline-flex; }
 
 /* ── 面板 ───────────────────────────────────────────────────────────── */
 /* ZH: 側欄本體 —— 貼右滿高。不是浮窗，所以不要圓角與大陰影，
