@@ -68,11 +68,15 @@
         <div class="handoff" id="note" hidden></div>
     </section>
 
-    <h2 class="chart__title" data-i18n="rep_diag_title">會一起送出的診斷資訊</h2>
-    <!-- ZH: 全部攤開來給使用者看。要別人交出診斷資訊，就不能讓他不知道交了什麼。
+    <!-- ZH: v4.2 改收合（擁有者裁定 2026-09-01）：標題常駐、內容點開看。
+             透明原則不變 —— 「要別人交出診斷資訊，就不能讓他不知道交了什麼」，
+             現在是「知道有這件事＋一鍵看全文」，對多數人少一坨雜訊。
              ⚠ 後端**不會**再補上任何這裡沒列出的欄位（含 IP）——
                見 job-scheduler/app/models.py 的 IssueReport 註解。 -->
-    <pre class="diag" id="diag" data-i18n="rep_preparing">整理中…</pre>
+    <details class="fold">
+        <summary class="fold__summary" data-i18n="rep_diag_title">會一起送出的診斷資訊</summary>
+        <pre class="diag fold__body" id="diag" data-i18n="rep_preparing">整理中…</pre>
+    </details>
 
     <h2 class="chart__title" data-i18n="rep_mine">我的回報</h2>
     <!-- ZH: v4.2 回報內容彈窗（與公告同一套：條目清單＋<dialog>，樣式共用 .nmod）。
