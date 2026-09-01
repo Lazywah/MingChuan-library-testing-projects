@@ -208,45 +208,102 @@ function renderMine(rows) {
         return;
     }
 
+    // ZH: v4.2（擁有者裁定 2026-09-01，與公告同套）：**主旨條目＋彈窗**。
+    //     原本每筆全文攤開，回報一多整頁就長。現在一列
+    //     「狀態徽章＋日期＋主旨」，點擊開 <dialog> 看全文與管理者回覆。
     rows.forEach((row) => {
         const art = document.createElement('article');
-        art.className = 'post';
+        art.className = 'post post--entry';
 
-        const head = document.createElement('div');
-        head.className = 'post__head';
+        const head = document.createElement('button');
+        head.type = 'button';
+        head.className = 'post__head post__head--btn';
+        head.setAttribute('aria-haspopup', 'dialog');
+
         const badge = document.createElement('span');
         // ZH: 狀態用**文字**標籤，不只用顏色（WCAG 1.4.1）。
-        //     顏色只是次要強調：未處理有邊框、其餘中性。
         badge.className = 'rep-badge';
         badge.dataset.status = row.status || 'open';
         badge.textContent = statusText(row.status) || T('rep_st_open', '未處理');
         head.appendChild(badge);
-        head.appendChild(document.createTextNode(fmtDate(row.created_at)));
+
+        const date = document.createElement('span');
+        date.className = 'post__date';
+        date.textContent = fmtDate(row.created_at);
+        head.appendChild(date);
+
+        const h = document.createElement('h3');
+        h.className = 'post__title';
+        // ZH: 舊回報沒有主旨（欄位是後來加的）→ 拿內文開頭頂替，別顯示空白列。
+        h.textContent = row.subject || (row.body || '').slice(0, 40)
+                        || T('rep_untitled', '(無主旨)');
+        head.appendChild(h);
+
+        const chev = document.createElement('span');
+        chev.className = 'post__chev';
+        chev.setAttribute('aria-hidden', 'true');
+        chev.textContent = '›';
+        head.appendChild(chev);
+
+        head.addEventListener('click', () => openReport(row));
         art.appendChild(head);
-
-        // ZH: 全部用 textContent，不用 innerHTML —— 這些是使用者自己打的字，
-        //     但管理者的回覆也會走同一條路，兩邊都不該能注入標記。
-        const b = document.createElement('p');
-        b.className = 'post__body';
-        b.textContent = row.body;
-        art.appendChild(b);
-
-        if (row.admin_reply) {
-            const reply = document.createElement('div');
-            reply.className = 'rep-reply';
-            const rh = document.createElement('div');
-            rh.className = 'rep-reply__head';
-            rh.textContent = `${T('rep_admin_reply', '管理者回覆')} · ${fmtDate(row.replied_at)}`;
-            const rb = document.createElement('p');
-            rb.className = 'post__body';
-            rb.textContent = row.admin_reply;
-            reply.appendChild(rh);
-            reply.appendChild(rb);
-            art.appendChild(reply);
-        }
-
         box.appendChild(art);
     });
+}
+
+/* ZH: v4.2 回報內容彈窗。單一 dialog 重複填；ESC / ✕ 都能關。
+ *     全部 textContent 不進 innerHTML —— 使用者的字與管理者的回覆
+ *     都不該能注入標記（沿用原 renderMine 的紀律）。 */
+function openReport(row) {
+    const dlg = $('rep-dialog');
+    dlg.textContent = '';
+
+    const x = document.createElement('form');
+    x.method = 'dialog';
+    x.className = 'nmod__x';
+    const xb = document.createElement('button');
+    xb.className = 'btn btn--minor';
+    xb.type = 'submit';
+    xb.setAttribute('aria-label', T('news_close', '關閉'));
+    xb.textContent = '✕';
+    x.appendChild(xb);
+
+    const meta = document.createElement('div');
+    meta.className = 'nmod__meta';
+    const badge = document.createElement('span');
+    badge.className = 'rep-badge';
+    badge.dataset.status = row.status || 'open';
+    badge.textContent = statusText(row.status) || T('rep_st_open', '未處理');
+    meta.appendChild(badge);
+    const date = document.createElement('span');
+    date.className = 'post__date';
+    date.textContent = fmtDate(row.created_at);
+    meta.appendChild(date);
+
+    const h = document.createElement('h2');
+    h.className = 'nmod__title';
+    h.textContent = row.subject || T('rep_untitled', '(無主旨)');
+
+    const b = document.createElement('p');
+    b.className = 'post__body';
+    b.textContent = row.body;
+
+    dlg.append(x, meta, h, b);
+
+    if (row.admin_reply) {
+        const reply = document.createElement('div');
+        reply.className = 'rep-reply';
+        const rh = document.createElement('div');
+        rh.className = 'rep-reply__head';
+        rh.textContent = `${T('rep_admin_reply', '管理者回覆')} · ${fmtDate(row.replied_at)}`;
+        const rb = document.createElement('p');
+        rb.className = 'post__body';
+        rb.textContent = row.admin_reply;
+        reply.appendChild(rh);
+        reply.appendChild(rb);
+        dlg.appendChild(reply);
+    }
+    dlg.showModal();
 }
 
 async function loadMine() {
