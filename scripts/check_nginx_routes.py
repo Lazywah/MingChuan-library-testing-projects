@@ -122,14 +122,18 @@ def main() -> int:
         print("[FAIL] 從 main.py 解析不到任何 include_router 前綴 —— "
               "檢查本身失效了（不是「沒有問題」）。請看 backend_prefixes 的正則。")
         return 1
-    if "80" not in blocks:
-        print("[FAIL] 從 nginx.conf 解析不到 `listen 80` 的 server 區塊 —— "
+    # ZH: v3（2026-09-01）：使用者端的應用面在 **:443**（https 全轉之後，
+    #     :80 只剩「/.well-known 直出＋301 轉址」，本來就不該有任何 API route）。
+    #     守門對象改成 443；找不到 443 時退回 80（尚未啟用 https 的部署）。
+    public = "443" if "443" in blocks else "80"
+    if public not in blocks:
+        print("[FAIL] 從 nginx.conf 解析不到 `listen 443/80` 的 server 區塊 —— "
               "檢查本身失效了。請看 nginx_blocks。")
         return 1
 
-    on80 = nginx_prefixes(blocks["80"])
+    on80 = nginx_prefixes(blocks[public])
     if not on80:
-        print("[FAIL] :80 區塊裡找不到任何 /api/v1 location —— 檢查本身失效了。")
+        print("[FAIL] :%s 區塊裡找不到任何 /api/v1 location —— 檢查本身失效了。" % public)
         return 1
 
     missing = sorted(p for p in prefixes if p not in on80 and p not in ALLOW_NOT_ON_80)
