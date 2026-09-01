@@ -206,6 +206,49 @@ def check_kb_freshness():
     return WARN, "知識庫可能過期（介面改名了沒跟上）→ python scripts/check_kb_freshness.py"
 
 
+def check_core_images(refs=None):
+    """
+    ZH: 程式碼與 scheduler_policy 指名的 aibase/* 映像，本機到底在不在。
+
+    ZH: 🔴 為什麼需要這一條：映像是唯一「不在版控、又會被人手動清掉」的承重資產。
+        實際發生過（2026-09-01）：清磁碟時誤刪 code-server-gpu，
+        學生按「開啟實驗室」直接吃 404 pull access denied ——
+        設定與程式碼都沒變，deploy_check 當時無從察覺。
+
+    ZH: 判 WARN 不判 FAIL：全新 checkout 的機器本來就還沒 build（147GB），
+        紅燈會把「還沒建」與「建好被誤刪」混在一起擋部署；黃燈講清楚就好。
+
+    ZH: 指名清單**用掃的不用手列**：grep app 目錄（.py/.yaml）裡的
+        `aibase/<名>:<tag>` 字面。手列清單會漂（新功能指了新映像沒人記得補這裡）。
+
+    @node scripts/deploy_check.py::check_core_images
+    """
+    if refs is None:
+        pat = re.compile(r"aibase/[a-z-]+:[a-z0-9.-]+")
+        refs = set()
+        app = SCRIPTS_DIR.parent / "job-scheduler" / "app"
+        for p in list(app.rglob("*.py")) + list(app.rglob("*.yaml")):
+            try:
+                refs |= set(pat.findall(p.read_text(encoding="utf-8")))
+            except (OSError, UnicodeDecodeError):
+                pass
+        refs = sorted(refs)
+    if not refs:
+        return WARN, "掃不到任何 aibase/* 映像指名 —— 檢查本身可能失效了"
+    try:
+        r = subprocess.run(["docker", "images", "--format", "{{.Repository}}:{{.Tag}}"],
+                           capture_output=True, text=True, timeout=30)
+        have = set(r.stdout.split())
+    except Exception as e:  # noqa: BLE001
+        return WARN, f"docker images 查不到（{e}），跳過映像檢查"
+    missing = [x for x in refs if x not in have]
+    if missing:
+        return WARN, ("程式指名的映像本機不存在（Lab/訓練會啟動失敗）："
+                      + "、".join(missing)
+                      + "　→ 重建：bash infrastructure/base-images/build-all.sh")
+    return PASS, f"程式指名的 {len(refs)} 個 aibase 映像本機都在"
+
+
 def check_ollama_models(env: dict):
     """
     ZH: 設定裡指名的 Ollama 模型有沒有真的下載下來。
@@ -638,6 +681,7 @@ def main():
         ("HTML 中文標記",  check_untranslated_html()),
         ("知識庫新鮮度",   check_kb_freshness()),
         ("Ollama 模型",    check_ollama_models(env)),
+        ("核心映像",       check_core_images()),
         ("主機埠",         check_ports()),
     ]
 
