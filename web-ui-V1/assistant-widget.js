@@ -314,6 +314,14 @@ ZH: ⚠ 已知限制（擁有者 2026-08-28 裁定接受）：V1 的 Lab 走**�
     // ZH: ⚠ `<html>` 的 `aibot-docked` **已經由 head 裡的 inline script 套好了**
     //     （避免每換一頁都看到內容滑動讓位）。這裡是把面板本身打開，
     //     class 再加一次是無害的 no-op。
+    // ZH: 🔴 還原記憶必須在**第一次 _renderLog 之前**（2026-09-01 修）。
+    //     原本這行在檔案更下面（對外 API 前面）——比自動開面板晚：
+    //     換頁後面板先畫了「空的」紀錄（只有問候語），紀錄才載入、
+    //     而載入不重畫 → 使用者要切一下模式（setMode 無條件重畫）才看得到。
+    //     症狀的狡猾處：手動開合不會修（openPanel 只在 logEl 為空時才畫，
+    //     問候語已佔位），只有切模式會好，看起來像「隨機需要撥一下」。
+    _loadHistories();
+
     if (_wantOpen()) openPanel(false);
 
     // ZH: textarea 自動長高 + Enter 送出（Shift+Enter 換行）
@@ -414,9 +422,6 @@ ZH: ⚠ 已知限制（擁有者 2026-08-28 裁定接受）：V1 的 Lab 走**�
             input.focus();
         }
     });
-
-    // ZH: 啟動時還原本次登入的聊天室記憶 | restore this-login rooms on start
-    _loadHistories();
 
     // ---- ZH: 對外 API（Notebook 頁「問程式家教」呼叫）| EN: public API ----
     window.AibotWidget = {
