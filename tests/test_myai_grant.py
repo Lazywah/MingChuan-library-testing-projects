@@ -470,3 +470,52 @@ def test_auto_match_relinks_recreated_vendor_account(db):
     assert res["relinked"] == 1
     acc = db.query(models.ExternalAiAccount).filter_by(user_id=user.id).one()
     assert acc.status == "active" and acc.myai_vendor_sn == "SN-NEW"
+
+
+# ══════════════════════════════════════════════════════════════════════════
+# ZH: 八、v4.1 —— 開通成功後即時同步（關掉「得知點數」的空窗）
+# ══════════════════════════════════════════════════════════════════════════
+# ZH: 實際發生過（2026-09-01）：學生開通後點數要等下一輪 6h 同步才進鏡像，
+#     平台收攤就順延到隔天 —— 「快用完」信隔一天才寄。修法：created 後當場 sync。
+
+def _bg_env(monkeypatch, db, db_engine, provision_status):
+    """ZH: 佈置 _provision_myai_bg 的測試環境：導 SessionLocal 到測試 DB、
+        假 provision_user（回指定狀態）、假 sync（記錄有沒有被叫）。回 (user, calls)。"""
+    from sqlalchemy.orm import sessionmaker
+    from app import database
+    from app.services import myai_sync as ms
+    monkeypatch.setattr(database, "SessionLocal",
+                        sessionmaker(autocommit=False, autoflush=False, bind=db_engine))
+
+    calls = []
+
+    async def fake_provision(_db, _user):
+        return {"status": provision_status}
+
+    async def fake_sync(_db):
+        calls.append("sync")
+        return {"total": 1, "backfilled": 1}
+
+    monkeypatch.setattr(ms, "provision_user", fake_provision)
+    monkeypatch.setattr(ms, "sync", fake_sync)
+
+    from conftest import make_user
+    user = make_user(db, username="12360017", email="12360017@example.com")
+    return user, calls
+
+
+def test_bg_task_syncs_immediately_after_creation(monkeypatch, db, db_engine):
+    """ZH: created → 當場跑一次 sync（空窗關閉的核心斷言）。"""
+    from app.routers.sso import _provision_myai_bg
+    user, calls = _bg_env(monkeypatch, db, db_engine, "created")
+    asyncio.run(_provision_myai_bg(user.username))
+    assert calls == ["sync"], "建號成功後必須立刻同步一次"
+
+
+@pytest.mark.parametrize("status", ["bound", "linked_only", "disabled", "failed"])
+def test_bg_task_does_not_sync_for_other_outcomes(monkeypatch, db, db_engine, status):
+    """ZH: 其餘結果不觸發（linked_only 的鏡像列本來就在；failed 沒東西可同步）。"""
+    from app.routers.sso import _provision_myai_bg
+    user, calls = _bg_env(monkeypatch, db, db_engine, status)
+    asyncio.run(_provision_myai_bg(user.username))
+    assert calls == [], f"{status} 不該觸發即時同步"

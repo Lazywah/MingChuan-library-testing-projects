@@ -351,6 +351,34 @@ async def _provision_myai_bg(username: str) -> None:
                 "（廠商端既有帳號的綁定不受此限，已在前面執行）")
         elif res.get("status") != "bound":
             logger.info(f"MYAI 自動開通結果 {username}: {res}")
+
+        # ==================================================================
+        # ZH: v4.1 —— 建號成功後**當場補跑一次全量同步**，關掉「得知點數」的空窗。
+        #
+        # ZH: 為什麼：建號當下我們只拿到「成功」，vendor_sn 與點數要等
+        #     下一輪 6 小時同步才進鏡像；餘額輪詢（5 分）只更新**已存在**的
+        #     鏡像列，新帳號連列都沒有、無處可掛。實際發生過（2026-09-01）：
+        #     學生昨天開通、平台傍晚收攤，隔天開容器第一次同步才得知點數
+        #     = 100 < 門檻 → 「快用完」信隔了一天才寄，看起來像系統怪異。
+        #     補跑之後空窗從「最長 6 小時＋停機順延」變成幾秒。
+        #
+        # ZH: 只在 `created`（真的新建號）時跑 —— linked_only/bound 的鏡像列
+        #     本來就在。同步是冪等 upsert（與排程迴圈撞了無害），
+        #     頻率＝新生首次登入，成本一趟幾秒。失敗不影響已完成的開通，
+        #     點數晚點由排程補上（回到舊行為，不會更糟）。
+        # EN: v4.1 — run one full sync right after a successful vendor-side
+        #     account creation, so the mirror learns sn/points in seconds
+        #     instead of at the next 6-hour sync (measured: a low-balance
+        #     alert once arrived a day late because of this gap).
+        # ==================================================================
+        if res.get("status") == "created":
+            try:
+                sync_res = await myai_sync.sync(db)
+                logger.info(f"MYAI 開通後即時同步完成 {username}: "
+                            f"total={sync_res.get('total')} "
+                            f"backfilled={sync_res.get('backfilled')}")
+            except Exception as e:  # noqa: BLE001 - 同步失敗不影響開通
+                logger.warning(f"MYAI 開通後即時同步失敗（點數將由排程補上）{username}: {e}")
     except Exception as e:  # noqa: BLE001 - 開通失敗絕不影響登入
         logger.error(f"MYAI 自動開通背景任務錯誤 {username}: {e}")
     finally:
