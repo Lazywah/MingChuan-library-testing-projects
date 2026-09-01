@@ -74,6 +74,18 @@ async function loadNews() {
         rows.slice(0, NEWS_MAX).forEach((a) => {
             const li = document.createElement('li');
             li.className = 'news__item';
+            // ZH: v4.1 整列可點 → news.html（2026-09-01 修）。
+            //     內文與附件**只活在 news.html**，但首頁的項目原本是死文字、
+            //     「看全部公告」又只在超過 7 則時出現 —— 只有 1 則公告時，
+            //     內文與圖片變成「存在但到不了」。實際發生：管理員發了
+            //     帶圖公告，使用端點不開、什麼都看不到。
+            const go = document.createElement('a');
+            go.className = 'news__go';
+            // ZH: v4.2 帶 ?open=<id> —— news.html 會直接開那一則的彈窗，
+            //     省掉「點了標題還要再點一次」。
+            go.href = 'news.html?open=' + encodeURIComponent(a.id);
+            go.setAttribute('aria-label',
+                T('idx_news_open', '看公告內文與附件'));
 
             const d = document.createElement('span');
             d.className = 'news__date';
@@ -97,14 +109,20 @@ async function loadNews() {
             //     這裡只有標題，內文不在首頁上。
             const en = (window.Prefs && window.Prefs.get().ui_lang) === 'en';
             t.textContent = (en && a.title_en) || a.title || '';
-            li.appendChild(t);
+
+            // ZH: 日期/徽章/標題全部收進連結，整列都是點擊面。
+            while (li.firstChild) go.appendChild(li.firstChild);
+            go.appendChild(t);
+            li.appendChild(go);
 
             list.appendChild(li);
         });
 
-        // ZH: 只有「還有沒顯示到的」才給看全部；剛好 7 則以內就不必了。
-        //     上面要了 NEWS_MAX+1 筆，所以這裡才分得出「剛好 7 則」與「超過 7 則」。
-        $('news-all').hidden = rows.length <= NEWS_MAX;
+        // ZH: v4.1 —— 有公告就顯示「看全部公告」。
+        //     原本只在超過 7 則時出現（想省一個重複入口），但 news.html 是
+        //     內文與附件的**唯一**去處，入口藏起來等於整個功能藏起來。
+        //     （項目本身 v4.1 起也可點，這條是給「習慣找按鈕」的人的第二入口。）
+        $('news-all').hidden = false;
         box.hidden = false;
     } catch (e) {
         /* 公告取不到 → 整塊不出現，首頁其餘照常 */

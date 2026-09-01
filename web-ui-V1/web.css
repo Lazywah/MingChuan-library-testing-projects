@@ -637,3 +637,61 @@ html.aibot-docked #aibot-fab { display: none; }
  * ZH: .topbar 本來就有底色與下框線 —— 沒有底色的 sticky 會透出底下的字。
  * ========================================================================== */
 .topbar { position: sticky; top: 0; z-index: 30; }
+
+/* ZH: v4.1 首頁公告整列可點（news__go 是 <a>，吃掉整列） */
+.news__go {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    color: inherit;
+    text-decoration: none;
+}
+.news__go:hover .news__title { text-decoration: underline; }
+
+/* ZH: v4.1 公告內嵌圖片。max-width 保版面；圓角與卡片一致。 */
+.post__img-wrap { margin: 10px 0; }
+.post__img {
+    max-width: 100%;
+    max-height: 420px;
+    border-radius: 8px;
+    display: block;
+}
+
+/* ZH: v4.2 公告條目清單（點了開彈窗）。head 變 <button> —— 清掉按鈕預設樣式、
+ *     整列可點；chevron 是「›」示意可進入。 */
+.post__head--btn {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    background: none;
+    border: 0;
+    padding: 0;
+    font: inherit;
+    color: inherit;
+    text-align: left;
+    cursor: pointer;
+}
+.post__head--btn .post__title { margin: 0; flex: 1 1 auto; min-width: 0; }
+.post__head--btn:hover .post__title { text-decoration: underline; }
+.post__chev { color: var(--text-muted); flex: 0 0 auto; }
+
+/* ZH: v4.2 公告內容彈窗（.nmod）—— 鏡自管理端 .rmod（使用者端不載 admin.css，
+ *     所以這裡養自己的一份；改樣式時兩邊獨立，這是刻意的：兩端的視覺語彙本就不同）。 */
+.nmod {
+    width: min(720px, calc(100vw - 2 * var(--space-5)));
+    max-width: none;
+    max-height: calc(100vh - 2 * var(--space-5));
+    padding: var(--space-5);
+    border: 1px solid var(--hairline);
+    border-radius: var(--radius-lg);
+    background-color: var(--surface);
+    color: var(--text);
+    overflow-y: auto;
+    position: fixed;   /* ZH: 給 .nmod__x 定位基準 */
+}
+.nmod::backdrop { background: rgb(31 35 40 / 55%); }
+.nmod__x { position: absolute; top: var(--space-4); right: var(--space-4); margin: 0; }
+.nmod__meta { display: flex; align-items: center; gap: 8px; margin-bottom: var(--space-2); }
+.nmod__title { margin: 0 0 var(--space-3); padding-right: 48px; /* ZH: 讓位給 ✕ */ }

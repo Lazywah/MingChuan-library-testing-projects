@@ -137,6 +137,8 @@
             // ── 公告清單 ─────────────────────────────────────
             idx_news_h: '公告',
             idx_news_all: '看全部公告',
+            idx_news_open: '看公告內文與附件',
+            news_close: '關閉',
             idx_news_pinned: '置頂',
             // ── 引導流程 ─────────────────────────────────────
             idx_groups_h: '你想做什麼',
@@ -601,6 +603,8 @@
             // ── Announcements ────────────────────────────────
             idx_news_h: 'Announcements',
             idx_news_all: 'See all announcements',
+            idx_news_open: 'Open announcement body and attachments',
+            news_close: 'Close',
             idx_news_pinned: 'Pinned',
             // ── Guided steps ─────────────────────────────────
             idx_groups_h: 'What do you want to do',

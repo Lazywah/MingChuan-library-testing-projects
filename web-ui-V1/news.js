@@ -48,13 +48,20 @@ function render(list) {
     const box = $('list');
     box.textContent = '';                    // 清掉骨架
 
+    // ZH: v4.2（擁有者裁定 2026-09-01）：**條目清單，點了開彈窗**。
+    //     原本進頁全攤開 —— 公告一多整頁就亂；行內展開試過一版，
+    //     擁有者再裁定改彈窗（與管理端公告/回報同一套 <dialog> 模式）。
+    //     圖片**開彈窗才載**（fetch+blob 要打 API），且以 file id 快取 blob，
+    //     同一則重複開不重抓。
     list.forEach((a) => {
         const art = document.createElement('article');
-        art.className = 'post';
+        art.className = 'post post--entry';
         if (a.is_pinned) art.dataset.pinned = '1';
 
-        const head = document.createElement('div');
-        head.className = 'post__head';
+        const head = document.createElement('button');
+        head.type = 'button';
+        head.className = 'post__head post__head--btn';
+        head.setAttribute('aria-haspopup', 'dialog');
 
         if (a.is_pinned) {
             const tag = document.createElement('span');
@@ -68,25 +75,31 @@ function render(list) {
         date.textContent = fmtDate(a.posted_at);
         head.appendChild(date);
 
-        // ZH: **不顯示 posted_by。** 後端回的是 `users.id` 的 UUID 而不是名字
-        //     （AnnouncementResponse.posted_by 是外鍵），實際畫面上會變成
-        //     「2026/08/20  3ad36141-3bd9-4a14-bcef-4b23dcbf92b3  標題」。
-        //     假資料用的是 'admin' 這種人名，所以檢視模式下看起來正常——
-        //     **這個缺陷只在接真實 API 時才會出現**。
-        //     對學生而言「誰發的」本來也不重要；要顯示的話後端得另外回名字。
+        // ZH: **不顯示 posted_by。** 後端回的是 users.id 的 UUID 而不是名字。
 
         const h = document.createElement('h2');
         h.className = 'post__title';
         h.textContent = pickLang(a, 'title') || T('news_untitled', '(無標題)');
+        head.appendChild(h);
 
-        const body = document.createElement('p');
-        body.className = 'post__body';
-        linkify(body, pickLang(a, 'body'));
+        const chev = document.createElement('span');
+        chev.className = 'post__chev';
+        chev.setAttribute('aria-hidden', 'true');
+        chev.textContent = '›';
+        head.appendChild(chev);
 
-        art.append(head, h, body);
-        if (a.files && a.files.length) art.appendChild(fileList(a));
+        head.addEventListener('click', () => openPost(a));
+        art.appendChild(head);
         box.appendChild(art);
     });
+
+    // ZH: 首頁點某一則會帶 ?open=<id> 過來 —— 直接開那一則，
+    //     省掉「點了標題還要再點一次」。id 對不到就只留清單（連結過期不炸）。
+    const want = new URLSearchParams(location.search).get('open');
+    if (want) {
+        const hit = list.find((a) => String(a.id) === want);
+        if (hit) openPost(hit);
+    }
 
     // 過多：後端 limit 上限 100，這裡只取 LIMIT。取滿就明講可能還有更舊的。
     $('more').hidden = list.length < LIMIT;
@@ -194,6 +207,86 @@ function linkify(el, text) {
  *     使用者會以為檔案壞了。
  * ZH: 檔名用 textContent 放，不進 innerHTML —— 那是管理員上傳時的原始檔名。
  */
+/* ZH: v4.2 公告內容彈窗。單一 dialog 重複填（與管理端 reports.js 同模式）；
+ *     ESC / ✕ 都能關（公告不是一次性密碼，沒有攔 ESC 的理由）。 */
+function openPost(a) {
+    const dlg = $('news-dialog');
+    dlg.textContent = '';
+
+    const x = document.createElement('form');
+    x.method = 'dialog';
+    x.className = 'nmod__x';
+    const xb = document.createElement('button');
+    xb.className = 'btn btn--minor';
+    xb.type = 'submit';
+    xb.setAttribute('aria-label', T('news_close', '關閉'));
+    xb.textContent = '✕';
+    x.appendChild(xb);
+
+    const meta = document.createElement('div');
+    meta.className = 'nmod__meta';
+    if (a.is_pinned) {
+        const tag = document.createElement('span');
+        tag.className = 'post__pin';
+        tag.textContent = T('news_pinned', '置頂');
+        meta.appendChild(tag);
+    }
+    const date = document.createElement('span');
+    date.className = 'post__date';
+    date.textContent = fmtDate(a.posted_at);
+    meta.appendChild(date);
+
+    const h = document.createElement('h2');
+    h.className = 'nmod__title';
+    h.textContent = pickLang(a, 'title') || T('news_untitled', '(無標題)');
+
+    const body = document.createElement('p');
+    body.className = 'post__body';
+    linkify(body, pickLang(a, 'body'));
+
+    dlg.append(x, meta, h, body);
+    if (a.files && a.files.length) {
+        appendInlineImages(dlg, a);
+        dlg.appendChild(fileList(a));
+    }
+    dlg.showModal();
+}
+
+// ZH: blob URL 快取（key = file id）—— 同一則重複開彈窗不重抓；
+//     頁面關閉自動釋放，不必手動 revoke。
+const IMG_CACHE = new Map();
+
+/* ZH: 圖片附件內嵌（v4.1）。只處理 content_type image/* 的附件；
+ *     其餘檔案（pdf/zip…）維持下載鈕。圖片本身也保留下載鈕——有人要存檔。
+ *     取檔帶 token（與 Chrome.download 同款），blob URL 用完不急著收回
+ *     （頁面關閉自動釋放；提早 revoke 會讓右鍵另存失效）。 */
+function appendInlineImages(art, a) {
+    (a.files || []).filter((f) => /^image\//.test(f.content_type || '')).forEach((f) => {
+        const ph = document.createElement('div');
+        ph.className = 'post__img-wrap';
+        art.appendChild(ph);
+        const put = (url) => {
+            const img = document.createElement('img');
+            img.className = 'post__img';
+            img.alt = f.filename;
+            img.src = url;
+            ph.appendChild(img);
+        };
+        if (IMG_CACHE.has(f.id)) { put(IMG_CACHE.get(f.id)); return; }
+        const t = sessionStorage.getItem('ai_hud_token') || localStorage.getItem('ai_hud_token');
+        fetch(API + '/announcements/' + encodeURIComponent(a.id)
+                + '/files/' + encodeURIComponent(f.id),
+              { headers: t ? { Authorization: 'Bearer ' + t } : {} })
+            .then((r) => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.blob(); })
+            .then((b) => {
+                const url = URL.createObjectURL(b);
+                IMG_CACHE.set(f.id, url);
+                put(url);
+            })
+            .catch(() => { ph.remove(); });   // ZH: 載不到就整塊收掉，別留空框
+    });
+}
+
 function fileList(a) {
     const wrap = document.createElement('div');
     wrap.className = 'post__files';
