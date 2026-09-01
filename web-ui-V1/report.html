@@ -61,6 +61,16 @@
                       data-i18n-placeholder="rep_ph" placeholder="例：按下「前往 MYAI」之後新分頁是空白的，重試三次都一樣。"></textarea>
         </label>
 
+        <!-- ZH: v4.2 改收合（擁有者裁定 2026-09-01）：標題常駐、內容點開看，
+                 並移進表單卡、放在送出鈕**上面**（擁有者裁定 2026-09-01）——
+                 「會交出什麼」要在按下送出**之前**看得到，放頁面底部等於送完才發現。
+             ZH: 透明原則不變 —— 後端**不會**再補上任何這裡沒列出的欄位（含 IP），
+                 見 job-scheduler/app/models.py 的 IssueReport 註解。 -->
+        <details class="fold">
+            <summary class="fold__summary" data-i18n="rep_diag_title">會一起送出的診斷資訊</summary>
+            <pre class="diag fold__body" id="diag" data-i18n="rep_preparing">整理中…</pre>
+        </details>
+
         <button class="btn btn--primary" id="send" type="button" data-i18n="rep_send">送出回報</button>
         <!-- ZH: 複製鈕**保留**。後端掛掉、或使用者當下沒登入時，
                  「複製後自己交出去」仍是唯一走得通的路——把降級路徑砍掉不划算。 -->
@@ -68,24 +78,19 @@
         <div class="handoff" id="note" hidden></div>
     </section>
 
-    <!-- ZH: v4.2 改收合（擁有者裁定 2026-09-01）：標題常駐、內容點開看。
-             透明原則不變 —— 「要別人交出診斷資訊，就不能讓他不知道交了什麼」，
-             現在是「知道有這件事＋一鍵看全文」，對多數人少一坨雜訊。
-             ⚠ 後端**不會**再補上任何這裡沒列出的欄位（含 IP）——
-               見 job-scheduler/app/models.py 的 IssueReport 註解。 -->
-    <details class="fold">
-        <summary class="fold__summary" data-i18n="rep_diag_title">會一起送出的診斷資訊</summary>
-        <pre class="diag fold__body" id="diag" data-i18n="rep_preparing">整理中…</pre>
-    </details>
 
-    <h2 class="chart__title" data-i18n="rep_mine">我的回報</h2>
-    <!-- ZH: v4.2 回報內容彈窗（與公告同一套：條目清單＋<dialog>，樣式共用 .nmod）。
-             內容由 report.js 的 openReport() 產生。 -->
-    <dialog class="nmod" id="rep-dialog"></dialog>
-    <div id="mine">
-        <span class="skeleton skeleton--line"></span>
-        <span class="skeleton skeleton--line"></span>
-    </div>
+    <!-- ZH: v4.2 包進 .panel（擁有者裁定 2026-09-01）：上面的表單有卡、
+             這區沒有，看起來像掉在頁面外。.panel = 同款白框但左對齊，清單才好讀。 -->
+    <section class="panel" aria-labelledby="mine-title">
+        <h2 class="chart__title" id="mine-title" data-i18n="rep_mine">我的回報</h2>
+        <!-- ZH: v4.2 回報內容彈窗（與公告同一套：條目清單＋<dialog>，樣式共用 .nmod）。
+                 內容由 report.js 的 openReport() 產生。 -->
+        <dialog class="nmod" id="rep-dialog"></dialog>
+        <div id="mine">
+            <span class="skeleton skeleton--line"></span>
+            <span class="skeleton skeleton--line"></span>
+        </div>
+    </section>
 
 </main>
 
