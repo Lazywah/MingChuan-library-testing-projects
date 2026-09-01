@@ -31,6 +31,9 @@ services:
       # ⚠ 要從別台電腦開管理端時，把 `127.0.0.1:` 拿掉再 `docker compose up -d nginx`。
       #   拿掉之前請先確認密碼不是預設值。
       - "127.0.0.1:8888:8888"
+      # ZH: 🔒 舊版使用者端 UI（V0/V0.5）—— v4.0 起只給本機做新舊對照，
+      #     對外埠（:80）只開 V1。同 :8888 的綁定機制。
+      - "127.0.0.1:8890:8890"
     volumes:
       - ./infrastructure/nginx.conf:/etc/nginx/nginx.conf:ro
       # ZH: 🔒 TLS 憑證掛載 —— 與上面的 443 埠同一天解開。
