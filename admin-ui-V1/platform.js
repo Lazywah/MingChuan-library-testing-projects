@@ -542,6 +542,72 @@
         }
     }
 
+    // ZH: v4.2 滑條開關（擁有者裁定 2026-09-02）：0/1 的旋鈕不用數字欄位，
+    //     畫成滑條。判定是**資料驅動**的（int 且範圍正好 0–1）——
+    //     後端新增開關型旋鈕會自動長成滑條，前端不維護 key 清單。
+    function isToggle(s) {
+        return s.type === 'int' && Number(s.min) === 0 && Number(s.max) === 1;
+    }
+
+    function swLabel(on) {
+        return on ? T('pf_sw_on', '開') : T('pf_sw_off', '關');
+    }
+
+    // ZH: 滑條的 HTML。編輯模式是真按鈕（role="switch"）＋隱藏欄位收值 ——
+    //     隱藏欄位沿用 data-f="v"，儲存與「回到預設」的既有邏輯**一行都不用改**
+    //     就讀得到；「空白＝跟著預設」的契約也一起保住：沒撥過的維持空白，
+    //     撥了才寫 '0'/'1'（＝明確覆寫）。
+    //     唯讀模式是 <span>（不可聚焦、不進 Tab 順序），只是把值畫成開關的樣子。
+    function tswHtml(s2, editable) {
+        var on = String(s2.overridden ? s2.value : s2.default) === '1';
+        var txt = '<span class="tsw__txt">' + esc(swLabel(on)) + '</span>';
+        if (!editable) {
+            return '<span class="tsw tsw--ro"' + (on ? ' data-on="1"' : '')
+                + ' aria-hidden="true"><span class="tsw__knob"></span></span>' + txt;
+        }
+        return '<input type="hidden" data-f="v" value="'
+            + esc(s2.overridden ? String(s2.value) : '') + '">'
+            + '<button type="button" class="tsw" role="switch"'
+            + ' aria-checked="' + (on ? 'true' : 'false') + '"'
+            + ' data-default="' + esc(String(s2.default)) + '"'
+            + ' aria-label="' + esc(labelOf(s2)) + '">'
+            + '<span class="tsw__knob"></span></button>' + txt;
+    }
+
+    // ZH: v4.2 半開關（擁有者裁定 2026-09-02）：後端標了 zero_means="off" 的
+    //     數字旋鈕（0=停用），畫成「滑條＋數字欄」。判定靠後端標記不靠猜 ——
+    //     0 有三種語意（停用／不限／每次都寄），用 0 猜必踩反例。
+    function isHalf(s) {
+        return s.type === 'int' && s.zero_means === 'off';
+    }
+
+    // ZH: 半開關的 HTML。隱藏欄位收值（''=跟預設 / '0'=明確關 / 數字=開），
+    //     跟 tswHtml 同一套契約。編輯時滑條關著＝數字欄停用。
+    function hswHtml(s2, editable) {
+        var on = Number(s2.value) > 0;      // ZH: value 是後端算好的生效值
+        if (!editable) {
+            return '<span class="tsw tsw--ro"' + (on ? ' data-on="1"' : '')
+                + ' aria-hidden="true"><span class="tsw__knob"></span></span>'
+                + '<span class="tsw__txt">'
+                + esc(on ? String(s2.value) : swLabel(false)) + '</span>';
+        }
+        var num = (s2.overridden && Number(s2.value) > 0) ? String(s2.value) : '';
+        return '<input type="hidden" data-f="v" value="'
+            + esc(s2.overridden ? String(s2.value) : '') + '">'
+            + '<button type="button" class="tsw" role="switch"'
+            + ' aria-checked="' + (on ? 'true' : 'false') + '"'
+            + ' data-default="' + esc(String(s2.default)) + '"'
+            + ' aria-label="' + esc(labelOf(s2)) + '">'
+            + '<span class="tsw__knob"></span></button>'
+            + '<input type="number" class="field__input tsw__num"'
+            + (s2.min != null ? ' min="' + esc(s2.min) + '"' : '')
+            + (s2.max != null ? ' max="' + esc(s2.max) + '"' : '')
+            + ' step="1" value="' + esc(num) + '"'
+            + ' placeholder="' + esc(s2.default) + '"'
+            + (on ? '' : ' disabled')
+            + ' aria-label="' + esc(labelOf(s2)) + '">';
+    }
+
     function settingValueLabel(s) {
         // ZH: 唯讀時下拉要顯示**看得懂的名字**，不是模型 id。
         if (s.type === 'choice') {
@@ -550,6 +616,7 @@
             })[0];
             return pick ? pick.label : String(s.value);
         }
+        if (isToggle(s)) return swLabel(String(s.value) === '1');
         return String(s.value);
     }
 
@@ -563,7 +630,7 @@
         // ZH: 一列的 HTML。抽出來是為了讓下面能按分組各自組表，
         //     而不是把整個 map 複製三份。
         function rowHtml(s2) {
-            var range = (s2.min != null && s2.max != null)
+            var range = (s2.min != null && s2.max != null && !isToggle(s2))
                 ? T('pf_range', '{min}–{max}').replace('{min}', s2.min).replace('{max}', s2.max)
                 : '—';
             // ZH: `overridden` 是後端給的 —— 標出來，管理者才分得出
@@ -581,10 +648,22 @@
                 + (s2.overridden ? ' <span class="adm-pill adm-pill--temp">'
                     + esc(T('pf_overridden', '已覆寫')) + '</span>' : '') + '</td>';
 
+            var defTxt = isToggle(s2) ? swLabel(String(s2.default) === '1')
+                : (isHalf(s2) && Number(s2.default) === 0) ? swLabel(false)
+                : String(s2.default);
+
+            // ZH: v4.2 —— 子參數列掛 data-dep（父開關的 key）。
+            //     CSS 用它縮排；refreshDeps() 用它在父開關關著時淡化整列。
+            var dep = s2.depends_on ? ' data-dep="' + esc(s2.depends_on) + '"' : '';
+
+            var valCell = isToggle(s2) ? tswHtml(s2, false)
+                : isHalf(s2) ? hswHtml(s2, false)
+                : esc(settingValueLabel(s2));
+
             if (!EDITING) {
-                return '<tr>' + name
-                    + '<td>' + esc(settingValueLabel(s2)) + '</td>'
-                    + '<td class="footnote">' + esc(s2.default) + '</td>'
+                return '<tr' + dep + '>' + name
+                    + '<td>' + valCell + '</td>'
+                    + '<td class="footnote">' + esc(defTxt) + '</td>'
                     + '<td class="footnote">' + esc(range) + '</td></tr>';
             }
 
@@ -596,7 +675,11 @@
             //
             // ZH: 空白＝跟著預設走，正好是後端的契約（值留空＝清除覆寫）。
             //     所以「回到預設」只要把欄位清空就好，不需要另外記狀態。
-            var field = s2.type === 'choice'
+            var field = isToggle(s2)
+                ? '<td>' + tswHtml(s2, true) + '</td>'
+                : isHalf(s2)
+                ? '<td class="tsw-cell">' + hswHtml(s2, true) + '</td>'
+                : s2.type === 'choice'
                 // ZH: 下拉沒辦法「留空」，所以給一個明確的「用預設」選項。
                 //     選項由後端給 —— 前端不維護一份模型清單，
                 //     不然管理者新增模型之後這裡還是舊的。
@@ -608,8 +691,8 @@
                     min: s2.min, max: s2.max, placeholder: s2.default,
                     label: labelOf(s2),
                 });
-            return '<tr data-key="' + esc(s2.key) + '">' + name + field
-                + '<td class="footnote">' + esc(s2.default) + '</td>'
+            return '<tr data-key="' + esc(s2.key) + '"' + dep + '>' + name + field
+                + '<td class="footnote">' + esc(defTxt) + '</td>'
                 + '<td class="footnote">' + esc(range) + '</td>'
                 + '<td class="num"><button class="btn btn--minor" type="button"'
                 + ' data-reset="' + esc(s2.key) + '"' + (s2.overridden ? '' : ' disabled') + '>'
@@ -638,6 +721,9 @@
             var rows = SETTINGS.filter(function (x) {
                 return x.group === g.key && ALERT_MAIL_KEYS.indexOf(x.key) < 0;
             });
+            // ZH: v4.2 組內順序由後端 SETTING_ORDER 決定（上游在前、父子相鄰，
+            //     擁有者裁定 2026-09-02）。前端**不再**自己排 ——
+            //     這裡排一次會把父開關從它的子參數旁邊抽走。
             if (!rows.length) return '';        // 空的分組不畫標題
             return '<h3 class="adm-subhead">' + esc(labelOf(g)) + '</h3>'
                  + tableHtml(cols, rows.map(rowHtml).join(''));
@@ -662,10 +748,91 @@
                 //     其中一個按了「回到預設」就把全部一起存掉並踢出編輯模式。
                 var tr = b.closest('tr');
                 var el = tr && tr.querySelector('[data-f="v"]');
-                if (el) { el.value = ''; el.focus(); }
+                if (el) { el.value = ''; }
+                // ZH: 滑條列：隱藏欄位收不到焦點，畫面也要撥回預設的位置 ——
+                //     只清值不動滑條的話，看起來像「按了沒反應」。
+                var sw = tr && tr.querySelector('.tsw[role="switch"]');
+                if (sw) {
+                    // ZH: Number(...)>0 對純開關（'0'/'1'）與半開關（任意數）都對。
+                    var defOn = Number(sw.dataset.default) > 0;
+                    paintSwitch(sw, defOn);
+                    var num0 = tr.querySelector('.tsw__num');
+                    if (num0) { num0.value = ''; num0.disabled = !defOn; }
+                    sw.focus();
+                } else if (el) { el.focus(); }
                 b.disabled = true;          // 已經是預設了，再按沒有意義
+                refreshDeps();
             });
         });
+
+        // ZH: 滑條撥動：值寫進同列的隱藏欄位（'0'/'1' ＝ 明確覆寫），
+        //     並點亮「回到預設」—— 這一撥之後它就不再跟著預設走了。
+        $('settings').querySelectorAll('.tsw[role="switch"]').forEach(function (sw) {
+            sw.addEventListener('click', function () {
+                var on = sw.getAttribute('aria-checked') !== 'true';
+                paintSwitch(sw, on);
+                var tr = sw.closest('tr');
+                var el = tr && tr.querySelector('[data-f="v"]');
+                var num = tr && tr.querySelector('.tsw__num');
+                if (num) {
+                    // ZH: 半開關。開＝數字欄啟用（空白仍是「跟預設」）；
+                    //     關＝寫 '0' 明確關（預設本來就 0 的寫空白，不多留覆寫）。
+                    num.disabled = !on;
+                    if (el) el.value = on ? num.value
+                        : (Number(sw.dataset.default) > 0 ? '0' : '');
+                    if (on) num.focus();
+                } else if (el) {
+                    el.value = on ? '1' : '0';
+                }
+                var rb = tr && tr.querySelector('[data-reset]');
+                if (rb) rb.disabled = false;
+                refreshDeps();
+            });
+        });
+
+        // ZH: 半開關的數字欄：值直通隱藏欄位（清空＝回到跟預設走）。
+        $('settings').querySelectorAll('.tsw__num').forEach(function (num) {
+            num.addEventListener('input', function () {
+                var tr = num.closest('tr');
+                var el = tr && tr.querySelector('[data-f="v"]');
+                if (el) el.value = num.value;
+                var rb = tr && tr.querySelector('[data-reset]');
+                if (rb) rb.disabled = false;
+                refreshDeps();
+            });
+        });
+
+        refreshDeps();
+    }
+
+    // ZH: v4.2 依賴淡化 —— 父開關關著時，子參數列整列淡化（仍可編輯：
+    //     淡化是「現在沒作用」的提示，不是鎖；鎖了反而沒辦法先調好再開）。
+    //     父的生效值：編輯中讀畫面上的（即時跟著撥動變），唯讀讀後端給的。
+    function refreshDeps() {
+        $('settings').querySelectorAll('tr[data-dep]').forEach(function (tr) {
+            tr.classList.toggle('is-dimmed', !depParentOn(tr.dataset.dep));
+        });
+    }
+
+    function depParentOn(key) {
+        var s = SETTINGS.filter(function (x) { return x.key === key; })[0];
+        if (EDITING) {
+            var ptr = $('settings').querySelector('tr[data-key="' + key + '"]');
+            var el = ptr && ptr.querySelector('[data-f="v"]');
+            if (el) {
+                var eff = el.value !== '' ? el.value : (s ? s.default : '');
+                return Number(eff) > 0;
+            }
+        }
+        // ZH: 找不到父列（例如父在另一個檢視）就不淡化 —— 寧可少提示不要誤導。
+        return s ? Number(s.value) > 0 : true;
+    }
+
+    // ZH: 把滑條畫到指定狀態（含旁邊的 開/關 字樣）。撥動與「回到預設」共用。
+    function paintSwitch(sw, on) {
+        sw.setAttribute('aria-checked', on ? 'true' : 'false');
+        var txt = sw.parentNode.querySelector('.tsw__txt');
+        if (txt) txt.textContent = swLabel(on);
     }
 
     // ZH: 選了校外供應商就把代價講出來 —— 這是政策決定，不只是換個下拉值。

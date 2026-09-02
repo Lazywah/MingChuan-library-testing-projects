@@ -1494,6 +1494,27 @@ _VIEW_KEYS = {"platform", "myai"}
 #     反過來漏標一個該標的只是少一個提醒 —— 比亂標好。
 _GROUP_KEYS = {g["key"] for g in SETTING_GROUPS}
 
+# ZH: v4.2 組內顯示順序（擁有者裁定 2026-09-02）：**上游在前、父子相鄰**。
+#     一個設定決定另一個「有沒有意義」時排前面（開關是最常見的上游）；
+#     節流/微調參數緊跟它隸屬的開關（例：登入通知信 → 其最短間隔）。
+#     裝機時設一次就不動的（SMTP 連線四件）沉到組尾。
+# ZH: 沒列到的 key 排在該組最後（照 registry 順序）—— 新增旋鈕忘了列，
+#     只是排尾不會消失；列了不存在的 key 則在載入時就炸（見下方自檢）。
+SETTING_ORDER = {
+    "platform": ["job_timeout_minutes", "lab_gpu_max_minutes", "lab_archive_days",
+                 "announcement_file_max_mb", "announcement_total_gb"],
+    "myai":     ["myai_autoprovision", "myai_initial_credit", "myai_init_pwd_days",
+                 "myai_monthly_topup_to", "myai_monthly_topup_day",
+                 "myai_sync_interval_hours", "myai_active_poll_minutes",
+                 "myai_usage_window_min"],
+    "assistant": ["rag_chat_model", "rag_top_k", "rag_min_score", "rag_history_turns"],
+    "email":    ["myai_provision_email", "bounce_scan_minutes",
+                 "login_alert_email", "login_alert_hours",
+                 "myai_balance_alert_days", "lab_purge_first_days",
+                 "lab_purge_final_days", "admin_alert_min_hours",
+                 "smtp_server", "smtp_port", "smtp_username", "smtp_from_email"],
+}
+
 
 SYSTEM_SETTINGS = {
     # ZH: 🔴 v3.9 —— 這兩個**刻意從管理畫面隱藏**（擁有者 2026-08-29 裁定）。
@@ -1510,22 +1531,22 @@ SYSTEM_SETTINGS = {
     # ZH: 公告附件。上限調小**不會**動到已經上傳的檔案，只擋之後的上傳。
     "announcement_file_max_mb": {"group": "platform", "type": "int",   "default": lambda: settings.ANNOUNCEMENT_FILE_MAX_MB,    "min": 1,   "max": 500,  "label": "公告附件單檔上限(MB)", "label_en": "Announcement attachment: max per file (MB)"},
     "announcement_total_gb":    {"group": "platform", "type": "int",   "default": lambda: settings.ANNOUNCEMENT_FILES_TOTAL_GB, "min": 1,   "max": 100,  "label": "公告附件總量上限(GB)", "label_en": "Announcement attachments: total cap (GB)"},
-    "myai_sync_interval_hours": {"group": "myai", "type": "int",   "default": lambda: settings.MYAI_SYNC_INTERVAL_HOURS,    "min": 0,   "max": 168,  "label": "MYAI 同步間隔(小時, 0=關閉)", "label_en": "MYAI sync interval (hours; 0 = off)"},
+    "myai_sync_interval_hours": {"zero_means": "off", "group": "myai", "type": "int",   "default": lambda: settings.MYAI_SYNC_INTERVAL_HOURS,    "min": 0,   "max": 168,  "label": "MYAI 同步間隔(小時, 0=關閉)", "label_en": "MYAI sync interval (hours; 0 = off)"},
     "rag_top_k":                {"group": "assistant", "type": "int",   "default": lambda: settings.RAG_TOP_K,                   "min": 1,   "max": 20,   "label": "小基 RAG 取回片段數", "label_en": "Assistant RAG: chunks retrieved"},
     "rag_min_score":            {"group": "assistant", "type": "float", "default": lambda: settings.RAG_MIN_SCORE,               "min": 0.0, "max": 1.0,  "label": "小基 RAG 相似度門檻", "label_en": "Assistant RAG: similarity threshold"},
     "rag_history_turns":        {"group": "assistant", "type": "int",   "default": lambda: settings.RAG_HISTORY_TURNS,           "min": 0,   "max": 20,   "label": "小基 RAG 帶入對話輪數", "label_en": "Assistant RAG: conversation turns included"},
     # v3.3 MYAI 自動開通
     "myai_autoprovision":       {"starred": True, "group": "myai", "type": "int",   "default": lambda: 0,                                    "min": 0,   "max": 1,    "label": "MYAI 首次登入自動建號(1=開, 0=關；綁定既有帳號不受此限)", "label_en": "MYAI auto-create vendor account on first login (1 = on, 0 = off; linking existing accounts is always on)"},
     "myai_init_pwd_days":       {"starred": True, "group": "myai", "type": "int",   "default": lambda: 30,                                   "min": 1,   "max": 180,  "label": "MYAI 初始密碼保存天數(逾期自動清除)", "label_en": "MYAI initial password retention (days; purged when it expires)"},
-    "myai_initial_credit":      {"starred": True, "group": "myai", "type": "int",   "default": lambda: 0,                                    "min": 0,   "max": None, "label": "MYAI 新帳號初始點數(0=不發放)", "label_en": "MYAI initial credit for new accounts (0 = none)"},
+    "myai_initial_credit":      {"zero_means": "off", "starred": True, "group": "myai", "type": "int",   "default": lambda: 0,                                    "min": 0,   "max": None, "label": "MYAI 新帳號初始點數(0=不發放)", "label_en": "MYAI initial credit for new accounts (0 = none)"},
     # ZH: v3.9 每月補點（擁有者 2026-08-29 定的三條規則）：
     #       補到**固定值**（不是固定加）· **所有**綁定帳號 · 每月 1 號
     #     到期日不管 —— 那是廠商在處理的事（他們的使用者列表有「有效期間」欄）。
     # ZH: ⚠️ 與 myai_initial_credit 刻意分開：那個是**新帳號**的初始值，
     #     這個是**每月**補到的水位。兩者將來很可能要調成不同數字，共用會綁死。
     # ZH: 🔴 上限 28 是因為 29–31 在某些月份不存在 —— 設 31 的話 2 月永遠不會補。
-    "myai_monthly_topup_to":    {"starred": True, "group": "myai", "type": "int",   "default": lambda: 0,                                    "min": 0,   "max": None, "label": "MYAI 每月補到的點數(0=不補)", "label_en": "MYAI monthly top-up target (0 = no top-up)"},
-    "myai_monthly_topup_day":   {"starred": True, "group": "myai", "type": "int",   "default": lambda: 1,                                    "min": 1,   "max": 28,   "label": "MYAI 每月補點日(每月第幾天; 上限 28)", "label_en": "MYAI top-up day of month (max 28)"},
+    "myai_monthly_topup_to":    {"zero_means": "off", "starred": True, "group": "myai", "type": "int",   "default": lambda: 0,                                    "min": 0,   "max": None, "label": "MYAI 每月補到的點數(0=不補)", "label_en": "MYAI monthly top-up target (0 = no top-up)"},
+    "myai_monthly_topup_day":   {"depends_on": "myai_monthly_topup_to", "starred": True, "group": "myai", "type": "int",   "default": lambda: 1,                                    "min": 1,   "max": 28,   "label": "MYAI 每月補點日(每月第幾天; 上限 28)", "label_en": "MYAI top-up day of month (max 28)"},
     # v3.3 刪除使用者後 Lab volume 的封存保留天數（逾期背景任務真正刪除）
     # ZH: v3.9 GPU 實驗室的最長借用時間（0 = 不限）。
     # ZH: 🔴 **刻意不分角色**，與 scheduler_policy 的 `hard_limit_min` 是兩回事：
@@ -1543,9 +1564,9 @@ SYSTEM_SETTINGS = {
     #     0 = 不寄信（畫面提示仍在）。值會影響使用者收到幾封信,所以標星號。
     # ZH: 🔴 為什麼要有這個：點數低會**持續好幾天**,不節流的話每輪輪詢都寄一封。
     #     收件人第二天就會把規則設成全部丟垃圾桶,於是真的用完時反而沒人看到。
-    "myai_balance_alert_days":  {"starred": True, "group": "email", "type": "int", "default": lambda: 7, "min": 0, "max": 90, "label": "MYAI 點數提醒的最短間隔(天; 0=不寄信)", "label_en": "Minimum interval between MYAI credit reminders (days; 0 = no email)"},
+    "myai_balance_alert_days":  {"zero_means": "off", "starred": True, "group": "email", "type": "int", "default": lambda: 7, "min": 0, "max": 90, "label": "MYAI 點數提醒的最短間隔(天; 0=不寄信)", "label_en": "Minimum interval between MYAI credit reminders (days; 0 = no email)"},
     "myai_usage_window_min":    {"group": "myai", "type": "int",   "default": lambda: 15,                                   "min": 1,   "max": 180,  "label": "判定「正在使用 MYAI」的時間窗(分)", "label_en": "Window for counting someone as actively using MYAI (minutes)"},
-    "bounce_scan_minutes":      {"group": "email", "type": "int",   "default": lambda: 30,                                   "min": 0,   "max": 1440, "label": "退信回收掃描間隔(分, 0=停用)", "label_en": "Bounce-collection scan interval (minutes; 0 = disabled)"},
+    "bounce_scan_minutes":      {"zero_means": "off", "depends_on": "myai_provision_email", "group": "email", "type": "int",   "default": lambda: 30,                                   "min": 0,   "max": 1440, "label": "退信回收掃描間隔(分, 0=停用)", "label_en": "Bounce-collection scan interval (minutes; 0 = disabled)"},
     # ZH: v3.7 小基要用哪個模型回答。值是**模型登錄表裡的 api_model_id**，
     #     選項由「平台設定 → 模型」那張表決定，所以不必在這裡維護一份清單。
     #
@@ -1561,8 +1582,8 @@ SYSTEM_SETTINGS = {
     #     ⚠ 保留期預設 30 天(lab_archive_days),所以第一封在**刪除當天**就寄出 ——
     #     那正是使用者最需要知道的時刻(「我的東西還在,但只剩 30 天」)。
     #     值會出現在信件內文,所以標星號。
-    "lab_purge_first_days": {"starred": True, "group": "email", "type": "int", "default": lambda: 30, "min": 0, "max": 365, "label": "Lab 資料銷毀前第一次提醒(剩幾天;0=不寄)", "label_en": "First reminder before Lab data is destroyed (days left; 0 = no email)"},
-    "lab_purge_final_days": {"starred": True, "group": "email", "type": "int", "default": lambda: 7,  "min": 0, "max": 365, "label": "Lab 資料銷毀前最後提醒(剩幾天;0=不寄)", "label_en": "Final reminder before Lab data is destroyed (days left; 0 = no email)"},
+    "lab_purge_first_days": {"zero_means": "off", "starred": True, "group": "email", "type": "int", "default": lambda: 30, "min": 0, "max": 365, "label": "Lab 資料銷毀前第一次提醒(剩幾天;0=不寄)", "label_en": "First reminder before Lab data is destroyed (days left; 0 = no email)"},
+    "lab_purge_final_days": {"zero_means": "off", "starred": True, "group": "email", "type": "int", "default": lambda: 7,  "min": 0, "max": 365, "label": "Lab 資料銷毀前最後提醒(剩幾天;0=不寄)", "label_en": "Final reminder before Lab data is destroyed (days left; 0 = no email)"},
     # ZH: v3.8 管理員告警信。收件人留空 = 完全不寄（預設就是留空）——
     #     一個沒有人填收件人的告警系統應該安靜，而不是往預設信箱亂寄。
     "admin_alert_emails":       {"group": "email", "type": "text",  "default": lambda: "",   "min": None, "max": None, "maxlen": 500, "text_kind": "emails", "label": "管理員告警收件人 To(逗號分隔;與 CC 都留空=不寄告警)", "label_en": "Admin alert recipients, To (comma-separated; empty here and in CC = no alerts)"},
@@ -1593,7 +1614,7 @@ SYSTEM_SETTINGS = {
     # ZH: 🔴 間隔**擋不住換 IP 的登入**（見 should_send_login_alert）——
     #     從沒看過的位址登入正是這封信唯一真正的價值，節流不該把它一起吃掉。
     "login_alert_email":        {"starred": True, "group": "email", "type": "int",   "default": lambda: 1,                                    "min": 0,   "max": 1,    "label": "登入通知信(1=寄, 0=不寄)", "label_en": "Login alert email (1 = send, 0 = do not)"},
-    "login_alert_hours":        {"starred": True, "group": "email", "type": "int",   "default": lambda: 0,                                    "min": 0,   "max": 720,  "label": "登入通知信的最短間隔(小時; 0=每次都寄; 換 IP 一律照寄)", "label_en": "Minimum interval between login alerts (hours; 0 = every login; a new IP always sends)"},
+    "login_alert_hours":        {"depends_on": "login_alert_email", "starred": True, "group": "email", "type": "int",   "default": lambda: 0,                                    "min": 0,   "max": 720,  "label": "登入通知信的最短間隔(小時; 0=每次都寄; 換 IP 一律照寄)", "label_en": "Minimum interval between login alerts (hours; 0 = every login; a new IP always sends)"},
     "rag_chat_model":           {"starred": True, "group": "assistant", "type": "choice", "default": lambda: settings.RAG_CHAT_MODEL,             "min": None, "max": None, "label": "小基回應用的模型", "label_en": "Model the assistant replies with"},
 }
 
@@ -1814,6 +1835,18 @@ if _public_unstarred:
         "（前台看得到的值一定要標星號）" % _public_unstarred)
 
 # ZH: 同理，分組也要有合法的 view —— 漏標的話那一組在兩個檢視下都不會出現。
+# ZH: v4.2 —— 順序表與依賴指到不存在的 key 要在載入時就炸。
+#     打錯字的話：順序表安靜退化成「排尾」、依賴安靜退化成「沒依賴」，
+#     兩者都是沒有人會回報的故障。與 _bad_group 同一個哲學。
+_bad_order = [k for keys in SETTING_ORDER.values() for k in keys
+              if k not in SYSTEM_SETTINGS]
+if _bad_order:
+    raise RuntimeError("SETTING_ORDER 列了不存在的旋鈕：%s" % _bad_order)
+_bad_dep = [k for k, v in SYSTEM_SETTINGS.items()
+            if v.get("depends_on") and v["depends_on"] not in SYSTEM_SETTINGS]
+if _bad_dep:
+    raise RuntimeError("這些旋鈕的 depends_on 指到不存在的 key：%s" % _bad_dep)
+
 _bad_view = [g["key"] for g in SETTING_GROUPS if g.get("view") not in _VIEW_KEYS]
 if _bad_view:
     raise RuntimeError(
@@ -1846,6 +1879,10 @@ def get_all_settings(db: Session) -> list:
             "min": spec["min"],
             "max": spec["max"],
             "overridden": raw not in (None, ""),
+            # ZH: v4.2 —— 給前端畫半開關（0=停用）與「父開關關著就淡化」用。
+            #     由後端給是刻意的，理由同 text_kind：前端自己維護清單一定會漏。
+            "zero_means": spec.get("zero_means"),
+            "depends_on": spec.get("depends_on"),
             # ZH: v3.8 —— 文字型旋鈕的「子型別」。前端據此決定怎麼畫：
             #     `emails` 會畫成一列一個地址的清單編輯器，不用管理者自己打逗號。
             #     由後端給是刻意的 —— 前端自己維護一份「哪些 key 是信箱清單」的話，
@@ -1856,6 +1893,13 @@ def get_all_settings(db: Session) -> list:
         if spec["type"] == "choice":
             item["choices"] = rag_model_choices(db)
         out.append(item)
+    # ZH: v4.2 組內照 SETTING_ORDER 排（上游在前、父子相鄰），
+    #     沒列到的排該組最後、維持 registry 順序（排序穩定，原順序不動）。
+    def _order_key(it):
+        seq = SETTING_ORDER.get(it["group"], [])
+        i = seq.index(it["key"]) if it["key"] in seq else len(seq)
+        return (i,)
+    out.sort(key=_order_key)
     return out
 
 

@@ -1517,3 +1517,71 @@ textarea.field__input {
 }
 /* ZH: 分隔線畫在**每一列**的那一格上，只畫表頭的話中間會斷掉。 */
 .adm-table .an-sep { border-left: 1px solid var(--hairline); }
+
+/* ==========================================================================
+ * ZH: 滑條開關（v4.2，擁有者裁定 2026-09-02）—— 營運設定裡 0/1 的旋鈕
+ *     不再用數字欄位/文字，畫成滑條。
+ *     編輯模式是 <button role="switch">，唯讀模式是 .tsw--ro 的 <span>
+ *     （不可聚焦；只是把值畫成開關的樣子）。值收在同列的隱藏欄位，
+ *     所以儲存契約（空白＝跟著預設）不經過這裡。
+ * ========================================================================== */
+.tsw {
+    position: relative;
+    display: inline-block;
+    width: 44px;
+    height: 24px;
+    padding: 0;
+    border: 1px solid var(--hairline);
+    border-radius: var(--radius-pill);
+    background-color: var(--surface-2);
+    cursor: pointer;
+    vertical-align: middle;
+    transition: background-color 0.15s ease, border-color 0.15s ease;
+}
+.tsw__knob {
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background-color: var(--surface);
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
+    transition: transform 0.15s ease;
+}
+.tsw[aria-checked="true"],
+.tsw--ro[data-on="1"] {
+    background-color: var(--accent);
+    border-color: var(--accent);
+}
+.tsw[aria-checked="true"] .tsw__knob,
+.tsw--ro[data-on="1"] .tsw__knob { transform: translateX(20px); }
+.tsw:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
+.tsw--ro { cursor: default; }
+.tsw__txt { margin-left: var(--space-2); vertical-align: middle; }
+/* ZH: 開關醒目但不能招來誤觸 —— 動畫關掉的使用者也不該看到滑動。 */
+@media (prefers-reduced-motion: reduce) {
+    .tsw, .tsw__knob { transition: none; }
+}
+
+/* ZH: v4.2 半開關（滑條＋數字欄）與依賴淡化。
+ *     子參數列（tr[data-dep]）縮排＋「└」——因果畫在畫面上；
+ *     父開關關著時整列淡化（.is-dimmed，由 platform.js 的 refreshDeps 掛）。
+ *     淡化不是停用：仍可先調好值再回頭開父開關。 */
+.tsw-cell { white-space: nowrap; }
+.tsw__num {
+    width: 88px;
+    margin-left: var(--space-2);
+    vertical-align: middle;
+}
+#settings tr[data-dep] td:first-child {
+    position: relative;
+    padding-left: 1.8em;
+}
+#settings tr[data-dep] td:first-child::before {
+    content: '└';
+    position: absolute;
+    left: 0.5em;
+    color: var(--text-muted);
+}
+#settings tr.is-dimmed td { opacity: 0.45; }
