@@ -90,6 +90,16 @@ RUN rm -f /tmp/aibase-runner.vsix
 # "exec /usr/local/bin/aibase-entrypoint.sh: no such file or directory"
 # (kernel 把 /bin/bash\r 當解譯器)。COPY 後用 sed 強制改 LF
 COPY infrastructure/base-images/code-server/aibase-entrypoint.sh /usr/local/bin/aibase-entrypoint.sh
+
+# ZH: v4.2 貓狗分類範例（擁有者裁定 2026-09-02）—— gpu.html 承諾「開啟後已經
+#     有寫好的程式」，這包就是兌現：範例 .py ＋ 精選資料集（500+500 張、224px、
+#     ~15MB），entrypoint 首次啟動時放進 ~/projects/。資料不佔使用者配額太多、
+#     訓練不需要網路。資料製作方式見 samples/cat_dog_data/README.md。
+#     資料以單一 zip 進 repo（1000 張散檔會讓版本庫很吵），建置時解開。
+#     範例 .py 同樣防 CRLF（Windows host build 的老坑，同 entrypoint）。
+COPY infrastructure/base-images/code-server/samples/ /opt/aibase/samples/
+RUN cd /opt/aibase/samples && unzip -q cat_dog_data.zip && rm cat_dog_data.zip \
+    && sed -i 's/\r$//' /opt/aibase/samples/sample_cats_dogs.py
 RUN sed -i 's/\r$//' /usr/local/bin/aibase-entrypoint.sh \
     && chmod +x /usr/local/bin/aibase-entrypoint.sh
 

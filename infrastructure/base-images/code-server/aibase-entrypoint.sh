@@ -48,6 +48,17 @@ EOF
     echo "[aibase-entrypoint] Conda configured to use ~/.conda for envs/pkgs"
 fi
 
+# ============ 貓狗分類範例（只放一次；使用者刪掉就不再補）============
+# ZH: v4.2 —— gpu.html 的「用範例資料開始」承諾開啟後就有寫好的程式，
+#     這裡兌現。marker 檔獨立於 .welcome-shown：舊使用者（已看過 welcome）
+#     下次啟動也會拿到範例。
+SAMPLE_MARK="$HOME/projects/.sample-seeded-v1"
+if [ ! -f "$SAMPLE_MARK" ] && [ -d /opt/aibase/samples ]; then
+    cp -r /opt/aibase/samples/. "$HOME/projects/" 2>/dev/null || true
+    touch "$SAMPLE_MARK"
+    echo "[aibase-entrypoint] Seeded cat/dog sample into ~/projects"
+fi
+
 # ============ Welcome banner（只在第一次啟動時建立）============
 WELCOME_FILE="$HOME/projects/.welcome-shown"
 if [ ! -f "$WELCOME_FILE" ]; then
@@ -55,6 +66,11 @@ if [ ! -f "$WELCOME_FILE" ]; then
 # 歡迎使用 AI Base Lab！
 
 ## 快速開始
+
+### 第一次來？跑跑看貓狗分類範例
+1. 打開 `sample_cats_dogs.py`（資料已經幫你放在 `cat_dog_data/`）
+2. 在檔案上按右鍵 → **「Run on GPU」**
+3. 幾分鐘後你就有一個能分辨貓狗的模型
 
 ### 寫程式 + 提交 GPU 任務
 1. 在 Explorer 內新增 `.py` 或 `.ipynb` 檔

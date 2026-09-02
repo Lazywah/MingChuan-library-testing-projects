@@ -1057,6 +1057,11 @@ def execute_job(job):
     cmd = [
         "docker", "run", "--rm",
         "--gpus", f"device={gpu_id}",
+        # ZH: v4.2 —— Docker 預設 /dev/shm 只有 64MB，PyTorch DataLoader 開
+        #     num_workers>0 時 batch 走共享記憶體，224px 的圖一兩個 worker 就爆
+        #     （Bus error, worker killed）。2026-09-02 貓狗範例 E2E 實測踩到。
+        #     2g 對單卡訓練綽綽有餘，也不是常駐占用（用多少算多少）。
+        "--shm-size", "2g",
         *storage_mounts,
         *extra_mounts,
         *lab_mount_args,
