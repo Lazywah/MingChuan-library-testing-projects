@@ -323,6 +323,11 @@ class UserResponse(BaseModel):
     # ZH: v3.8 管理權限。這是**回應** schema —— 使用者看得到自己有沒有,但改不了。
     is_admin: int = 0
     onboarded_at: Optional[UtcDatetime] = None
+    # ZH: v4.2 角色是怎麼來的（sso_email=依信箱自動判 / self_onboard=本人初次設定時選）。
+    #     🔴 唯讀狀態回報 —— 前端靠它判斷「要不要在初次設定問身分」：
+    #     職員與老師同網域（@mail.mcu.edu.tw），系統分不出來，
+    #     擁有者裁定 2026-09-02：讓本人在首次登入時自己選。
+    role_source: Optional[str] = None
     # ZH: v3.8 管理者開放的一次性修改。`None` = 鎖著。
     #     🔴 這是**唯讀的狀態回報** —— 使用者改不了它,寫入只有管理端那支端點。
     #     沒有這個欄位的話,前端無從得知「現在可以改了」,

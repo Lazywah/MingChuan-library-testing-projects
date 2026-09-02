@@ -789,7 +789,15 @@
             return (curLang === 'en' && en) ? en : zh;
         }
         _onbUnlock = unlock || null;
-        var field = onbFieldFor(me.role);
+        // ZH: v4.2 身分選擇（擁有者裁定 2026-09-02）：職員與老師同網域
+        //     （@mail.mcu.edu.tw），系統分不出來 —— 被自動判成 teacher 的人
+        //     在**初次設定**時自己選。解鎖模式不問（role 不在可解鎖欄位裡，
+        //     後端 complete_onboarding 也擋）。
+        var askRole = !unlock && !me.onboarded_at
+            && me.role === 'teacher' && me.role_source === 'sso_email';
+        var effRole = askRole ? ((prefill && prefill.role) || 'teacher') : me.role;
+        // ZH: 學系/行政單位要照**選到的身分**問 —— 選職員就問行政單位。
+        var field = onbFieldFor(effRole);
         // ZH: 解鎖模式下只顯示核可範圍內的欄位 —— 顯示了卻不能存,
         //     使用者會以為自己改成功了,而後端會退回「這次核可的範圍不包含…」。
         var askCampus = !unlock || unlock.indexOf('campus') >= 0;
@@ -877,6 +885,21 @@
                 ? T('onb_edit_sub', '管理員開放了一次修改。存檔之後會再次鎖定。')
                 : T('onb_sub', '這些資料用來做統計分組，只需要設定一次。')) + '</p>'
             + '<p class="onb__err" id="onb-err" hidden></p>'
+            + (askRole
+                ? '<div class="onb__field">'
+                  + '<span class="onb__label">' + esc(T('onb_role', '身分')) + '</span>'
+                  + '<div class="onb__radios" role="radiogroup" aria-label="' + esc(T('onb_role', '身分')) + '">'
+                  +   '<label class="onb__radio"><input type="radio" name="onb-role" value="teacher"'
+                  +     (effRole === 'teacher' ? ' checked' : '') + '> '
+                  +     esc(T('onb_role_teacher', '我是老師')) + '</label>'
+                  +   '<label class="onb__radio"><input type="radio" name="onb-role" value="staff"'
+                  +     (effRole === 'staff' ? ' checked' : '') + '> '
+                  +     esc(T('onb_role_staff', '我是職員')) + '</label>'
+                  + '</div>'
+                  + '<span class="onb__hint">' + esc(T('onb_role_hint',
+                        '信箱看不出身分，請自己選 —— 老師會問學系、職員會問行政單位。')) + '</span>'
+                  + '</div>'
+                : '')
             + (askCampus ? '<div class="onb__field">'
             +   '<label class="onb__label" for="onb-campus">' + esc(T('onb_campus', '校區')) + '</label>'
             +   '<select class="onb__select" id="onb-campus"' + (multi ? ' multiple size="5"' : '') + '>'
@@ -918,8 +941,25 @@
             if (oe && prefill.org) oe.value = prefill.org;
         }
 
+        // ZH: 換身分要整個重畫 —— 下面的組織欄位（學系 vs 行政單位）跟著身分走，
+        //     清單整個不同所以 org 不帶回去（帶了會對到不存在的選項）。
+        //     校區的選擇帶回去：它跟身分無關，重選一次只是氣人。
+        box.querySelectorAll('input[name="onb-role"]').forEach(function (rb) {
+            rb.addEventListener('change', function () {
+                var sel0 = box.querySelector('#onb-campus');
+                var picked0 = !sel0 ? []
+                    : multi
+                        ? Array.prototype.slice.call(sel0.selectedOptions)
+                            .map(function (o) { return o.value; })
+                        : (sel0.value ? [sel0.value] : []);
+                box.remove();
+                buildOnboarding(me, opts,
+                    { campuses: picked0, org: null, role: rb.value }, unlock);
+            });
+        });
+
         box.querySelector('#onb-go').addEventListener('click', function () {
-            reviewOnboarding(box, multi, field);
+            reviewOnboarding(box, multi, field, askRole);
         });
 
         // ZH: 切語言要把對話框整個重畫。
@@ -940,10 +980,12 @@
                         .map(function (o) { return o.value; })
                     : (sel.value ? [sel.value] : []);
             var orgEl = box.querySelector('#onb-org');
+            var roleEl = box.querySelector('input[name="onb-role"]:checked');
             document.removeEventListener('prefs:langchanged', onLang);
             box.remove();
             buildOnboarding(_me, _onbOpts,
-                { campuses: picked, org: orgEl ? orgEl.value : null }, _onbUnlock);
+                { campuses: picked, org: orgEl ? orgEl.value : null,
+                  role: roleEl ? roleEl.value : null }, _onbUnlock);
         }
         document.addEventListener('prefs:langchanged', onLang);
     }
@@ -955,7 +997,7 @@
     //
     // ZH: 🔴 **確認頁不重新讀取欄位** —— 它顯示的就是待會要送出的那份資料。
     //     重讀的話,顯示與送出會是兩次不同的讀取,中間任何變動都看不出來。
-    function reviewOnboarding(box, multi, field) {
+    function reviewOnboarding(box, multi, field, askRole) {
         // ZH: 解鎖模式下只會出現核可範圍內的欄位,所以兩個都可能不存在。
         var sel = box.querySelector('#onb-campus');
         var campuses = !sel ? []
@@ -964,6 +1006,9 @@
                 : (sel.value ? [sel.value] : []);
         var orgEl = box.querySelector('#onb-org');
         var orgValue = orgEl ? orgEl.value : null;
+        // ZH: 身分只在 askRole 時送 —— 其他人送 role 會被後端擋「不適用」。
+        var roleEl = box.querySelector('input[name="onb-role"]:checked');
+        var roleValue = askRole && roleEl ? roleEl.value : null;
         var err = box.querySelector('#onb-err');
 
         // ZH: 明顯的漏填在這裡先擋 —— 讓他確認一份空的再被後端退回很不友善。
@@ -983,7 +1028,13 @@
 
         var orgLabel = orgEl && orgEl.selectedOptions[0]
             ? orgEl.selectedOptions[0].textContent : '';
-        var rows = (sel ? '<div class="onb__row"><span class="onb__k">'
+        var rows = (roleValue
+            ? '<div class="onb__row"><span class="onb__k">'
+              + esc(T('onb_role', '身分')) + '</span><span class="onb__v">'
+              + esc(roleValue === 'staff' ? T('onb_role_staff', '我是職員')
+                                          : T('onb_role_teacher', '我是老師'))
+              + '</span></div>' : '')
+            + (sel ? '<div class="onb__row"><span class="onb__k">'
             + esc(T('onb_campus', '校區')) + '</span><span class="onb__v">'
             + esc(campuses.join('、')) + '</span></div>' : '')
             + (orgEl
@@ -1005,7 +1056,7 @@
             + esc(T('onb_confirm_back', '返回修改')) + '</button>';
 
         box.querySelector('#onb-yes').addEventListener('click', function () {
-            submitOnboarding(box, campuses, orgValue);
+            submitOnboarding(box, campuses, orgValue, roleValue);
         });
         // ZH: 返回就重畫第一頁 —— 但**要把剛才選的帶回去**,
         //     不然他返回之後得從頭再選一次,那比沒有返回鍵更氣人。
@@ -1013,13 +1064,14 @@
             box.remove();
             // ZH: 🔴 `_onbUnlock` 要一起帶回去 —— 不帶的話返回之後會變成
             //     初次設定模式,欄位全開,而使用者存下去會被後端擋「超出核可範圍」。
-            buildOnboarding(_me, _onbOpts, { campuses: campuses, org: orgValue }, _onbUnlock);
+            buildOnboarding(_me, _onbOpts,
+                { campuses: campuses, org: orgValue, role: roleValue }, _onbUnlock);
         });
     }
 
     // ZH: 收的是**確認頁顯示過的那份值**,不是重新讀欄位 ——
     //     重讀的話「他看到的」與「送出去的」會是兩次不同的讀取。
-    async function submitOnboarding(box, campuses, orgValue) {
+    async function submitOnboarding(box, campuses, orgValue, roleValue) {
         var btn = box.querySelector('#onb-yes');
         var err = box.querySelector('#onb-err');
 
@@ -1028,7 +1080,9 @@
             var r = await fetch(API + '/system/onboarding', {
                 method: 'POST',
                 headers: Object.assign({ 'Content-Type': 'application/json' }, authHeaders()),
-                body: JSON.stringify({ campuses: campuses, org_value: orgValue }),
+                body: JSON.stringify(roleValue
+                    ? { campuses: campuses, org_value: orgValue, role: roleValue }
+                    : { campuses: campuses, org_value: orgValue }),
             });
             if (!r.ok) {
                 // ZH: 後端的訊息是給人看的（「請選擇校區」「沒有這個學系」）,直接顯示。

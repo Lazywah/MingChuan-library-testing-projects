@@ -63,7 +63,7 @@ def get_base_quota_gb(role: str) -> int:
     @node job-scheduler/app/services/quota_service.py::get_base_quota_gb
     """
     defaults = SCHEDULER_POLICY.get("default_disk_quota_gb", {})
-    fallback = {"student": 10, "teacher": 50, "admin": 100}
+    fallback = {"student": 10, "teacher": 50, "staff": 50, "admin": 100}
     return int(defaults.get(role, fallback.get(role, 10)))
 
 
@@ -202,6 +202,8 @@ def get_session_limits(role: str) -> dict:
     fallback = {
         "student": {"idle_timeout_min": 30, "hard_limit_min": 90, "daily_limit_min": 360},
         "teacher": {"idle_timeout_min": 120, "hard_limit_min": None, "daily_limit_min": None},
+        # ZH: v4.2 staff 比照 teacher（與 scheduler_policy.yaml 同步改）。
+        "staff":   {"idle_timeout_min": 120, "hard_limit_min": None, "daily_limit_min": None},
         "admin":   {"idle_timeout_min": None, "hard_limit_min": None, "daily_limit_min": None},
     }
     return limits_map.get(role, fallback.get(role, fallback["student"]))

@@ -698,3 +698,24 @@ html.aibot-docked #aibot-fab { display: none; }
 .nmod__x { position: absolute; top: var(--space-4); right: var(--space-4); margin: 0; }
 .nmod__meta { display: flex; align-items: center; gap: 8px; margin-bottom: var(--space-2); }
 .nmod__title { margin: 0 0 var(--space-3); padding-right: 48px; /* ZH: 讓位給 ✕ */ }
+
+/* ZH: v4.2 初次設定的身分單選（老師/職員，擁有者裁定 2026-09-02）。
+ *     兩個大目標並排，radio 用原生的 —— 這個彈窗一輩子只看一次，
+ *     不值得為它自畫控制項。 */
+.onb__radios { display: flex; gap: var(--space-3); }
+.onb__radio {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    min-height: var(--tap-min);
+    padding: 0 var(--space-3);
+    border: 1px solid var(--hairline);
+    border-radius: var(--radius-md);
+    background-color: var(--surface);
+    cursor: pointer;
+}
+.onb__radio:has(input:checked) {
+    border-color: var(--accent);
+    background-color: var(--accent-soft);
+}

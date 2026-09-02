@@ -62,6 +62,13 @@ session_limits:
     idle_timeout_min: 120
     hard_limit_min: null
     daily_limit_min: null
+  # ZH: v4.2（擁有者裁定 2026-09-02）：staff 比照 teacher。
+  #     之前**沒有這個條目**，職員會靜默退回學生等級 —— 那會讓
+  #     首次登入的身分選擇變成「誠實選職員就吃虧」，沒有人會選。
+  staff:
+    idle_timeout_min: 120
+    hard_limit_min: null
+    daily_limit_min: null
   admin:
     idle_timeout_min: null
     hard_limit_min: null
@@ -74,6 +81,7 @@ session_limits:
 default_disk_quota_gb:
   student: 10
   teacher: 50
+  staff: 50        # ZH: v4.2 比照 teacher（理由同上面的 session_limits.staff）
   admin: 100
 
 # ==============================================================================

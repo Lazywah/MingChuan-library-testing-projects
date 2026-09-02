@@ -86,7 +86,8 @@ def submit_onboarding(
     try:
         u = crud.complete_onboarding(db, user,
                                      payload.get("campuses") or [],
-                                     payload.get("org_value"))
+                                     payload.get("org_value"),
+                                     role=payload.get("role"))
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     return {"onboarded_at": u.onboarded_at, "campuses": crud.campuses_of(db, u.id),

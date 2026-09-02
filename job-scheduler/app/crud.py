@@ -2251,7 +2251,8 @@ def onboarding_spec(role: str) -> dict:
 
 
 def complete_onboarding(db: Session, user: models.User,
-                        campuses: list, org_value: Optional[str]) -> models.User:
+                        campuses: list, org_value: Optional[str],
+                        role: Optional[str] = None) -> models.User:
     """
     ZH: 收下組織資料。這支函式有**兩種模式**,不要混在一起看：
 
@@ -2270,9 +2271,27 @@ def complete_onboarding(db: Session, user: models.User,
 
     @node job-scheduler/app/crud.py::complete_onboarding
     """
-    spec = onboarding_spec(user.role)
-    field = spec["org_field"]
     first_time = user.onboarded_at is None
+
+    # ZH: v4.2 身分選擇（擁有者裁定 2026-09-02）：職員與老師同網域，
+    #     系統分不出來 —— 只有「依信箱被自動判成 teacher」的人，
+    #     在**初次設定**時可以自選 老師/職員。其餘一律拒絕：
+    #     這是 UNLOCKABLE_FIELDS 永遠不含 role 的唯一例外，範圍越窄越好。
+    # ZH: 🔴 這裡只驗證不寫入 —— 寫入集中在最後（與其他欄位同一節），
+    #     否則驗證失敗的那幾次會先改掉角色再拋錯。
+    chosen_role = None
+    if role is not None:
+        if not first_time:
+            raise ValueError("身分只能在初次設定時選擇，之後請向管理員申請")
+        if user.role != "teacher" or getattr(user, "role_source", None) != "sso_email":
+            raise ValueError("你的帳號不適用身分選擇")
+        if role not in ("teacher", "staff"):
+            raise ValueError("身分只能是老師或職員")
+        chosen_role = role
+
+    # ZH: 欄位（學系/行政單位）要照**選完的身分**問 —— 選職員就該問行政單位。
+    spec = onboarding_spec(chosen_role or user.role)
+    field = spec["org_field"]
 
     want_campus = bool(campuses)
     want_org = bool((org_value or "").strip())
@@ -2316,6 +2335,11 @@ def complete_onboarding(db: Session, user: models.User,
                     models.OrgUnit.path == v).first():
                 raise ValueError(f"沒有這個行政單位：{v}")
 
+    if chosen_role:
+        # ZH: 確認成 teacher 也記 self_onboard —— 這代表「本人確認過」，
+        #     與自動判的 sso_email 區分開，日後盤點誰還沒確認就查得出來。
+        user.role = chosen_role
+        user.role_source = "self_onboard"
     if want_campus:
         set_user_campuses(db, user, campuses)      # ZH: 學生限一個的規則在這支裡
     if want_org and field:
