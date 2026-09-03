@@ -1594,10 +1594,34 @@ textarea.field__input {
  * ========================================================================== */
 .dslider {
     display: flex;
+    align-items: flex-start;
+    gap: var(--space-3);
+}
+.dslider__dayname { flex: none; width: 1.5em; padding-top: 5px; }
+.dslider__on { width: 18px; height: 18px; flex: none; margin-top: 6px; }
+.dslider__segs {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1);
+}
+.dslider__seg {
+    display: flex;
     align-items: center;
     gap: var(--space-3);
 }
-.dslider__on { width: 18px; height: 18px; flex: none; }
+.dslider[data-off="1"] .dslider__segs { opacity: 0.4; }
+.dslider__del {
+    flex: none;
+    border: 0;
+    background: none;
+    cursor: pointer;
+    color: var(--text-muted);
+    padding: 2px 6px;
+    font-size: 0.9rem;
+}
+.dslider__del:hover { color: var(--error); }
+.dslider__add { flex: none; margin-top: 0; }
 .dslider__track {
     position: relative;
     flex: 1;
@@ -1616,7 +1640,6 @@ textarea.field__input {
     background-color: var(--surface-2);
     border: 1px solid var(--hairline);
 }
-.dslider__track[data-off="1"] { opacity: 0.4; }
 .dslider__fill {
     position: absolute;
     top: 50%;
