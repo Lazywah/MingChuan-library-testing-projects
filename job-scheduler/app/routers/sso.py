@@ -37,6 +37,7 @@ from ..crud import (
 from ..auth import create_access_token
 from ..config import SSO_POLICY, OIDC_ENABLED
 from ..sso_client import get_sso_client, build_oidc_client_if_enabled
+from ..services import alma_service
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -83,13 +84,18 @@ def _finalize_sso_login(db: Session, user_info: dict, request: Request = None) -
 
     if user is None:
         # 首次登入：建新 SSO 帳號
-        # ZH: v3.8 角色依**信箱網域**判定（擁有者裁定 2026-08-27）：
+        # ZH: v4.2 身分優先問 **Alma**（圖書館 API，擁有者裁定 2026-09-02 保守版）：
+        #       user_group 在已知對照表上 → 直接定角色（老師/職員/學生分得出來），
+        #       慣用信箱也以 Alma 的為準（那是圖書館真的寄得到的地址）。
+        #     Alma 查無 / 代碼未知 / API 掛了 → 降級走 v3.8 的網域判定：
         #       me.mcu.edu.tw   → student
-        #       mail.mcu.edu.tw → teacher（要改成 staff 由管理者手動）
+        #       mail.mcu.edu.tw → teacher（首登自選老師/職員）
         #       推不出來        → student（往低權限的方向猜）
-        #     admin 永遠手動。規則只有 crud.role_from_email 一份實作。
-        email = user_info.get("email") or f"{username}@unknown"
-        role = crud.role_from_email(email)
+        #     admin 永遠手動。網域規則只有 crud.role_from_email 一份實作。
+        alma = alma_service.lookup_identity(username)
+        email = ((alma or {}).get("email")
+                 or user_info.get("email") or f"{username}@unknown")
+        role = (alma or {}).get("role") or crud.role_from_email(email)
         user = create_sso_user(
             db,
             username=username,
@@ -98,16 +104,21 @@ def _finalize_sso_login(db: Session, user_info: dict, request: Request = None) -
             auth_source=auth_source,
             external_id=external_id,
         )
-        # ZH: 記下「這個 role 是自動判的」—— 判定依據是我們自己組出來的信箱，
-        #     所以管理者必須能把自動判定與人工確認過的分開來看。
-        user.role_source = "sso_email"
+        # ZH: 記下角色是**怎麼來的** —— alma=權威 API / sso_email=依信箱網域猜。
+        #     首登「老師/職員」自選只對 sso_email 的 teacher 出現（chrome.js）：
+        #     Alma 已經給答案的人不必再被問。
+        alma_role = bool(alma and alma.get("role"))
+        user.role_source = "alma" if alma_role else "sso_email"
         db.commit()
-        logger.info("SSO 首次登入，建立帳號 username=%s auth_source=%s role=%s(自動依信箱)",
-                    username, auth_source, role)
+        logger.info("SSO 首次登入，建立帳號 username=%s auth_source=%s role=%s(%s)",
+                    username, auth_source, role,
+                    "Alma user_group=%s" % alma.get("user_group") if alma_role
+                    else "自動依信箱")
         if role != "student":
             # ZH: 自動給出非學生角色是要被看見的事,用 warning 不是 info。
-            logger.warning("帳號 %s 依信箱網域自動建為 %s（email=%s）——"
-                           "如需調整請由管理端手動改", username, role, email)
+            logger.warning("帳號 %s 自動建為 %s（來源=%s, email=%s）——"
+                           "如需調整請由管理端手動改", username, role,
+                           user.role_source, email)
         # ZH: v3.4 這裡原本是「判定為教職員時只記錄、**不自動升權**」,
         #     理由是「網域不是權威授權來源」。**2026-08-27 擁有者裁定改為自動給 teacher**,
         #     判定已移到上面的 crud.role_from_email。原本的顧慮沒有消失,

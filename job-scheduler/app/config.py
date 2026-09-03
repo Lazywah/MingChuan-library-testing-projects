@@ -250,6 +250,13 @@ class Settings(BaseSettings):
     BOOTSTRAP_ADMIN_EMAIL: str = "admin@local"
 
     # ------------------------------------------------------------------
+    # ZH: v4.2 圖書館 Alma API（擁有者提供 2026-09-02，僅查詢權限）。
+    #     用途：SSO 首次登入時以 學號/員編 查權威身分（user_group）與慣用信箱。
+    #     Key 留空 = 整個功能關閉（lookup 一律回 None，走原本的網域判定）。
+    # ------------------------------------------------------------------
+    ALMA_API_KEY: str = ""
+    ALMA_BASE_URL: str = "https://api-ap.hosted.exlibrisgroup.com"
+
     # ZH: SMTP 郵件設定 | EN: SMTP Email Configuration
     # ------------------------------------------------------------------
     SMTP_SERVER: str = ""
