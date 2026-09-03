@@ -136,14 +136,16 @@
             <span class="topbar__spacer"></span>
             <button class="btn btn--minor" type="button" id="tu-preview" data-i18n="pf_topup_preview">預覽</button>
             <button class="btn btn--primary" type="button" id="tu-apply" data-i18n="pf_topup_apply" hidden>確認補齊</button>
-            <button class="btn btn--minor" type="button" id="tu-cancel" data-i18n="pf_cancel" hidden>取消</button>
+            <button class="btn btn--minor" type="button" id="tu-cancel" data-i18n="pf_topup_cancel" hidden>取消預覽</button>
         </div>
         <label class="field">
             <span class="field__label" data-i18n="pf_topup_target">補到的點數</span>
             <input class="field__input" type="number" id="tu-target" min="1" step="1" inputmode="numeric">
         </label>
-        <div id="tu-result" aria-live="polite"></div>
+        <!-- ZH: v4.2b 提醒在表格**上面**（擁有者裁定 2026-09-03）——
+                 「幾個帳號、合計幾點」是決策資訊，要在捲名單之前看到。 -->
         <div class="inline-error" id="tu-msg" hidden></div>
+        <div id="tu-result" aria-live="polite"></div>
     </section>
 
 </main>
@@ -151,10 +153,10 @@
 <script src="tz.js?v=2e214a8b"></script>
 <!-- ⚠ ZH: 順序不能動 —— i18n-admin 在 i18n 之後、prefs 之前。 -->
 <script src="i18n.js?v=bec7665d"></script>
-<script src="i18n-admin.js?v=6821db74"></script>
+<script src="i18n-admin.js?v=33a65431"></script>
 <script src="tip.js?v=0699f4a2"></script>
 <script src="prefs.js?v=00b43387"></script>
 <script src="admin-chrome.js?v=ce2fd362"></script>
-<script src="people.js?v=a15d007f"></script>
+<script src="people.js?v=d662c2de"></script>
 </body>
 </html>

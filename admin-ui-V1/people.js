@@ -1794,10 +1794,15 @@
     //     把預覽結果送回去當名單的話，補的會是一份已經過期的數字。
     (function () {
         var PREVIEWED = null;      // ZH: 只用來決定按鈕要不要亮，不當送出的資料
+        var TU_PAGE_SIZE = 10;     // ZH: 預覽名單 10 人一頁（擁有者裁定 2026-09-03）
 
         function btns() {
             $('tu-apply').hidden = !PREVIEWED;
             $('tu-cancel').hidden = !PREVIEWED;
+            // ZH: 有預覽在畫面上時，再按一次是拿**現在的**餘額重算 ——
+            //     字樣跟著改（預覽→重算），不然看起來像同一件事按兩次。
+            $('tu-preview').textContent = PREVIEWED
+                ? T('pf_topup_recalc', '重算') : T('pf_topup_preview', '預覽');
             // ZH: 刻意**不**把輸入框鎖起來 —— 鎖了的話下面那個 input 監聽器
             //     永遠不會觸發（打不了字就沒有 input 事件），等於死碼。
             //     改成「改了數字就讓預覽失效」，同樣防得住「看 A 的預覽、送出 B」。
@@ -1821,6 +1826,17 @@
                     + esc(T('pf_topup_nobody', '沒有人低於這個點數，不需要補。')) + '</p>';
                 return;
             }
+            renderPreviewPage(r, 1);
+            note('tu-msg', T('pf_topup_sum', '{n} 個帳號，合計 {p} 點。按「確認補齊」才會送出。')
+                .replace('{n}', num(r.count)).replace('{p}', num(r.points)));
+        }
+
+        // ZH: 10 人一頁（擁有者裁定 2026-09-03：整班補點時名單太長）。
+        //     只是**顯示**分頁 —— 送出的仍是整批（後端本來就重新算，見上面 🔴）。
+        function renderPreviewPage(r, page) {
+            var pages = Math.max(1, Math.ceil(r.rows.length / TU_PAGE_SIZE));
+            page = Math.min(Math.max(1, page), pages);
+            var slice = r.rows.slice((page - 1) * TU_PAGE_SIZE, page * TU_PAGE_SIZE);
             // ZH: .adm-tablewrap 是必要的（橫向捲動）—— 自己組光溜溜的 <table>，
             //     窄畫面會把整頁撐寬。與本頁其他表格同一套。
             $('tu-result').innerHTML =
@@ -1828,13 +1844,28 @@
                 + '<th>' + esc(T('pf_topup_who', '帳號')) + '</th>'
                 + '<th class="num">' + esc(T('pf_topup_add', '要補')) + '</th>'
                 + '</tr></thead><tbody>'
-                + r.rows.map(function (x) {
+                + slice.map(function (x) {
                     return '<tr><td>' + esc(x.email) + '</td>'
                          + '<td class="num">' + num(x.points) + '</td></tr>';
                 }).join('')
-                + '</tbody></table></div>';
-            note('tu-msg', T('pf_topup_sum', '{n} 個帳號，合計 {p} 點。按「確認補齊」才會送出。')
-                .replace('{n}', num(r.count)).replace('{p}', num(r.points)));
+                + '</tbody></table></div>'
+                + (pages > 1
+                    ? '<div class="adm-inline tu-pager">'
+                      + '<button class="btn btn--minor" type="button" id="tu-prev"'
+                      + (page <= 1 ? ' disabled' : '') + '>'
+                      + esc(T('pf_pg_prev', '上一頁')) + '</button>'
+                      + '<span class="footnote">'
+                      + esc(T('pf_pg_of', '第 {a} / {b} 頁').replace('{a}', page).replace('{b}', pages))
+                      + '</span>'
+                      + '<button class="btn btn--minor" type="button" id="tu-next"'
+                      + (page >= pages ? ' disabled' : '') + '>'
+                      + esc(T('pf_pg_next', '下一頁')) + '</button>'
+                      + '</div>'
+                    : '');
+            if (pages > 1) {
+                $('tu-prev').addEventListener('click', function () { renderPreviewPage(r, page - 1); });
+                $('tu-next').addEventListener('click', function () { renderPreviewPage(r, page + 1); });
+            }
         }
 
         async function preview() {
