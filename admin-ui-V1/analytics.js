@@ -660,7 +660,8 @@
     //     選項再寫「依學系」會變成「依組織：依學系」。
     var ORGS = [['department', 'an_by_dept', '學系'],
                 ['college', 'an_by_college', '學院'],
-                ['unit', 'an_by_unit', '單位']];
+                ['unit', 'an_by_unit', '單位'],
+                ['campus', 'an_by_campus', '校區']];
     var ORG = 'department';
 
     function orgKey() { return ORG; }
@@ -669,7 +670,8 @@
         if (!d) return '';
         var map = { department: [d.by_department, 'department'],
                     college: [d.by_college, 'college'],
-                    unit: [d.by_unit, 'unit'] }[ORG];
+                    unit: [d.by_unit, 'unit'],
+                    campus: [d.by_campus, 'campus'] }[ORG];
         // ZH: `pts` 是 renderMyai 裡的區域變數（單位文字「點」）,這裡拿不到 ——
         //     自己取一次。第一版寫成 pts(d),那會在切換時直接炸,
         //     而語法檢查抓不到（它是執行期錯誤）。
@@ -858,7 +860,8 @@
 
     function groupHeadKey() {
         return { college: ['an_dept_college', '學院'],
-                 unit:    ['an_dept_unit', '單位'] }[groupBy()]
+                 unit:    ['an_dept_unit', '單位'],
+                 campus:  ['an_dept_campus', '校區'] }[groupBy()]
             || ['an_dept', '學系'];
     }
 

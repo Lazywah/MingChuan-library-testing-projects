@@ -1902,11 +1902,24 @@ def get_analytics(
 
     @node job-scheduler/app/routers/admin.py::get_analytics
     """
-    if group_by not in ("department", "college", "unit"):
+    if group_by not in ("department", "college", "unit", "campus"):
         raise HTTPException(status_code=400,
-                            detail=f"不支援的分組方式：{group_by}（可用：department / college / unit）")
+                            detail=f"不支援的分組方式：{group_by}"
+                                   "（可用：department / college / unit / campus）")
 
-    if group_by == "college":
+    # ZH: v4.5 依校區（擁有者需求 2026-09-03）。校區是**關聯表**
+    #     （user_campuses，教職員可多校區）——直接 join 會把跨校區的人
+    #     算兩次，總數對不上、圓餅也切不完整。所以先彙總成每人一列：
+    #     單校區歸該校區、**多校區自成一桶**、沒設＝未分類（None）。
+    camp_sub = None
+    if group_by == "campus":
+        camp_sub = (db.query(
+            models.UserCampus.user_id.label("uid"),
+            func.count(models.UserCampus.campus).label("n"),
+            func.min(models.UserCampus.campus).label("one"),
+        ).group_by(models.UserCampus.user_id).subquery())
+        label_col = case((camp_sub.c.n > 1, "多校區"), else_=camp_sub.c.one)
+    elif group_by == "college":
         label_col = models.OrgDepartment.college
     elif group_by == "unit":
         label_col = models.User.unit
@@ -1923,6 +1936,9 @@ def get_analytics(
         base_q = base_q.outerjoin(
             models.OrgDepartment,
             models.User.department == models.OrgDepartment.name)
+    elif group_by == "campus":
+        base_q = base_q.outerjoin(
+            camp_sub, models.User.id == camp_sub.c.uid)
 
     # ZH: `department` 這個篩選沿用舊參數名（前端與匯出都在用）——
     #     它篩的一律是**學系**，與 group_by 無關：先篩人，再看要怎麼分組。
@@ -1940,6 +1956,10 @@ def get_analytics(
     elif group_by == "college":
         group_en = {d.college: d.college_en
                     for d in db.query(models.OrgDepartment).all() if d.college_en}
+    elif group_by == "campus":
+        from .. import org_seed
+        group_en = dict(org_seed.CAMPUS_EN)
+        group_en["多校區"] = "Multi-campus"
 
     group_stats = [
         {
@@ -1991,6 +2011,8 @@ def get_analytics(
         if group_by == "college":
             q = q.outerjoin(models.OrgDepartment,
                             models.User.department == models.OrgDepartment.name)
+        elif group_by == "campus":
+            q = q.outerjoin(camp_sub, models.User.id == camp_sub.c.uid)
         if department != "all":
             q = q.filter(models.User.department == department)
         return q.group_by(label_col)

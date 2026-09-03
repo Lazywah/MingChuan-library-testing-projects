@@ -908,6 +908,13 @@ def consumption_analytics(
                        for d in db.query(models.OrgDepartment).all()}
     college_map: dict = {}
     unit_map: dict = {}
+    # ZH: v4.5 依校區（擁有者需求 2026-09-03）。校區是關聯表（教職員可多校區）——
+    #     先彙總成每人一個標籤：單校區＝該校區、**多校區自成一桶**、沒設＝None。
+    #     直接逐筆 join 會把跨校區的人算兩次，總數就對不上。
+    campus_map: dict = {}
+    _campus_rows: dict = {}
+    for r in db.query(models.UserCampus).all():
+        _campus_rows.setdefault(r.user_id, []).append(r.campus)
     for u in db.query(models.User).all():
         if u.email:
             k = u.email.strip().lower()
@@ -917,6 +924,8 @@ def consumption_analytics(
             #     下面會歸到「未設定」而不是硬塞一個學院。
             college_map[k] = college_of_dept.get((u.department or "").strip()) or None
             unit_map[k] = getattr(u, "unit", None) or None
+            cs = _campus_rows.get(u.id) or []
+            campus_map[k] = ("多校區" if len(cs) > 1 else (cs[0] if cs else None))
     # ZH: v2.9 模型對應表（顯示時套用，不改寫原始交易）| EN: display-time model map
     mmap = {m.code: m for m in db.query(models.MyaiModelMap).all()}
     per: dict = {}      # ZH: sn → 每生統計
@@ -927,6 +936,7 @@ def consumption_analytics(
     dept_agg: dict = {}
     college_agg: dict = {}
     unit_agg: dict = {}
+    campus_agg: dict = {}
     daily: dict = {}
     total = total_uses = total_logins = 0
     for t in txs:
@@ -977,6 +987,9 @@ def consumption_analytics(
                 unit = unit_map.get(ek) or ("未設定" if known else "未綁定")
                 ua = unit_agg.setdefault(unit, {"unit": unit, "consumed": 0, "uses": 0})
                 ua["consumed"] += c; ua["uses"] += 1
+                campus = campus_map.get(ek) or ("未設定" if known else "未綁定")
+                cma = campus_agg.setdefault(campus, {"campus": campus, "consumed": 0, "uses": 0})
+                cma["consumed"] += c; cma["uses"] += 1
         elif t.event_type == "login":
             p["logins"] += 1; total_logins += 1
     accounts = sorted(per.values(), key=lambda x: x["consumed"], reverse=True)
@@ -987,6 +1000,7 @@ def consumption_analytics(
     by_department = sorted(dept_agg.values(), key=lambda x: x["consumed"], reverse=True)
     by_college = sorted(college_agg.values(), key=lambda x: x["consumed"], reverse=True)
     by_unit = sorted(unit_agg.values(), key=lambda x: x["consumed"], reverse=True)
+    by_campus = sorted(campus_agg.values(), key=lambda x: x["consumed"], reverse=True)
     series = [{"date": d, "consumed": daily[d]} for d in sorted(daily.keys())]
     return {
         "days": days,
@@ -1004,6 +1018,7 @@ def consumption_analytics(
         "by_role": by_role,
         "by_college": by_college,
         "by_unit": by_unit,
+        "by_campus": by_campus,
         "by_department": by_department,
         "series": series,
         # ZH: 回傳**實際生效**的區間，不是前端送來的——
@@ -1054,6 +1069,9 @@ _EXPORT_SHEETS = [
         ("學院", "college"), ("消耗點數", "consumed"), ("使用次數", "uses")]),
     ("依行政單位", "by_unit", [
         ("行政單位", "unit"), ("消耗點數", "consumed"), ("使用次數", "uses")]),
+    # ZH: v4.5 —— 校區（多校區的人自成「多校區」一桶，見 campus_map）。
+    ("依校區", "by_campus", [
+        ("校區", "campus"), ("消耗點數", "consumed"), ("使用次數", "uses")]),
 ]
 
 
