@@ -1112,6 +1112,78 @@
         return (obj[day] || []).map(function (seg) { return seg[0] + '-' + seg[1]; }).join(', ');
     }
 
+    // ══════════════════════════════════════════════════════════════════
+    // ZH: v4.2 時段拉條（擁有者裁定 2026-09-02）：每天一條雙把手拉條，
+    //     30 分鐘一格（0..48）。把手交叉＝跨夜（契約本來就定義 結束<=開始）。
+    //     右端點 48 顯示 24:00、存成 "00:00"（後端不收 24:00；
+    //     "18:00"-"00:00" 依契約＝跨夜延伸到隔天零點＝到午夜，語意正好）。
+    // ZH: 🔴 拉條一天只有一段。既有資料某天**多段**時，那天退回文字輸入
+    //     （data-multi="1"）——拉條畫不出來就不要假裝畫得出來，
+    //     默默丟掉第二段是資料損失。
+    // ══════════════════════════════════════════════════════════════════
+    function hhToStep(hm) {
+        var m = /^(\d{1,2}):(\d{2})$/.exec(String(hm || '').trim());
+        if (!m) return null;
+        return Math.round((+m[1] * 60 + +m[2]) / 30);
+    }
+
+    function stepToHH(v, asEnd) {
+        if (asEnd && +v === 48) return '00:00';   // ZH: 存檔用（跨夜到午夜）
+        var min = (+v % 48) * 30;
+        return ('0' + Math.floor(min / 60)).slice(-2) + ':' + ('0' + (min % 60)).slice(-2);
+    }
+
+    function stepLabel(v) {                        // ZH: 顯示用（48 顯示 24:00）
+        return +v === 48 ? '24:00'
+            : ('0' + Math.floor(v / 2)).slice(-2) + ':' + (v % 2 ? '30' : '00');
+    }
+
+    function sliderLabel(a, b, on) {
+        if (!on) return T('pf_n_day_off', '不開放');
+        if (+a === 0 && +b === 48) return T('pf_n_allday', '24 小時');
+        var wrap = +b <= +a;
+        return stepLabel(a) + ' – ' + stepLabel(b)
+            + (wrap ? T('pf_n_wrap', '（跨夜）') : '');
+    }
+
+    function dayRowHtml(d, segs) {
+        var multi = (segs || []).length > 1;
+        if (multi) {
+            // ZH: 多段那天退回文字輸入（沿用舊格式與舊解析）。
+            return '<label class="adm-day">'
+                + '<span>' + esc(T('d_' + d, d)) + '</span>'
+                + '<input class="field__input" id="n-' + d + '" data-multi="1"'
+                + ' type="text" value="'
+                + esc(segs.map(function (g) { return g[0] + '-' + g[1]; }).join(', ')) + '">'
+                + '</label>';
+        }
+        var seg = (segs || [])[0];
+        var on = !!seg;
+        var a = on ? hhToStep(seg[0]) : 18;        // ZH: 沒設定的天預設 09:00–18:00（好改）
+        var b = on ? hhToStep(seg[1]) : 36;
+        if (a == null) a = 18;
+        if (b == null) b = 36;
+        // ZH: 存檔時 48 寫成 "00:00"（跨夜到午夜）——讀回來要還原成右端點，
+        //     不然「18:00–24:00」會顯示成交叉的「18:00–00:00（跨夜）」。
+        if (on && b === 0 && a > 0) b = 48;
+        return '<div class="adm-day dslider" data-day="' + esc(d) + '">'
+            + '<span>' + esc(T('d_' + d, d)) + '</span>'
+            + '<input type="checkbox" class="dslider__on"'
+            + ' aria-label="' + esc(T('pf_n_day_on', '這天開放')) + '"'
+            + (on ? ' checked' : '') + '>'
+            + '<span class="dslider__track"' + (on ? '' : ' data-off="1"') + '>'
+            + '<span class="dslider__fill"></span>'
+            + '<input type="range" class="dslider__a" min="0" max="48" step="1"'
+            + ' value="' + a + '"' + (on ? '' : ' disabled')
+            + ' aria-label="' + esc(T('pf_n_from', '開始時間')) + '">'
+            + '<input type="range" class="dslider__b" min="0" max="48" step="1"'
+            + ' value="' + b + '"' + (on ? '' : ' disabled')
+            + ' aria-label="' + esc(T('pf_n_to', '結束時間')) + '">'
+            + '</span>'
+            + '<output class="dslider__val">' + esc(sliderLabel(a, b, on)) + '</output>'
+            + '</div>';
+    }
+
     // ZH: 把「18:00-23:00, 08:00-12:00」轉回契約要的 [["18:00","23:00"], …]。
     //     格式不對就丟錯 —— **不要默默忽略**，那會讓管理者以為存好了。
     function textToSegs(text) {
@@ -1294,16 +1366,13 @@
             + '</select></label>'
             + '<div class="adm-days" id="n-days"' + (mode === 'win' ? '' : ' hidden') + '>'
             + DAYS.map(function (d) {
-                return '<label class="adm-day">'
-                    + '<span>' + esc(T('d_' + d, d)) + '</span>'
-                    + '<input class="field__input" id="n-' + d
-                    + '" type="text" value="' + esc(schedToText(n.schedule, d)) + '">'
-                    + '</label>';
+                var raw = n.schedule;
+                var obj = raw == null || raw === '' ? {}
+                    : (typeof raw === 'string' ? JSON.parse(raw) : raw);
+                return dayRowHtml(d, obj[d] || []);
             }).join('')
-            + '<p class="footnote">' + esc(T('pf_n_sched_hint',
-                '每一天可以填多段，用逗號分開，例如「18:00-23:00, 08:00-12:00」。空白＝那天不開放。')) + '</p>'
-            + '<p class="footnote">' + esc(T('pf_n_overnight',
-                '結束時間比開始早＝跨夜，例如 22:00-02:00。')) + '</p>'
+            + '<p class="footnote">' + esc(T('pf_n_slider_hint',
+                '拖曳兩個圓點設定開放時段（30 分鐘一格）。右把手拉過左把手＝跨夜（例：22:00 – 02:00）。')) + '</p>'
             + '</div>'
             + '</div>'
             + '</div>'
@@ -1317,6 +1386,40 @@
         // ZH: 切「依時段」才顯示七天的輸入 —— 選「全天」時那七格是誤導。
         $('n-mode').addEventListener('change', function (ev) {
             $('n-days').hidden = (ev.target.value !== 'win');
+        });
+
+        // ZH: 拉條連動：拖把手→更新字樣與填色；勾選→啟停整條。
+        //     填色是「看得見的時段」——跨夜時反過來塗兩端。
+        $('n-days').querySelectorAll('.dslider').forEach(function (row) {
+            var on = row.querySelector('.dslider__on');
+            var a = row.querySelector('.dslider__a');
+            var b = row.querySelector('.dslider__b');
+            if (!a) return;                       // ZH: 多段退回文字輸入的那種列
+            var val = row.querySelector('.dslider__val');
+            var fill = row.querySelector('.dslider__fill');
+            var track = row.querySelector('.dslider__track');
+            function paint() {
+                var A = +a.value, B = +b.value, pa = A / 48 * 100, pb = B / 48 * 100;
+                val.textContent = sliderLabel(A, B, on.checked);
+                if (!on.checked) { fill.style.left = '0'; fill.style.width = '0'; return; }
+                if (B > A) { fill.style.left = pa + '%'; fill.style.width = (pb - pa) + '%'; fill.style.background = ''; }
+                else {
+                    // ZH: 跨夜：塗 [0..B] 與 [A..100] 兩端（單一元素用漸層塗）。
+                    fill.style.left = '0'; fill.style.width = '100%';
+                    fill.style.background = 'linear-gradient(to right, var(--accent) '
+                        + pb + '%, transparent ' + pb + '%, transparent ' + pa
+                        + '%, var(--accent) ' + pa + '%)';
+                }
+            }
+            a.addEventListener('input', paint);
+            b.addEventListener('input', paint);
+            on.addEventListener('change', function () {
+                a.disabled = b.disabled = !on.checked;
+                if (on.checked) track.removeAttribute('data-off');
+                else track.setAttribute('data-off', '1');
+                paint();
+            });
+            paint();
         });
         $('n-save').addEventListener('click', function () { saveNode(n); });
     }
@@ -1340,8 +1443,18 @@
             schedule = {};
             try {
                 DAYS.forEach(function (d) {
-                    var segs = textToSegs($('n-' + d).value);
-                    if (segs.length) schedule[d] = segs;
+                    var txt = $('n-' + d);        // ZH: 多段退回的文字輸入才有這個 id
+                    if (txt) {
+                        var segs = textToSegs(txt.value);
+                        if (segs.length) schedule[d] = segs;
+                        return;
+                    }
+                    var row = $('n-days').querySelector('.dslider[data-day="' + d + '"]');
+                    if (!row || !row.querySelector('.dslider__on').checked) return;
+                    var A = +row.querySelector('.dslider__a').value;
+                    var B = +row.querySelector('.dslider__b').value;
+                    if (A === B) return;          // ZH: 零長度＝視同沒開（拉在一起不是 24 小時）
+                    schedule[d] = [[stepToHH(A, false), stepToHH(B, true)]];
                 });
             } catch (bad) {
                 say('n-msg', T('pf_n_sched_bad', '時段格式看不懂：{w}').replace('{w}', bad.message));

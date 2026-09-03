@@ -1585,3 +1585,89 @@ textarea.field__input {
     color: var(--text-muted);
 }
 #settings tr.is-dimmed td { opacity: 0.45; }
+
+/* ==========================================================================
+ * ZH: GPU 開放時段拉條（v4.2，擁有者裁定 2026-09-02）——
+ *     一天一條雙把手拉條取代文字輸入。兩個原生 range 疊在同一軌道上
+ *     （軌道不吃滑鼠、只有把手吃），30 分鐘一格；把手交叉＝跨夜。
+ *     多段退回的文字輸入列不吃這組樣式（它還是 .field__input）。
+ * ========================================================================== */
+.dslider {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+}
+.dslider__on { width: 18px; height: 18px; flex: none; }
+.dslider__track {
+    position: relative;
+    flex: 1;
+    height: 28px;
+    min-width: 160px;
+}
+.dslider__track::before {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 0;
+    right: 0;
+    height: 6px;
+    transform: translateY(-50%);
+    border-radius: var(--radius-pill);
+    background-color: var(--surface-2);
+    border: 1px solid var(--hairline);
+}
+.dslider__track[data-off="1"] { opacity: 0.4; }
+.dslider__fill {
+    position: absolute;
+    top: 50%;
+    height: 6px;
+    transform: translateY(-50%);
+    border-radius: var(--radius-pill);
+    background-color: var(--accent);
+    pointer-events: none;
+}
+.dslider__track input[type="range"] {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    margin: 0;
+    -webkit-appearance: none;
+    appearance: none;
+    background: none;
+    pointer-events: none;   /* ZH: 軌道不搶滑鼠，把手才吃（見 thumb） */
+}
+.dslider__track input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    pointer-events: auto;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background-color: var(--accent);
+    border: 2px solid var(--surface);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+    cursor: grab;
+}
+.dslider__track input[type="range"]::-moz-range-thumb {
+    pointer-events: auto;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background-color: var(--accent);
+    border: 2px solid var(--surface);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+    cursor: grab;
+}
+.dslider__track input[type="range"]:disabled::-webkit-slider-thumb { cursor: default; }
+.dslider__track input[type="range"]:focus-visible::-webkit-slider-thumb {
+    outline: 2px solid var(--focus-ring);
+    outline-offset: 2px;
+}
+.dslider__val {
+    flex: none;
+    min-width: 132px;
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+    color: var(--text);
+    font-size: 0.85rem;
+}
