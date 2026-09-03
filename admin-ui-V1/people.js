@@ -1334,7 +1334,212 @@
     }
 
     // ── 啟動 ──────────────────────────────────────────────────────────────
+    // ══════════════════════════════════════════════════════════════════
+    // ZH: v4.2 批次匯入臨時帳號（擁有者需求 2026-09-02）。
+    //     每列：帳號名稱,信箱,密碼,身分（後三欄可留空）；用途與到期日整批共用。
+    //     兩段式（預覽 → 確認建立），與手動補齊/組織匯入同一套慣例。
+    //     後端全有或全無：任何一列有錯就整批不建（預覽先把錯抓出來）。
+    // ══════════════════════════════════════════════════════════════════
+    // ZH: v4.2b 改檔案匯入（擁有者修訂 2026-09-03）：CSV/XLSX 由**後端**解析
+    //     （Big5/UTF-8、Excel 數值格式都在那邊處理），前端只負責把檔案送過去。
+    var TI_FILE = null;          // ZH: 已選的檔案；改任何欄位就作廢預覽（防「看A送B」）
+
+    function tempImportForm(dryRun) {
+        var fd = new FormData();
+        fd.append('file', TI_FILE);
+        fd.append('purpose', $('ti-why').value.trim());
+        fd.append('expires_on', $('ti-expires').value);
+        fd.append('dry_run', dryRun ? 'true' : 'false');
+        return fd;
+    }
+
+    // ZH: 範例檔下載。端點要 Authorization，不能用 <a href>（同組織匯出的理由）。
+    async function downloadTemplate(fmt) {
+        try {
+            var res = await fetch(API + '/admin/users/temporary/import-template?fmt=' + fmt,
+                                  { headers: { Authorization: 'Bearer ' + token() } });
+            if (!res.ok) throw new Error('HTTP ' + res.status);
+            var blob = await res.blob();
+            var url = URL.createObjectURL(blob);
+            var a = document.createElement('a');
+            a.href = url;
+            a.download = 'temp-accounts-template.' + fmt;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        } catch (e) { say('ti-msg', e.message); }
+    }
+
+    function openTempImport() {
+        var dlg = _tempDlg(false);
+        dlg.innerHTML =
+            '<form method="dialog" class="rmod__x">'
+            +   '<button class="btn btn--minor" type="submit" aria-label="'
+            +   esc(T('pf_close', '關閉')) + '">✕</button></form>'
+            + '<h2 class="rmod__title">' + esc(T('tmpi_title', '匯入臨時帳號')) + '</h2>'
+            + '<p class="footnote">' + esc(T('tmpi_fmt',
+                '每行一個帳號，欄位用逗號分開：帳號名稱,信箱,密碼,身分。'
+                + '信箱可空（不寄信）；密碼可空（系統產生，建立後顯示一次）；'
+                + '身分可空（預設學生），可用：學生/老師/職員/訪客。')) + '</p>'
+            + field('ti-why', T('tmp_purpose', '用途（必填）'), '')
+            + field('ti-expires', T('tmp_expires_on', '到期日'), twDay(1), 'date',
+                    ' min="' + twDay(0) + '" max="' + twDay(TEMP_MAX_DAYS) + '"')
+            + '<div class="adm-inline">'
+            + '<button class="btn btn--minor" type="button" id="ti-tpl-csv">'
+            + esc(T('tmpi_tpl_csv', '下載範例 CSV')) + '</button>'
+            + '<button class="btn btn--minor" type="button" id="ti-tpl-xlsx">'
+            + esc(T('tmpi_tpl_xlsx', '下載範例 Excel')) + '</button>'
+            + '</div>'
+            + '<div class="adm-inline">'
+            + '<input type="file" id="ti-file" accept=".csv,.xlsx" hidden>'
+            + '<button class="btn btn--minor" type="button" id="ti-pick">'
+            + esc(T('tmpi_pick', '選擇檔案（CSV / Excel）')) + '</button>'
+            + '<span class="footnote" id="ti-fname">' + esc(T('tmpi_nofile', '尚未選擇')) + '</span>'
+            + '</div>'
+            + '<div class="adm-inline rmod__foot">'
+            + '<button class="btn btn--minor" type="button" id="ti-preview">'
+            + esc(T('tmpi_preview', '預覽')) + '</button>'
+            + '<button class="btn btn--primary" type="button" id="ti-apply" hidden>'
+            + esc(T('tmpi_apply', '確認建立')) + '</button>'
+            + '<button class="btn btn--minor" type="button" id="ti-cancel">'
+            + esc(T('tmp_cancel', '取消')) + '</button>'
+            + '</div>'
+            + '<div id="ti-result" aria-live="polite"></div>'
+            + '<div class="inline-error" id="ti-msg" hidden></div>';
+
+        dlg.showModal();
+        TI_FILE = null;
+        $('ti-cancel').addEventListener('click', function () { dlg.close(); });
+        $('ti-preview').addEventListener('click', previewTempImport);
+        $('ti-apply').addEventListener('click', applyTempImport);
+        $('ti-tpl-csv').addEventListener('click', function () { downloadTemplate('csv'); });
+        $('ti-tpl-xlsx').addEventListener('click', function () { downloadTemplate('xlsx'); });
+        $('ti-pick').addEventListener('click', function () { $('ti-file').click(); });
+        $('ti-file').addEventListener('change', function () {
+            TI_FILE = ($('ti-file').files || [])[0] || null;
+            $('ti-fname').textContent = TI_FILE ? TI_FILE.name : T('tmpi_nofile', '尚未選擇');
+            $('ti-apply').hidden = true;
+            $('ti-result').innerHTML = '';
+        });
+        // ZH: 內容一改，上一份預覽就不算數（同手動補齊：看 A 的預覽送出 B 很危險）。
+        ['ti-why', 'ti-expires'].forEach(function (id) {
+            $(id).addEventListener('input', function () {
+                $('ti-apply').hidden = true;
+                $('ti-result').innerHTML = '';
+            });
+        });
+        $('ti-why').focus();
+    }
+
+    function renderTempPreview(r) {
+        var roleName = { student: T('role_student', '學生'), teacher: T('role_teacher', '教師'),
+                         staff: T('role_staff', '職員'), guest: T('role_guest', '訪客') };
+        $('ti-result').innerHTML =
+            '<div class="adm-tablewrap"><table class="adm-table"><thead><tr>'
+            + '<th>' + esc(T('pp_c_user', '帳號')) + '</th>'
+            + '<th>' + esc(T('pp_c_role', '角色')) + '</th>'
+            + '<th>' + esc(T('tmpi_pw_col', '密碼')) + '</th>'
+            + '<th>' + esc(T('tmpi_check', '檢查')) + '</th>'
+            + '</tr></thead><tbody>'
+            + r.rows.map(function (x) {
+                return '<tr><td>' + esc(x.username || '—') + '</td>'
+                    + '<td>' + esc(roleName[x.role] || '—') + '</td>'
+                    + '<td>' + esc(x.will_generate_pw
+                        ? T('tmpi_pw_gen', '系統產生') : T('tmpi_pw_given', '檔案提供')) + '</td>'
+                    + '<td>' + (x.errors.length
+                        ? '<span class="adm-pill adm-pill--temp">' + esc(x.errors.join('、')) + '</span>'
+                        : '✓') + '</td></tr>';
+            }).join('')
+            + '</tbody></table></div>';
+        if (r.ok) {
+            note('ti-msg', T('tmpi_sum', '{n} 個帳號可建立。按「確認建立」才會送出。')
+                .replace('{n}', num(r.total)));
+        } else {
+            say('ti-msg', T('tmpi_bad', '{e} 列有問題（見「檢查」欄）——整批都不會建立，改好再預覽一次。')
+                .replace('{e}', num(r.error_rows)));
+        }
+        $('ti-apply').hidden = !r.ok;
+    }
+
+    async function previewTempImport() {
+        if (!TI_FILE) { say('ti-msg', T('tmpi_empty', '先選擇檔案。')); return; }
+        say('ti-msg', '');
+        try {
+            // ZH: FormData 不能自帶 Content-Type —— 瀏覽器要自己放 boundary。
+            var r = await api('/admin/users/temporary/import', {
+                method: 'POST',
+                body: tempImportForm(true),
+            });
+            renderTempPreview(r);
+        } catch (e) { say('ti-msg', e.message); }
+    }
+
+    async function applyTempImport() {
+        $('ti-apply').disabled = true;      // ZH: 防連點
+        try {
+            var r = await api('/admin/users/temporary/import', {
+                method: 'POST',
+                body: tempImportForm(false),
+            });
+            showImportResult(r);
+            ALL = await loadAll();
+            renderList();
+        } catch (e) {
+            say('ti-msg', e.message);
+            $('ti-apply').disabled = false;
+        }
+    }
+
+    function showImportResult(r) {
+        // ZH: 有系統產生的密碼 → 鎖 ESC（與單筆同一個「只顯示一次」契約）。
+        var gen = r.created.filter(function (x) { return x.password; });
+        var dlg = _tempDlg(gen.length > 0);
+        dlg.innerHTML =
+            '<form method="dialog" class="rmod__x">'
+            +   '<button class="btn btn--minor" type="submit" aria-label="'
+            +   esc(T('pf_close', '關閉')) + '">✕</button></form>'
+            + '<h2 class="rmod__title">' + esc(T('tmpi_done', '匯入完成')) + '</h2>'
+            + '<p class="footnote">' + esc(T('tmpi_done_sum', '共建立 {n} 個臨時帳號。')
+                .replace('{n}', num(r.total))) + '</p>'
+            + (gen.length
+                ? '<div class="adm-alert adm-alert--error"><span>'
+                  + esc(T('tmpi_pw_once',
+                      '🔴 下面這些密碼是系統產生的，只會顯示這一次。現在就抄下來——關掉之後就看不到了。'))
+                  + '</span></div>'
+                  + '<div class="adm-tablewrap"><table class="adm-table"><thead><tr>'
+                  + '<th>' + esc(T('pp_c_user', '帳號')) + '</th>'
+                  + '<th>' + esc(T('tmp_pw', '密碼')) + '</th>'
+                  + '</tr></thead><tbody>'
+                  + gen.map(function (x) {
+                      return '<tr><td class="mono">' + esc(x.username) + '</td>'
+                          + '<td class="mono">' + esc(x.password) + '</td></tr>';
+                  }).join('')
+                  + '</tbody></table></div>'
+                : '')
+            + '<div class="adm-inline rmod__foot">'
+            + (gen.length
+                ? '<button class="btn btn--primary" type="button" id="ti-copy">'
+                  + esc(T('tmpi_copy', '複製全部帳密')) + '</button>'
+                : '')
+            + '<button class="btn btn--minor" type="button" id="ti-close">'
+            + esc(T('tmp_close', '知道了')) + '</button>'
+            + '</div>'
+            + '<div class="inline-error" id="ti-msg" hidden></div>';
+        if (gen.length) {
+            $('ti-copy').addEventListener('click', async function () {
+                var text = gen.map(function (x) { return x.username + ' / ' + x.password; }).join('\n');
+                try {
+                    await navigator.clipboard.writeText(text);
+                    flash('ti-msg', T('tmp_copied', '已複製'));
+                } catch (e) { say('ti-msg', T('tmpi_copy_fail', '複製被擋，請手動選取。')); }
+            });
+        }
+        $('ti-close').addEventListener('click', function () { dlg.close(); });
+    }
+
     $('new-temp').addEventListener('click', openTempForm);
+    $('import-temp').addEventListener('click', openTempImport);
 
     // ── 廠商帳號對應（維運）───────────────────────────────────────────────
     //

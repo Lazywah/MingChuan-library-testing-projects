@@ -29,6 +29,10 @@
                  它跟「處理某一個人」是同一件事的兩端（開帳號 / 管帳號）。 -->
         <button class="btn btn--minor" type="button" id="new-temp" data-view="platform"
                 data-i18n="tmp_new">建立臨時帳號</button>
+        <!-- ZH: v4.2 批次匯入（擁有者需求 2026-09-02）：整班/整團一次開。
+                 同一個 <dialog> 重複用，內容由 people.js 的 openTempImport() 產生。 -->
+        <button class="btn btn--minor" type="button" id="import-temp" data-view="platform"
+                data-i18n="tmpi_new">匯入臨時帳號</button>
         <!-- ZH: 檢視滑條。與「平台設定」「數據」同一個元件 ——
                  它是**篩選**不是分頁：兩邊講的都是同一批帳號,
                  只是「平台這邊的資料」與「廠商那邊的對應」。
@@ -147,10 +151,10 @@
 <script src="tz.js?v=2e214a8b"></script>
 <!-- ⚠ ZH: 順序不能動 —— i18n-admin 在 i18n 之後、prefs 之前。 -->
 <script src="i18n.js?v=bec7665d"></script>
-<script src="i18n-admin.js?v=4230263b"></script>
+<script src="i18n-admin.js?v=6821db74"></script>
 <script src="tip.js?v=0699f4a2"></script>
 <script src="prefs.js?v=00b43387"></script>
 <script src="admin-chrome.js?v=ce2fd362"></script>
-<script src="people.js?v=a52bce7e"></script>
+<script src="people.js?v=a15d007f"></script>
 </body>
 </html>

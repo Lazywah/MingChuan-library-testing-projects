@@ -28,7 +28,8 @@ ZH: 端點清單：
 ==============================================================================
 """
 
-from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, Query, Body, Request
+from fastapi import (APIRouter, Depends, HTTPException, BackgroundTasks,
+                     Query, Body, Request, UploadFile, File, Form)
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 from sqlalchemy import case, func
@@ -39,6 +40,7 @@ import csv
 import io
 import json
 import logging
+import re
 
 from .. import models, schemas, crud
 from ..auth import get_current_user, require_admin as _require_admin
@@ -1041,6 +1043,270 @@ def extend_temp_user(
     logger.info("延長臨時帳號 %s 至 %s by %s",
                 user.username, user.expires_at.isoformat(), admin.username)
     return {"username": user.username, "expires_at": user.expires_at.isoformat()}
+
+
+# ZH: 匯入時接受的身分寫法 → 平台角色。中文寫法一併收 ——
+#     匯入檔多半是人用 Excel 打的，逼他寫英文代碼只會多一輪來回。
+#     🔴 沒有 admin：管理員永遠手動開（打錯一格就多一個管理員不可接受）。
+_IMPORT_ROLES = {
+    "student": "student", "學生": "student",
+    "teacher": "teacher", "老師": "teacher", "教師": "teacher",
+    "staff": "staff", "職員": "staff",
+    "guest": "guest", "訪客": "guest",
+}
+
+_IMPORT_HEADERS = ("帳號名稱", "帳號", "名稱", "username", "name")
+_IMPORT_MAX_ROWS = 200
+_EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+
+
+def _cell_str(v) -> str:
+    """ZH: Excel 儲存格轉字串。整數值的 float 去掉 `.0` ——
+       純數字密碼/帳號在 xlsx 裡是數值型，直接 str() 會變 `12345678.0`。
+
+    @node job-scheduler/app/routers/admin.py::_cell_str
+    """
+    if v is None:
+        return ""
+    if isinstance(v, float) and v.is_integer():
+        return str(int(v))
+    return str(v).strip()
+
+
+def _parse_import_file(filename: str, blob: bytes) -> list:
+    """ZH: 把上傳的 CSV / XLSX 解成列（[username, email, password, role] 字典）。
+
+    ZH: CSV 編碼：先試 utf-8-sig，再退 cp950 —— 台灣的 Excel 存 CSV
+        預設是 Big5，不接的話中文身分欄會整批亂碼。
+    ZH: 首列若是欄位名（帳號名稱/username…）自動略過，與範例檔對齊。
+    ZH: 解析失敗丟 ValueError（訊息給人看），由端點包成 400。
+
+    @node job-scheduler/app/routers/admin.py::_parse_import_file
+    """
+    name = (filename or "").lower()
+    grid: list[list[str]] = []
+    if name.endswith(".xlsx"):
+        import openpyxl
+        from io import BytesIO
+        try:
+            wb = openpyxl.load_workbook(BytesIO(blob), read_only=True, data_only=True)
+        except Exception:
+            raise ValueError("這個檔案不是有效的 Excel（.xlsx）")
+        ws = wb.worksheets[0]
+        for row in ws.iter_rows(values_only=True):
+            grid.append([_cell_str(c) for c in row])
+        wb.close()
+    elif name.endswith(".csv"):
+        try:
+            text = blob.decode("utf-8-sig")
+        except UnicodeDecodeError:
+            try:
+                text = blob.decode("cp950")
+            except UnicodeDecodeError:
+                raise ValueError("CSV 編碼看不懂（請用 UTF-8 或 Big5 存檔）")
+        for line in text.splitlines():
+            if line.strip():
+                grid.append([c.strip() for c in line.split(",")])
+    else:
+        raise ValueError("只接受 .csv 或 .xlsx 檔")
+
+    rows = []
+    for i, cells in enumerate(grid):
+        c = list(cells) + [""] * (4 - len(cells))
+        if not any(x for x in c[:4]):
+            continue
+        if i == 0 and c[0].strip().lower() in _IMPORT_HEADERS:
+            continue
+        rows.append({"username": c[0], "email": c[1],
+                     "password": c[2], "role": c[3] or "student"})
+    return rows
+
+
+@router.get("/users/temporary/import-template", summary="下載臨時帳號匯入範例檔")
+def temp_import_template(
+    fmt: str = Query("csv", pattern="^(csv|xlsx)$"),
+    admin: models.User = Depends(require_admin),
+) -> Any:
+    """ZH: 範例檔（含欄位列＋兩列示範）。CSV 帶 BOM —— 台灣的 Excel
+       沒有 BOM 會把 UTF-8 中文開成亂碼。
+
+    @node job-scheduler/app/routers/admin.py::temp_import_template
+    """
+    from fastapi.responses import Response
+    header = ["帳號名稱", "信箱(可空)", "密碼(可空=系統產生)", "身分(學生/老師/職員/訪客)"]
+    demo = [["visitor01", "guest01@example.edu", "Str0ngPa55", "訪客"],
+            ["visitor02", "", "", "訪客"]]
+    if fmt == "xlsx":
+        import openpyxl
+        from io import BytesIO
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.title = "臨時帳號"
+        ws.append(header)
+        for r in demo:
+            ws.append(r)
+        # ZH: 欄寬撐開，不然打開來全被截字。
+        for col, w in zip("ABCD", (16, 28, 24, 28)):
+            ws.column_dimensions[col].width = w
+        buf = BytesIO()
+        wb.save(buf)
+        return Response(
+            buf.getvalue(),
+            media_type="application/vnd.openxmlformats-officedocument"
+                       ".spreadsheetml.sheet",
+            headers={"Content-Disposition":
+                     "attachment; filename=temp-accounts-template.xlsx"})
+    csv_text = "\n".join(",".join(r) for r in [header] + demo) + "\n"
+    return Response(
+        csv_text.encode("utf-8-sig"),
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition":
+                 "attachment; filename=temp-accounts-template.csv"})
+
+
+@router.post("/users/temporary/import", summary="批次匯入臨時帳號（CSV/XLSX，預覽＋建立）")
+async def import_temp_users(
+    request: Request,
+    file: UploadFile = File(...),
+    purpose: str = Form(...),
+    expires_on: str = Form(...),
+    dry_run: bool = Form(False),
+    db: Session = Depends(get_db),
+    admin: models.User = Depends(require_admin),
+) -> Any:
+    """
+    ZH: 批次建立臨時帳號（擁有者需求 2026-09-02，改檔案匯入 2026-09-03）。
+        上傳 CSV 或 XLSX：每列 名稱/信箱/密碼/身分；用途與到期日整批共用。
+        `dry_run=true` 只驗證回報、不寫入。範例檔見 import-template 端點。
+
+    ZH: 🔴 **全有或全無**：任何一列驗不過就整批不建（400 帶逐列錯誤）。
+        建到一半停下來的話，管理者得自己對「哪幾個建了」——那正是
+        批次匯入要消滅的工作。預覽（dry_run）讓錯誤在送出前就現形。
+
+    ZH: 密碼規則：有給就用（≥8 字）；留空＝系統產生，**回應帶一次明文**
+        （與單筆建立同一個「只顯示這一次」契約）。有給密碼的列**不回傳**
+        密碼——管理者的檔案裡本來就有，多回一次只是多一份外洩面。
+
+    ZH: 絕不寄信（臨時帳號的鐵則，理由見單筆端點）。
+
+    @node job-scheduler/app/routers/admin.py::import_temp_users
+    """
+    import secrets as _secrets
+    import uuid as _uuid
+    from datetime import date as _date
+
+    # ── 共用欄位驗證（multipart 拿不到 pydantic body，這裡手動對齊單筆規則）──
+    purpose = (purpose or "").strip()
+    if not purpose:
+        raise HTTPException(status_code=400, detail="請說明這批臨時帳號的用途")
+    try:
+        exp_date = _date.fromisoformat((expires_on or "").strip())
+        schemas._check_expires_on(exp_date)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e) or "到期日格式不對（YYYY-MM-DD）")
+    expires_at = schemas.expires_on_to_utc(exp_date)
+
+    blob = await file.read()
+    try:
+        raw_rows = _parse_import_file(file.filename, blob)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    if not raw_rows:
+        raise HTTPException(status_code=400, detail="檔案裡沒有任何資料列")
+    if len(raw_rows) > _IMPORT_MAX_ROWS:
+        raise HTTPException(status_code=400,
+                            detail=f"一次最多 {_IMPORT_MAX_ROWS} 列（收到 {len(raw_rows)}）")
+
+    # ── 逐列驗證（先全部驗完，一筆都還沒寫）──────────────────────────
+    report = []
+    errors = 0
+    seen_users = set()
+    seen_emails = set()
+    for i, row in enumerate(raw_rows, start=1):
+        uname = row["username"].strip()
+        email = row["email"].strip()
+        pw = row["password"].strip()
+        role_raw = row["role"].strip() or "student"
+        problems = []
+        if not uname:
+            problems.append("帳號名稱空白")
+        elif uname.lower() in seen_users:
+            problems.append("檔案內帳號重複")
+        elif crud.get_user_by_username(db, uname):
+            problems.append("帳號已存在")
+        seen_users.add(uname.lower())
+        if email:
+            if not _EMAIL_RE.match(email):
+                problems.append("Email 格式不對")
+            elif email.lower() in seen_emails:
+                problems.append("檔案內 Email 重複")
+            elif crud.get_user_by_email(db, email):
+                problems.append("Email 已存在")
+            seen_emails.add(email.lower())
+        if pw and len(pw) < 8:
+            problems.append("密碼太短（至少 8 字）")
+        role = _IMPORT_ROLES.get(role_raw.lower() if role_raw.isascii() else role_raw)
+        if role is None:
+            problems.append("身分看不懂（可用：學生/老師/職員/訪客）")
+        if problems:
+            errors += 1
+        report.append({"line": i, "username": uname, "role": role,
+                       "has_email": bool(email), "will_generate_pw": not pw,
+                       "errors": problems})
+
+    if dry_run or errors:
+        result = {"ok": errors == 0, "total": len(report),
+                  "error_rows": errors, "rows": report}
+        if errors and not dry_run:
+            # ZH: 直接送建立卻驗不過 → 400，內容與預覽同構，前端好顯示。
+            raise HTTPException(status_code=400, detail=result)
+        return result
+
+    # ── 建立（全數通過才走到這裡；一次交易）──────────────────────────
+    created = []
+    for row in raw_rows:
+        uname = row["username"].strip()
+        email_given = row["email"].strip()
+        email = email_given or f"temp-{uname}@ai-base.invalid"
+        pw_given = row["password"].strip()
+        pw = pw_given or _secrets.token_urlsafe(9)
+        role_raw = row["role"].strip() or "student"
+        role = _IMPORT_ROLES[role_raw.lower() if role_raw.isascii() else role_raw]
+        user = models.User(
+            id=str(_uuid.uuid4()),
+            username=uname,
+            email=email,
+            hashed_password=crud.get_password_hash(pw),
+            role=role,
+            is_active=1,
+            expires_at=expires_at,
+            temp_purpose=purpose,
+        )
+        db.add(user)
+        db.flush()          # ZH: AdminAction 的外鍵需要 user.id 先落地（同單筆端點）
+        db.add(models.AdminAction(
+            admin_id=admin.id,
+            target_user=user.id,
+            action="create_temp_account",
+            payload=json.dumps({
+                "username": uname, "purpose": purpose,
+                "expires_on": exp_date.isoformat(),
+                "role": role, "batch_import": True,
+            }, ensure_ascii=False),
+            timestamp=datetime.now(timezone.utc),
+            ip_address=(request.client.host if request.client else None),
+        ))
+        created.append({"username": uname, "role": role,
+                        "has_email": bool(email_given),
+                        # ZH: 只有系統產生的才回明文（見 docstring）。
+                        "password": (None if pw_given else pw)})
+    db.commit()
+
+    logger.info("批次匯入臨時帳號 %d 個（到期 %s，用途：%s，檔案 %s）by %s",
+                len(created), exp_date.isoformat(), purpose,
+                file.filename, admin.username)
+    return {"ok": True, "total": len(created),
+            "expires_at": expires_at.isoformat(), "created": created}
 
 
 @router.post("/users/temporary", summary="建立臨時帳號")
