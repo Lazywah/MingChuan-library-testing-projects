@@ -190,6 +190,10 @@ def init_db():
             try: conn.execute(text("ALTER TABLE training_jobs ADD COLUMN preferred_node VARCHAR"))
             except Exception: pass
 
+            # --- v4.3 常用信箱（通知寄送用；NULL=用主信箱）---
+            try: conn.execute(text("ALTER TABLE users ADD COLUMN contact_email VARCHAR"))
+            except Exception: pass
+
             # --- v2.0 Lab 模組欄位 | v2.0 Lab module columns ---
             try: conn.execute(text("ALTER TABLE users ADD COLUMN disk_quota_gb INTEGER DEFAULT 10"))
             except Exception: pass

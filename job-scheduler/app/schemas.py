@@ -95,7 +95,21 @@ class UserCreate(BaseModel):
 class UserUpdate(BaseModel):
     """ZH: 使用者更新個人資料請求 | EN: User profile update request"""
     email: Optional[EmailStr] = None
+    # ZH: v4.3 常用信箱：通知寄這裡；""=清除（回到用主信箱）。
+    #     不用 EmailStr —— 它不接受空字串，而「清除」是正當操作。
+    contact_email: Optional[str] = None
     password: Optional[str] = None
+
+    @field_validator("contact_email")
+    @classmethod
+    def contact_email_format(cls, v):
+        """@node job-scheduler/app/schemas.py::UserUpdate.contact_email_format"""
+        v = (v or "").strip() if v is not None else None
+        if v:
+            import re as _re
+            if not _re.match(r"^[^@\s]+@[^@\s]+\.[^@\s]+$", v):
+                raise ValueError("ZH: 常用信箱格式不對 | EN: Invalid contact email")
+        return v
     tutorial_dismissed: Optional[int] = None
     # ZH: 🔴 v3.8 `department` 從這裡**移除**。它原本讓使用者透過 PUT /auth/me
     #     隨意改成任何自由文字 —— 那既繞過了組織對照表的驗證（打錯字的系名
@@ -319,6 +333,8 @@ class UserResponse(BaseModel):
     # ZH: v3.8 組織欄位。`campuses` 來自 user_campuses 關聯表,不是 users 的欄位 ——
     #     所以 /auth/me 會**明確填它**（ORM 模式帶不出關聯表的值,不填會永遠是空陣列）。
     unit: Optional[str] = None
+    # ZH: v4.3 常用信箱（通知寄送用；null=用主信箱）。隨時可改（PUT /auth/me）。
+    contact_email: Optional[str] = None
     campuses: List[str] = []
     # ZH: v3.8 管理權限。這是**回應** schema —— 使用者看得到自己有沒有,但改不了。
     is_admin: int = 0
@@ -579,6 +595,8 @@ class AdminUserListItem(BaseModel):
     id: str
     username: str
     email: str
+    # ZH: v4.3 常用信箱（通知寄這裡；None=用主信箱）。管理端詳情顯示用。
+    contact_email: Optional[str] = None
     role: str
     # ZH: v3.8 這個 role 怎麼來的 —— sso_email(自動判) / admin(管理者設) / None(不知道)
     role_source: Optional[str] = None

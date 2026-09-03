@@ -719,3 +719,11 @@ html.aibot-docked #aibot-fab { display: none; }
     border-color: var(--accent);
     background-color: var(--accent-soft);
 }
+
+/* ZH: v4.3b 身分區的常用信箱行（在學號信箱下面）。 */
+.account__id-contact {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 240px;
+}

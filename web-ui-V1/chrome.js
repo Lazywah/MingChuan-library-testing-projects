@@ -665,7 +665,24 @@
             ? roleLabel(me.role)
             : roleLabel(me.role) + ' · ' + mail;
         head.appendChild(sub);
+        // ZH: v4.3b 常用信箱顯示在學號信箱下面（擁有者裁定 2026-09-03）——
+        //     兩個信箱疊在一起看，一眼分得出「身分的」與「收信的」。
+        var ctLine = document.createElement('div');
+        ctLine.className = 'account__id-sub account__id-contact';
+        ctLine.textContent = T('acct_contact', '常用信箱') + '：'
+            + (me.contact_email || T('onb_contact_school', '學校信箱（預設）'));
+        head.appendChild(ctLine);
         menu.appendChild(head);
+
+        // ZH: v4.3b 編輯鈕放選單項目**最上面**（擁有者裁定 2026-09-03）——
+        //     現值已經顯示在上方身分區，這裡只是動作入口。
+        var contact = document.createElement('a');
+        contact.href = '#';
+        contact.addEventListener('click', function (ev) {
+            ev.preventDefault();
+            openContactEditor(toggle, menu, me);
+        });
+        menu.appendChild(item(contact, 'acct_contact_set', '設定常用信箱'));
 
         var usage = document.createElement('a');
         usage.href = 'usage.html';
@@ -703,6 +720,64 @@
         out.className = 'account__logout';
         out.addEventListener('click', logout);
         menu.appendChild(item(out, 'acct_logout', '登出'));
+    }
+
+    // ── 常用信箱編輯（v4.3）────────────────────────────────────────────
+    // ZH: 重用初次設定的 .onb 遮罩樣式；只有一個欄位。
+    //     留空儲存＝清除（回到用學校信箱）——後端把空字串當清除。
+    function openContactEditor(toggle, menu, me) {
+        var box = document.createElement('div');
+        box.className = 'onb';
+        box.setAttribute('role', 'dialog');
+        box.setAttribute('aria-modal', 'true');
+        box.innerHTML =
+            '<div class="onb__box">'
+            + '<h2 class="onb__title">' + esc(T('acct_contact', '常用信箱')) + '</h2>'
+            + '<p class="onb__sub">' + esc(T('contact_sub',
+                '通知信會寄到這裡。留空＝用學校信箱。隨時可以再改。')) + '</p>'
+            + '<p class="onb__err" id="ct-err" hidden></p>'
+            + '<div class="onb__field">'
+            + '<input class="onb__select" id="ct-mail" type="email"'
+            + ' placeholder="' + esc(T('onb_contact_ph', '留空＝用學校信箱')) + '"'
+            + ' value="' + esc(me.contact_email || '') + '">'
+            + '</div>'
+            + '<button class="btn btn--primary btn--block" type="button" id="ct-save">'
+            + esc(T('contact_save', '儲存')) + '</button>'
+            + '<button class="btn btn--ghost btn--block" type="button" id="ct-cancel">'
+            + esc(T('contact_cancel', '取消')) + '</button>'
+            + '</div>';
+        document.body.appendChild(box);
+        var input = box.querySelector('#ct-mail');
+        input.focus();
+        box.querySelector('#ct-cancel').addEventListener('click', function () { box.remove(); });
+        box.querySelector('#ct-save').addEventListener('click', async function () {
+            var btn = box.querySelector('#ct-save');
+            var err = box.querySelector('#ct-err');
+            btn.disabled = true;
+            try {
+                var r = await fetch(API + '/auth/me', {
+                    method: 'PUT',
+                    headers: Object.assign({ 'Content-Type': 'application/json' }, authHeaders()),
+                    body: JSON.stringify({ contact_email: input.value.trim() }),
+                });
+                if (!r.ok) {
+                    var body = await r.json().catch(function () { return {}; });
+                    err.textContent = (body.detail && String(body.detail).slice(0, 120))
+                        || ('HTTP ' + r.status);
+                    err.hidden = false;
+                    btn.disabled = false;
+                    return;
+                }
+                var me2 = await r.json();
+                _me = me2;
+                box.remove();
+                render(toggle, menu, me2);      // ZH: 選單上的現值要跟著換
+            } catch (e) {
+                err.textContent = T('onb_net', '存不起來，請檢查連線後再試一次。');
+                err.hidden = false;
+                btn.disabled = false;
+            }
+        });
     }
 
     // ── 前台可見的營運設定（v3.8）────────────────────────────────────
@@ -916,6 +991,19 @@
                   + '<option value="">' + esc(T('onb_pick', '請選擇')) + '</option>'
                   + orgHtml + '</select></div>'
                 : '')
+            + (unlock ? '' :
+                // ZH: v4.3 常用信箱（擁有者需求 2026-09-03）：通知信寄到這裡。
+                //     選填、**不在**鎖定契約裡（之後帳號選單隨時可改），
+                //     解鎖模式不出現 —— 它本來就不需要解鎖。
+                '<div class="onb__field">'
+                + '<label class="onb__label" for="onb-contact">'
+                + esc(T('onb_contact', '常用信箱（選填）')) + '</label>'
+                + '<input class="onb__select" id="onb-contact" type="email"'
+                + ' placeholder="' + esc(T('onb_contact_ph', '留空＝用學校信箱')) + '"'
+                + ' value="' + esc((prefill && prefill.contact) || '') + '">'
+                + '<span class="onb__hint">' + esc(T('onb_contact_hint',
+                    '通知信會寄到這裡（也可以填學校信箱）。之後在帳號選單隨時可改。')) + '</span>'
+                + '</div>')
             + '<button class="btn btn--primary btn--block" type="button" id="onb-go">'
             + esc(T('onb_next', '下一步')) + '</button>'
             + '</div>';
@@ -955,9 +1043,11 @@
                         ? Array.prototype.slice.call(sel0.selectedOptions)
                             .map(function (o) { return o.value; })
                         : (sel0.value ? [sel0.value] : []);
+                var ct0 = box.querySelector('#onb-contact');
                 box.remove();
                 buildOnboarding(me, opts,
-                    { campuses: picked0, org: null, role: rb.value }, unlock);
+                    { campuses: picked0, org: null, role: rb.value,
+                      contact: ct0 ? ct0.value : null }, unlock);
             });
         });
 
@@ -984,11 +1074,13 @@
                     : (sel.value ? [sel.value] : []);
             var orgEl = box.querySelector('#onb-org');
             var roleEl = box.querySelector('input[name="onb-role"]:checked');
+            var ctEl = box.querySelector('#onb-contact');
             document.removeEventListener('prefs:langchanged', onLang);
             box.remove();
             buildOnboarding(_me, _onbOpts,
                 { campuses: picked, org: orgEl ? orgEl.value : null,
-                  role: roleEl ? roleEl.value : null }, _onbUnlock);
+                  role: roleEl ? roleEl.value : null,
+                  contact: ctEl ? ctEl.value : null }, _onbUnlock);
         }
         document.addEventListener('prefs:langchanged', onLang);
     }
@@ -1012,6 +1104,9 @@
         // ZH: 身分只在 askRole 時送 —— 其他人送 role 會被後端擋「不適用」。
         var roleEl = box.querySelector('input[name="onb-role"]:checked');
         var roleValue = askRole && roleEl ? roleEl.value : null;
+        var ctEl = box.querySelector('#onb-contact');
+        // ZH: null=解鎖模式（沒有這欄）；''=留空（用學校信箱）。
+        var contactValue = ctEl ? ctEl.value.trim() : null;
         var err = box.querySelector('#onb-err');
 
         // ZH: 明顯的漏填在這裡先擋 —— 讓他確認一份空的再被後端退回很不友善。
@@ -1044,6 +1139,12 @@
                 ? '<div class="onb__row"><span class="onb__k">'
                   + esc(field === 'unit' ? T('onb_unit', '行政單位') : T('onb_dept', '學系'))
                   + '</span><span class="onb__v">' + esc(orgLabel) + '</span></div>'
+                : '')
+            + (contactValue !== null
+                ? '<div class="onb__row"><span class="onb__k">'
+                  + esc(T('onb_contact_k', '常用信箱')) + '</span><span class="onb__v">'
+                  + esc(contactValue || T('onb_contact_school', '學校信箱（預設）'))
+                  + '</span></div>'
                 : '');
 
         box.querySelector('.onb__box').innerHTML =
@@ -1059,7 +1160,7 @@
             + esc(T('onb_confirm_back', '返回修改')) + '</button>';
 
         box.querySelector('#onb-yes').addEventListener('click', function () {
-            submitOnboarding(box, campuses, orgValue, roleValue);
+            submitOnboarding(box, campuses, orgValue, roleValue, contactValue);
         });
         // ZH: 返回就重畫第一頁 —— 但**要把剛才選的帶回去**,
         //     不然他返回之後得從頭再選一次,那比沒有返回鍵更氣人。
@@ -1068,13 +1169,14 @@
             // ZH: 🔴 `_onbUnlock` 要一起帶回去 —— 不帶的話返回之後會變成
             //     初次設定模式,欄位全開,而使用者存下去會被後端擋「超出核可範圍」。
             buildOnboarding(_me, _onbOpts,
-                { campuses: campuses, org: orgValue, role: roleValue }, _onbUnlock);
+                { campuses: campuses, org: orgValue, role: roleValue,
+                  contact: contactValue }, _onbUnlock);
         });
     }
 
     // ZH: 收的是**確認頁顯示過的那份值**,不是重新讀欄位 ——
     //     重讀的話「他看到的」與「送出去的」會是兩次不同的讀取。
-    async function submitOnboarding(box, campuses, orgValue, roleValue) {
+    async function submitOnboarding(box, campuses, orgValue, roleValue, contactValue) {
         var btn = box.querySelector('#onb-yes');
         var err = box.querySelector('#onb-err');
 
@@ -1083,9 +1185,14 @@
             var r = await fetch(API + '/system/onboarding', {
                 method: 'POST',
                 headers: Object.assign({ 'Content-Type': 'application/json' }, authHeaders()),
-                body: JSON.stringify(roleValue
-                    ? { campuses: campuses, org_value: orgValue, role: roleValue }
-                    : { campuses: campuses, org_value: orgValue }),
+                body: JSON.stringify((function () {
+                    var b = { campuses: campuses, org_value: orgValue };
+                    if (roleValue) b.role = roleValue;
+                    // ZH: null=這次沒有這欄（解鎖模式）就不送；''（用學校信箱）照送——
+                    //     後端把空字串當「清除」，語意一致。
+                    if (contactValue !== null) b.contact_email = contactValue;
+                    return b;
+                })()),
             });
             if (!r.ok) {
                 // ZH: 後端的訊息是給人看的（「請選擇校區」「沒有這個學系」）,直接顯示。

@@ -1421,7 +1421,9 @@ def archive_user_lab(db: Session, user, retention_days: int, reason: str = "admi
         rec = existing or models.ArchivedLabVolume(volume_name=vol_name)
         rec.user_id = uid
         rec.username = getattr(user, "username", None)
-        rec.email = getattr(user, "email", None)
+        # ZH: v4.3 快照收信地址用常用信箱優先 —— 帳號快刪了，
+        #     之後的銷毀提醒只能靠這個快照，要存本人看得到的那個。
+        rec.email = crud.mail_address_for(user) if user else None
         rec.size_bytes = _volume_size(vol_name)
         rec.reason = reason
         rec.archived_at = now

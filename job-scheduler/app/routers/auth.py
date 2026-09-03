@@ -179,12 +179,12 @@ async def login(
     # ZH: 發送登入通知 | EN: Send login alert
     # ZH: v3.9 可設定：總開關 login_alert_email、最短間隔 login_alert_hours。
     #     換 IP 的登入一律照寄（見 crud.should_send_login_alert）。
-    if user.email:
+    if crud.mail_address_for(user):
         send_it, why = crud.should_send_login_alert(db, user.id, prev_login_ip, now_ip)
         if send_it:
             background_tasks.add_task(
                 email_service.send_login_alert,
-                user.email,
+                crud.mail_address_for(user),
                 user.username,
                 now_ip,
                 user.id,
@@ -271,7 +271,7 @@ async def forgot_password(
     db.commit()
     background_tasks.add_task(
         email_service.send_temp_password,
-        user.email,
+        crud.mail_address_for(user),
         user.username,
         temp_password,
         False
@@ -387,10 +387,10 @@ def update_users_me(
     password_changed = update_data.password is not None and update_data.password != ""
     updated_user = crud.update_user(db, current_user, update_data)
     
-    if password_changed and updated_user.email:
+    if password_changed and crud.mail_address_for(updated_user):
         background_tasks.add_task(
             email_service.send_password_change_alert,
-            updated_user.email,
+            crud.mail_address_for(updated_user),
             updated_user.username
         )
         

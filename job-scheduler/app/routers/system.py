@@ -83,6 +83,17 @@ def submit_onboarding(
 
     @node job-scheduler/app/routers/system.py::submit_onboarding
     """
+    # ZH: v4.3 常用信箱：初次設定順手設定（可留空）。它**不在**鎖定契約裡
+    #     （隨時可用 PUT /auth/me 改），所以驗完直接寫、不看解鎖。
+    ce = payload.get("contact_email")
+    if ce is not None:
+        ce = str(ce).strip()
+        if ce:
+            import re as _re
+            if not _re.match(r"^[^@\s]+@[^@\s]+\.[^@\s]+$", ce):
+                raise HTTPException(status_code=400, detail="常用信箱格式不對")
+        user.contact_email = ce or None
+
     try:
         u = crud.complete_onboarding(db, user,
                                      payload.get("campuses") or [],

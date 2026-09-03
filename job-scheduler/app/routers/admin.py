@@ -476,6 +476,9 @@ def get_all_users(
                 id=u.id,
                 username=u.username,
                 email=u.email,
+                # ZH: v4.3 常用信箱 —— 上下兩處警告講的就是這種欄位，這次還是踩了
+                #     （schema 加了、這裡漏帶，管理端顯示永遠 None）。
+                contact_email=getattr(u, "contact_email", None),
                 role=u.role,
                 role_source=getattr(u, "role_source", None),
                 is_admin=int(getattr(u, "is_admin", 0) or 0),
@@ -1429,11 +1432,11 @@ def provision_user(
     db_user.is_test_account = 0
     db.commit()
 
-    email_queued = bool(db_user.email)
+    email_queued = bool(crud.mail_address_for(db_user))
     if email_queued:
         background_tasks.add_task(
             email_service.send_temp_password,
-            db_user.email, db_user.username, temp_password, True,
+            crud.mail_address_for(db_user), db_user.username, temp_password, True,
         )
 
     # ZH: 僅在無法發送 Email 時才在回應中回傳明文密碼，避免密碼出現在瀏覽器記錄中
@@ -1476,11 +1479,11 @@ def reset_user_account(
 
     db.commit()
 
-    email_queued = bool(db_user.email)
+    email_queued = bool(crud.mail_address_for(db_user))
     if email_queued:
         background_tasks.add_task(
             email_service.send_temp_password,
-            db_user.email, db_user.username, temp_password, False,
+            crud.mail_address_for(db_user), db_user.username, temp_password, False,
         )
 
     logger.info(

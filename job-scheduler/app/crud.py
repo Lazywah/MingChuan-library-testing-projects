@@ -168,6 +168,19 @@ def create_user(db: Session, user: schemas.UserCreate) -> models.User:
 
     return db_user
 
+def mail_address_for(user) -> str:
+    """ZH: v4.3 這個人的**收信**地址：常用信箱優先，沒設就主信箱。
+
+    ZH: 🔴 寄給使用者的每一封信都該走這裡 —— 主信箱可能是合成的
+        `.invalid`（臨時帳號）或推導出來的學校信箱；常用信箱是本人
+        自己說「寄到這裡我看得到」的地址。**身分/MYAI 綁定仍用主信箱**，
+        這支只管寄送。
+
+    @node job-scheduler/app/crud.py::mail_address_for
+    """
+    return (getattr(user, "contact_email", None) or user.email or "")
+
+
 def update_user(db: Session, db_user: models.User, update_data: schemas.UserUpdate) -> models.User:
     """
     ZH: 更新使用者資料 (如果不為空)
@@ -182,6 +195,11 @@ def update_user(db: Session, db_user: models.User, update_data: schemas.UserUpda
 
     @node job-scheduler/app/crud.py::update_user
     """
+    # ZH: v4.3 常用信箱：隨時可改（含 SSO 帳號——它不是 IdP 的東西）。
+    #     空字串＝清除（回到用主信箱）；格式在 schema 已驗過。
+    if update_data.contact_email is not None:
+        db_user.contact_email = update_data.contact_email.strip() or None
+
     # v2.1: SSO 使用者改密碼直接拒絕
     if update_data.password is not None and update_data.password.strip():
         if getattr(db_user, "auth_source", "local") != "local":

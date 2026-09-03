@@ -459,6 +459,11 @@
     function roText(u) {
         return '<div class="kv"><span class="kv__k">Email</span>'
             + '<span class="kv__v">' + esc(shownEmail(u)) + '</span></div>'
+            // ZH: v4.3 常用信箱：通知實際寄去的地址。沒設就講清楚是用主信箱，
+            //     不要留「—」讓人猜。
+            + '<div class="kv"><span class="kv__k">' + esc(T('pp_contact', '常用信箱')) + '</span>'
+            + '<span class="kv__v">' + esc(u.contact_email
+                || T('pp_contact_none', '—（用學號信箱）')) + '</span></div>'
             + '<div class="kv"><span class="kv__k">' + esc(T('pp_c_dept', '學系')) + '</span>'
             + '<span class="kv__v">' + esc(orgName(u.department, u.department_en) || '—')
             +      '</span></div>'

@@ -67,6 +67,9 @@ class User(Base):
     id = Column(String, primary_key=True, default=generate_uuid)              # ZH: UUID 主鍵 | EN: UUID primary key
     username = Column(String, unique=True, index=True, nullable=False)        # ZH: 使用者名稱 | EN: Username
     email = Column(String, unique=True, index=True, nullable=False)           # ZH: 電子郵件 | EN: Email
+    # ZH: v4.3 常用信箱（擁有者需求 2026-09-03）：通知信寄到這裡；NULL=用主信箱。
+    #     主信箱（email）仍是身分/MYAI 綁定的鍵，這欄**只影響寄送**、隨時可改。
+    contact_email = Column(String, nullable=True)
     hashed_password = Column(String, nullable=False)                          # ZH: 雜湊密碼 | EN: Hashed password
     role = Column(String, nullable=False, default="student")                  # ZH: 角色 | EN: Role
     # ZH: v3.8 這個 role 是怎麼來的 —— `sso_email`(依信箱網域自動判) / `admin`(管理者設)

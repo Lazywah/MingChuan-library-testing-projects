@@ -1657,7 +1657,9 @@ async def provision_user(db: Session, user) -> dict:
             import asyncio
             from .email_service import send_myai_provisioned
             url = _crud.get_system_config(db, "platform_public_url", "") or ""
-            await asyncio.to_thread(send_myai_provisioned, email, _nickname_for(user), url)
+            # ZH: v4.3 通知寄常用信箱（沒設就還是綁定用的那個 email）。
+            _to = _crud.mail_address_for(user) or email
+            await asyncio.to_thread(send_myai_provisioned, _to, _nickname_for(user), url)
         except Exception as e:  # noqa: BLE001
             logger.warning("MYAI 開通通知信寄送失敗（不影響開通）：%s", e)
 
@@ -2017,7 +2019,7 @@ def notify_balance_alerts(db: Session) -> dict:
         try:
             # ZH: 信裡引用的門檻要對到**它自己那一段**（early 段講 early 的數字）
             email_service.send_myai_balance_alert(
-                u.email, u.username or u.email, u.id, stage,
+                crud.mail_address_for(u), u.username or u.email, u.id, stage,
                 int(row.points or 0),
                 early if stage == "low_early" else threshold, guide or "")
             sent += 1
