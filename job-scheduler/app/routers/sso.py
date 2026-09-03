@@ -93,9 +93,13 @@ def _finalize_sso_login(db: Session, user_info: dict, request: Request = None) -
         #       推不出來        → student（往低權限的方向猜）
         #     admin 永遠手動。網域規則只有 crud.role_from_email 一份實作。
         alma = alma_service.lookup_identity(username)
-        email = ((alma or {}).get("email")
-                 or user_info.get("email") or f"{username}@unknown")
-        role = (alma or {}).get("role") or crud.role_from_email(email)
+        # ZH: 🔴 網域降級判定一律用「構造信箱」（sso_policy 的規則組出來的，
+        #     永遠是校內網域）—— **不能**拿 Alma 慣用信箱去比：那是聯絡方式，
+        #     有人把 gmail 設成圖書館聯絡信箱，拿它比網域會把真校內人
+        #     降成 guest（2026-09-02 檢查訪客觸發時機時抓到的回歸）。
+        derived_email = user_info.get("email") or f"{username}@unknown"
+        email = (alma or {}).get("email") or derived_email
+        role = (alma or {}).get("role") or crud.role_from_email(derived_email)
         user = create_sso_user(
             db,
             username=username,
@@ -110,6 +114,12 @@ def _finalize_sso_login(db: Session, user_info: dict, request: Request = None) -
         alma_role = bool(alma and alma.get("role"))
         user.role_source = "alma" if alma_role else "sso_email"
         db.commit()
+        # ZH: v4.2 預填初次設定（校區/學系/單位）——對得上組織表才寫，
+        #     彈窗照出、本人確認才算完成（onboarded_at 仍由彈窗送出時設）。
+        if alma:
+            applied = crud.apply_alma_profile(db, user, alma)
+            if applied:
+                logger.info("Alma 預填 %s：%s", username, "、".join(applied))
         logger.info("SSO 首次登入，建立帳號 username=%s auth_source=%s role=%s(%s)",
                     username, auth_source, role,
                     "Alma user_group=%s" % alma.get("user_group") if alma_role

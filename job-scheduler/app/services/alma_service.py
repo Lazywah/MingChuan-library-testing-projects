@@ -42,6 +42,10 @@ USER_GROUP_ROLES = {
 # ZH: 登入路徑上的外呼要短 —— Alma 慢就放棄，別讓全校的登入陪它等。
 TIMEOUT_SECONDS = 4
 
+# ZH: campus_code → 平台校區名（org_seed.CAMPUSES 的值）。
+#     實測只見過 SL/TY；未知代碼不猜、不預填。
+CAMPUS_CODES = {"SL": "台北", "TY": "桃園"}
+
 
 def lookup_identity(sub: str) -> Optional[dict]:
     """
@@ -100,5 +104,24 @@ def lookup_identity(sub: str) -> Optional[dict]:
         # ZH: 有查到人但代碼不在保守表上 —— 講出來，日後補表就靠這些 log。
         logger.info("Alma user_group=%s(%s) 不在保守對照表，角色交回網域判定（%s）",
                     group, desc, sub)
+
+    # ZH: v4.2 預填初次設定用的欄位（擁有者裁定 2026-09-02）。
+    #     user_statistic 的 desc 長相是「代碼-名稱[-名稱…]」：
+    #       ZBE 學系  36-資訊工程學系-Computer Science…  → 取第 2 段中文名
+    #       ZBT 單位  0721-圖書館-資訊組                 → 取第 2 段起（可能多層）
+    #     這裡只**萃取**，對得上平台組織表才用（見 crud.apply_alma_profile）。
+    campus = CAMPUS_CODES.get(str((d.get("campus_code") or {}).get("value") or ""))
+    department = None
+    unit_segments = None
+    for st in d.get("user_statistic") or []:
+        cat = (st.get("category_type") or {}).get("value")
+        parts = ((st.get("statistic_category") or {}).get("desc") or "").split("-")
+        if cat == "ZBE" and len(parts) >= 2 and department is None:
+            department = parts[1].strip() or None
+        elif cat == "ZBT" and len(parts) >= 2 and unit_segments is None:
+            unit_segments = [x.strip() for x in parts[1:] if x.strip()] or None
+
     return {"role": role, "email": email,
-            "user_group": group, "user_group_desc": desc}
+            "user_group": group, "user_group_desc": desc,
+            "campus": campus, "department": department,
+            "unit_segments": unit_segments}

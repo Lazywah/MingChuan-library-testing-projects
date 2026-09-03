@@ -924,7 +924,10 @@
 
         // ZH: 解鎖模式帶入現有值 —— 只開放改校區時,不該讓他連學系一起重選;
         //     而且看得到目前是什麼,才知道自己要改成什麼。
-        if (!prefill && unlock) {
+        // ZH: v4.2 初次設定也帶 —— Alma 查得到的人，後端已把校區/學系/單位
+        //     預填進帳號（apply_alma_profile），彈窗變成「看一眼按確認」。
+        //     沒有 Alma 資料的人這些值是空的，跟以前一模一樣。
+        if (!prefill) {
             prefill = { campuses: me.campuses || [],
                         org: (field === 'unit' ? me.unit : me.department) || '' };
         }

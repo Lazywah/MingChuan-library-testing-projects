@@ -2125,6 +2125,58 @@ def myai_balance_state(points, threshold, early_threshold=None) -> str:
     return "ok"
 
 
+def apply_alma_profile(db: Session, user: models.User, alma: dict) -> list:
+    """
+    ZH: v4.2 —— 把 Alma 查到的 校區/學系/單位 **預填**到使用者身上
+        （擁有者裁定 2026-09-02）。初次設定彈窗照樣出現，但欄位已選好，
+        本人看一眼按確認即可；所以這裡**不設** onboarded_at。
+
+    ZH: 🔴 對不上平台組織表的值**不寫**（記 log 就好）：Alma 的名稱與
+        我們的 org_departments / org_units 是兩套人維護的，硬塞會讓
+        彈窗預選一個不存在的選項（畫面顯示空白，比沒預填更糟）。
+
+    ZH: 單位的對法：ZBT desc 去掉代碼後可能多層（圖書館-資訊組）——
+        先試完整路徑（圖書館/資訊組），再退頂層（圖書館），都沒有就放棄。
+
+    ZH: 欄位跟著**角色**走（ONBOARDING_FIELDS）：老師/學生填學系、
+        職員填單位 —— 教師兼行政職兩邊都有資料，只取角色對應的那邊。
+
+    @node job-scheduler/app/crud.py::apply_alma_profile
+    """
+    applied = []
+    campus = alma.get("campus")
+    if campus:
+        try:
+            set_user_campuses(db, user, [campus])
+            applied.append("campus=%s" % campus)
+        except ValueError as e:
+            logger.info("Alma 校區預填略過（%s）：%s", user.username, e)
+
+    field = ONBOARDING_FIELDS.get(user.role, "department")
+    if field == "department" and alma.get("department"):
+        v = alma["department"]
+        if db.query(models.OrgDepartment).filter(
+                models.OrgDepartment.name == v).first():
+            user.department = v
+            applied.append("department=%s" % v)
+        else:
+            logger.info("Alma 學系「%s」不在組織表，略過預填（%s）", v, user.username)
+    elif field == "unit" and alma.get("unit_segments"):
+        segs = alma["unit_segments"]
+        for cand in ("/".join(segs), segs[0]):
+            if db.query(models.OrgUnit).filter(
+                    models.OrgUnit.path == cand).first():
+                user.unit = cand
+                applied.append("unit=%s" % cand)
+                break
+        else:
+            logger.info("Alma 單位「%s」不在組織表，略過預填（%s）",
+                        "-".join(segs), user.username)
+    if applied:
+        db.commit()
+    return applied
+
+
 def role_from_email(email: Optional[str]) -> str:
     """
     ZH: 由信箱網域推角色。
