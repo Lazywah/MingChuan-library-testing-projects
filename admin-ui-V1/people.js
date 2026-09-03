@@ -458,19 +458,44 @@
     //     也不會污染登入紀錄），不是畫面上比對一下而已。
     var EDIT_BASIC = false;
 
-    function roText(u) {
-        return '<div class="kv"><span class="kv__k">Email</span>'
-            + '<span class="kv__v">' + esc(shownEmail(u)) + '</span></div>'
-            // ZH: v4.3 常用信箱：通知實際寄去的地址。沒設就講清楚是用主信箱，
-            //     不要留「—」讓人猜。
-            + '<div class="kv"><span class="kv__k">' + esc(T('pp_contact', '常用信箱')) + '</span>'
-            + '<span class="kv__v">' + esc(u.contact_email
-                || T('pp_contact_none', '—（用學號信箱）')) + '</span></div>'
-            + '<div class="kv"><span class="kv__k">' + esc(T('pp_c_dept', '學系')) + '</span>'
-            + '<span class="kv__v">' + esc(orgName(u.department, u.department_en) || '—')
-            +      '</span></div>'
-            + '<div class="kv"><span class="kv__k">' + esc(T('pp_c_role', '角色')) + '</span>'
-            + '<span class="kv__v">' + esc(T('role_' + u.role, u.role)) + '</span></div>';
+    // ZH: v4.4 名片頭（擁有者裁定 2026-09-03）：身分資訊集中在彈窗最上面，
+    //     長得像一張名片 —— 頭像圈＋名字＋標籤＋兩行信箱＋一行出處。
+    //     基本資料卡因此**不再重複列身分**（原 roText 已併入這裡並刪除）。
+    function pcardHtml(u) {
+        var pills = '<span class="adm-pill">' + esc(T('role_' + u.role, u.role)) + '</span>'
+            + (u.is_admin ? '<span class="adm-pill">'
+                + esc(T('pp_c_is_admin', '管理權限')) + '</span>' : '')
+            + (u.expires_at ? '<span class="adm-pill adm-pill--temp">'
+                + esc(T('pp_pill_temp', '臨時帳號')) + '</span>' : '')
+            + (!u.is_active ? '<span class="adm-pill adm-pill--temp">'
+                + esc(T('pf_org_off', '停用')) + '</span>' : '');
+        var org = orgName(u.department, u.department_en);
+        var meta = [];
+        if (org) meta.push(org);
+        meta.push(u.auth_source || 'local');
+        if (u.last_login_time) {
+            meta.push(T('pp_c_seen', '最後登入') + ' ' + TW.when(u.last_login_time));
+        }
+        return '<div class="pcard">'
+            + '<span class="pcard__avatar" aria-hidden="true">'
+            + esc((u.username || '?').charAt(0).toUpperCase()) + '</span>'
+            + '<div class="pcard__main">'
+            + '<div class="pcard__name">' + esc(u.username) + pills + '</div>'
+            + '<div class="pcard__line">' + esc(shownEmail(u)) + '</div>'
+            + '<div class="pcard__line">' + esc(T('pp_contact', '常用信箱')) + '：'
+            + esc(u.contact_email || T('pp_contact_none', '—（用學號信箱）')) + '</div>'
+            + '<div class="pcard__line">' + esc(meta.join(' · ')) + '</div>'
+            + '<div class="pcard__id mono">' + esc(u.id) + '</div>'
+            + '</div>'
+            // ZH: v4.4b 停用/刪除搬到名片右側（擁有者裁定 2026-09-03）——
+            //     密碼確認在按下去之後用小彈窗問（pwConfirm），
+            //     所以這裡只是兩顆入口鈕，不再擺密碼欄。
+            + '<div class="pcard__acts">'
+            + '<button class="btn btn--minor" type="button" id="toggle-active">'
+            + esc(u.is_active ? T('pp_disable', '停用帳號') : T('pp_enable', '啟用帳號')) + '</button>'
+            + '<button class="btn btn--minor pcard__del" type="button" id="del">'
+            + esc(T('pp_delete', '刪除帳號')) + '</button>'
+            + '</div></div>';
     }
 
     function basicCard(u) {
@@ -478,9 +503,11 @@
             + '<div class="adm-card__title">' + esc(T('pp_basic', '基本資料')) + '</div>';
 
         if (!EDIT_BASIC) {
+            // ZH: v4.4 身分資訊都在上面的名片頭 —— 這張卡只剩「編輯」入口，
+            //     重複列一次只會讓彈窗更長。
             return head
-                + roText(u)
-                + '<p class="footnote">' + esc(T('pp_ro_hint', '唯讀。要修改請按「編輯」。')) + '</p>'
+                + '<p class="footnote">' + esc(T('pp_ro_hint2',
+                    'Email、角色、學系、密碼與管理權限都在這裡改。')) + '</p>'
                 + '<div class="ds__actions">'
                 + '<button class="btn btn--minor" type="button" id="b-edit">'
                 + esc(T('pp_edit', '編輯')) + '</button>'
@@ -520,8 +547,8 @@
             //     提示跟欄位長在一起，開始打字就讓位，不佔一行。
             + field('f-pw', T('pp_new_pw', '新密碼'), '', 'password',
                     ' placeholder="' + esc(T('pp_pw_hint', '留空就不改密碼')) + '"')
-            // ZH: 唯一一道密碼確認（v4.3b）：擋「誤存」。驗完立刻清掉。
-            + field('f-confirm', T('pp_confirm_save', '管理者密碼確認'), '', 'password')
+            // ZH: v4.4b 密碼確認改在按「儲存」後用小彈窗問（pwConfirm），
+            //     表單裡不再擺確認欄。
             + '<div class="ds__actions">'
             + '<button class="btn btn--primary" type="button" id="save">'
             + esc(T('pp_save', '儲存')) + '</button>'
@@ -530,6 +557,47 @@
             + '</div>'
             + '<div class="inline-error" id="save-msg" hidden></div>'
             + '</section>';
+    }
+
+    // ══════════════════════════════════════════════════════════════════
+    // ZH: v4.4b 管理員密碼確認彈窗（擁有者裁定 2026-09-03）：
+    //     停用/刪除/儲存前確認共用。`run(pw)` 負責驗證與動作，
+    //     丟錯就顯示在彈窗裡、彈窗不關；成功才關。
+    //     密碼欄位活在這個彈窗裡，關掉就消失 —— 不殘留在詳情的 DOM。
+    // ══════════════════════════════════════════════════════════════════
+    function pwConfirm(title, hint, run) {
+        var dlg = $('pw-dialog');
+        dlg.innerHTML =
+            '<h2 class="rmod__title">' + esc(title) + '</h2>'
+            + (hint ? '<p class="footnote">' + esc(hint) + '</p>' : '')
+            + field('pwc-in', T('pp_admin_pw', '你的管理員密碼'), '', 'password')
+            + '<div class="adm-inline rmod__foot">'
+            + '<button class="btn btn--primary" type="button" id="pwc-go">'
+            + esc(T('pp_pwc_go', '確認')) + '</button>'
+            + '<button class="btn btn--minor" type="button" id="pwc-cancel">'
+            + esc(T('tmp_cancel', '取消')) + '</button>'
+            + '</div>'
+            + '<div class="inline-error" id="pwc-msg" hidden></div>';
+        dlg.showModal();
+        $('pwc-in').focus();
+        $('pwc-cancel').addEventListener('click', function () { dlg.close(); });
+        async function go() {
+            var pw = $('pwc-in').value;
+            if (!pw) { say('pwc-msg', T('pp_need_pw', '請先輸入你的管理員密碼。')); return; }
+            $('pwc-go').disabled = true;
+            try {
+                await run(pw);
+                dlg.close();
+            } catch (e) {
+                say('pwc-msg', e.message || String(e));
+                $('pwc-go').disabled = false;
+            }
+        }
+        $('pwc-go').addEventListener('click', go);
+        // ZH: 密碼欄按 Enter = 確認 —— 打完還要移滑鼠去按鈕很煩。
+        $('pwc-in').addEventListener('keydown', function (ev) {
+            if (ev.key === 'Enter') { ev.preventDefault(); go(); }
+        });
     }
 
     // ZH: 向後端驗證管理員密碼。用 /admin/verify —— 它專為此而存在，
@@ -630,23 +698,23 @@
     }
 
     function renderDetail() {
+        var dlg = $('user-dialog');
         var box = $('detail');
         if (!CURRENT) {
-            box.innerHTML = '<p class="footnote">' + esc(T('pp_pick', '點一列看這個人的詳細資料。')) + '</p>';
+            box.innerHTML = '';
+            if (dlg.open) dlg.close();
             return;
         }
         var u = CURRENT;
         box.innerHTML =
-            '<div class="adm-sec__head"><h2>'
-            + esc(T('pp_detail', '{name} 的資料').replace('{name}', u.username)) + '</h2>'
-            + '<span class="footnote mono">' + esc(u.id) + '</span>'
-            // ZH: 關閉預覽。這一區很長（基本資料 + 額度 + 實驗室 + 危險操作）,
-            //     看完之後它會一直卡在清單下面,要往回捲很久才回得到清單。
-            //     🔴 只清 CURRENT 不重畫清單 —— 清單的「選中」樣式也要跟著收掉,
-            //     不然畫面上還反白著一列,但下面已經沒有它的資料了。
-            + '<span class="topbar__spacer"></span>'
-            + '<button class="btn btn--minor" type="button" id="detail-close">'
-            + esc(T('pp_close', '關閉')) + '</button></div>'
+            // ZH: v4.4 彈窗右上角 ✕。走**明確的 click 清理**而不是 method="dialog"——
+            //     清 CURRENT/收反白不能押在 <dialog> 的 close 事件上
+            //     （實測瀏覽器面板環境不發 close 事件；正式瀏覽器會發，
+            //     但清理邏輯要在兩種環境都成立）。
+            '<span class="rmod__x">'
+            + '<button class="btn btn--minor" type="button" id="user-close" aria-label="'
+            + esc(T('pp_close', '關閉')) + '">✕</button></span>'
+            + pcardHtml(u)
 
             + '<div class="adm-cols">'
             + basicCard(u)
@@ -674,28 +742,25 @@
             // ZH: 只有臨時帳號才出現這張卡。一般帳號看到一個「延期」欄位
             //     只會困惑（他沒有到期日可以延）。
             + (u.expires_at ? tempCard(u) : '')
-            + '</div>'
+            + '</div>';
 
-            // 危險操作
-            + '<section class="adm-card adm-card--danger">'
-            + '<div class="adm-card__title">' + esc(T('pp_danger', '需要再確認的操作')) + '</div>'
-            + '<p class="footnote">' + esc(T('pp_danger_why', '這幾項會影響使用者，所以要再輸入一次你的密碼。')) + '</p>'
-            + field('f-adminpw', T('pp_admin_pw', '你的管理員密碼'), '', 'password')
-            + '<div class="ds__actions">'
-            + '<button class="btn btn--minor" type="button" id="toggle-active">'
-            + esc(u.is_active ? T('pp_disable', '停用帳號') : T('pp_enable', '啟用帳號')) + '</button>'
-            + '<button class="btn btn--minor" type="button" id="del">'
-            + esc(T('pp_delete', '刪除帳號')) + '</button>'
-            + '</div>'
-            + '<div class="inline-error" id="danger-msg" hidden></div>'
-            + '</section>';
-
+        $('user-close').addEventListener('click', closeUserDialog);
         wireDetail(u);
         if (u.expires_at) wireExtend(u);
         loadQuota(u);
         loadLab(u);
         loadUnlock(u);
         loadExtAi(u);
+        if (!dlg.open) dlg.showModal();
+    }
+
+    // ZH: v4.4 關閉的唯一實作：✕、ESC（cancel）、close 事件三條路都走這裡。
+    function closeUserDialog() {
+        var dlg = $('user-dialog');
+        CURRENT = null;
+        $('detail').innerHTML = '';
+        renderList();      // ZH: 清單的反白也要收掉,不然還亮著一列但人已經關掉了
+        if (dlg.open) dlg.close();
     }
 
     function say(id, text) {
@@ -752,15 +817,13 @@
             renderDetail();
         });
 
-        $('save').addEventListener('click', async function () {
-            // ZH: 儲存前的密碼確認（唯一一道，v4.3b 擁有者裁定）。
-            var pw2 = $('f-confirm').value;
-            if (!pw2) { say('save-msg', T('pp_need_pw', '請先輸入你的管理員密碼。')); return; }
+        $('save').addEventListener('click', function () {
+            // ZH: 儲存前的密碼確認（唯一一道）——用小彈窗問（v4.4b）。
+            //     欄位值在 run 裡才讀：小彈窗不動編輯表單，值都還在。
+            pwConfirm(T('pp_confirm_save', '管理者密碼確認'), null, async function (pw2) {
             if (!await verifyPassword(pw2)) {
-                say('save-msg', T('pp_unlock_bad', '密碼不對。'));
-                return;
+                throw new Error(T('pp_unlock_bad', '密碼不對。'));
             }
-            $('f-confirm').value = '';
 
             var patch = {
                 email: $('f-email').value.trim() || null,
@@ -780,15 +843,16 @@
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(patch),
                 });
-                Object.assign(u, { email: patch.email, department: patch.department, role: patch.role });
-                $('f-pw').value = '';
-                EDIT_BASIC = false;            // ZH: 存完收回唯讀
-                renderList();
-                renderDetail();
-                flash('save-msg', T('pp_saved', '已儲存'));
             } catch (e) {
-                say('save-msg', T('pp_save_fail', '存不起來（{w}）').replace('{w}', e.message));
+                // ZH: 丟給 pwConfirm 顯示在小彈窗裡（彈窗不關，密碼不用重打）。
+                throw new Error(T('pp_save_fail', '存不起來（{w}）').replace('{w}', e.message));
             }
+            Object.assign(u, { email: patch.email, department: patch.department, role: patch.role });
+            EDIT_BASIC = false;            // ZH: 存完收回唯讀
+            renderList();
+            renderDetail();
+            flash('save-msg', T('pp_saved', '已儲存'));
+            });
         });
 
         wireCommon(u);
@@ -796,38 +860,41 @@
 
     // ZH: 兩種模式都有的部分（危險操作那一區不受唯讀／編輯影響）。
     function wireCommon(u) {
-        $('toggle-active').addEventListener('click', async function () {
-            try {
-                await api('/admin/users/' + encodeURIComponent(u.id), {
-                    method: 'PUT',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ is_active: u.is_active ? 0 : 1 }),
+        // ZH: v4.4b 停用/刪除都走密碼小彈窗。
+        //     ⚠ 舊版「停用」其實**沒驗密碼**（危險卡的欄位只有刪除在讀）——
+        //     這次補齊：停用也要驗（/admin/verify），與卡上的承諾一致。
+        $('toggle-active').addEventListener('click', function () {
+            pwConfirm(u.is_active ? T('pp_disable', '停用帳號') : T('pp_enable', '啟用帳號'),
+                null,
+                async function (pw) {
+                    if (!await verifyPassword(pw)) {
+                        throw new Error(T('pp_unlock_bad', '密碼不對。'));
+                    }
+                    await api('/admin/users/' + encodeURIComponent(u.id), {
+                        method: 'PUT',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ is_active: u.is_active ? 0 : 1 }),
+                    });
+                    u.is_active = u.is_active ? 0 : 1;
+                    renderList();
+                    renderDetail();
                 });
-                u.is_active = u.is_active ? 0 : 1;
-                renderList();
-                renderDetail();
-            } catch (e) {
-                say('danger-msg', e.message);
-            }
         });
 
-        $('del').addEventListener('click', async function () {
-            var pw = $('f-adminpw').value;
-            if (!pw) { say('danger-msg', T('pp_need_pw', '請先輸入你的管理員密碼。')); return; }
-            if (!confirm(T('pp_delete_confirm', '要刪除「{n}」嗎？').replace('{n}', u.username))) return;
-            try {
-                await api('/admin/users/' + encodeURIComponent(u.id) + '/delete', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ admin_password: pw }),
+        $('del').addEventListener('click', function () {
+            // ZH: 刪除的確認句直接放在彈窗裡（原本的原生 confirm 併進來了）。
+            pwConfirm(T('pp_delete', '刪除帳號'),
+                T('pp_delete_confirm', '要刪除「{n}」嗎？').replace('{n}', u.username),
+                async function (pw) {
+                    // ZH: 刪除端點自己收 admin_password 驗 —— 不用先打 /admin/verify。
+                    await api('/admin/users/' + encodeURIComponent(u.id) + '/delete', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ admin_password: pw }),
+                    });
+                    ALL = ALL.filter(function (x) { return x.id !== u.id; });
+                    closeUserDialog();
                 });
-                ALL = ALL.filter(function (x) { return x.id !== u.id; });
-                CURRENT = null;
-                renderList();
-                renderDetail();
-            } catch (e) {
-                say('danger-msg', e.message);
-            }
         });
     }
 
@@ -1920,13 +1987,26 @@
         }
     })();
 
-    // ZH: 用事件委派而不是在 renderDetail 裡綁 —— #detail 的內容每次都整個重畫,
-    //     直接綁在按鈕上的話,每重畫一次就要記得重綁一次,漏一次就變成「按了沒反應」。
-    document.addEventListener('click', function (e) {
-        if (!e.target.closest || !e.target.closest('#detail-close')) return;
-        CURRENT = null;
-        renderDetail();
-        renderList();      // ZH: 清單的反白也要收掉,不然還亮著一列但下面沒東西了
+    // ZH: v4.4 ESC 關閉：攔下 cancel 走同一條清理路（cancel 是同步事件，可靠）。
+    //     close 事件也掛一份當保險 —— 面板環境實測不發它，正式瀏覽器會，
+    //     兩邊都掛、閒置的那份無害（closeUserDialog 冪等）。
+    $('user-dialog').addEventListener('cancel', function (ev) {
+        ev.preventDefault();
+        closeUserDialog();
+    });
+    // ZH: v4.4b 點遮罩也關（擁有者裁定 2026-09-03）。點在 ::backdrop 上時
+    //     事件的 target 是 <dialog> 本身、座標落在內容框**外** ——
+    //     用座標判斷，免得點到彈窗內距（padding）也被當成遮罩。
+    $('user-dialog').addEventListener('click', function (ev) {
+        if (ev.target !== this) return;
+        var r = this.getBoundingClientRect();
+        if (ev.clientX < r.left || ev.clientX > r.right
+            || ev.clientY < r.top || ev.clientY > r.bottom) {
+            closeUserDialog();
+        }
+    });
+    $('user-dialog').addEventListener('close', function () {
+        if (CURRENT) closeUserDialog();
     });
 
     document.addEventListener('prefs:langchanged', function () {

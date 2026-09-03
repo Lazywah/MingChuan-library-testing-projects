@@ -11,7 +11,7 @@
 
     <link rel="stylesheet" href="tokens.css?v=ff9cecda">
     <link rel="stylesheet" href="styles.css?v=13de82fd">
-    <link rel="stylesheet" href="admin.css?v=88fd6b2a">
+    <link rel="stylesheet" href="admin.css?v=0d208a67">
 </head>
 <body>
 
@@ -74,7 +74,15 @@
     <!-- ZH: 選中的人的**所有東西**都在這裡：基本資料、額度、實驗室、危險操作。
              舊版把這些散在「帳號管理」與「Lab 管理」兩個分頁，
              處理一個人要跳來跳去、而且兩邊各有一份搜尋。 -->
-    <section class="adm-sec" id="detail" data-view="platform" aria-live="polite"></section>
+    <!-- ZH: v4.4 使用者詳情改彈窗＋名片頭（擁有者裁定 2026-09-03）：
+             原本詳情整疊長在清單下面，看完要捲回去——改成 <dialog>，
+             與公告/回報/臨時帳號同一套。內容仍由 people.js 的 renderDetail 產生。 -->
+    <dialog class="rmod rmod--person" id="user-dialog" data-view="platform">
+        <div id="detail" aria-live="polite"></div>
+    </dialog>
+    <!-- ZH: v4.4b 管理員密碼確認的小彈窗（擁有者裁定 2026-09-03）：
+             停用/刪除/儲存前確認都走這一個。內容由 people.js 的 pwConfirm() 產生。 -->
+    <dialog class="rmod rmod--pw" id="pw-dialog" data-view="platform"></dialog>
 
     <!-- ZH: 廠商帳號的維運工作。**數字與動作常駐** —— 有幾個人對不上、
              有幾個等著開通，正是你該注意到的事；收起來就等於沒有人會看到。
@@ -153,10 +161,10 @@
 <script src="tz.js?v=2e214a8b"></script>
 <!-- ⚠ ZH: 順序不能動 —— i18n-admin 在 i18n 之後、prefs 之前。 -->
 <script src="i18n.js?v=ac2b1380"></script>
-<script src="i18n-admin.js?v=e715b18a"></script>
+<script src="i18n-admin.js?v=571ccd26"></script>
 <script src="tip.js?v=0699f4a2"></script>
 <script src="prefs.js?v=00b43387"></script>
 <script src="admin-chrome.js?v=ce2fd362"></script>
-<script src="people.js?v=292fed58"></script>
+<script src="people.js?v=4128729a"></script>
 </body>
 </html>

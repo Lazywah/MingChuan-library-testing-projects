@@ -175,9 +175,7 @@
         pp_c_seen: '最後登入',
         pp_active: '啟用',
         pp_inactive: '已停用',
-        pp_pick: '點一列看這個帳號的詳細資料。',
 
-        pp_detail: '{name} 的資料',
         pp_basic: '基本資料',
         pp_save: '儲存',
         pp_saved: '已儲存',
@@ -186,8 +184,9 @@
         pp_new_pw: '新密碼',
 
         pp_edit: '編輯',
+        pp_pill_temp: '臨時帳號',
+        pp_ro_hint2: 'Email、角色、學系、密碼與管理權限都在這裡改。',
         pp_cancel: '取消變更',
-        pp_ro_hint: '唯讀。要修改請按「編輯」。',
         pp_unlock_bad: '密碼不對。',
         pp_confirm_save: '管理者密碼確認',
         pp_quota: '磁碟配額',
@@ -269,9 +268,8 @@
         pp_lab_stop: '強制關閉',
         pp_lab_confirm: '要強制關閉「{n}」的實驗室嗎？他正在編輯的檔案會保留，但未存檔的東西可能會不見。',
 
-        pp_danger: '需要再確認的操作',
-        pp_danger_why: '這幾項會影響使用者，所以要再輸入一次你的密碼。',
         pp_admin_pw: '你的管理員密碼',
+        pp_pwc_go: '確認',
         pp_disable: '停用帳號',
         pp_enable: '啟用帳號',
         pp_delete: '刪除帳號',
@@ -795,9 +793,7 @@
         pp_c_seen: 'Last sign-in',
         pp_active: 'Active',
         pp_inactive: 'Disabled',
-        pp_pick: 'Pick a row to see that account.',
 
-        pp_detail: '{name}',
         pp_basic: 'Details',
         pp_save: 'Save',
         pp_saved: 'Saved',
@@ -806,8 +802,9 @@
         pp_new_pw: 'New password',
 
         pp_edit: 'Edit',
+        pp_pill_temp: 'Temporary',
+        pp_ro_hint2: 'Email, role, department, password and admin rights are edited here.',
         pp_cancel: 'Discard changes',
-        pp_ro_hint: 'Read-only. Press "Edit" to change anything.',
         pp_unlock_bad: 'Wrong password.',
         pp_confirm_save: 'Administrator password confirmation',
         pp_quota: 'Disk quota',
@@ -888,9 +885,8 @@
         pp_lab_stop: 'Force stop',
         pp_lab_confirm: 'Force-stop the lab for {n}? Saved files are kept, but unsaved work may be lost.',
 
-        pp_danger: 'Actions that need confirmation',
-        pp_danger_why: 'These affect the user, so enter your password again.',
         pp_admin_pw: 'Your admin password',
+        pp_pwc_go: 'Confirm',
         pp_disable: 'Disable account',
         pp_enable: 'Enable account',
         pp_delete: 'Delete account',
