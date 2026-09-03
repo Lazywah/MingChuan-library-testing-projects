@@ -736,7 +736,9 @@
 
             // ZH: 外部 AI 的綁定與消耗。放在這裡而不是「數據」那一頁 ——
             //     那一頁是看趨勢的，要查某一個人就該在人這一頁查完。
-            + '<section class="adm-card" id="ext-box">'
+            // ZH: v4.4d 外部 AI 佔滿整列（擁有者裁定 2026-09-03）——
+            //     左半是綁定資訊、右半是消耗統計（extRo 的 .ext-cols）。
+            + '<section class="adm-card adm-card--wide" id="ext-box">'
             + '<div class="adm-card__title">' + esc(T('pp_ext', '外部 AI（MYAI）')) + '</div>'
             + '<span class="skeleton skeleton--line"></span></section>'
             // ZH: 只有臨時帳號才出現這張卡。一般帳號看到一個「延期」欄位
@@ -911,33 +913,41 @@
             return '<div class="kv"><span class="kv__k">' + esc(k) + '</span>'
                 + '<span class="kv__v">' + esc(v) + '</span></div>';
         };
-        var out = kv(T('pp_ext_vendor', '廠商帳號'), b.myai_email || '—')
+        // ZH: v4.4d 左右分欄（擁有者裁定 2026-09-03）：卡佔滿整列後，
+        //     左＝綁定資訊、右＝消耗統計，並排一眼看完。
+        // ZH: 左欄也給小標 —— 右欄有「用了多少」而左欄沒有的話，
+        //     兩欄的列從不同高度開始，分隔線對不齊，看起來就是亂。
+        var left = '<div class="adm-card__title">'
+            + esc(T('pp_ext_binding', '綁定資訊')) + '</div>'
+            + kv(T('pp_ext_vendor', '廠商帳號'), b.myai_email || '—')
             + kv(T('pp_ext_sn', '序號'), b.myai_vendor_sn || '—');
 
         // ZH: 點數只有對得上同步快取時才有值。對不上就明講「同步不到」——
         //     顯示「—」會被當成「他沒有點數」，那是完全不同的一件事。
-        out += kv(T('pp_ext_points', '點數'),
-                  b.synced ? num(b.points) : T('pp_ext_nosync', '同步不到這個帳號'));
+        left += kv(T('pp_ext_points', '點數'),
+                   b.synced ? num(b.points) : T('pp_ext_nosync', '同步不到這個帳號'));
         // ZH: ⚠ 唯讀這行也要翻譯。只在下拉裡翻的話，看的時候是 "active"、
         //     一按編輯變成「正常」—— 同一個值兩種樣子。
-        out += kv(T('pp_ext_status', '狀態'),
-                  b.status ? T('st_' + b.status, b.status) : '—');
+        left += kv(T('pp_ext_status', '狀態'),
+                   b.status ? T('st_' + b.status, b.status) : '—');
 
+        var right = '<div class="adm-card__title">'
+            + esc(T('pp_ext_used', '用了多少（全部期間）')) + '</div>';
         if (c && c.summary && c.summary.tx_count) {
             var s2 = c.summary, p = c.peer || {};
-            out += '<div class="adm-card__title" style="margin-top:1rem">'
-                + esc(T('pp_ext_used', '用了多少（全部期間）')) + '</div>'
-                + kv(T('pp_ext_consumed', '總消耗'), num(s2.consumed) + ' ' + T('an_points', '點'))
+            right += kv(T('pp_ext_consumed', '總消耗'), num(s2.consumed) + ' ' + T('an_points', '點'))
                 + kv(T('pp_ext_uses', 'AI 使用次數'), num(s2.uses))
                 + kv(T('pp_ext_logins', '登入次數'), num(s2.logins))
                 // ZH: 一個人的數字單看沒有意義 —— 給同期間的全體人均當基準，
                 //     才知道「1000 點」是多還是少。
                 + kv(T('pp_ext_peer', '全體人均'),
                      p.avg_consumed != null ? num(p.avg_consumed) + ' ' + T('an_points', '點') : '—');
-        } else if (c) {
-            out += '<p class="footnote">' + esc(T('pp_ext_notx', '交易日誌裡還沒有這個人的紀錄。')) + '</p>';
+        } else {
+            right += '<p class="footnote">' + esc(c
+                ? T('pp_ext_notx', '交易日誌裡還沒有這個人的紀錄。')
+                : T('pp_ext_nosync', '同步不到這個帳號')) + '</p>';
         }
-        return out;
+        return '<div class="ext-cols"><div>' + left + '</div><div>' + right + '</div></div>';
     }
 
     function extForm(b) {

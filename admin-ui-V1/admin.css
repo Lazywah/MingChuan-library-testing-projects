@@ -1756,3 +1756,12 @@ textarea.field__input {
 }
 .pcard__del:hover { border-color: var(--error); color: var(--error); }
 .rmod--pw { width: min(420px, calc(100vw - 2 * var(--space-5))); }
+
+/* ZH: v4.4d 外部 AI 卡佔滿整列＋內部左右分欄（左=綁定、右=消耗）。 */
+.adm-card--wide { grid-column: 1 / -1; }
+.ext-cols {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 0 var(--space-5);
+    align-items: start;
+}
