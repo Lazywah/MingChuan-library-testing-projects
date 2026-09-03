@@ -719,6 +719,12 @@
             + '<div class="adm-cols">'
             + basicCard(u)
 
+            // ZH: v4.4c 一次性解鎖移到第二順位（擁有者裁定 2026-09-03）——
+            //     它跟「編輯基本資料」是同一類事（改這個人的資料），排在一起。
+            + '<section class="adm-card" id="unlock-box">'
+            + '<div class="adm-card__title">' + esc(T('pp_unlock', '修改個人資料的授權')) + '</div>'
+            + '<span class="skeleton skeleton--line"></span></section>'
+
             // 額度 / 實驗室（非同步填）
             + '<section class="adm-card" id="quota-box">'
             + '<div class="adm-card__title">' + esc(T('pp_quota', '磁碟配額')) + '</div>'
@@ -726,12 +732,6 @@
 
             + '<section class="adm-card" id="lab-box">'
             + '<div class="adm-card__title">' + esc(T('pp_lab', '程式實驗室')) + '</div>'
-            + '<span class="skeleton skeleton--line"></span></section>'
-
-            // ZH: 一次性解鎖。放在配額與實驗室之後 —— 那兩個是「他有什麼」,
-            //     這個是「他能不能改自己的資料」,同樣是針對這一個人的設定。
-            + '<section class="adm-card" id="unlock-box">'
-            + '<div class="adm-card__title">' + esc(T('pp_unlock', '修改個人資料的授權')) + '</div>'
             + '<span class="skeleton skeleton--line"></span></section>'
 
             // ZH: 外部 AI 的綁定與消耗。放在這裡而不是「數據」那一頁 ——
@@ -1172,17 +1172,18 @@
                     : '')
                 // ZH: 核可表單常駐（不收進 fold）—— 使用者是用「問題回報」來申請的,
                 //     管理者看到申請時人已經在這一頁上了,再多一次展開只是多一步。
+                // ZH: v4.4c 範圍**依身分自動決定**（擁有者裁定 2026-09-03）：
+                //     不再逐項勾選 —— 老師/學生＝校區＋學系、職員＝校區＋單位、
+                //     訪客＝僅校區，一次全給。逐項挑的需求從沒出現過，
+                //     挑錯反而會讓對方改到一半發現差一項、再跑一次申請。
                 + '<div class="adm-card__title" style="margin-top:1rem">'
                 + esc(T('pp_unl_grant', '開放一次修改')) + '</div>'
-                + '<div class="adm-inline">'
-                + (d.unlockable || []).map(function (f) {
-                    var lab = UNLOCK_LABELS[f] || [f, f];
-                    return '<label class="field field--check">'
-                        + '<input type="checkbox" data-unl="' + esc(f) + '">'
-                        + '<span class="field--check__text"><span class="field--check__title">'
-                        + esc(T(lab[0], lab[1])) + '</span></span></label>';
-                }).join('')
-                + '</div>'
+                + '<p class="footnote">'
+                + esc(T('pp_unl_scope', '會開放：{f}（依他的身分決定）').replace('{f}',
+                    unlockFieldsFor(u).map(function (f) {
+                        var lab = UNLOCK_LABELS[f] || [f, f];
+                        return T(lab[0], lab[1]);
+                    }).join('、'))) + '</p>'
                 + field('unl-reason', T('pp_unl_reason', '原因（會寫進稽核）'), '')
                 + '<div class="ds__actions">'
                 + '<button class="btn btn--primary" type="button" id="unl-go">'
@@ -1201,16 +1202,18 @@
         }
     }
 
+    // ZH: v4.4c 這個身分能改哪些欄位（與初次設定的 ONBOARDING_FIELDS 同一套邏輯）：
+    //     校區人人有；老師/學生＝學系、職員/admin＝行政單位、訪客沒有組織欄。
+    function unlockFieldsFor(u) {
+        var out = ['campus'];
+        if (u.role === 'staff' || u.role === 'admin') out.push('unit');
+        else if (u.role !== 'guest') out.push('department');
+        return out;
+    }
+
     async function grantUnlock(u, revoke) {
         var msg = $('unl-msg');
-        var fields = revoke ? [] : [].slice.call(
-            document.querySelectorAll('#unlock-box [data-unl]:checked')
-        ).map(function (b) { return b.dataset.unl; });
-        // ZH: 前端先擋沒勾任何欄位 —— 後端也會擋,但讓他先看到訊息比較快。
-        if (!revoke && !fields.length) {
-            if (msg) { msg.textContent = T('pp_unl_pick', '請先勾選要開放哪幾項。'); msg.hidden = false; }
-            return;
-        }
+        var fields = revoke ? [] : unlockFieldsFor(u);
         try {
             if (revoke) {
                 await api('/admin/users/' + encodeURIComponent(u.id) + '/profile-unlock/revoke',
