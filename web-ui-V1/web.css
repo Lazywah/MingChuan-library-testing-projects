@@ -727,3 +727,44 @@ html.aibot-docked #aibot-fab { display: none; }
     white-space: nowrap;
     max-width: 240px;
 }
+
+/* ==========================================================================
+ * ZH: v4.7 首頁：公告與功能卡左右並排（擁有者裁定 2026-09-07）。
+ *
+ * ZH: 🔴 用 flex 不用 grid —— 沒有公告時 `.news` 是 `hidden`（display:none），
+ *     而 grid 的固定欄位**照樣佔位**：功能卡會被擠進左邊那個窄欄，
+ *     右半整片空白。flex 天然處理這件事（元素不存在，剩下的自己吃滿）。
+ *
+ * ZH: 首頁因此要比其他頁寬 —— `.page` 的 720px 擺兩欄會太擠。
+ *     只加在首頁（.page--home），其他頁維持原本的閱讀寬度。
+ * ========================================================================== */
+/* ZH: ⚠ 一半 ≈545px，功能卡因此是**一排兩張**（.group__cards 的 minmax
+ *     是 240px，一排三張要 ≈740px＝公告得縮到約 32%）。
+ *     擁有者選擇公告佔一半、接受兩張——已知取捨，不是漏調。 */
+.page--home { max-width: 1160px; }
+
+.home {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--space-5);
+}
+/* ZH: 兩欄等寬（各 50%）。用 `flex: 1 1 0` 而不是寫死 50% ——
+ *     沒有公告時 .news 是 display:none，剩下的 .groups 自然吃滿整列，
+ *     不必為那個情況另寫規則。 */
+.home > .news {
+    flex: 1 1 0;
+    min-width: 0;
+    margin-bottom: 0;               /* ZH: 並排時不需要下方間距，改由 gap 負責 */
+}
+.home > .groups {
+    flex: 1 1 0;
+    min-width: 0;                   /* ZH: 沒有它，長標題會把欄撐爆而不是換行 */
+    margin-top: 0;                  /* ZH: 兩欄要對齊頂端 */
+}
+
+/* ZH: 窄畫面疊回上下，並把上面歸零的間距還回來。 */
+@media (max-width: 900px) {
+    .home { display: block; }
+    .home > .news { margin-bottom: var(--space-5); }
+    .home > .groups { margin-top: var(--space-6); }
+}

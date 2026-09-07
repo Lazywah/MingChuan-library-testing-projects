@@ -13,7 +13,7 @@
 
     <link rel="stylesheet" href="tokens.css?v=ff9cecda">
     <link rel="stylesheet" href="styles.css?v=13de82fd">
-    <link rel="stylesheet" href="web.css?v=4a234c4e">
+    <link rel="stylesheet" href="web.css?v=79f80706">
     <!-- ZH: 🔴 側欄狀態必須在**首次繪製之前**套用，否則每換一頁都會看到
              內容滑出去讓位（widget 的 JS 在 body 尾端才跑，那時已經畫過一次了）。
              這一段刻意內嵌而不是外部檔案 —— 外部檔案要等網路往返，
@@ -32,7 +32,12 @@
 
 </header>
 
-<main class="page">
+<main class="page page--home">
+
+    <!-- ZH: v4.7 公告與功能卡左右並排（擁有者裁定 2026-09-07）。
+             寬螢幕：公告在左（窄欄）、功能卡在右（吃剩下的寬度）；
+             窄螢幕自動疊回上下。細節見 web.css 的 .home。 -->
+    <div class="home">
 
     <!-- ZH: 層級 0 · 公告。條件式——沒有公告時整塊不存在，
              不做「目前沒有公告」的空卡片。
@@ -157,6 +162,8 @@
             </div>
         </div>
     </section>
+
+    </div><!-- /.home -->
 </main>
 
 <script src="docs-entry.js?v=131ee7af"></script>
