@@ -375,6 +375,31 @@ load();
 })();
 
 
+/* ZH: v4.9 `?topic=org` —— 從初次設定的「找不到我的單位」點過來的（chrome.js）。
+ *
+ * ZH: 為什麼需要這條路：組織清單改以 Alma 為準之後，Alma 沒有的單位
+ *     （新成立、剛改名）在下拉裡就是不存在 —— 那個人按了「稍後再說」之後
+ *     **沒有任何地方可以說「我的單位不在上面」**，於是他的組織永遠空著，
+ *     而管理者也永遠不知道少了哪一個。這裡把那句話接回問題回報。
+ *
+ * ZH: ⚠ 規則與 quota 那條完全相同：只填**空的**欄位（見上面的理由）。
+ */
+(function prefillOrg() {
+    var topic = new URLSearchParams(location.search).get('topic');
+    if (topic !== 'org') return;
+    var el = $('what');
+    if (!el || el.value.trim()) return;
+    el.value = T('rep_prefill_org',
+        ['選單裡沒有我的單位，麻煩幫我新增。', '',
+         '我的單位全名：', '上層單位（學院／處室）：'].join('\n'));
+    fillCategories('account');
+    const sub = $('subject');
+    if (sub && !sub.value.trim()) sub.value = T('rep_subject_org', '選單裡沒有我的單位');
+    el.focus();
+    el.setSelectionRange(el.value.length, el.value.length);
+})();
+
+
 // ── 語言切換時重繪 ───────────────────────────────────────────────────
 // ZH: prefs.js 的字典掃描只換得掉 `data-i18n` 元素；本頁 JS 產生的內容要自己重跑。
 //     只在語言**改變**時觸發（不是每次套用），所以不會在載入時多跑一次。

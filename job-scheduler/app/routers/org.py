@@ -84,7 +84,8 @@ def list_departments(db: Session = Depends(get_db),
         "colleges": sorted({r.college for r in rows}),
         "rows": [{"name": r.name, "college": r.college, "campus": r.campus,
                   "name_en": r.name_en or "", "college_en": r.college_en or "",
-                  "active": r.active, "users": counts.get(r.name, 0)} for r in rows],
+                  "active": r.active, "users": counts.get(r.name, 0),
+                  "source": r.source or "admin"} for r in rows],
     }
 
 
@@ -123,9 +124,12 @@ def save_departments(payload: dict = Body(...),
             if db.get(models.OrgDepartment, name):
                 raise HTTPException(status_code=409,
                                     detail=f"ZH: 已經有這個學系：{name} | EN: duplicate: {name}")
+            # ZH: v4.9 管理者手動新增的，標 'admin' —— 之後 Alma 重掃時
+            #     這一列不會被當成過期的 Alma 資料清掉。
             db.add(models.OrgDepartment(name=name, college=college,
                                         campus=campus, active=active,
-                                        name_en=name_en, college_en=college_en))
+                                        name_en=name_en, college_en=college_en,
+                                        source='admin'))
             added += 1
             continue
 
@@ -146,7 +150,8 @@ def save_departments(payload: dict = Body(...),
                                     synchronize_session=False))
             db.add(models.OrgDepartment(name=name, college=college,
                                         campus=campus, active=active,
-                                        name_en=name_en, college_en=college_en))
+                                        name_en=name_en, college_en=college_en,
+                                        source=cur.source or 'admin'))
             db.delete(cur)
             renamed += 1
             continue
@@ -181,7 +186,8 @@ def list_units(db: Session = Depends(get_db),
         "rows": [{"path": r.path, "name": r.name, "parent": r.parent,
                   "name_en": r.name_en or "",
                   "campus": r.campus, "active": r.active,
-                  "users": counts.get(r.path, 0)} for r in rows],
+                  "users": counts.get(r.path, 0),
+                  "source": r.source or "admin"} for r in rows],
     }
 
 
@@ -220,7 +226,8 @@ def save_units(payload: dict = Body(...),
                 raise HTTPException(status_code=409,
                                     detail=f"ZH: 已經有這個單位：{path} | EN: duplicate: {path}")
             db.add(models.OrgUnit(path=path, name=name, parent=parent,
-                                  campus=campus, active=active, name_en=name_en))
+                                  campus=campus, active=active, name_en=name_en,
+                                  source='admin'))
             added += 1
             continue
 
@@ -238,7 +245,8 @@ def save_units(payload: dict = Body(...),
                             .update({models.User.unit: path},
                                     synchronize_session=False))
             db.add(models.OrgUnit(path=path, name=name, parent=parent,
-                                  campus=campus, active=active, name_en=name_en))
+                                  campus=campus, active=active, name_en=name_en,
+                                  source=cur.source or 'admin'))
             db.delete(cur)
             renamed += 1
             continue
@@ -375,7 +383,8 @@ def import_org(payload: dict = Body(...),
             if not dry_run:
                 db.add(models.OrgDepartment(name=name, college=college,
                                             campus=campus, active=active,
-                                            name_en=name_en, college_en=college_en))
+                                            name_en=name_en, college_en=college_en,
+                                            source='admin'))
         else:
             want_en = name_en if has_en else cur.name_en
             want_cen = college_en if has_cen else cur.college_en
@@ -406,7 +415,8 @@ def import_org(payload: dict = Body(...),
             report["units"]["added"].append(path)
             if not dry_run:
                 db.add(models.OrgUnit(path=path, name=name, parent=parent,
-                                      campus=campus, active=active, name_en=name_en))
+                                      campus=campus, active=active, name_en=name_en,
+                                      source='admin'))
         else:
             want_en = name_en if has_en else cur.name_en
             if (cur.name, cur.campus, cur.active, cur.name_en) != (name, campus, active, want_en):

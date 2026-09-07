@@ -1189,6 +1189,103 @@ def alma_backfill(
     return alma_service.backfill_users(db, limit=limit, dry_run=dry_run)
 
 
+# ══════════════════════════════════════════════════════════════════════════
+# ZH: 組織對照表用 Alma 重建（擁有者裁定 2026-09-07）
+# ══════════════════════════════════════════════════════════════════════════
+# ZH: 為什麼要開一條背景任務、而不是像別的端點那樣同步做完：
+#     掃描要逐一查 3,315 位教職員的明細（Alma 沒有組織清單端點，使用者清單
+#     又不含組織欄位）—— **約 20 分鐘**。放在請求裡做的話，瀏覽器、nginx、
+#     以及中間任何一層都會先逾時，而背景那支還在跑：管理者看到的是失敗，
+#     實際上資料庫正在被改。那是最難查的一種半成功。
+#
+# ZH: 🔴 同一時間只准跑一支（`_ORG_JOB["running"]`）。兩支同時重建的話，
+#     一支的「Alma 已經沒有這個單位了」會刪掉另一支剛寫進去的列。
+#
+# ZH: 進度存在**行程記憶體**裡，不進資料庫 —— 它只在這一次重開機之間有意義。
+#     排程重啟後狀態歸零是對的：那支任務本來就沒了。
+# ══════════════════════════════════════════════════════════════════════════
+_ORG_JOB: dict = {"running": False, "phase": "idle", "done": 0, "total": 0,
+                  "report": None, "error": None, "started_at": None,
+                  "finished_at": None, "dry_run": True}
+
+
+def _org_rebuild_worker(dry_run: bool) -> None:
+    """
+    ZH: 背景執行緒：掃 Alma → 重建兩張組織對照表。
+
+    ZH: 🔴 自己開 session。`Depends(get_db)` 那個在請求結束時就關了，
+        而這支比請求活得久 —— 用它會在中途拿到已關閉的 session。
+
+    @node job-scheduler/app/routers/admin.py::_org_rebuild_worker
+    """
+    from ..database import SessionLocal
+    from ..services import alma_service
+
+    db = SessionLocal()
+    try:
+        _ORG_JOB.update(phase="scanning", done=0, total=0)
+
+        def progress(done, total):
+            _ORG_JOB.update(done=done, total=total)
+
+        folded = alma_service.harvest_org(progress=progress)
+        if folded is None:
+            # ZH: 掃描失敗一律整批放棄（harvest_org 自己判斷）——
+            #     半份清單會被重建當成「Alma 精簡了組織」而清掉沒掃到的單位。
+            _ORG_JOB.update(error="Alma 掃描失敗，這次沒有改動任何資料")
+            return
+        _ORG_JOB.update(phase="writing")
+        _ORG_JOB["report"] = alma_service.rebuild_org_from_alma(
+            db, folded, dry_run=dry_run)
+    except Exception as e:                    # noqa: BLE001
+        logger.exception("組織重建失敗")
+        _ORG_JOB.update(error=str(e))
+        db.rollback()
+    finally:
+        db.close()
+        _ORG_JOB.update(running=False, phase="done",
+                        finished_at=datetime.now(timezone.utc).isoformat())
+
+
+@router.post("/alma/org-rebuild", summary="用 Alma 重建組織對照表（背景執行）")
+def alma_org_rebuild(
+    dry_run: bool = Query(True, description="ZH: true=只看不寫（預設）"),
+    _: models.User = Depends(require_admin),
+) -> Any:
+    """
+    ZH: 啟動背景重建，**立刻回**（要跑約 20 分鐘）。進度看 org-rebuild/status。
+
+    ZH: 預設 `dry_run=true` —— 這支會刪列，而刪掉的沒有復原鍵。
+        先跑一次乾跑看報告，確認要刪的都是沒有人用的，再跑真的。
+
+    @node job-scheduler/app/routers/admin.py::alma_org_rebuild
+    """
+    import threading
+
+    if _ORG_JOB["running"]:
+        raise HTTPException(
+            status_code=409,
+            detail="ZH: 已經有一支重建在跑，等它跑完 | EN: a rebuild is already running")
+
+    _ORG_JOB.update(running=True, phase="starting", done=0, total=0,
+                    report=None, error=None, dry_run=dry_run,
+                    started_at=datetime.now(timezone.utc).isoformat(),
+                    finished_at=None)
+    threading.Thread(target=_org_rebuild_worker, args=(dry_run,),
+                     name="org-rebuild", daemon=True).start()
+    return {"started": True, "dry_run": dry_run}
+
+
+@router.get("/alma/org-rebuild/status", summary="組織重建的進度與結果")
+def alma_org_rebuild_status(_: models.User = Depends(require_admin)) -> Any:
+    """
+    ZH: 進度（掃到第幾個人）與跑完的報告。行程重開就歸零 —— 見 _ORG_JOB 的註解。
+
+    @node job-scheduler/app/routers/admin.py::alma_org_rebuild_status
+    """
+    return dict(_ORG_JOB)
+
+
 @router.post("/users/temporary/import", summary="批次匯入臨時帳號（CSV/XLSX，預覽＋建立）")
 async def import_temp_users(
     request: Request,

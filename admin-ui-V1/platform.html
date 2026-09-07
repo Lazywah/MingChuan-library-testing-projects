@@ -10,8 +10,8 @@
     <link href="https://fonts.googleapis.com/css2?family=Open+Sans:wght@400;600;700&display=swap" rel="stylesheet">
 
     <link rel="stylesheet" href="tokens.css?v=ff9cecda">
-    <link rel="stylesheet" href="styles.css?v=13de82fd">
-    <link rel="stylesheet" href="admin.css?v=cc67c2ea">
+    <link rel="stylesheet" href="styles.css?v=3dc3d31d">
+    <link rel="stylesheet" href="admin.css?v=2c641bcc">
 </head>
 <body>
 
@@ -219,6 +219,11 @@
                 </span>
             </h3>
             <span class="topbar__spacer"></span>
+            <!-- ZH: v4.9 用 Alma 重建（擁有者裁定 2026-09-07）。這張表的內容
+                     以 Alma 為準，這顆是「現在去對一次」。要跑約 20 分鐘，
+                     所以是背景任務＋進度，不是按了就等。 -->
+            <button class="btn btn--minor" type="button" id="og-alma"
+                    data-i18n="pf_org_alma">用 Alma 重建</button>
             <button class="btn btn--minor" type="button" id="og-export" data-i18n="pf_org_export">匯出</button>
             <!-- ZH: file input 藏起來，用按鈕代按 —— 原生的檔案選擇器樣式無法與其他鈕一致。 -->
             <input type="file" id="og-file" accept="application/json,.json" hidden>
@@ -244,15 +249,18 @@
         <div class="inline-error" id="og-msg" hidden></div>
     </section>
 
+    <!-- ZH: v4.9 組織重建的進度／報告彈窗。內容由 platform.js 的 openOrgAlma() 產生。 -->
+    <dialog class="rmod" id="og-alma-dialog" data-view="platform"></dialog>
+
 </main>
 
 <script src="tz.js?v=2e214a8b"></script>
 <!-- ⚠ ZH: 順序不能動 —— i18n-admin 在 i18n 之後、prefs 之前。 -->
-<script src="i18n.js?v=ea47a33a"></script>
-<script src="i18n-admin.js?v=168c5511"></script>
+<script src="i18n.js?v=d06f2fe6"></script>
+<script src="i18n-admin.js?v=380c619d"></script>
 <script src="tip.js?v=0699f4a2"></script>
 <script src="prefs.js?v=00b43387"></script>
 <script src="admin-chrome.js?v=ce2fd362"></script>
-<script src="platform.js?v=53e01b19"></script>
+<script src="platform.js?v=877cb370"></script>
 </body>
 </html>

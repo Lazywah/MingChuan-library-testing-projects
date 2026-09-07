@@ -390,6 +390,10 @@ class OrgDepartment(Base):
     # ZH: 校區由管理者選 —— 官網的教學單位頁沒有標校區，硬推會是假資料。
     campus  = Column(String, nullable=True)
     active  = Column(Integer, default=1)                       # ZH: 停招的留著但不進下拉
+    # ZH: v4.9 這一列是哪來的：'alma' = 從 Alma 掃回來的、'admin' = 管理者自己加的。
+    # ZH: 為什麼要記：Alma 是權威來源，重掃時「Alma 沒有的」要能跟
+    #     「管理者刻意補的」分得開 —— 否則重掃會把人工補的單位一起洗掉。
+    source  = Column(String, nullable=True, default='admin')
 
 
 class OrgUnit(Base):
@@ -411,6 +415,8 @@ class OrgUnit(Base):
     parent = Column(String, nullable=True, index=True)         # ZH: 上層處室名；頂層為 NULL
     campus = Column(String, nullable=True)
     active = Column(Integer, default=1)
+    # ZH: v4.9 同 OrgDepartment.source（'alma' / 'admin'）。
+    source = Column(String, nullable=True, default='admin')
 
 
 class ArchivedLabVolume(Base):

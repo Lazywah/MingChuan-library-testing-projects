@@ -1492,6 +1492,8 @@ textarea.field__input {
     padding: var(--space-3);
 }
 .rmod__foot { margin-top: var(--space-4); }
+/* ZH: v4.9 彈窗裡的小標（組織重建報告用「學系／行政單位」分段）。 */
+.rmod__sub { margin: var(--space-4) 0 var(--space-1); font-size: 0.95rem; }
 
 /* ZH: 公告的中英並排（v3.9）。
  * ZH: 窄視窗折成一欄 —— 兩欄各 360px 以下時，中文一行放不了幾個字，

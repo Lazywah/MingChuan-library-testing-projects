@@ -194,6 +194,23 @@ def init_db():
             try: conn.execute(text("ALTER TABLE myai_accounts ADD COLUMN excluded INTEGER DEFAULT 0"))
             except Exception: pass
 
+            # --- v4.9 組織對照的來源標記（'alma' = Alma 掃出來的／'admin' = 人工加的）---
+            # ZH: 既有列標 'seed' —— 它們是 2026-08-27 從銘傳官網抓的那份快照。
+            # ZH: 🔴 **不能標 'admin'**：'admin' 的意思是「管理者親手加的，
+            #     Alma 重建時不要動」（見 alma_service.KEEP_SOURCES）。
+            #     官網舊種子正好相反 —— 它就是要被 Alma 換掉的那一份。
+            #     標錯的話重建會一列都換不掉，而報告會顯示「全部保留」，
+            #     看起來像成功了。
+            # ZH: 'seed' 是過渡標記：重建跑完之後就不會再有這種列。
+            try:
+                conn.execute(text("ALTER TABLE org_departments ADD COLUMN source VARCHAR"))
+                conn.execute(text("UPDATE org_departments SET source='seed' WHERE source IS NULL"))
+            except Exception: pass
+            try:
+                conn.execute(text("ALTER TABLE org_units ADD COLUMN source VARCHAR"))
+                conn.execute(text("UPDATE org_units SET source='seed' WHERE source IS NULL"))
+            except Exception: pass
+
             # --- v4.3 常用信箱（通知寄送用；NULL=用主信箱）---
             try: conn.execute(text("ALTER TABLE users ADD COLUMN contact_email VARCHAR"))
             except Exception: pass

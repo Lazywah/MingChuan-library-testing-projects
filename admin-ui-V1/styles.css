@@ -1185,6 +1185,11 @@ textarea.field__input { resize: vertical; min-height: 6rem; }
 .onb__field { margin-bottom: var(--space-4); }
 .onb__label { display: block; margin-bottom: var(--space-1); color: var(--text-strong); font-weight: 600; }
 .onb__hint  { display: block; margin-top: var(--space-1); color: var(--text-muted); font-size: 0.85rem; }
+/* ZH: v4.9 「找不到我的單位？」——刻意做得比 hint 更像連結（底線＋主色），
+   因為它是一條**出路**而不是說明文字。做成灰色小字的話，卡在這一步的人
+   會看不見它，然後隨便選一個對得上的單位交差。 */
+.onb__help  { display: inline-block; margin-top: var(--space-1); color: var(--accent);
+              font-size: 0.85rem; text-decoration: underline; }
 .onb__select {
     width: 100%;
     padding: var(--space-2) var(--space-3);

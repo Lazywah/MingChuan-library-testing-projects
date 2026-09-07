@@ -2077,13 +2077,18 @@
 
         // ZH: v3.9 英文名欄。緊接在中文名後面 —— 填的人是逐列對照著填的，
         //     擺到最右邊的話眼睛要橫跨整張表，51 列填下來很容易錯行。
+        // ZH: v4.9 「來源」欄 —— 這一列是 Alma 掃回來的，還是管理者自己加的。
+        //     它決定下一次重建會不會動這一列（Alma 的會被換掉、人工的不動），
+        //     所以看得到才知道自己改的東西留不留得住。
         var cols = isDept
             ? [['pf_org_c_dept', '學系'], ['pf_org_c_dept_en', '學系（英）'],
                ['pf_org_c_college', '學院'], ['pf_org_c_college_en', '學院（英）'],
-               ['pf_org_c_campus', '校區'], ['pf_org_c_on', '啟用'], ['pf_org_c_users', '人數']]
+               ['pf_org_c_campus', '校區'], ['pf_org_c_src', '來源'],
+               ['pf_org_c_on', '啟用'], ['pf_org_c_users', '人數']]
             : [['pf_org_c_unit', '單位'], ['pf_org_c_unit_en', '單位（英）'],
                ['pf_org_c_parent', '上層'],
-               ['pf_org_c_campus', '校區'], ['pf_org_c_on', '啟用'], ['pf_org_c_users', '人數']];
+               ['pf_org_c_campus', '校區'], ['pf_org_c_src', '來源'],
+               ['pf_org_c_on', '啟用'], ['pf_org_c_users', '人數']];
 
         $('og-list').innerHTML =
             '<div class="adm-tablewrap"><table class="adm-table"><thead><tr>'
@@ -2091,6 +2096,151 @@
             + '</tr></thead><tbody>'
             + rows.map(function (r, i) { return orgRow(r, i, isDept, d); }).join('')
             + '</tbody></table></div>';
+    }
+
+    // ZH: 新增而還沒存的列沒有來源（存下去才會標 admin）——顯示「—」，
+    //     不要顯示 admin，那是還沒發生的事。
+    // ══════════════════════════════════════════════════════════════════
+    // ZH: v4.9 用 Alma 重建組織對照表（擁有者裁定 2026-09-07）。
+    //
+    // ZH: 兩段式（預覽 → 確認），因為它會**刪列**，而刪掉的沒有復原鍵。
+    //     預覽會列出要刪掉哪些 —— 全都是「Alma 沒有而且沒有人掛在上面」的，
+    //     但那句話值得管理者自己看一眼再按。
+    //
+    // ZH: 🔴 掃描要約 20 分鐘，所以後端是**背景任務**、這裡輪詢進度。
+    //     做成同步等待的話瀏覽器與 nginx 都會先逾時，而背景那支還在寫資料庫：
+    //     畫面顯示失敗、資料其實改了。
+    // ══════════════════════════════════════════════════════════════════
+    var OGA_POLL = null;          // ZH: 輪詢的 timer，關掉彈窗要一起停
+
+    function ogaBox(inner, foot) {
+        return '<form method="dialog" class="rmod__x">'
+            + '<button class="btn btn--minor" type="submit" aria-label="'
+            + esc(T('pf_org_alma_close', '關閉')) + '">✕</button></form>'
+            + '<h2 class="rmod__title">'
+            + esc(T('pf_org_alma_title', '用 Alma 重建組織對照表')) + '</h2>'
+            + inner
+            + '<div class="adm-inline rmod__foot">' + (foot || '') + '</div>';
+    }
+
+    function ogaList(label, arr) {
+        if (!arr || !arr.length) return '';
+        return '<p class="footnote"><strong>' + esc(label) + '（' + num(arr.length) + '）</strong><br>'
+            + esc(arr.join('、')) + '</p>';
+    }
+
+    function ogaReport(r) {
+        var head = r.dry_run
+            ? T('pf_org_alma_dryhead', '這是預覽，沒有寫入任何東西。')
+            : T('pf_org_alma_donehead', '重建完成。');
+        var out = '<p class="footnote">' + esc(head) + '</p>';
+        [['pf_org_c_dept', '學系', r.departments],
+         ['pf_org_c_unit', '行政單位', r.units]].forEach(function (g) {
+            var v = g[2] || {};
+            out += '<h3 class="rmod__sub">' + esc(T(g[0], g[1])) + '</h3>'
+                + ogaList(T('pf_org_alma_added', '新增'), v.added)
+                + ogaList(T('pf_org_alma_updated', '更新'), v.updated)
+                + ogaList(T('pf_org_alma_disabled',
+                    '停用（Alma 沒有了，但還有人掛在上面）'), v.disabled)
+                + ogaList(T('pf_org_alma_deleted',
+                    '刪除（Alma 沒有了，也沒有人用）'), v.deleted);
+        });
+        if (r.kept_admin) {
+            out += '<p class="footnote">'
+                + esc(T('pf_org_alma_kept', '保留的人工列') + '：' + num(r.kept_admin)) + '</p>';
+        }
+        if (r.ambiguous && r.ambiguous.length) {
+            // ZH: 多數決是**推**出來的，不是 Alma 直接說的 —— 列出來讓人看得到。
+            out += ogaList(T('pf_org_alma_amb', '學院是多數決推出來的學系'),
+                r.ambiguous.map(function (a) { return a.name + '→' + a.picked; }));
+        }
+        return out;
+    }
+
+    function ogaStop() {
+        if (OGA_POLL) { clearInterval(OGA_POLL); OGA_POLL = null; }
+    }
+
+    async function ogaPoll(dlg) {
+        var st;
+        try {
+            st = await api('/admin/alma/org-rebuild/status');
+        } catch (e) { return; }
+
+        if (st.running) {
+            var msg = st.phase === 'writing'
+                ? T('pf_org_alma_writing', '正在寫入…')
+                : (st.total
+                    ? T('pf_org_alma_running', '掃描中：{d} / {t} 人')
+                        .replace('{d}', num(st.done)).replace('{t}', num(st.total))
+                    : T('pf_org_alma_starting', '正在向 Alma 要名單…'));
+            dlg.innerHTML = ogaBox('<p class="footnote">' + esc(msg) + '</p>', '');
+            return;
+        }
+
+        ogaStop();
+        if (st.error) {
+            dlg.innerHTML = ogaBox('<p class="footnote">' + esc(st.error) + '</p>',
+                '<button class="btn btn--minor" type="button" id="oga-x">'
+                + esc(T('pf_org_alma_close', '關閉')) + '</button>');
+        } else if (st.report) {
+            dlg.innerHTML = ogaBox(ogaReport(st.report),
+                (st.report.dry_run
+                    ? '<button class="btn btn--primary" type="button" id="oga-go">'
+                      + esc(T('pf_org_alma_go', '確認重建')) + '</button>'
+                    : '')
+                + '<button class="btn btn--minor" type="button" id="oga-x">'
+                + esc(T('pf_org_alma_close', '關閉')) + '</button>');
+            if (st.report.dry_run) {
+                $('oga-go').addEventListener('click', function () { ogaStart(dlg, false); });
+            } else {
+                loadOrg();          // ZH: 表已經變了，清單要跟著換
+            }
+        }
+        var x = $('oga-x');
+        if (x) x.addEventListener('click', function () { dlg.close(); });
+    }
+
+    async function ogaStart(dlg, dryRun) {
+        dlg.innerHTML = ogaBox('<p class="footnote">'
+            + esc(T('pf_org_alma_starting', '正在向 Alma 要名單…')) + '</p>', '');
+        try {
+            await api('/admin/alma/org-rebuild?dry_run=' + (dryRun ? 'true' : 'false'),
+                      { method: 'POST' });
+        } catch (e) {
+            dlg.innerHTML = ogaBox('<p class="footnote">' + esc(e.message) + '</p>',
+                '<button class="btn btn--minor" type="button" id="oga-x">'
+                + esc(T('pf_org_alma_close', '關閉')) + '</button>');
+            $('oga-x').addEventListener('click', function () { dlg.close(); });
+            return;
+        }
+        ogaStop();
+        // ZH: 5 秒一次。掃描本身要 20 分鐘，更密只是多打幾百次 API。
+        OGA_POLL = setInterval(function () { ogaPoll(dlg); }, 5000);
+        ogaPoll(dlg);
+    }
+
+    function openOrgAlma() {
+        var dlg = $('og-alma-dialog');
+        // ZH: 🔴 關掉彈窗一定要停輪詢 —— 不停的話它會一直打 API，
+        //     而且下次開啟會有兩支 timer 同時寫同一個 dialog。
+        dlg.addEventListener('close', ogaStop);
+        dlg.innerHTML = ogaBox(
+            '<p class="footnote">' + esc(T('pf_org_alma_why',
+                '這張表的內容以 Alma 為準。重建會掃過全校教職員（約 3,300 人、20 分鐘），'
+                + '把 Alma 有的寫進來、Alma 已經沒有而且沒有人掛在上面的刪掉。'
+                + '標「人工」的列不會被動到。')) + '</p>',
+            '<button class="btn btn--primary" type="button" id="oga-dry">'
+            + esc(T('pf_org_alma_dry', '先預覽（不寫入）')) + '</button>');
+        dlg.showModal();
+        $('oga-dry').addEventListener('click', function () { ogaStart(dlg, true); });
+    }
+
+    function orgSrc(r) {
+        if (r.__new) return '<span class="footnote">—</span>';
+        return r.source === 'alma'
+            ? esc(T('pf_org_src_alma', 'Alma'))
+            : esc(T('pf_org_src_admin', '人工'));
     }
 
     function orgRow(r, i, isDept, d) {
@@ -2111,6 +2261,7 @@
                           : '<span class="footnote">—</span>') + '</td>'
                     : '<td>' + esc(r.parent || '—') + '</td>')
                 + '<td>' + esc(r.campus || '—') + '</td>'
+                + '<td>' + orgSrc(r) + '</td>'
                 + '<td>' + (r.active ? esc(T('pf_org_on', '啟用'))
                     : '<span class="footnote">' + esc(T('pf_org_off', '停用')) + '</span>') + '</td>'
                 + '<td class="num">' + users + '</td>'
@@ -2132,6 +2283,8 @@
                   + esc(T('pf_org_en_ph', '官方英文名')) + '"></td>'
                 : '')
             + '<td>' + orgCampusSelect(r.campus || '', d.campuses) + '</td>'
+            // ZH: 來源不可編輯 —— 它記的是「這一列哪來的」，不是一個偏好設定。
+            + '<td>' + orgSrc(r) + '</td>'
             + '<td><select data-f="active">'
             + '<option value="1"' + (r.active ? ' selected' : '') + '>' + esc(T('pf_org_on', '啟用')) + '</option>'
             + '<option value="0"' + (r.active ? '' : ' selected') + '>' + esc(T('pf_org_off', '停用')) + '</option>'
@@ -2298,6 +2451,8 @@
 
     (function wireOrgIo() {
         var ex = $('og-export'), pick = $('og-pick'), f = $('og-file'), ap = $('og-apply');
+        var alma = $('og-alma');
+        if (alma) alma.addEventListener('click', openOrgAlma);
         if (!ex || !pick || !f || !ap) return;
         ex.addEventListener('click', function () { exportOrg(ex); });
         pick.addEventListener('click', function () { f.click(); });

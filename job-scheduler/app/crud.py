@@ -1966,6 +1966,11 @@ def get_public_settings(db: Session) -> dict:
 # EN: v3.8 organisation lookups
 # ==============================================================================
 
+# ZH: v4.9 組織對照改以 Alma 為準之後，這個 key 記著「已經用 Alma 重建過」。
+#     見 ORG_REBUILT_KEY 在 seed_org_tables 裡的用途。
+ORG_REBUILT_KEY = "org_rebuilt_from_alma_at"
+
+
 def seed_org_tables(db: Session) -> dict:
     """
     ZH: 第一次啟動時把種子資料填進兩張對照表。**表裡已經有東西就完全不動。**
@@ -1973,19 +1978,27 @@ def seed_org_tables(db: Session) -> dict:
     ZH: 為什麼不是每次啟動都對齊種子：那樣管理者改過的名字會在下次重開時被蓋回去，
         而且沒有任何提示。種子只是初值，真相在表裡（見 org_seed.py 的檔頭）。
 
+    ZH: 🔴 v4.9 多了一道閘：**用 Alma 重建過之後就永遠不再撒種子**。
+        沒有這一道的話會有個很難查的坑 —— 組織表改以 Alma 為準（2026-09-07）
+        之後，若哪天表被清空（重建失敗、管理者手動清掉），下次重開機
+        `count()==0` 成立，2026-08-27 從官網抓的那份舊資料就會**無聲地復活**，
+        而且看起來跟正常啟動一模一樣。旗標一旦寫下就不會再撒。
+
     @node job-scheduler/app/crud.py::seed_org_tables
     """
     from . import org_seed
     out = {"departments": 0, "units": 0}
+    if get_system_config(db, ORG_REBUILT_KEY, ""):
+        return out
     if db.query(models.OrgDepartment).count() == 0:
         for college, depts in org_seed.COLLEGES.items():
             for name in depts:
-                db.add(models.OrgDepartment(name=name, college=college))
+                db.add(models.OrgDepartment(name=name, college=college, source='seed'))
                 out["departments"] += 1
     if db.query(models.OrgUnit).count() == 0:
         for name, parent in org_seed.UNITS:
             db.add(models.OrgUnit(path=f"{parent}/{name}" if parent else name,
-                                  name=name, parent=parent))
+                                  name=name, parent=parent, source='seed'))
             out["units"] += 1
     if out["departments"] or out["units"]:
         db.commit()
@@ -2166,46 +2179,39 @@ def match_org_unit(db: Session, segs: list) -> Optional[str]:
     """
     ZH: 把 Alma 的單位字串對到平台組織表的 path。對不出唯一解就回 None。
 
-    ZH: Alma 的 ZBT 是**多段**的（`2151-桃園校區行政處-圖書分館閱覽組`），
-        而兩邊是兩套人各自維護的命名，常常對不起來：
+    ZH: 🔴 **這支在 2026-09-07 大幅縮小了，故意的。**
+
+    ZH: 原本它有一層「兩段都共用 2 字詞、唯一命中就採用」的模糊比對。
+        那是為了橋接**兩套不同來源的命名**：
             Alma   桃園校區行政處 / 圖書分館閱覽組
-            平台   圖書館        / 桃園閱覽組
-        誰也不包含誰，只共用「閱覽組」。
+            平台   圖書館        / 桃園閱覽組   ← 2026-08-27 從官網抓的
+        誰也不包含誰，只共用「閱覽組」，不模糊比就對不上。
 
-    ZH: 🔴 解法是**兩段一起比**（擁有者提議 2026-09-07）：要求候選路徑
-        與**每一段**都共用至少一個 2 字詞。上例中「桃園」來自第一段、
-        「圖書」「閱覽」來自第二段，只有 `圖書館/桃園閱覽組` 同時滿足 ——
-        而 `圖書館/台北閱覽組` 對不上第一段的「桃園」，自動被排除。
-        實測：只比最後一段時三個真實案例都是 5～6 個候選（等於不能用），
-        兩段一起比則全部命中唯一解。
+    ZH: 現在組織表**本身就是從 Alma 掃出來的**（見 alma_service.harvest_org），
+        兩邊是同一個來源 —— 對得上的一律是完整路徑相等，模糊比對再也不是
+        「唯一的辦法」，而變成一個**只會在該留空時開口猜的東西**：
+        Alma 掃描時沒出現過的新單位（新成立、剛改名），模糊比對很可能
+        剛好只命中一個既有單位，於是把人放進一個他不屬於的單位，
+        而且沒有任何人會發現。所以拿掉。
 
-    ZH: 🔴 **唯一解才寫**。多個候選一律留空 —— 指錯比留空更糟：
-        留空的話本人會在初次設定的下拉自己挑（自我修正），
-        指錯則沒有人會發現，而「數據」頁會把他算進錯的單位。
-        反例實測：只給「行政處」會產生 14 個候選 → 不猜。
+    ZH: 對不上就回 None —— 那個人會在登入時看到單位選擇（可以按「稍後再說」），
+        找不到自己的單位還有「告訴管理員」那條路（見 chrome.js 的 onb__help）。
+        **讓本人自己講，比我們猜準。**
 
     @node job-scheduler/app/crud.py::match_org_unit
     """
     segs = [x for x in (segs or []) if x]
     if not segs:
         return None
-    rows = db.query(models.OrgUnit).all()
-    paths = {r.path for r in rows}
+    paths = {r.path for r in db.query(models.OrgUnit).all()}
 
-    # 1) 完整路徑就對得上 —— 最可信，直接用
+    # 1) 完整路徑相等 —— 同一個來源，正常情況都走這條
     joined = "/".join(segs)
     if joined in paths:
         return joined
 
-    # 2) 兩段（或多段）都要對上，且只能有一個候選
-    def grams(t):
-        return {t[i:i + 2] for i in range(len(t) - 1)}
-    hits = [r.path for r in rows
-            if all(grams(seg) & grams(r.path) for seg in segs)]
-    if len(hits) == 1:
-        return hits[0]
-
-    # 3) 退回上層單位（Alma 的第一段剛好是平台的一個單位）
+    # 2) 退回上層單位（Alma 的第一段剛好是表裡的一個單位）。
+    #    這不是猜：上層單位確實存在，而那個人確實在它底下 —— 只是少了一層。
     if segs[0] in paths:
         return segs[0]
     return None
@@ -2428,12 +2434,13 @@ def complete_onboarding(db: Session, user: models.User,
                         campuses: list, org_value: Optional[str],
                         role: Optional[str] = None) -> models.User:
     """
-    ZH: 收下組織資料。這支函式有**兩種模式**,不要混在一起看：
+    ZH: 收下組織資料。這支函式有**三種模式**,不要混在一起看：
 
-          第一次（`onboarded_at` 是 NULL）——「初次設定」。校區與組織欄位**都必填**,
-              因為那是彈窗,而彈窗不可跳過。
+          第一次（`onboarded_at` 是 NULL）——「初次設定」。**校區必填、組織可以先跳過**。
 
-          之後 ——「解鎖後的修改」。必須有管理者核可的一次性解鎖,
+          之後、組織還空著 ——「補填」（v4.9）。不需要解鎖,但**只能把空的補上**。
+
+          之後、組織已經有值 ——「解鎖後的修改」。必須有管理者核可的一次性解鎖,
               而且**只能改核可範圍內的欄位**。沒送的欄位保持原值,不強制重填 ——
               核可「改校區」卻要求他連學系一起重選,他就得再確認一次自己的系,
               而那正是最容易點錯的時候。
@@ -2470,8 +2477,28 @@ def complete_onboarding(db: Session, user: models.User,
     want_campus = bool(campuses)
     want_org = bool((org_value or "").strip())
 
+    # ══════════════════════════════════════════════════════════════════
+    # ZH: v4.9 「補填」模式（擁有者裁定 2026-09-07）。
+    #
+    # ZH: 為什麼需要：組織對照表改以 Alma 為準之後，**一定會有人在清單裡
+    #     找不到自己的單位**（Alma 的詞彙表跟不上新成立/改名的單位）。
+    #     初次設定若強制必填，那個人就只剩兩條路：亂選一個對不上的，
+    #     或者被鎖在一個關不掉的彈窗裡。所以組織改成可以按「稍後再說」。
+    #
+    # ZH: 🔴 跳過的代價要有人收 —— 空著的組織會讓彈窗**下次登入再問一次**
+    #     （見 chrome.js maybeShowOnboarding）。但那時 `onboarded_at` 已經有值，
+    #     照原本的規則會掉進「要解鎖」那條，於是他永遠補不上、而彈窗永遠再問。
+    #     這一段就是那個缺口：**空 → 有值**不需要解鎖，因為它沒有覆蓋任何東西。
+    #
+    # ZH: 🔴 界線在「原本是不是空的」，不是「他想不想改」。已經有值的一律
+    #     走解鎖 —— 否則這就變成一條繞過鎖的後門（先想辦法清空再重填）。
+    # ══════════════════════════════════════════════════════════════════
+    filling_gap = bool(
+        not first_time and field and want_org
+        and not (getattr(user, field, None) or "").strip())
+
     unlock = None
-    if not first_time:
+    if not first_time and not filling_gap:
         unlock = active_unlock(db, user.id)
         if unlock is None:
             raise ValueError(
@@ -2490,12 +2517,16 @@ def complete_onboarding(db: Session, user: models.User,
                 f"（可改：{'、'.join(sorted(allowed))}）")
         if not asked:
             raise ValueError("沒有要修改的內容")
+    elif filling_gap:
+        # ZH: 補填只補組織 —— 校區在初次設定時就填過了，這裡不該再動它。
+        #     （前端這個模式只畫組織一欄，這裡是後端自己的防線。）
+        if want_campus:
+            raise ValueError("這次只能補填學系／行政單位，校區要改請向管理員申請")
     else:
-        # ZH: 初次設定是彈窗,兩項都必填（訪客沒有組織欄位,所以只檢查校區）。
+        # ZH: 初次設定是彈窗，**校區必填**（訪客沒有組織欄位，所以只檢查校區）。
+        # ZH: 組織是選填 —— 找不到自己單位的人按「稍後再說」，見上面 filling_gap。
         if not want_campus:
             raise ValueError("請選擇校區")
-        if field and not want_org:
-            raise ValueError("請選擇學系" if field == "department" else "請選擇行政單位")
 
     # ZH: 先把值都驗過再寫 —— 驗到一半才失敗的話,前面已經改掉的救不回來。
     if want_org and field:
