@@ -1656,13 +1656,23 @@
                 }))
 
             + blockTable('pp_bx_un_myai', '廠商帳號沒有對到人',
-                'pp_bx_un_myai_why', '廠商那邊有這些帳號，但平台上沒有人對應。多半是老師，或用了與平台不同的信箱。',
-                [C_ACC, C_MAIL, C_TAG, ['pp_bx_c_points', '點數', 'num']],
+                'pp_bx_un_myai_why', '廠商那邊有這些帳號，但平台上沒有人對應。多半是老師，或用了與平台不同的信箱。廠商自己的管理帳號請按「不列入計算」，統計就不會被它灌水。',
+                [C_ACC, C_MAIL, C_TAG, ['pp_bx_c_points', '點數', 'num'],
+                 ['pp_bx_c_stat', '統計']],
                 (un.unmatched_myai || []).map(function (r) {
                     return [{ t: r.name || r.vendor_sn }, { t: r.email || '—' },
-                            { t: r.has_platform_user ? T('pp_bx_hasuser', '找得到同 email 的使用者') : '',
+                            { t: r.excluded
+                                ? T('pp_bx_excluded', '不列入計算')
+                                : (r.has_platform_user ? T('pp_bx_hasuser', '找得到同 email 的使用者') : ''),
                               pill: true },
-                            { t: num(r.points), cls: 'num' }];
+                            { t: num(r.points), cls: 'num' },
+                            // ZH: 切換鈕。vendor_sn 進 data 屬性要 esc —— 它是後端來的值。
+                            { html: '<button class="btn btn--minor" type="button"'
+                                + ' data-excl="' + esc(r.vendor_sn) + '"'
+                                + ' data-on="' + (r.excluded ? '1' : '0') + '">'
+                                + esc(r.excluded ? T('pp_bx_incl_do', '列入計算')
+                                                 : T('pp_bx_excl_do', '不列入計算'))
+                                + '</button>' }];
                 }))
 
             // ZH: 待開通依**事實**分三類（有沒有信箱、網域屬不屬教職員），
@@ -1733,6 +1743,12 @@
             + '</tr></thead><tbody>'
             + shown.map(function (r) {
                 return '<tr>' + r.map(function (cell) {
+                    // ZH: v4.5 `html` 型儲存格 —— 放按鈕用。**只給這支自己組的
+                    //     字串**，不接任何後端資料（後端來的值一律走 esc）。
+                    if (cell.html != null) {
+                        return '<td' + (cell.cls ? ' class="' + esc(cell.cls) + '"' : '')
+                            + '>' + cell.html + '</td>';
+                    }
                     if (cell.pill) {
                         return '<td>' + (cell.t
                             ? '<span class="adm-pill adm-pill--temp">' + esc(cell.t) + '</span>'
@@ -1795,6 +1811,27 @@
             await loadBatch();
         } catch (e) { say('bx-csv-msg', e.message); }
     }
+
+    // ZH: v4.5 「不列入計算」切換。用委派 —— #bx-body 每次都整個重畫，
+    //     直接綁在按鈕上的話，重畫一次就要記得重綁（漏一次＝按了沒反應）。
+    document.addEventListener('click', async function (ev) {
+        var btn = ev.target.closest && ev.target.closest('[data-excl]');
+        if (!btn) return;
+        var on = btn.dataset.on === '1';
+        btn.disabled = true;
+        try {
+            await api('/external-ai/admin/myai-accounts/'
+                      + encodeURIComponent(btn.dataset.excl) + '/exclude', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ excluded: !on }),
+            });
+            await loadBatch();     // ZH: 重讀 —— 讓標記與筆數一起更新
+        } catch (e) {
+            say('bx-msg', e.message);
+            btn.disabled = false;
+        }
+    });
 
     var typing = null;
     $('q').addEventListener('input', function () {

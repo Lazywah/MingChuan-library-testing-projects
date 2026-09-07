@@ -854,6 +854,12 @@ class MyaiAccount(Base):
     status     = Column(String, nullable=True)                                 # ZH: 狀態 | EN: status
     newsletter = Column(String, nullable=True)                                 # ZH: 電子報 | EN: newsletter
     note       = Column(Text, nullable=True)                                   # ZH: 備註 | EN: note
+    # ZH: v4.5 不列入統計（擁有者需求 2026-09-03）：廠商自己的管理帳號
+    #     （mingta@myai168.com 之類）也會出現在匯出裡，它們的點數進出
+    #     不是「學校在用 AI」，混進統計會讓每一張圖都失真。
+    #     🔴 這欄是**我們自己**的標記，不是廠商欄位 —— sync 的 upsert 只寫
+    #     parse_xlsx 給的鍵，所以同步不會把它洗掉（見 myai_sync.sync）。
+    excluded   = Column(Integer, default=0)                                    # ZH: 1 = 不列入統計
     synced_at  = Column(DateTime, default=lambda: datetime.now(timezone.utc),
                         onupdate=lambda: datetime.now(timezone.utc))           # ZH: 最後同步時間 | EN: last sync time
 

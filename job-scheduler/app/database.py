@@ -190,6 +190,10 @@ def init_db():
             try: conn.execute(text("ALTER TABLE training_jobs ADD COLUMN preferred_node VARCHAR"))
             except Exception: pass
 
+            # --- v4.5 廠商帳號不列入統計（1 = 排除；廠商自己的管理帳號）---
+            try: conn.execute(text("ALTER TABLE myai_accounts ADD COLUMN excluded INTEGER DEFAULT 0"))
+            except Exception: pass
+
             # --- v4.3 常用信箱（通知寄送用；NULL=用主信箱）---
             try: conn.execute(text("ALTER TABLE users ADD COLUMN contact_email VARCHAR"))
             except Exception: pass

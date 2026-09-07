@@ -15,18 +15,23 @@ EN: Purpose: Temporarily route non-admin users to a partner vendor (myai168)
 ==============================================================================
 """
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Body, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from typing import Any, Optional
 import csv
 import io
+import logging
 import re
 
 from .. import crud, schemas, models
 from ..auth import get_current_user
 from ..database import get_db
 from ..services import myai_sync
+
+# ZH: 這個模組原本沒有 logger（2026-09-03 加排除端點時才發現）——
+#     其他 router 都有一份，這裡缺了會讓任何想記 log 的新端點直接 NameError。
+logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["外部 AI External-AI"])
 
@@ -732,6 +737,35 @@ def list_bindings(
     return {"count": len(out), "bindings": out}
 
 
+@router.post("/admin/myai-accounts/{vendor_sn}/exclude",
+             summary="設定某個廠商帳號要不要列入統計")
+def set_myai_excluded(
+    vendor_sn: str,
+    payload: dict = Body(..., description='{"excluded": true}'),
+    db: Session = Depends(get_db),
+    _: models.User = Depends(require_admin),
+) -> Any:
+    """ZH: 標記／取消標記「不列入統計」（擁有者需求 2026-09-03）。
+
+    ZH: 用途：廠商自己的管理帳號（發點數用的）也在匯出名單裡，它們的
+        點數進出不是「學校在用 AI」—— 不排除的話總消耗、Top 10、
+        各分組圖表全部被灌水。
+
+    ZH: 🔴 **只改我們的鏡像標記，絕不碰廠商**。排除的帳號仍然看得到、
+        可以隨時取消 —— 藏起來的話，下一個接手的人會以為它不存在。
+
+    @node job-scheduler/app/routers/external_ai.py::set_myai_excluded
+    """
+    m = (db.query(models.MyaiAccount)
+           .filter(models.MyaiAccount.vendor_sn == vendor_sn).first())
+    if not m:
+        raise HTTPException(status_code=404, detail="ZH: 找不到這個廠商帳號 | EN: account not found")
+    m.excluded = 1 if payload.get("excluded") else 0
+    db.commit()
+    logger.info("MYAI 帳號 %s (sn=%s) 統計排除 = %s", m.email, vendor_sn, bool(m.excluded))
+    return {"vendor_sn": vendor_sn, "excluded": bool(m.excluded)}
+
+
 @router.get("/admin/unmatched")
 def list_unmatched(
     db: Session = Depends(get_db),
@@ -767,6 +801,7 @@ def list_unmatched(
         {
             "vendor_sn": m.vendor_sn, "email": m.email, "name": m.name,
             "user_type": m.user_type, "points": m.points, "status": m.status,
+            "excluded": bool(getattr(m, "excluded", 0)),
             "has_platform_user": bool(m.email and m.email.strip().lower() in platform_emails),
         }
         for m in myai_rows
@@ -915,17 +950,35 @@ def consumption_analytics(
     _campus_rows: dict = {}
     for r in db.query(models.UserCampus).all():
         _campus_rows.setdefault(r.user_id, []).append(r.campus)
+    # ZH: 🔴 v4.5 —— 分群的鍵要**兩種都收**（2026-09-03 實際踩到）：
+    #       (a) 平台主信箱          —— 自動開通的帳號，廠商 email 就是它
+    #       (b) 綁定的 vendor_username —— 手動綁定的情境，兩者本來就不同
+    #     只用 (a) 的話，「老師本來就有自己的 MYAI 帳號、管理者手動綁上去」
+    #     這種人的消耗會**永遠**落在「未綁定」—— 而綁定表明明就知道他是誰。
+    #     實例：8000036 綁到 tfho@mail.mcu.edu.tw，9 筆交易全被算成未綁定。
+    def _put(k, u):
+        k = (k or "").strip().lower()
+        if not k:
+            return
+        role_map[k] = u.role or "unknown"
+        dept_map[k] = u.department or None
+        # ZH: 對不到對照表就回 None（舊系名、打錯字）—— **不猜**,
+        #     下面會歸到「未設定」而不是硬塞一個學院。
+        college_map[k] = college_of_dept.get((u.department or "").strip()) or None
+        unit_map[k] = getattr(u, "unit", None) or None
+        cs = _campus_rows.get(u.id) or []
+        campus_map[k] = ("多校區" if len(cs) > 1 else (cs[0] if cs else None))
+
+    users_by_id = {}
     for u in db.query(models.User).all():
+        users_by_id[u.id] = u
         if u.email:
-            k = u.email.strip().lower()
-            role_map[k] = u.role or "unknown"
-            dept_map[k] = u.department or None
-            # ZH: 對不到對照表就回 None（舊系名、打錯字）—— **不猜**,
-            #     下面會歸到「未設定」而不是硬塞一個學院。
-            college_map[k] = college_of_dept.get((u.department or "").strip()) or None
-            unit_map[k] = getattr(u, "unit", None) or None
-            cs = _campus_rows.get(u.id) or []
-            campus_map[k] = ("多校區" if len(cs) > 1 else (cs[0] if cs else None))
+            _put(u.email, u)
+    # ZH: 綁定表是「這個廠商帳號屬於誰」的權威答案 —— 後放，蓋過主信箱的推測。
+    for b in db.query(models.ExternalAiAccount).all():
+        u = users_by_id.get(b.user_id)
+        if u and b.vendor_username:
+            _put(b.vendor_username, u)
     # ZH: v2.9 模型對應表（顯示時套用，不改寫原始交易）| EN: display-time model map
     mmap = {m.code: m for m in db.query(models.MyaiModelMap).all()}
     per: dict = {}      # ZH: sn → 每生統計
@@ -939,6 +992,13 @@ def consumption_analytics(
     campus_agg: dict = {}
     daily: dict = {}
     total = total_uses = total_logins = 0
+    # ZH: v4.5 不列入統計的廠商帳號（擁有者需求 2026-09-03）——
+    #     在**進迴圈之前**就濾掉，這樣每一張圖（總消耗／Top10／各分組／
+    #     每日曲線）拿到的都是同一份資料。逐張圖各自過濾遲早會漏一張。
+    excluded_sns = {m.vendor_sn for m in db.query(models.MyaiAccount)
+                    .filter(models.MyaiAccount.excluded == 1).all()}
+    if excluded_sns:
+        txs = [t for t in txs if t.vendor_sn not in excluded_sns]
     for t in txs:
         p = per.setdefault(t.vendor_sn, {
             "vendor_sn": t.vendor_sn, "name": t.name, "email": t.email,
@@ -1019,6 +1079,9 @@ def consumption_analytics(
         "by_college": by_college,
         "by_unit": by_unit,
         "by_campus": by_campus,
+        # ZH: 讓畫面能講出「已排除 N 個廠商帳號」—— 不講的話，
+        #     數字對不上舊報表時沒有人知道為什麼。
+        "excluded_count": len(excluded_sns),
         "by_department": by_department,
         "series": series,
         # ZH: 回傳**實際生效**的區間，不是前端送來的——
