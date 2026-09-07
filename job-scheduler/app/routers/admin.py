@@ -1167,6 +1167,28 @@ def temp_import_template(
                  "attachment; filename=temp-accounts-template.csv"})
 
 
+@router.post("/alma/backfill", summary="拿 Alma 補既有帳號的空欄位（預覽／執行）")
+def alma_backfill(
+    dry_run: bool = Query(True, description="ZH: true=只看不寫（預設）"),
+    limit: int = Query(50, ge=1, le=500, description="ZH: 這次檢查幾個人"),
+    db: Session = Depends(get_db),
+    _: models.User = Depends(require_admin),
+) -> Any:
+    """
+    ZH: 手動觸發 Alma 身分回填（排程版見 scheduler._alma_backfill_loop）。
+
+    ZH: **只補空值，絕不覆蓋** —— 角色只升級當初用信箱猜的（role_source
+        ='sso_email'），人工設過或本人選過的一律不動；主信箱永遠不動。
+        判準與排程版共用同一支 `alma_service.backfill_users`，不會漂開。
+
+    ZH: 預設 `dry_run=true` —— 這支會改到人的身分，先讓管理者看一眼是誰。
+
+    @node job-scheduler/app/routers/admin.py::alma_backfill
+    """
+    from ..services import alma_service
+    return alma_service.backfill_users(db, limit=limit, dry_run=dry_run)
+
+
 @router.post("/users/temporary/import", summary="批次匯入臨時帳號（CSV/XLSX，預覽＋建立）")
 async def import_temp_users(
     request: Request,

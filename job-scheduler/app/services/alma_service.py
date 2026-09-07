@@ -125,3 +125,113 @@ def lookup_identity(sub: str) -> Optional[dict]:
             "user_group": group, "user_group_desc": desc,
             "campus": campus, "department": department,
             "unit_segments": unit_segments}
+
+
+# ══════════════════════════════════════════════════════════════════════════
+# ZH: 既有帳號的定期回填（擁有者需求 2026-09-07）
+# ══════════════════════════════════════════════════════════════════════════
+# ZH: 為什麼需要：SSO 只在**建號當下**問 Alma（見 routers/sso.py）。之後
+#     Alma 那邊改了身分／系所／信箱，平台不會自己跟上。2026-09-03 用一次性
+#     腳本補過一輪，那種東西不會有人記得再跑第二次。
+#
+# ZH: 🔴 鐵則：**只補空值，絕不覆蓋**。
+#       role   —— 只升級 role_source='sso_email'（當初用信箱猜的）。
+#                 人工設過（admin）或本人選過（self_onboard）一律不動。
+#       校區/系所/單位/常用信箱 —— 空的才寫。
+#       主信箱 —— **永遠不動**（它是 MYAI 綁定與身分的鍵）。
+#     這條界線是刻意的：管理者的判斷與本人的確認，權威高於 Alma 的快照。
+# ══════════════════════════════════════════════════════════════════════════
+
+# ZH: 一次跑幾個人。Alma 是外部 API，全校跑下去要幾千次往返——分批做，
+#     下一輪接著跑（`synced_at` 沒有欄位可記，所以用「最久沒登入的優先」
+#     這種無狀態排序：每輪都會輪到不同的人，長期覆蓋全體）。
+BACKFILL_BATCH = 50
+
+
+def backfill_users(db, limit: int = BACKFILL_BATCH, dry_run: bool = False) -> dict:
+    """
+    ZH: 拿 Alma 補既有帳號的空欄位。回 {checked, changed, skipped, details:[...]}。
+
+    ZH: 跳過：本機帳號、臨時帳號（有 expires_at）、Alma 查無。
+    ZH: `dry_run=True` 只算不寫 —— 管理端可以先看會動到誰。
+
+    @node job-scheduler/app/services/alma_service.py::backfill_users
+    """
+    from .. import crud, models
+
+    q = (db.query(models.User)
+           .filter(models.User.auth_source != "local")
+           .filter(models.User.expires_at.is_(None))
+           # ZH: 最久沒登入的先補 —— 無狀態的輪替，不必為此加一張表。
+           .order_by(models.User.last_login_time.asc().nullsfirst()))
+    users = q.limit(max(1, limit)).all()
+
+    out = {"checked": 0, "changed": 0, "skipped": 0, "details": []}
+    for u in users:
+        out["checked"] += 1
+        alma = lookup_identity(u.username)
+        if alma is None:
+            out["skipped"] += 1
+            continue
+
+        plan = []
+        # ── 角色：只升級「當初用信箱猜的」──────────────────────────────
+        if alma.get("role") and u.role_source == "sso_email":
+            if alma["role"] != u.role:
+                plan.append("role: %s→%s" % (u.role, alma["role"]))
+                if not dry_run:
+                    u.role = alma["role"]
+            else:
+                plan.append("role_source: sso_email→alma")
+            if not dry_run:
+                u.role_source = "alma"
+
+        # ── 校區：完全沒設才補 ────────────────────────────────────────
+        has_campus = (db.query(models.UserCampus)
+                        .filter(models.UserCampus.user_id == u.id).count() > 0)
+        if not has_campus and alma.get("campus"):
+            plan.append("campus=%s" % alma["campus"])
+            if not dry_run:
+                try:
+                    crud.set_user_campuses(db, u, [alma["campus"]])
+                except ValueError as e:
+                    plan[-1] += "（略過：%s）" % e
+
+        # ── 學系／單位：照角色對應的那一欄，空的才補、對得上組織表才寫 ──
+        role_now = alma.get("role") if (alma.get("role") and u.role_source in
+                                        ("sso_email", "alma")) else u.role
+        field = crud.ONBOARDING_FIELDS.get(role_now, "department")
+        if field == "department" and not u.department and alma.get("department"):
+            v = alma["department"]
+            if db.query(models.OrgDepartment).filter(
+                    models.OrgDepartment.name == v).first():
+                plan.append("department=%s" % v)
+                if not dry_run:
+                    u.department = v
+        elif field == "unit" and not u.unit and alma.get("unit_segments"):
+            segs = alma["unit_segments"]
+            for cand in ("/".join(segs), segs[0]):
+                if db.query(models.OrgUnit).filter(
+                        models.OrgUnit.path == cand).first():
+                    plan.append("unit=%s" % cand)
+                    if not dry_run:
+                        u.unit = cand
+                    break
+
+        # ── 常用信箱：空的、且與主信箱不同才有意義 ────────────────────
+        if (not u.contact_email and alma.get("email")
+                and alma["email"].lower() != (u.email or "").lower()):
+            plan.append("contact_email（Alma 慣用信箱）")
+            if not dry_run:
+                u.contact_email = alma["email"]
+
+        if plan:
+            out["changed"] += 1
+            out["details"].append({"username": u.username, "changes": plan})
+
+    if not dry_run and out["changed"]:
+        db.commit()
+    logger.info("Alma 回填：檢查 %d、變更 %d、查無 %d%s",
+                out["checked"], out["changed"], out["skipped"],
+                "（乾跑）" if dry_run else "")
+    return out

@@ -1594,7 +1594,102 @@
     }
 
     $('new-temp').addEventListener('click', openTempForm);
+    // ══════════════════════════════════════════════════════════════════
+    // ZH: v4.6 Alma 身分回填（擁有者需求 2026-09-07）。
+    //     排程每 alma_sync_interval_hours 自己跑一次；這顆是「現在就跑」。
+    //     兩段式：先乾跑列出會動到誰，按確認才寫 —— 它改的是**身分**，
+    //     跟手動補齊點數同一個等級的操作。
+    // ZH: 後端只補空值、不覆蓋人工設定（判準在 alma_service.backfill_users，
+    //     排程與這裡共用同一支，不會漂開）。
+    // ══════════════════════════════════════════════════════════════════
+    var ALMA_LIMIT = 200;      // ZH: 一次檢查幾個人（後端上限 500）
+
+    function almaBox(inner, foot) {
+        return '<form method="dialog" class="rmod__x">'
+            + '<button class="btn btn--minor" type="submit" aria-label="'
+            + esc(T('pf_close', '關閉')) + '">✕</button></form>'
+            + '<h2 class="rmod__title">' + esc(T('alma_title', 'Alma 身分回填')) + '</h2>'
+            + inner
+            + '<div class="adm-inline rmod__foot">' + foot + '</div>'
+            + '<div class="inline-error" id="alma-msg" hidden></div>';
+    }
+
+    function almaTable(details) {
+        if (!details.length) {
+            return '<p class="footnote">'
+                + esc(T('alma_none', '沒有需要補的欄位——大家的資料都齊了。')) + '</p>';
+        }
+        return '<div class="adm-tablewrap"><table class="adm-table"><thead><tr>'
+            + '<th>' + esc(T('pp_c_user', '帳號')) + '</th>'
+            + '<th>' + esc(T('alma_changes', '會補上')) + '</th>'
+            + '</tr></thead><tbody>'
+            + details.map(function (d) {
+                return '<tr><td>' + esc(d.username) + '</td><td>'
+                    + esc((d.changes || []).join('、')) + '</td></tr>';
+            }).join('')
+            + '</tbody></table></div>';
+    }
+
+    async function openAlma() {
+        var dlg = $('alma-dialog');
+        dlg.innerHTML = almaBox(
+            '<p class="footnote">' + esc(T('alma_loading', '正在跟 Alma 對資料…')) + '</p>', '');
+        dlg.showModal();
+        var r;
+        try {
+            r = await api('/admin/alma/backfill?dry_run=true&limit=' + ALMA_LIMIT,
+                          { method: 'POST' });
+        } catch (e) {
+            dlg.innerHTML = almaBox('<p class="footnote">' + esc(e.message) + '</p>',
+                '<button class="btn btn--minor" type="button" id="alma-close">'
+                + esc(T('tmp_close', '知道了')) + '</button>');
+            $('alma-close').addEventListener('click', function () { dlg.close(); });
+            return;
+        }
+        dlg.innerHTML = almaBox(
+            '<p class="footnote">'
+            + esc(T('alma_why', '只補空著的欄位（校區／學系／單位／常用信箱），'
+                    + '以及當初用信箱猜出來的角色。人工設定過或本人確認過的一律不動，'
+                    + '主信箱永遠不動。')) + '</p>'
+            + '<p class="footnote">'
+            + esc(T('alma_checked', '檢查了 {n} 人，{c} 人有欄位可以補。')
+                .replace('{n}', num(r.checked)).replace('{c}', num(r.changed))) + '</p>'
+            + almaTable(r.details || []),
+            (r.changed
+                ? '<button class="btn btn--primary" type="button" id="alma-go">'
+                  + esc(T('alma_apply', '確認回填')) + '</button>'
+                : '')
+            + '<button class="btn btn--minor" type="button" id="alma-close">'
+            + esc(r.changed ? T('tmp_cancel', '取消') : T('tmp_close', '知道了')) + '</button>');
+        $('alma-close').addEventListener('click', function () { dlg.close(); });
+        if (r.changed) {
+            $('alma-go').addEventListener('click', function () { applyAlma(dlg); });
+        }
+    }
+
+    async function applyAlma(dlg) {
+        $('alma-go').disabled = true;          // ZH: 防連點
+        try {
+            var r = await api('/admin/alma/backfill?dry_run=false&limit=' + ALMA_LIMIT,
+                              { method: 'POST' });
+            dlg.innerHTML = almaBox(
+                '<p class="footnote">'
+                + esc(T('alma_done', '完成：{c} 人的資料補齊了（檢查 {n} 人）。')
+                    .replace('{c}', num(r.changed)).replace('{n}', num(r.checked))) + '</p>'
+                + almaTable(r.details || []),
+                '<button class="btn btn--minor" type="button" id="alma-close">'
+                + esc(T('tmp_close', '知道了')) + '</button>');
+            $('alma-close').addEventListener('click', function () { dlg.close(); });
+            ALL = await loadAll();             // ZH: 清單要跟著換（角色/學系可能變了）
+            renderList();
+        } catch (e) {
+            say('alma-msg', e.message);
+            $('alma-go').disabled = false;
+        }
+    }
+
     $('import-temp').addEventListener('click', openTempImport);
+    $('alma-sync').addEventListener('click', openAlma);
 
     // ── 廠商帳號對應（維運）───────────────────────────────────────────────
     //

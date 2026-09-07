@@ -24,6 +24,7 @@ _lab_scan_task = None        # v2.0: 每分鐘掃描 lab session idle/hard-limit
 _storage_scan_task = None    # v2.0: 每日 03:00 執行儲存生命週期掃描
 _myai_sync_task = None       # v2.8: 每 N 小時 headless 同步 myai168 帳號/Token
 _myai_topup_task = None      # v3.9: 每月把所有綁定帳號補到同一個點數水位
+_alma_task = None            # v4.6: 定期拿 Alma 補既有帳號的空欄位
 _myai_balance_task = None    # v2.8: 每 N 分輕量輪詢交易日誌更新餘額（低點數提醒用）
 _bounce_scan_task  = None    # v3.5: 定期 IMAP 讀退信回填 email_log（信箱不存在的事實來源）
 
@@ -519,9 +520,60 @@ async def _myai_topup_loop():
     logger.info("ZH: MYAI 每月補點迴圈已停止")
 
 
+async def _alma_backfill_loop():
+    """ZH: 定期拿 Alma 補既有帳號的空欄位（擁有者需求 2026-09-07）。
+
+    ZH: 間隔由 SystemConfig(alma_sync_interval_hours) 每輪重讀，0 = 暫停
+        （迴圈仍在，每 30 分鐘回看有沒有被重新啟用）——與 MYAI 同步同一套。
+    ZH: 沒設 ALMA_API_KEY 時 lookup_identity 一律回 None，整輪等於空轉，
+        所以不必在這裡另外判斷；但為了不空跑幾千次外呼，開頭仍檢查一次。
+
+    @node job-scheduler/app/scheduler.py::_alma_backfill_loop
+    """
+    from .config import settings
+    from .services import alma_service
+
+    if not settings.ALMA_API_KEY:
+        logger.info("ZH: Alma 身分回填未啟用（ALMA_API_KEY 未設）")
+        return
+    logger.info("ZH: Alma 身分回填迴圈啟動（間隔由 SystemConfig 即時控制）")
+
+    PAUSE_RECHECK_SECONDS = 1800      # ZH: 間隔=0(暫停)時，每 30 分鐘回看
+
+    try:
+        await asyncio.sleep(120)      # ZH: 開機先讓服務穩定
+    except asyncio.CancelledError:
+        return
+
+    while _scheduler_running:
+        db = SessionLocal()
+        try:
+            hours = crud.get_setting(db, "alma_sync_interval_hours")
+            if not hours or int(hours) <= 0:
+                sleep_s = PAUSE_RECHECK_SECONDS
+            else:
+                try:
+                    # ZH: 阻塞式 HTTP（requests）——丟到執行緒，不要卡住事件迴圈。
+                    res = await asyncio.to_thread(alma_service.backfill_users, db)
+                    if res.get("changed"):
+                        logger.info("ZH: Alma 回填完成 | %s", res)
+                except Exception as e:  # noqa: BLE001
+                    # ZH: 失敗只記 log —— 這是補資料，不該影響任何線上功能。
+                    logger.error("ZH: Alma 回填錯誤 | EN: Alma backfill error: %s", e)
+                sleep_s = int(hours) * 3600
+        finally:
+            db.close()
+        try:
+            await asyncio.sleep(sleep_s)
+        except asyncio.CancelledError:
+            break
+
+    logger.info("ZH: Alma 身分回填迴圈已停止")
+
+
 async def start_scheduler():
     """@node job-scheduler/app/scheduler.py::start_scheduler"""
-    global _scheduler_task, _lab_scan_task, _storage_scan_task, _myai_sync_task, _myai_balance_task, _bounce_scan_task, _myai_topup_task, _scheduler_running
+    global _scheduler_task, _lab_scan_task, _storage_scan_task, _myai_sync_task, _myai_balance_task, _bounce_scan_task, _myai_topup_task, _alma_task, _scheduler_running
     _scheduler_running = True
     _scheduler_task    = asyncio.create_task(_timeout_cleanup_loop())
     _lab_scan_task     = asyncio.create_task(_lab_session_scan_loop())
@@ -530,14 +582,15 @@ async def start_scheduler():
     _myai_balance_task = asyncio.create_task(_myai_balance_loop())
     _bounce_scan_task  = asyncio.create_task(_bounce_scan_loop())
     _myai_topup_task   = asyncio.create_task(_myai_topup_loop())
-    logger.info("ZH: 排程器背景工作已啟動 (timeout + lab + storage + myai + myai餘額 + 退信回收 + 每月補點) | EN: Scheduler started (7 tasks)")
+    _alma_task         = asyncio.create_task(_alma_backfill_loop())
+    logger.info("ZH: 排程器背景工作已啟動 (timeout + lab + storage + myai + myai餘額 + 退信回收 + 每月補點 + Alma回填) | EN: Scheduler started (8 tasks)")
 
 
 async def stop_scheduler():
     """@node job-scheduler/app/scheduler.py::stop_scheduler"""
-    global _scheduler_task, _lab_scan_task, _storage_scan_task, _myai_sync_task, _myai_balance_task, _bounce_scan_task, _myai_topup_task, _scheduler_running
+    global _scheduler_task, _lab_scan_task, _storage_scan_task, _myai_sync_task, _myai_balance_task, _bounce_scan_task, _myai_topup_task, _alma_task, _scheduler_running
     _scheduler_running = False
-    for task in (_scheduler_task, _lab_scan_task, _storage_scan_task, _myai_sync_task, _myai_balance_task, _bounce_scan_task, _myai_topup_task):
+    for task in (_scheduler_task, _lab_scan_task, _storage_scan_task, _myai_sync_task, _myai_balance_task, _bounce_scan_task, _myai_topup_task, _alma_task):
         if task:
             task.cancel()
             try:

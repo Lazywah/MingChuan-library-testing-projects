@@ -33,6 +33,10 @@
                  同一個 <dialog> 重複用，內容由 people.js 的 openTempImport() 產生。 -->
         <button class="btn btn--minor" type="button" id="import-temp" data-view="platform"
                 data-i18n="tmpi_new">匯入臨時帳號</button>
+        <!-- ZH: v4.6 Alma 身分回填（擁有者需求 2026-09-07）：排程每天自己跑，
+                 這顆是「現在就跑一次」。兩段式（預覽 → 確認），因為它會改身分。 -->
+        <button class="btn btn--minor" type="button" id="alma-sync" data-view="platform"
+                data-i18n="alma_btn">Alma 身分回填</button>
         <!-- ZH: 檢視滑條。與「平台設定」「數據」同一個元件 ——
                  它是**篩選**不是分頁：兩邊講的都是同一批帳號,
                  只是「平台這邊的資料」與「廠商那邊的對應」。
@@ -83,6 +87,8 @@
     <!-- ZH: v4.4b 管理員密碼確認的小彈窗（擁有者裁定 2026-09-03）：
              停用/刪除/儲存前確認都走這一個。內容由 people.js 的 pwConfirm() 產生。 -->
     <dialog class="rmod rmod--pw" id="pw-dialog" data-view="platform"></dialog>
+    <!-- ZH: v4.6 Alma 回填的預覽／結果彈窗。內容由 people.js 的 openAlma() 產生。 -->
+    <dialog class="rmod" id="alma-dialog" data-view="platform"></dialog>
 
     <!-- ZH: 廠商帳號的維運工作。**數字與動作常駐** —— 有幾個人對不上、
              有幾個等著開通，正是你該注意到的事；收起來就等於沒有人會看到。
@@ -161,10 +167,10 @@
 <script src="tz.js?v=2e214a8b"></script>
 <!-- ⚠ ZH: 順序不能動 —— i18n-admin 在 i18n 之後、prefs 之前。 -->
 <script src="i18n.js?v=ac2b1380"></script>
-<script src="i18n-admin.js?v=97997791"></script>
+<script src="i18n-admin.js?v=168c5511"></script>
 <script src="tip.js?v=0699f4a2"></script>
 <script src="prefs.js?v=00b43387"></script>
 <script src="admin-chrome.js?v=ce2fd362"></script>
-<script src="people.js?v=02f82785"></script>
+<script src="people.js?v=8f8268a7"></script>
 </body>
 </html>

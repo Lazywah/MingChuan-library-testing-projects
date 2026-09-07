@@ -1549,6 +1549,14 @@ SYSTEM_SETTINGS = {
     # ZH: 公告附件。上限調小**不會**動到已經上傳的檔案，只擋之後的上傳。
     "announcement_file_max_mb": {"group": "platform", "type": "int",   "default": lambda: settings.ANNOUNCEMENT_FILE_MAX_MB,    "min": 1,   "max": 500,  "label": "公告附件單檔上限(MB)", "label_en": "Announcement attachment: max per file (MB)"},
     "announcement_total_gb":    {"group": "platform", "type": "int",   "default": lambda: settings.ANNOUNCEMENT_FILES_TOTAL_GB, "min": 1,   "max": 100,  "label": "公告附件總量上限(GB)", "label_en": "Announcement attachments: total cap (GB)"},
+    # ZH: v4.6 Alma 身分回填的間隔（擁有者需求 2026-09-07）。
+    #     SSO 只在建號當下問 Alma，之後 Alma 改了平台不會跟上 ——
+    #     這支定期補**空值**（絕不覆蓋人工設定，見 alma_service.backfill_users）。
+    #     0 = 關閉。每輪分批（BACKFILL_BATCH），最久沒登入的先補。
+    "alma_sync_interval_hours": {"zero_means": "off", "group": "platform", "type": "int",
+                                 "default": lambda: 24, "min": 0, "max": 720,
+                                 "label": "Alma 身分回填間隔(小時, 0=關閉)",
+                                 "label_en": "Alma identity backfill interval (hours; 0 = off)"},
     "myai_sync_interval_hours": {"zero_means": "off", "group": "myai", "type": "int",   "default": lambda: settings.MYAI_SYNC_INTERVAL_HOURS,    "min": 0,   "max": 168,  "label": "MYAI 同步間隔(小時, 0=關閉)", "label_en": "MYAI sync interval (hours; 0 = off)"},
     "rag_top_k":                {"group": "assistant", "type": "int",   "default": lambda: settings.RAG_TOP_K,                   "min": 1,   "max": 20,   "label": "小基 RAG 取回片段數", "label_en": "Assistant RAG: chunks retrieved"},
     "rag_min_score":            {"group": "assistant", "type": "float", "default": lambda: settings.RAG_MIN_SCORE,               "min": 0.0, "max": 1.0,  "label": "小基 RAG 相似度門檻", "label_en": "Assistant RAG: similarity threshold"},
