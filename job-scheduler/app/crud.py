@@ -2639,6 +2639,29 @@ def list_external_accounts(db: Session) -> List[dict]:
     return out
 
 
+def _vendor_sn_for(db: Session, vendor_username: Optional[str]) -> Optional[str]:
+    """ZH: v4.5 由廠商帳號 email 在鏡像裡查 `vendor_sn`（穩定鍵）。查不到回 None。
+
+    ZH: 🔴 為什麼建立/更新綁定時就要查：**統計是用 `myai_vendor_sn` 接交易表的**，
+        sn 是 None 就完全接不上 —— 而畫面看起來是好的（list_bindings 有 email
+        退路，點數照樣顯示），所以這個缺陷不會被人發現，只會讓那個人的用量
+        安靜地落進「未綁定」。2026-09-03 實際發生：手動把 8000036 綁到
+        tfho@mail.mcu.edu.tw，卡片正常但 9 筆交易全算成未綁定。
+
+    ZH: ⚠ 不能靠 `auto_match` 補 —— 它是以**平台主信箱**比對廠商 email 的，
+        而手動綁定的典型情境正是「兩者不同」（老師本來就有自己的 MYAI 帳號）。
+
+    @node job-scheduler/app/crud.py::_vendor_sn_for
+    """
+    email = (vendor_username or "").strip()
+    if not email:
+        return None
+    m = (db.query(models.MyaiAccount)
+           .filter(models.MyaiAccount.email.ilike(email))
+           .first())
+    return m.vendor_sn if m else None
+
+
 def create_external_account(
     db: Session, platform_username: str, vendor_username: str,
     status: str = "active", note: Optional[str] = None
@@ -2655,6 +2678,9 @@ def create_external_account(
         raise ValueError(f"mapping already exists for: {platform_username}")
     acc = models.ExternalAiAccount(
         user_id=user.id, vendor_username=vendor_username,
+        # ZH: v4.5 建立當下就把穩定鍵補上（見 _vendor_sn_for 的說明）。
+        #     查不到就 None —— 之後鏡像同步到了再由 auto_match 回填。
+        myai_vendor_sn=_vendor_sn_for(db, vendor_username),
         status=status or "active", note=note,
     )
     db.add(acc)
@@ -2675,6 +2701,10 @@ def update_external_account(
     if not acc:
         return None
     if vendor_username is not None:
+        # ZH: 🔴 換了廠商帳號一定要**重查** sn。留著舊的比 None 更糟 ——
+        #     那會把前一個廠商帳號的交易算到這個人頭上（統計是用 sn 接的）。
+        if (vendor_username or "").strip().lower() != (acc.vendor_username or "").strip().lower():
+            acc.myai_vendor_sn = _vendor_sn_for(db, vendor_username)
         acc.vendor_username = vendor_username
     if status is not None:
         acc.status = status
