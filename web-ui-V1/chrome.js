@@ -1017,7 +1017,12 @@
         //     沒有 Alma 資料的人這些值是空的，跟以前一模一樣。
         if (!prefill) {
             prefill = { campuses: me.campuses || [],
-                        org: (field === 'unit' ? me.unit : me.department) || '' };
+                        org: (field === 'unit' ? me.unit : me.department) || '',
+                        // ZH: 🔴 常用信箱也要帶 —— 不帶的話欄位是空的，送出時
+                        //     後端把空字串當「清除」，會把 Alma 回填的真信箱洗掉。
+                        //     2026-09-05 實際發生：8000036 走完初次設定，
+                        //     contact_email 從 tfho@mail.mcu.edu.tw 變成 None。
+                        contact: me.contact_email || '' };
         }
         if (prefill) {
             var cs = box.querySelector('#onb-campus');
