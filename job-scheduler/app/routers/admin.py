@@ -2067,6 +2067,19 @@ def get_analytics(
             .select_from(models.MyaiTransaction)
             .join(models.ExternalAiAccount,
                   models.MyaiTransaction.vendor_sn == models.ExternalAiAccount.myai_vendor_sn))
+    # ZH: 🔴 v4.5 只算 `ai_usage`（擁有者裁定 2026-09-03）。
+    #     原本是「任何負向點數變動都算消耗」—— 但**轉出點數也是負的**：
+    #     管理者把點數轉發給別人，會被算成「他用掉了 AI」。
+    #     實例：tfho 轉出 50 萬點、一次 AI 都沒用，台北校區卻顯示 500,000 消耗。
+    #     MYAI 那支（external_ai.consumption）本來就只算 ai_usage ——
+    #     兩張表對同一件事給不同答案，這裡跟它對齊。
+    tx_q = tx_q.filter(models.MyaiTransaction.event_type == "ai_usage")
+    # ZH: 標記為「不列入計算」的廠商帳號也要排除（與 MYAI 那支同一份判準）。
+    #     它們多半沒有綁定所以本來就進不來，但綁過的話這裡是唯一的閘門。
+    _excl = [m.vendor_sn for m in db.query(models.MyaiAccount)
+             .filter(models.MyaiAccount.excluded == 1).all()]
+    if _excl:
+        tx_q = tx_q.filter(models.MyaiTransaction.vendor_sn.notin_(_excl))
     tx_q = _by_group(tx_q, models.ExternalAiAccount.user_id)
     tx_q = _win(tx_q, models.MyaiTransaction.occurred_at, naive_vendor_time=True)
     tx_rows = {r.grp: (r.n, r.pts or 0) for r in tx_q.all()}
