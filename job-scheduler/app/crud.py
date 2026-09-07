@@ -2209,9 +2209,47 @@ def apply_alma_profile(db: Session, user: models.User, alma: dict) -> list:
         else:
             logger.info("Alma 單位「%s」不在組織表，略過預填（%s）",
                         "-".join(segs), user.username)
+    # ZH: v4.9 常用信箱：Alma 給的地址與主信箱不同時才寫（學生的私人 gmail
+    #     就是這條）。空的才補 —— 本人自己填過的不覆蓋。
+    if (not user.contact_email and alma.get("email")
+            and alma["email"].lower() != (user.email or "").lower()):
+        user.contact_email = alma["email"]
+        applied.append("contact_email（Alma 慣用信箱）")
+
     if applied:
         db.commit()
     return applied
+
+
+def pick_primary_email(derived_email: str, alma_email: Optional[str]) -> tuple:
+    """
+    ZH: 決定新帳號的**主信箱**，回 (主信箱, 要不要把 Alma 那個放進常用信箱)。
+
+    ZH: 規則：Alma 的慣用信箱**只有在它是校內網域時**才拿來當主信箱。
+
+    ZH: 🔴 為什麼不是「Alma 優先」（2026-09-02 我第一版就是那樣寫的，錯了）：
+        Alma 的慣用信箱是**聯絡方式**，不是身分。實測：
+          老師 8000036 → tfho@mail.mcu.edu.tw      （校內，正好也是身分）
+          學生 12360013 → wesley931209@gmail.com   （**私人 gmail**）
+        學生那條直接採用的話，主信箱會變成 gmail —— 而主信箱是 MYAI 綁定的鍵，
+        廠商端的學生帳號是 `<學號>@me.mcu.edu.tw`，對不上就會**重複開一個帳號**。
+        2026-09-07 發現時還沒有新生登入過，所以沒有實際損害。
+
+    ZH: 判準沿用 classify_email 的 label（校內網域才有值）——
+        「什麼算校內」只有 sso_policy.yaml 的 email_rules 一份定義。
+
+    ZH: 非校內的那個不丟掉：交給呼叫端寫進 `contact_email`，
+        通知信才寄得到學生真正在看的信箱。
+
+    @node job-scheduler/app/crud.py::pick_primary_email
+    """
+    from .services.myai_sync import classify_email
+    alma = (alma_email or "").strip()
+    if not alma:
+        return derived_email, False
+    if classify_email(alma).get("label"):        # 校內網域
+        return alma, False
+    return derived_email, True                   # 校外 → 主信箱用構造的，Alma 那個當常用
 
 
 def role_from_email(email: Optional[str]) -> str:

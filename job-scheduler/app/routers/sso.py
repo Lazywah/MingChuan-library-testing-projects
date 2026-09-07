@@ -98,7 +98,12 @@ def _finalize_sso_login(db: Session, user_info: dict, request: Request = None) -
         #     有人把 gmail 設成圖書館聯絡信箱，拿它比網域會把真校內人
         #     降成 guest（2026-09-02 檢查訪客觸發時機時抓到的回歸）。
         derived_email = user_info.get("email") or f"{username}@unknown"
-        email = (alma or {}).get("email") or derived_email
+        # ZH: 🔴 v4.9 主信箱**不是**無條件用 Alma 的（那是 9/2 的錯，見
+        #     crud.pick_primary_email 的說明）：Alma 給的是**聯絡方式**，
+        #     學生那邊多半是私人 gmail，拿它當身分鍵會讓 MYAI 綁定對不上、
+        #     在廠商端重複開帳號。校內網域才採用，校外的改放常用信箱。
+        email, _alma_to_contact = crud.pick_primary_email(
+            derived_email, (alma or {}).get("email"))
         role = (alma or {}).get("role") or crud.role_from_email(derived_email)
         user = create_sso_user(
             db,
