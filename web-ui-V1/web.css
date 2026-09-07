@@ -768,3 +768,19 @@ html.aibot-docked #aibot-fab { display: none; }
     .home > .news { margin-bottom: var(--space-5); }
     .home > .groups { margin-top: var(--space-6); }
 }
+
+/* ==========================================================================
+ * ZH: v4.8 暫停使用的入口（GPU 功能關閉時，見 chrome.js 的 applyGpuGate）。
+ *     刻意**不藏起來**：使用者要看得出「功能還在、只是現在不能用」，
+ *     藏起來只會讓人以為東西不見了。
+ * ZH: `pointer-events: none` 只擋滑鼠；真正讓它點不下去的是 chrome.js
+ *     把 href 拔掉（不然鍵盤 Enter 與中鍵開新分頁還是進得去）。
+ * ========================================================================== */
+.is-off {
+    opacity: 0.45;
+    cursor: not-allowed;
+    pointer-events: none;
+    text-decoration: line-through;
+}
+/* ZH: 卡片式入口刪節號會很醜，改成整張淡掉就好。 */
+.gcard.is-off { text-decoration: none; background-color: var(--surface-2); }

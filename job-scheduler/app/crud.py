@@ -1545,6 +1545,17 @@ SYSTEM_SETTINGS = {
     #     / TOKEN_RESET_DAY，或把這裡的 hidden 拿掉。
     "monthly_token_limit":      {"hidden": True, "starred": True, "group": "platform", "type": "int",   "default": lambda: settings.DEFAULT_MONTHLY_TOKEN_LIMIT, "min": 0,   "max": None, "label": "每月 Token 額度(新帳號預設；改既有帳號用批量設定)", "label_en": "Monthly token quota (default for new accounts; use bulk edit for existing ones)"},
     "token_reset_day":          {"hidden": True, "starred": True, "group": "platform", "type": "int",   "default": lambda: settings.TOKEN_RESET_DAY,             "min": 1,   "max": 28,   "label": "額度重置日(每月第幾天)", "label_en": "Quota reset day (day of the month)"},
+    # ZH: v4.8 GPU 功能總開關（擁有者裁定 2026-09-07：暫時對一般使用者關閉）。
+    #     關掉時：訓練引導/交給平台訓練/程式實驗室/訓練進度/訓練資料 五個入口
+    #     在導覽與首頁卡片上**灰掉不可點**，直接打網址也會被擋下來（chrome.js）。
+    #     **管理員不受影響** —— 要有人能在關閉期間驗證平台還活著。
+    #     MYAI、使用量、作品集、問題回報照常開放。
+    # ZH: 做成設定而不是寫死：這是**暫時**的措施，重開時按一下就好，不必再改程式、
+    #     不必重新部署。`public` 讓前台讀得到（見 get_public_settings）。
+    "gpu_features_enabled":     {"starred": True, "public": True, "group": "platform", "type": "int",
+                                 "default": lambda: 1, "min": 0, "max": 1,
+                                 "label": "GPU 相關功能對一般使用者開放(1=開, 0=暫停；管理員不受限)",
+                                 "label_en": "GPU features available to non-admin users (1 = on, 0 = paused; admins unaffected)"},
     "job_timeout_minutes":      {"starred": True, "public": True, "group": "platform", "type": "int",   "default": lambda: settings.JOB_TIMEOUT_MINUTES,         "min": 1,   "max": None, "label": "任務逾時(分鐘)", "label_en": "Job timeout (minutes)"},
     # ZH: 公告附件。上限調小**不會**動到已經上傳的檔案，只擋之後的上傳。
     "announcement_file_max_mb": {"group": "platform", "type": "int",   "default": lambda: settings.ANNOUNCEMENT_FILE_MAX_MB,    "min": 1,   "max": 500,  "label": "公告附件單檔上限(MB)", "label_en": "Announcement attachment: max per file (MB)"},

@@ -606,6 +606,9 @@
     var _anon = true;
 
     function render(toggle, menu, me) {
+        // ZH: v4.8 GPU 功能閘門。放在這裡是因為它需要 `me`（要看 is_admin），
+        //     而 me 是非同步取回的 —— 導覽在那之前就畫好了。
+        applyGpuGate(me);
         if (!me && !_anon) {
             // ZH: 拿不到身分**不等於**沒登入。說「未登入」會讓已登入的人以為被登出了，
             //     還會誘導他去點「前往登入」——那是錯的去處。
@@ -778,6 +781,62 @@
                 btn.disabled = false;
             }
         });
+    }
+
+    // ══════════════════════════════════════════════════════════════════
+    // ZH: v4.8 GPU 功能暫停（擁有者裁定 2026-09-07）
+    // ══════════════════════════════════════════════════════════════════
+    // ZH: 由旋鈕 `gpu_features_enabled` 控制（管理端「平台設定」可切回來，
+    //     不必改程式）。關閉時**一般使用者**看到的是「灰掉且點不下去」，
+    //     不是把項目藏起來 —— 藏起來的話使用者不知道發生什麼事，
+    //     只會覺得功能不見了、然後來問。
+    //
+    // ZH: 🔴 **管理員不受限**：關閉期間必須有人能驗證平台還活著。
+    //
+    // ZH: 🔴 導覽與卡片擋住了，**直接打網址還是進得去** —— 所以同一支
+    //     也擋頁面本身（blockPage）。少了那一段，書籤與瀏覽紀錄就是後門，
+    //     而「關閉」會變成只是視覺上的。
+    // ══════════════════════════════════════════════════════════════════
+    var GPU_PAGES = ['gpu.html', 'train.html', 'lab.html',
+                     'jobs.html', 'datasets.html'];
+
+    function markOff(el) {
+        // ZH: 拿掉 href 才是真的點不下去（只加 class 的話鍵盤與中鍵仍可開）。
+        el.removeAttribute('href');
+        el.classList.add('is-off');
+        el.setAttribute('aria-disabled', 'true');
+        el.setAttribute('title', T('gpu_off_hint', '這項功能暫停使用中'));
+    }
+
+    function blockPage() {
+        var main = document.querySelector('main');
+        if (!main) return;
+        main.innerHTML =
+            '<section class="primary-card">'
+            + '<h1 class="hero__title">' + esc(T('gpu_off_title', '這項功能暫停使用')) + '</h1>'
+            + '<p class="hero__sub">' + esc(T('gpu_off_body',
+                'GPU 相關功能（訓練與程式實驗室）目前暫停開放，其他功能不受影響。'
+                + '恢復時間請看首頁公告。')) + '</p>'
+            + '<a class="btn btn--primary btn--block" href="index.html">'
+            + esc(T('gpu_off_home', '回首頁')) + '</a>'
+            + '</section>';
+    }
+
+    async function applyGpuGate(me) {
+        // ZH: 管理員直接放行 —— 不必為此多打一次設定 API。
+        if (!me || me.is_admin) return;
+        var st = await publicSettings();
+        // ZH: 讀不到設定時**不擋** —— 這是暫時性的政策，不該因為一次
+        //     API 失敗就把平台的一半功能鎖起來（fail-open 是這裡的正解）。
+        if (String(st.gpu_features_enabled) !== '0') return;
+
+        document.querySelectorAll('a[href]').forEach(function (a) {
+            var href = (a.getAttribute('href') || '').split('?')[0].split('#')[0];
+            if (GPU_PAGES.indexOf(href) >= 0) markOff(a);
+        });
+
+        var here = (location.pathname.split('/').pop() || 'index.html');
+        if (GPU_PAGES.indexOf(here) >= 0) blockPage();
     }
 
     // ── 前台可見的營運設定（v3.8）────────────────────────────────────
