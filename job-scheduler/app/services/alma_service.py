@@ -209,14 +209,12 @@ def backfill_users(db, limit: int = BACKFILL_BATCH, dry_run: bool = False) -> di
                 if not dry_run:
                     u.department = v
         elif field == "unit" and not u.unit and alma.get("unit_segments"):
-            segs = alma["unit_segments"]
-            for cand in ("/".join(segs), segs[0]):
-                if db.query(models.OrgUnit).filter(
-                        models.OrgUnit.path == cand).first():
-                    plan.append("unit=%s" % cand)
-                    if not dry_run:
-                        u.unit = cand
-                    break
+            # ZH: 對照邏輯只有 crud.match_org_unit 一份（兩段一起比，唯一解才寫）。
+            hit = crud.match_org_unit(db, alma["unit_segments"])
+            if hit:
+                plan.append("unit=%s" % hit)
+                if not dry_run:
+                    u.unit = hit
 
         # ── 常用信箱：空的、且與主信箱不同才有意義 ────────────────────
         if (not u.contact_email and alma.get("email")

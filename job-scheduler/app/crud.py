@@ -2162,6 +2162,55 @@ def myai_balance_state(points, threshold, early_threshold=None) -> str:
     return "ok"
 
 
+def match_org_unit(db: Session, segs: list) -> Optional[str]:
+    """
+    ZH: 把 Alma 的單位字串對到平台組織表的 path。對不出唯一解就回 None。
+
+    ZH: Alma 的 ZBT 是**多段**的（`2151-桃園校區行政處-圖書分館閱覽組`），
+        而兩邊是兩套人各自維護的命名，常常對不起來：
+            Alma   桃園校區行政處 / 圖書分館閱覽組
+            平台   圖書館        / 桃園閱覽組
+        誰也不包含誰，只共用「閱覽組」。
+
+    ZH: 🔴 解法是**兩段一起比**（擁有者提議 2026-09-07）：要求候選路徑
+        與**每一段**都共用至少一個 2 字詞。上例中「桃園」來自第一段、
+        「圖書」「閱覽」來自第二段，只有 `圖書館/桃園閱覽組` 同時滿足 ——
+        而 `圖書館/台北閱覽組` 對不上第一段的「桃園」，自動被排除。
+        實測：只比最後一段時三個真實案例都是 5～6 個候選（等於不能用），
+        兩段一起比則全部命中唯一解。
+
+    ZH: 🔴 **唯一解才寫**。多個候選一律留空 —— 指錯比留空更糟：
+        留空的話本人會在初次設定的下拉自己挑（自我修正），
+        指錯則沒有人會發現，而「數據」頁會把他算進錯的單位。
+        反例實測：只給「行政處」會產生 14 個候選 → 不猜。
+
+    @node job-scheduler/app/crud.py::match_org_unit
+    """
+    segs = [x for x in (segs or []) if x]
+    if not segs:
+        return None
+    rows = db.query(models.OrgUnit).all()
+    paths = {r.path for r in rows}
+
+    # 1) 完整路徑就對得上 —— 最可信，直接用
+    joined = "/".join(segs)
+    if joined in paths:
+        return joined
+
+    # 2) 兩段（或多段）都要對上，且只能有一個候選
+    def grams(t):
+        return {t[i:i + 2] for i in range(len(t) - 1)}
+    hits = [r.path for r in rows
+            if all(grams(seg) & grams(r.path) for seg in segs)]
+    if len(hits) == 1:
+        return hits[0]
+
+    # 3) 退回上層單位（Alma 的第一段剛好是平台的一個單位）
+    if segs[0] in paths:
+        return segs[0]
+    return None
+
+
 def apply_alma_profile(db: Session, user: models.User, alma: dict) -> list:
     """
     ZH: v4.2 —— 把 Alma 查到的 校區/學系/單位 **預填**到使用者身上
@@ -2200,14 +2249,12 @@ def apply_alma_profile(db: Session, user: models.User, alma: dict) -> list:
             logger.info("Alma 學系「%s」不在組織表，略過預填（%s）", v, user.username)
     elif field == "unit" and alma.get("unit_segments"):
         segs = alma["unit_segments"]
-        for cand in ("/".join(segs), segs[0]):
-            if db.query(models.OrgUnit).filter(
-                    models.OrgUnit.path == cand).first():
-                user.unit = cand
-                applied.append("unit=%s" % cand)
-                break
+        hit = match_org_unit(db, segs)
+        if hit:
+            user.unit = hit
+            applied.append("unit=%s" % hit)
         else:
-            logger.info("Alma 單位「%s」不在組織表，略過預填（%s）",
+            logger.info("Alma 單位「%s」對不到組織表的唯一解，略過預填（%s）",
                         "-".join(segs), user.username)
     # ZH: v4.9 常用信箱：Alma 給的地址與主信箱不同時才寫（學生的私人 gmail
     #     就是這條）。空的才補 —— 本人自己填過的不覆蓋。
