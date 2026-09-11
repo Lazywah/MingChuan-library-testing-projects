@@ -137,7 +137,7 @@ curl http://localhost/health      # → "OK"
 | URL | 用途 | 第一次能做什麼 |
 |---|---|---|
 | http://localhost/ | 使用者介面（導到 /V1/）| 看得到登入頁；展開「沒有學校帳號？」可用本機 admin 登入（v2.2+，做完 §7 後可用）|
-| http://localhost:8888/ | 管理員介面 | 本機 admin 直接 username + password 登入 |
+| https://ai.lib.mcu.edu.tw:8888/ | 管理員介面 | 本機 admin 直接 username + password 登入 |
 | http://localhost:8002/docs | API Swagger | OpenAPI 文件、可直接打 API 測試 |
 
 > v2.2 後 user UI 登入頁加了**摺疊式 fallback 表單**：預設只顯示「使用學校帳號登入」(SSO)；點「沒有學校帳號？」展開可填 username + password。設計上學生看不到此入口，但 IT/老師/admin 自己用 user UI 可從這進。
@@ -158,7 +158,10 @@ docker logs ai-platform-scheduler | findstr 初始管理員     # Windows
 docker logs ai-platform-scheduler | grep 初始管理員         # Linux/macOS
 ```
 
-登入 <http://localhost:8888/>（帳號 `admin`，密碼為你在 setup_env 時輸入的）。
+登入 <https://ai.lib.mcu.edu.tw:8888/>（帳號 `admin`，密碼為你在 setup_env 時輸入的）。
+
+> ⚠️ 是 **https** 且用正式主機名，**本機也一樣** —— 8888 強制 TLS，
+> 憑證簽的是 `ai.lib.mcu.edu.tw`。舊的 `http://localhost:8888` 已失效。
 登入後管理端會顯示提醒橫幅，**請盡快改密碼**，或建立自己的管理員帳號後刪除它
 （改過密碼橫幅會自動消失）。
 
