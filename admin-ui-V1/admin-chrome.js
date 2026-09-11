@@ -377,6 +377,15 @@
         location.replace('login.html');
     }
 
+    // ZH: v4.10b 把目前登入者開放給各頁讀。
+    //
+    // ZH: 為什麼是這裡而不是各頁自己打一次 /auth/me：這一支**本來就會打**
+    //     （為了畫帳號選單）。各頁再打一次等於同一個資訊有兩個來源，
+    //     而且兩次回來的時間不同 —— 頁面會依賴哪一次先到，那種 bug 很難查。
+    //
+    // ZH: 回 null 是正常情況（還沒載到、或那一次讀失敗），呼叫端要自己處理。
+    window.AdminMe = function () { return _me; };
+
     async function loadWho() {
         try {
             var r = await fetch(API + '/auth/me', { headers: { Authorization: 'Bearer ' + token() } });

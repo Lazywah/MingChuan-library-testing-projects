@@ -589,7 +589,9 @@
     //
     // ZH: `run(value)` 負責動作，丟錯就顯示在彈窗裡、彈窗不關；成功才關。
     // ══════════════════════════════════════════════════════════════════
-    function targetConfirm(title, hint, expect, run) {
+    // ZH: `label` 可選 —— 批次操作確認的是**操作者自己**，欄位得這樣寫，
+    //     否則畫面會叫他去打一個不存在的「目標帳號」。
+    function targetConfirm(title, hint, expect, run, label) {
         var dlg = $('pw-dialog');
         dlg.innerHTML =
             '<h2 class="rmod__title">' + esc(title) + '</h2>'
@@ -597,7 +599,7 @@
             + '<p class="footnote">'
             + esc(T('pp_confirm_type', '請輸入「{n}」以確認。').replace('{n}', expect))
             + '</p>'
-            + field('pwc-in', T('pp_confirm_label', '帳號'), '', 'text')
+            + field('pwc-in', label || T('pp_confirm_label', '帳號'), '', 'text')
             + '<div class="adm-inline rmod__foot">'
             + '<button class="btn btn--primary" type="button" id="pwc-go">'
             + esc(T('pp_pwc_go', '確認')) + '</button>'
@@ -612,7 +614,10 @@
             var pw = $('pwc-in').value;
             // ZH: 前端先比一次只是省一趟往返 —— **後端才是判準**
             //     （前端擋得掉的東西，用 curl 一樣送得出來）。
-            if (pw.trim().toLowerCase() !== String(expect).trim().toLowerCase()) {
+            // ZH: 🔴 `expect` 是空的時候**不要在前端比**：那代表我們還不知道
+            //     該打什麼（例如 /auth/me 還沒回來），此時本地比對只會
+            //     把使用者鎖在一個永遠打不對的欄位裡。交給後端講原因。
+            if (expect && pw.trim().toLowerCase() !== String(expect).trim().toLowerCase()) {
                 say('pwc-msg', T('pp_confirm_bad', '打的帳號跟要操作的不一樣。'));
                 return;
             }
@@ -2027,6 +2032,10 @@
     //     把預覽結果送回去當名單的話，補的會是一份已經過期的數字。
     (function () {
         var PREVIEWED = null;      // ZH: 只用來決定按鈕要不要亮，不當送出的資料
+        // ZH: v4.10b 預覽算出來的「幾個人、合計幾點」——送出前的確認要把
+        //     這兩個數字講出來。理由同單人加點：數字寫進確認訊息是唯一
+        //     擋得住「多打一個 0」的地方。
+        var TU_LAST = { count: 0, points: 0 };
         var TU_PAGE_SIZE = 10;     // ZH: 預覽名單 10 人一頁（擁有者裁定 2026-09-03）
 
         function btns() {
@@ -2112,6 +2121,7 @@
                     body: JSON.stringify({ target: t, dry_run: true }),
                 });
                 PREVIEWED = t;
+                TU_LAST = { count: r.count || 0, points: r.points || 0 };
                 renderPreview(r);
                 // ZH: 沒有人要補時不給「確認」鈕 —— 按了也是空操作，
                 //     但會讓人以為真的做了什麼。
@@ -2122,15 +2132,33 @@
             }
         }
 
-        async function apply() {
+        function apply() {
             var t = target();
             if (!t) return;
+            // ZH: v4.10b 送出前要打出**自己的**帳號（擁有者裁定 2026-09-11）。
+            //     批次補齊沒有單一目標可以打，所以確認的是操作者本人。
+            // ZH: 🔴 人數與點數要留在說明裡 —— 那是唯一擋得住「多打一個 0」
+            //     的地方（同單人加點）。
+            targetConfirm(T('pf_topup_title', '確認補齊點數'),
+                T('pf_topup_confirm',
+                    '要把 {n} 個帳號補到 {t} 點嗎？合計 {p} 點，'
+                    + '從平台的管理帳號轉出，送出後收不回來。')
+                    .replace('{n}', num(TU_LAST.count))
+                    .replace('{t}', num(t))
+                    .replace('{p}', num(TU_LAST.points)),
+                ((window.AdminMe && window.AdminMe()) || {}).username || '',
+                async function (name) { await sendTopup(t, name); },
+                T('pf_topup_self', '你自己的帳號'));
+        }
+
+        async function sendTopup(t, name) {
             $('tu-apply').disabled = true;      // ZH: 防連點
             try {
                 var r = await api('/admin/myai/topup', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ target: t, dry_run: false }),
+                    body: JSON.stringify({ target: t, dry_run: false,
+                                           confirm_username: name }),
                 });
                 reset();
                 if (r.status === 'unknown') {
@@ -2144,7 +2172,9 @@
                         .replace('{n}', num(r.count)).replace('{p}', num(r.points)), 8000);
                 }
             } catch (e) {
-                say('tu-msg', String(e.message || e));
+                $('tu-apply').disabled = false;
+                // ZH: 丟回 targetConfirm 顯示在彈窗裡（彈窗不關，不用重打）。
+                throw new Error(String(e.message || e));
             } finally {
                 $('tu-apply').disabled = false;
             }

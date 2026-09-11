@@ -1019,6 +1019,28 @@ def delete_lab_archive(
 #       而且後端只能拿 current_user.username 去比，比了也證明不了什麼。
 #       打目標帳號則能被後端真正驗證，而且擋得住「我以為我點的是另一個人」。
 # ══════════════════════════════════════════════════════════════════════════
+def _require_self_confirm(given: Optional[str], admin: models.User) -> None:
+    """
+    ZH: 確認操作者把**自己的**帳號打出來了。不符就 400。
+
+    ZH: 🔴 為什麼這一支跟 `_require_target_confirm` 分開：
+        批次操作**沒有單一目標**可以打（手動補齊是補給所有綁定帳號）。
+        退而求其次讓操作者打自己的編號 —— 它證明不了什麼，
+        純粹是一道「你真的要按下去嗎」的閘，擋的是誤觸。
+        分成兩支是為了讓錯誤訊息講得出到底要打什麼；
+        共用一支的話畫面會叫他去打一個不存在的「目標帳號」。
+
+    @node job-scheduler/app/routers/admin.py::_require_self_confirm
+    """
+    want = (admin.username or "").strip().casefold()
+    got = (given or "").strip().casefold()
+    if not got or got != want:
+        raise HTTPException(
+            status_code=400,
+            detail=(f"ZH: 請輸入你自己的帳號「{admin.username}」以確認 | "
+                    f"EN: Type your own account name to confirm"))
+
+
 def _require_target_confirm(given: Optional[str], target: models.User) -> None:
     """
     ZH: 確認管理者打出來的帳號就是他要操作的那一個。不符就 400。
@@ -2713,6 +2735,8 @@ def get_audit_log(
 async def myai_manual_topup(
     target: int = Body(..., embed=True, description="要補到的點數（每人補到這個水位）"),
     dry_run: bool = Body(True, embed=True, description="true=只預覽不送出"),
+    confirm_username: str = Body("", embed=True,
+                                 description="操作者自己的帳號（只有 dry_run=false 時要）"),
     db: Session = Depends(get_db),
     admin: models.User = Depends(require_admin),
 ):
@@ -2728,6 +2752,11 @@ async def myai_manual_topup(
     @node job-scheduler/app/routers/admin.py::myai_manual_topup
     """
     from ..services import myai_sync
+    # ZH: v4.10b 真的送出前要操作者打出自己的帳號（擁有者裁定 2026-09-11）。
+    #     **預覽不必** —— 它不寫任何東西，加一道門只會讓人少看預覽。
+    # ZH: 這支沒有單一目標可以打（補給所有綁定帳號），所以用操作者版。
+    if not dry_run:
+        _require_self_confirm(confirm_username, admin)
     try:
         return await myai_sync.manual_topup(db, target, admin.id, dry_run=dry_run)
     except myai_sync.MyaiSyncError as e:
