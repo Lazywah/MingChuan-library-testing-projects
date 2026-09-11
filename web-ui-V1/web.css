@@ -407,13 +407,6 @@ html.aibot-docked #aibot-fab { display: none; }
     font-weight: 700;
     color: var(--text-strong);
 }
-/* ZH: 副標與標題同一行 —— 它是條件補充（「不用寫程式」），不是第二個標題。 */
-.group__sub {
-    margin-left: var(--space-2);
-    font-size: 0.8125rem;
-    font-weight: 400;
-    color: var(--text-muted);
-}
 
 .group__cards {
     display: grid;
