@@ -911,38 +911,29 @@
     // ZH: 🔴 沒有第二種模式的話,整條路是**斷的**：管理者按了「開放一次修改」,
     //     使用者端卻沒有任何地方能用它。（v3.8 開發中實際發生過,
     //     後端做完了、管理端介面做完了,使用者那邊卻打不開表單。）
-    // ZH: v4.9 這個人的組織欄位還空著嗎？空 → 回欄位名，有值或不適用 → null。
-    //     訪客沒有組織欄位（onbFieldFor 回 null），永遠不會被問。
-    function orgGapField(me) {
-        // ZH: 🔴 管理員不問 —— 系統自帶的 bootstrap admin 沒有真正的單位，
-        //     而這個彈窗是**關不掉的遮罩**：它會蓋住管理者用來設定這件事的
-        //     那個主控台本身。管理員要填單位，在帳號頁自己填就好。
-        if (me.is_admin) return null;
-        var f = onbFieldFor(me.role);
-        if (!f) return null;
-        return ((f === 'unit' ? me.unit : me.department) || '').trim() ? null : f;
-    }
-
     async function maybeShowOnboarding(me) {
         if (!me) return;
         var unlock = me.onboarded_at ? (me.profile_unlock || null) : null;
         // ══════════════════════════════════════════════════════════════
-        // ZH: v4.9 「補填」（擁有者裁定 2026-09-07）。
-        //     組織對照改以 Alma 為準之後，一定有人在清單裡找不到自己的單位，
-        //     所以初次設定的組織欄位改成可以按「稍後再說」。跳過的人**下次
-        //     登入再問一次** —— 這一行就是那個「再問」。
-        // ZH: 🔴 沒有這條的話「稍後再說」等於「永遠不說」：組織空著、
-        //     `onboarded_at` 有值，彈窗再也不出現，而那個人從此不在任何
-        //     依組織的統計裡，沒有人會發現。
+        // ZH: v4.13 初次登入**只問常用信箱**（擁有者裁定 2026-09-11）。
+        //
+        // ZH: 為什麼拿掉校區／學系／單位：擔心使用者亂填。這些欄位在
+        //     建號當下已由 Alma 預填（apply_alma_profile），準確度比人自己
+        //     挑高得多；Alma 沒有的少數人留白，由管理者補。
+        //     填錯的代價不對稱 —— 一個亂填的學系會靜靜地汙染所有依組織的
+        //     統計，而沒有人看得出那一筆是錯的。
+        //
+        // ZH: 🔴 v4.9 的「補填」模式（組織空著就再問一次）**一併移除**。
+        //     使用者端已經完全不碰組織欄位了，再問也沒有東西可以問；
+        //     要更正一律走「管理員開放一次修改」（下面的 unlock 模式）。
         // ══════════════════════════════════════════════════════════════
-        var gap = (me.onboarded_at && !unlock) ? orgGapField(me) : null;
-        if (me.onboarded_at && !unlock && !gap) return;   // ZH: 設定過、也沒缺 → 不問
+        if (me.onboarded_at && !unlock) return;   // ZH: 設定過、也沒開放修改 → 不問
         try {
             var r = await fetch(API + '/system/org-options', { headers: authHeaders() });
             if (!r.ok) return;                       // ZH: 讀不到選項就不要擋住人
             _onbOpts = await r.json();
         } catch (e) { return; }
-        buildOnboarding(me, _onbOpts, null, unlock, gap);
+        buildOnboarding(me, _onbOpts, null, unlock);
     }
 
     // ZH: 選項清單存起來 —— 從確認頁「返回修改」時要重畫第一頁,
@@ -953,10 +944,8 @@
     //     使用者按返回等於從頭再選一次 —— 那比沒有返回鍵更氣人。
     // ZH: `unlock` 是管理者核可的欄位清單（null = 初次設定,全部都要填）。
     var _onbUnlock = null;
-    // ZH: v4.9 補填模式（只問組織那一欄）。理由同 maybeShowOnboarding 的註解。
-    var _onbGap = null;
 
-    function buildOnboarding(me, opts, prefill, unlock, gap) {
+    function buildOnboarding(me, opts, prefill, unlock) {
         var curLang = (window.Prefs && window.Prefs.get)
             ? window.Prefs.get().ui_lang : 'zh';
 
@@ -973,22 +962,34 @@
             return (curLang === 'en' && en) ? en : zh;
         }
         _onbUnlock = unlock || null;
-        _onbGap = gap || null;
         // ZH: v4.2 身分選擇（擁有者裁定 2026-09-02）：職員與老師同網域
         //     （@mail.mcu.edu.tw），系統分不出來 —— 被自動判成 teacher 的人
         //     在**初次設定**時自己選。解鎖模式不問（role 不在可解鎖欄位裡，
         //     後端 complete_onboarding 也擋）。
-        var askRole = !unlock && !gap && !me.onboarded_at
-            && me.role === 'teacher' && me.role_source === 'sso_email';
-        var effRole = askRole ? ((prefill && prefill.role) || 'teacher') : me.role;
+        // ══════════════════════════════════════════════════════════════
+        // ZH: v4.13 身分選擇（老師／職員）**已整塊移除**（擁有者裁定 2026-09-11）。
+        //
+        // ZH: 它原本是為了補一個洞：職員與老師同網域，信箱看不出差別，
+        //     所以被自動判成 teacher 的人在初次設定時自己選。
+        //     Alma 接上之後這個洞基本補起來了（role_source='alma'），
+        //     而使用者自己選仍然是「使用者填的資料」——正是這次要少的東西。
+        //     Alma 答不出來的少數人維持網域判定，由管理者在後台直接改 role。
+        //
+        // ZH: 要恢復的話，這些東西要一起回來：
+        //     選項的 markup、換身分時整個重畫的處理（重畫要把校區帶回去、
+        //     組織不要帶，因為清單跟著身分換）、送出時的 role 欄位，
+        //     以及後端 complete_onboarding 的 `role` 參數（**那支還留著**，
+        //     只是現在沒有人送）。
+        // ══════════════════════════════════════════════════════════════
+        var effRole = me.role;
         // ZH: 學系/行政單位要照**選到的身分**問 —— 選職員就問行政單位。
         var field = onbFieldFor(effRole);
         // ZH: 解鎖模式下只顯示核可範圍內的欄位 —— 顯示了卻不能存,
         //     使用者會以為自己改成功了,而後端會退回「這次核可的範圍不包含…」。
-        // ZH: 補填模式只問組織 —— 校區初次設定時就填過了，再問一次
-        //     只是給他一個手殘改掉的機會（後端也擋，見 crud.complete_onboarding）。
-        var askCampus = !gap && (!unlock || unlock.indexOf('campus') >= 0);
-        var askOrg = !!field && (!unlock || unlock.indexOf(field) >= 0);
+        // ZH: v4.13 校區與組織**只在解鎖模式**出現（管理者核可的一次修改）。
+        //     初次登入不問 —— 見 maybeShowOnboarding 的區塊註解。
+        var askCampus = !!unlock && unlock.indexOf('campus') >= 0;
+        var askOrg = !!unlock && !!field && unlock.indexOf(field) >= 0;
         var box = document.createElement('div');
         box.className = 'onb';
         box.setAttribute('role', 'dialog');
@@ -1065,31 +1066,13 @@
             +   '</div>'
             + '</div>'
             + '<h2 class="onb__title" id="onb-title">'
-            + esc(gap ? T('onb_gap_title', '還差一項')
-                 : unlock ? T('onb_edit_title', '修改你的資料')
-                          : T('onb_title', '先完成基本設定')) + '</h2>'
+            + esc(unlock ? T('onb_edit_title', '修改你的資料')
+                         : T('onb_title', '設定常用信箱')) + '</h2>'
             + '<p class="onb__sub">'
-            + esc(gap
-                ? T('onb_gap_sub', '你的單位還沒設定。設定好之後，用量統計才分得到你的單位底下。')
-                : unlock
+            + esc(unlock
                 ? T('onb_edit_sub', '管理員開放了一次修改。存檔之後會再次鎖定。')
-                : T('onb_sub', '這些資料用來做統計分組，只需要設定一次。')) + '</p>'
+                : T('onb_sub', '通知信會寄到這裡。之後在帳號選單隨時可以改。')) + '</p>'
             + '<p class="onb__err" id="onb-err" hidden></p>'
-            + (askRole
-                ? '<div class="onb__field">'
-                  + '<span class="onb__label">' + esc(T('onb_role', '身分')) + '</span>'
-                  + '<div class="onb__radios" role="radiogroup" aria-label="' + esc(T('onb_role', '身分')) + '">'
-                  +   '<label class="onb__radio"><input type="radio" name="onb-role" value="teacher"'
-                  +     (effRole === 'teacher' ? ' checked' : '') + '> '
-                  +     esc(T('onb_role_teacher', '我是老師')) + '</label>'
-                  +   '<label class="onb__radio"><input type="radio" name="onb-role" value="staff"'
-                  +     (effRole === 'staff' ? ' checked' : '') + '> '
-                  +     esc(T('onb_role_staff', '我是職員')) + '</label>'
-                  + '</div>'
-                  + '<span class="onb__hint">' + esc(T('onb_role_hint',
-                        '信箱看不出身分，請自己選 —— 老師會問學系、職員會問行政單位。')) + '</span>'
-                  + '</div>'
-                : '')
             + (askCampus ? '<div class="onb__field">'
             +   '<label class="onb__label" for="onb-campus">' + esc(T('onb_campus', '校區')) + '</label>'
             +   '<select class="onb__select" id="onb-campus"' + (multi ? ' multiple size="5"' : '') + '>'
@@ -1108,12 +1091,13 @@
                   // ZH: v4.9 清單改以 Alma 為準之後，找不到自己單位是**正常**情況
                   //     （新成立／剛改名的還沒進 Alma）。給他一條說得出口的路，
                   //     不然他只能亂選一個對得上的，而那筆假資料沒有人看得出來。
-                  + (unlock ? '' :
-                     '<a class="onb__help" href="report.html?topic=org">'
-                     + esc(T('onb_org_missing', '找不到我的單位？告訴管理員')) + '</a>')
+                  // ZH: v4.13 這個連結搬到**解鎖模式**才出現 —— 初次登入已經
+                  //     不問組織了，現在會挑組織的就只剩被管理者開放修改的人。
+                  + '<a class="onb__help" href="report.html?topic=org">'
+                  + esc(T('onb_org_missing', '找不到我的單位？告訴管理員')) + '</a>'
                   + '</div>'
                 : '')
-            + (unlock || gap ? '' :
+            + (unlock ? '' :
                 // ZH: v4.3 常用信箱（擁有者需求 2026-09-03）：通知信寄到這裡。
                 //     選填、**不在**鎖定契約裡（之後帳號選單隨時可改），
                 //     解鎖模式不出現 —— 它本來就不需要解鎖。
@@ -1127,11 +1111,10 @@
                     '通知信會寄到這裡（也可以填學校信箱）。之後在帳號選單隨時可改。')) + '</span>'
                 + '</div>')
             + '<button class="btn btn--primary btn--block" type="button" id="onb-go">'
-            + esc(gap ? T('onb_gap_save', '存起來') : T('onb_next', '下一步')) + '</button>'
-            // ZH: v4.9 「稍後再說」。**只有組織那一欄可以跳過** ——
-            //     校區是分組統計的底，而且它只有三個選項、不依賴任何對照表，
-            //     沒有「找不到自己校區」這種情況，所以初次設定仍然必填。
-            // ZH: 解鎖模式不給（那是管理者核可的一次修改，跳過等於白核可一次）。
+            + esc(unlock ? T('onb_next', '下一步') : T('onb_save', '儲存')) + '</button>'
+            // ZH: v4.13 「稍後再說」。常用信箱本來就是選填（留空＝用學號信箱），
+            //     而且帳號選單隨時可以改 —— 沒有理由把人卡在這裡。
+            // ZH: 解鎖模式不給：那是管理者核可的一次修改，跳過等於白核可一次。
             + (unlock ? '' :
                '<button class="btn btn--ghost btn--block" type="button" id="onb-later">'
                + esc(T('onb_later', '稍後再說')) + '</button>')
@@ -1166,38 +1149,28 @@
             if (oe && prefill.org) oe.value = prefill.org;
         }
 
-        // ZH: 換身分要整個重畫 —— 下面的組織欄位（學系 vs 行政單位）跟著身分走，
-        //     清單整個不同所以 org 不帶回去（帶了會對到不存在的選項）。
-        //     校區的選擇帶回去：它跟身分無關，重選一次只是氣人。
-        box.querySelectorAll('input[name="onb-role"]').forEach(function (rb) {
-            rb.addEventListener('change', function () {
-                var sel0 = box.querySelector('#onb-campus');
-                var picked0 = !sel0 ? []
-                    : multi
-                        ? Array.prototype.slice.call(sel0.selectedOptions)
-                            .map(function (o) { return o.value; })
-                        : (sel0.value ? [sel0.value] : []);
-                var ct0 = box.querySelector('#onb-contact');
-                box.remove();
-                buildOnboarding(me, opts,
-                    { campuses: picked0, org: null, role: rb.value,
-                      contact: ct0 ? ct0.value : null }, unlock, gap);
-            });
-        });
+        // ZH: v4.13 這裡原本有一段「換身分就整個重畫」的處理，
+        //     隨身分選擇一起移除（理由與恢復方式見上面 effRole 那段註解）。
 
         box.querySelector('#onb-go').addEventListener('click', function () {
-            reviewOnboarding(box, multi, field, askRole, gap);
+            // ZH: v4.13 初次登入只有一個選填欄位 —— **不走二次確認頁**。
+            //     那一頁的價值是「送出後就鎖住了，再看一眼」，而常用信箱
+            //     隨時可改，那句警告在這裡是假的。
+            if (unlock) { reviewOnboarding(box, multi, field); return; }
+            var ct = box.querySelector('#onb-contact');
+            submitOnboarding(box, [], null, null, ct ? ct.value.trim() : '');
         });
 
         // ZH: 稍後再說 ——
         //   補填模式：什麼都不送，直接關掉（下次登入會再問，見 maybeShowOnboarding）。
         //   初次設定：**還是要送**（校區要存下來），只是組織留空。
         //     不送的話他下次進來又要從頭選校區，而校區他明明已經選好了。
+        // ZH: 稍後再說 —— 照樣送出（空的常用信箱），這樣 onboarded_at 會被設下去，
+        //     下次登入不會再問。不送的話彈窗每次登入都跳，那不是「稍後」是「一直」。
         var later = box.querySelector('#onb-later');
         if (later) {
             later.addEventListener('click', function () {
-                if (gap) { box.remove(); return; }
-                reviewOnboarding(box, multi, field, askRole, gap, true);
+                submitOnboarding(box, [], null, null, '');
             });
         }
 
@@ -1219,14 +1192,12 @@
                         .map(function (o) { return o.value; })
                     : (sel.value ? [sel.value] : []);
             var orgEl = box.querySelector('#onb-org');
-            var roleEl = box.querySelector('input[name="onb-role"]:checked');
             var ctEl = box.querySelector('#onb-contact');
             document.removeEventListener('prefs:langchanged', onLang);
             box.remove();
             buildOnboarding(_me, _onbOpts,
                 { campuses: picked, org: orgEl ? orgEl.value : null,
-                  role: roleEl ? roleEl.value : null,
-                  contact: ctEl ? ctEl.value : null }, _onbUnlock, _onbGap);
+                  contact: ctEl ? ctEl.value : null }, _onbUnlock);
         }
         document.addEventListener('prefs:langchanged', onLang);
     }
@@ -1238,10 +1209,10 @@
     //
     // ZH: 🔴 **確認頁不重新讀取欄位** —— 它顯示的就是待會要送出的那份資料。
     //     重讀的話,顯示與送出會是兩次不同的讀取,中間任何變動都看不出來。
-    // ZH: v4.9 多了兩個參數：
-    //       `gap`     補填模式（只有組織一欄）——返回修改時要帶回去。
-    //       `skipOrg` 使用者按了「稍後再說」——組織不送，其餘照送。
-    function reviewOnboarding(box, multi, field, askRole, gap, skipOrg) {
+    // ZH: v4.13 這一頁**只有解鎖模式會走到**（初次登入已改成一步送出）。
+    //     它存在的理由是那句「送出之後就不能自己改了」—— 而那句話
+    //     只有對解鎖開放的那幾個欄位成立。
+    function reviewOnboarding(box, multi, field) {
         // ZH: 解鎖模式下只會出現核可範圍內的欄位,所以兩個都可能不存在。
         var sel = box.querySelector('#onb-campus');
         var campuses = !sel ? []
@@ -1249,11 +1220,11 @@
                 ? Array.prototype.slice.call(sel.selectedOptions).map(function (o) { return o.value; })
                 : (sel.value ? [sel.value] : []);
         var orgEl = box.querySelector('#onb-org');
-        // ZH: 稍後再說 → 組織當作「這次沒有這欄」（null），不是空字串。
-        var orgValue = (orgEl && !skipOrg) ? orgEl.value : null;
-        // ZH: 身分只在 askRole 時送 —— 其他人送 role 會被後端擋「不適用」。
-        var roleEl = box.querySelector('input[name="onb-role"]:checked');
-        var roleValue = askRole && roleEl ? roleEl.value : null;
+        var orgValue = orgEl ? orgEl.value : null;
+        // ZH: v4.13 身分已不再由使用者選 —— 永遠不送（後端也會擋「不適用」）。
+        // ZH: v4.13 永遠是 null（身分不再由使用者選）。參數保留是因為
+        //     後端 complete_onboarding 還收 `role` —— 恢復時兩邊要一起改。
+        var roleValue = null;
         var ctEl = box.querySelector('#onb-contact');
         // ZH: null=解鎖模式（沒有這欄）；''=留空（用學校信箱）。
         var contactValue = ctEl ? ctEl.value.trim() : null;
@@ -1265,8 +1236,7 @@
             err.hidden = false;
             return;
         }
-        // ZH: 按「下一步」而組織沒選 → 擋。按「稍後再說」→ 本來就沒要選，不擋。
-        if (orgEl && !skipOrg && !orgValue) {
+        if (orgEl && !orgValue) {
             err.textContent = field === 'unit'
                 ? T('onb_need_unit', '請先選擇行政單位。')
                 : T('onb_need_dept', '請先選擇學系。');
@@ -1277,21 +1247,14 @@
 
         var orgLabel = orgEl && orgEl.selectedOptions[0]
             ? orgEl.selectedOptions[0].textContent : '';
-        var rows = (roleValue
-            ? '<div class="onb__row"><span class="onb__k">'
-              + esc(T('onb_role', '身分')) + '</span><span class="onb__v">'
-              + esc(roleValue === 'staff' ? T('onb_role_staff', '我是職員')
-                                          : T('onb_role_teacher', '我是老師'))
-              + '</span></div>' : '')
+        var rows = ''
             + (sel ? '<div class="onb__row"><span class="onb__k">'
             + esc(T('onb_campus', '校區')) + '</span><span class="onb__v">'
             + esc(campuses.join('、')) + '</span></div>' : '')
             + (orgEl
                 ? '<div class="onb__row"><span class="onb__k">'
                   + esc(field === 'unit' ? T('onb_unit', '行政單位') : T('onb_dept', '學系'))
-                  + '</span><span class="onb__v">'
-                  + esc(skipOrg ? T('onb_later_v', '稍後再說（下次登入會再問）') : orgLabel)
-                  + '</span></div>'
+                  + '</span><span class="onb__v">' + esc(orgLabel) + '</span></div>'
                 : '')
             + (contactValue !== null
                 ? '<div class="onb__row"><span class="onb__k">'
@@ -1303,14 +1266,8 @@
         box.querySelector('.onb__box').innerHTML =
             '<h2 class="onb__title" id="onb-title">'
             + esc(T('onb_confirm_title', '確認一下')) + '</h2>'
-            // ZH: 🔴 跳過組織時**不能**講「都不能改了」—— 那句話是假的：
-            //     空著的組織下次登入還會再問，而且他到時候可以自己填。
-            //     照原文顯示的話，他會以為自己剛剛永久放棄了單位設定。
-            + '<p class="onb__sub">' + esc(skipOrg
-                ? T('onb_confirm_sub_later',
-                    '校區送出之後就不能自己修改了。單位這次跳過，下次登入會再問你一次。')
-                : T('onb_confirm_sub',
-                    '送出之後這些資料就不能自己修改了。要更改需要向管理員申請。')) + '</p>'
+            + '<p class="onb__sub">' + esc(T('onb_confirm_sub',
+                '送出之後這些資料就不能自己修改了。要更改需要向管理員申請。')) + '</p>'
             + '<p class="onb__err" id="onb-err" hidden></p>'
             + '<div class="onb__review">' + rows + '</div>'
             + '<button class="btn btn--primary btn--block" type="button" id="onb-yes">'
@@ -1328,8 +1285,8 @@
             // ZH: 🔴 `_onbUnlock` 要一起帶回去 —— 不帶的話返回之後會變成
             //     初次設定模式,欄位全開,而使用者存下去會被後端擋「超出核可範圍」。
             buildOnboarding(_me, _onbOpts,
-                { campuses: campuses, org: orgValue, role: roleValue,
-                  contact: contactValue }, _onbUnlock, gap);
+                { campuses: campuses, org: orgValue,
+                  contact: contactValue }, _onbUnlock);
         });
     }
 

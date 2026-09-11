@@ -2434,13 +2434,14 @@ def complete_onboarding(db: Session, user: models.User,
                         campuses: list, org_value: Optional[str],
                         role: Optional[str] = None) -> models.User:
     """
-    ZH: 收下組織資料。這支函式有**三種模式**,不要混在一起看：
+    ZH: 收下組織資料。這支函式有**兩種模式**,不要混在一起看：
 
-          第一次（`onboarded_at` 是 NULL）——「初次設定」。**校區必填、組織可以先跳過**。
+          第一次（`onboarded_at` 是 NULL）——「初次設定」。v4.13 起**全部選填**：
+              使用者端只問常用信箱（那一欄由呼叫端處理），這支基本上只負責
+              把 `onboarded_at` 蓋下去。校區/組織若有送仍會驗、會寫，
+              但正常流程不會送。
 
-          之後、組織還空著 ——「補填」（v4.9）。不需要解鎖,但**只能把空的補上**。
-
-          之後、組織已經有值 ——「解鎖後的修改」。必須有管理者核可的一次性解鎖,
+          之後 ——「解鎖後的修改」。必須有管理者核可的一次性解鎖,
               而且**只能改核可範圍內的欄位**。沒送的欄位保持原值,不強制重填 ——
               核可「改校區」卻要求他連學系一起重選,他就得再確認一次自己的系,
               而那正是最容易點錯的時候。
@@ -2477,28 +2478,12 @@ def complete_onboarding(db: Session, user: models.User,
     want_campus = bool(campuses)
     want_org = bool((org_value or "").strip())
 
-    # ══════════════════════════════════════════════════════════════════
-    # ZH: v4.9 「補填」模式（擁有者裁定 2026-09-07）。
-    #
-    # ZH: 為什麼需要：組織對照表改以 Alma 為準之後，**一定會有人在清單裡
-    #     找不到自己的單位**（Alma 的詞彙表跟不上新成立/改名的單位）。
-    #     初次設定若強制必填，那個人就只剩兩條路：亂選一個對不上的，
-    #     或者被鎖在一個關不掉的彈窗裡。所以組織改成可以按「稍後再說」。
-    #
-    # ZH: 🔴 跳過的代價要有人收 —— 空著的組織會讓彈窗**下次登入再問一次**
-    #     （見 chrome.js maybeShowOnboarding）。但那時 `onboarded_at` 已經有值，
-    #     照原本的規則會掉進「要解鎖」那條，於是他永遠補不上、而彈窗永遠再問。
-    #     這一段就是那個缺口：**空 → 有值**不需要解鎖，因為它沒有覆蓋任何東西。
-    #
-    # ZH: 🔴 界線在「原本是不是空的」，不是「他想不想改」。已經有值的一律
-    #     走解鎖 —— 否則這就變成一條繞過鎖的後門（先想辦法清空再重填）。
-    # ══════════════════════════════════════════════════════════════════
-    filling_gap = bool(
-        not first_time and field and want_org
-        and not (getattr(user, field, None) or "").strip())
-
+    # ZH: 🔴 v4.13 「補填」模式（v4.9 加的，空→有值免解鎖）**已移除**。
+    #     擁有者裁定 2026-09-11：使用者端不再自己填組織，怕填錯的資料
+    #     會靜靜地汙染所有依組織的統計。要更正一律走管理者核可的解鎖。
+    #     留著那條路等於留一個「先清空再重填」就能繞過鎖的縫。
     unlock = None
-    if not first_time and not filling_gap:
+    if not first_time:
         unlock = active_unlock(db, user.id)
         if unlock is None:
             raise ValueError(
@@ -2517,16 +2502,10 @@ def complete_onboarding(db: Session, user: models.User,
                 f"（可改：{'、'.join(sorted(allowed))}）")
         if not asked:
             raise ValueError("沒有要修改的內容")
-    elif filling_gap:
-        # ZH: 補填只補組織 —— 校區在初次設定時就填過了，這裡不該再動它。
-        #     （前端這個模式只畫組織一欄，這裡是後端自己的防線。）
-        if want_campus:
-            raise ValueError("這次只能補填學系／行政單位，校區要改請向管理員申請")
-    else:
-        # ZH: 初次設定是彈窗，**校區必填**（訪客沒有組織欄位，所以只檢查校區）。
-        # ZH: 組織是選填 —— 找不到自己單位的人按「稍後再說」，見上面 filling_gap。
-        if not want_campus:
-            raise ValueError("請選擇校區")
+    # ZH: v4.13 初次設定**不再有必填欄位**。
+    #     在此之前校區是必填的；改成只問常用信箱之後，前端根本不會送校區，
+    #     留著那個檢查會讓每一個新帳號的首登都被 400 擋下來。
+    #     （校區/組織由 Alma 在建號當下預填，見 apply_alma_profile。）
 
     # ZH: 先把值都驗過再寫 —— 驗到一半才失敗的話,前面已經改掉的救不回來。
     if want_org and field:
