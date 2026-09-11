@@ -149,8 +149,12 @@
             return;
         }
 
+        // ZH: v4.11 拿掉「學系」欄（擁有者裁定 2026-09-11）——
+        //     組織改在點開的詳情裡看（見 orgLine）。清單這一條是用來
+        //     **找人**的，欄位越少越好找；而學系對職員一律是空的，
+        //     那一欄有一半的列是「—」。
         var head = [
-            ['pp_c_user', '帳號'], ['', 'Email'], ['pp_c_dept', '學系'],
+            ['pp_c_user', '帳號'], ['', 'Email'],
             ['pp_c_role', '角色'], ['pp_c_state', '狀態'], ['pp_c_source', '來源'],
             ['pp_c_seen', '最後登入'],
         ];
@@ -164,7 +168,6 @@
                     + '" data-id="' + esc(u.id) + '" tabindex="0">'
                     + '<td>' + esc(u.username) + '</td>'
                     + '<td>' + esc(shownEmail(u)) + '</td>'
-                    + '<td>' + esc(orgName(u.department, u.department_en) || '—') + '</td>'
                     + '<td>' + esc(T('role_' + u.role, u.role)) + '</td>'
                     + '<td>' + stateCell(u) + '</td>'
                     + '<td>' + esc(u.auth_source || '—') + '</td>'
@@ -474,6 +477,33 @@
     // ZH: v4.4 名片頭（擁有者裁定 2026-09-03）：身分資訊集中在彈窗最上面，
     //     長得像一張名片 —— 頭像圈＋名字＋標籤＋兩行信箱＋一行出處。
     //     基本資料卡因此**不再重複列身分**（原 roText 已併入這裡並刪除）。
+    // ZH: v4.11 這個人的組織，一行講完（擁有者需求 2026-09-11）。
+    //
+    // ZH: 顯示哪些**照身分走**，與初次設定問的那一欄一致
+    //     （crud.ONBOARDING_FIELDS）：學生／老師看學系，職員／管理員看單位。
+    //     兩邊都有值就都顯示 —— 老師同時掛學系與行政單位是真實情況
+    //     （實測 8000036 兩邊都有），硬挑一個會把另一個藏起來。
+    //
+    // ZH: 學院是**推**出來的（後端由 department 外連 org_departments），
+    //     不是使用者身上的欄位；所以改對照表這裡就立刻跟著變。
+    //
+    // ZH: 空的就回空字串，由呼叫端決定要不要顯示那一行 ——
+    //     不要回「—」，那會讓沒有組織的人多出一行沒有內容的字。
+    function orgLine(u) {
+        var parts = [];
+        var col = orgName(u.college, u.college_en);
+        var dep = orgName(u.department, u.department_en);
+        if (col) parts.push(col);
+        if (dep) parts.push(dep);
+        // ZH: 單位刻意不做英文（org_units 的英文名只有一半，
+        //     做了會讓同一行一半中文一半英文 —— 與「數據」那頁同一個判斷）。
+        if (u.unit) parts.push(u.unit);
+        var line = parts.join(' / ');
+        var camp = (u.campuses || []).join('、');
+        if (camp) line = line ? (line + '（' + camp + '）') : camp;
+        return line;
+    }
+
     function pcardHtml(u) {
         var pills = '<span class="adm-pill">' + esc(T('role_' + u.role, u.role)) + '</span>'
             + (u.is_admin ? '<span class="adm-pill">'
@@ -482,9 +512,9 @@
                 + esc(T('pp_pill_temp', '臨時帳號')) + '</span>' : '')
             + (!u.is_active ? '<span class="adm-pill adm-pill--temp">'
                 + esc(T('pf_org_off', '停用')) + '</span>' : '');
-        var org = orgName(u.department, u.department_en);
+        // ZH: v4.11 組織從 meta 那一行**搬出來自成一行** —— 它現在可能很長
+        //     （學院／學系／單位＋校區），跟來源、最後登入擠在一起會讀不出來。
         var meta = [];
-        if (org) meta.push(org);
         meta.push(u.auth_source || 'local');
         if (u.last_login_time) {
             meta.push(T('pp_c_seen', '最後登入') + ' ' + TW.when(u.last_login_time));
@@ -497,6 +527,8 @@
             + '<div class="pcard__line">' + esc(shownEmail(u)) + '</div>'
             + '<div class="pcard__line">' + esc(T('pp_contact', '常用信箱')) + '：'
             + esc(u.contact_email || T('pp_contact_none', '—（用學號信箱）')) + '</div>'
+            + '<div class="pcard__line">' + esc(T('pp_org', '組織')) + '：'
+            + esc(orgLine(u) || T('pp_org_none', '—（未設定）')) + '</div>'
             + '<div class="pcard__line">' + esc(meta.join(' · ')) + '</div>'
             + '<div class="pcard__id mono">' + esc(u.id) + '</div>'
             + '</div>'

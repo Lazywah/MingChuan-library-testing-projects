@@ -621,6 +621,22 @@ class AdminUserListItem(BaseModel):
     # ZH: ⚠ **行政單位刻意沒有 unit_en**：英文名只有 53/97，做了會讓同一欄
     #     一半英文一半中文，比全中文更難讀。等補齊再開（擁有者裁定 2026-08-30）。
     department_en: Optional[str] = None
+    # ══════════════════════════════════════════════════════════════════
+    # ZH: v4.11 完整組織（擁有者需求 2026-09-11：詳情要看得到他的組織）。
+    #
+    # ZH: 🔴 加欄位到這裡**還不夠** —— `/admin/users` 是**手工**組
+    #     AdminUserListItem 的（不是 from_attributes），漏了建構子那邊
+    #     就會一路回 None，而畫面看起來只是「這個人沒填」。
+    #     這個坑在 contact_email 上踩過一次（2026-09-03）。
+    #     見 routers/admin.py::get_all_users。
+    # ══════════════════════════════════════════════════════════════════
+    unit: Optional[str] = None                       # ZH: 行政單位（org_units.path；只有職員有）
+    # ZH: 學院是**推出來的**（department 外連 org_departments），不是 users 的欄位。
+    college: Optional[str] = None
+    college_en: Optional[str] = None
+    # ZH: 校區來自 user_campuses 關聯表，教職員可能有多個。
+    campuses: List[str] = []
+
     created_at: Optional[UtcDatetime] = None
     tokens_used: int = 0
     tokens_limit: int = 0

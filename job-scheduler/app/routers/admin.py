@@ -470,6 +470,25 @@ def get_all_users(
     #     前端退回中文 —— 那是正常情況（打錯字、或還沒進對照表）。
     dept_en = {d.name: d.name_en for d in db.query(models.OrgDepartment).all() if d.name_en}
 
+    # ZH: v4.11 學院與校區。理由同上：**一次查完做成表**，不要每一列查一次。
+    # ZH: 學院不存在 users 身上 —— 由 department 對 org_departments 推出來，
+    #     所以改對照表全站立刻生效，不必回填任何人（與「數據」那頁同一個道理）。
+    dept_col = {d.name: (d.college, d.college_en)
+                for d in db.query(models.OrgDepartment).all()}
+    # ZH: 校區是關聯表（一人可多校區）。只撈這一頁用得到的人，
+    #     全表撈在使用者變多之後會變成一個沒人注意到的慢查詢。
+    camp_map: dict = {}
+    page_ids = [u.id for u, _ in rows]
+    if page_ids:
+        for uid, camp in (db.query(models.UserCampus.user_id, models.UserCampus.campus)
+                          .filter(models.UserCampus.user_id.in_(page_ids)).all()):
+            camp_map.setdefault(uid, []).append(camp)
+    # ZH: 順序照 org_seed.CAMPUSES，不是插入順序 —— 同一個人每次重整
+    #     看到的順序要一樣（與 crud.campuses_of 同一個做法）。
+    from .. import org_seed as _org_seed
+    for uid in camp_map:
+        camp_map[uid] = [c for c in _org_seed.CAMPUSES if c in set(camp_map[uid])]
+
     result = []
     for u, t in rows:
         if u.auth_source == "sso_mock" and u.username not in yaml_usernames:
@@ -493,6 +512,11 @@ def get_all_users(
                 # ZH: ⚠ 上面那句警告就是在講這裡 —— schema 加了欄位還要在這裡帶上，
                 #     不然它會靜靜地永遠是 None。
                 department_en=dept_en.get(u.department),
+                # ZH: v4.11 完整組織 —— ⚠ 這三行漏了的話 schema 有欄位也是回 None。
+                unit=u.unit,
+                college=(dept_col.get(u.department) or (None, None))[0],
+                college_en=(dept_col.get(u.department) or (None, None))[1],
+                campuses=camp_map.get(u.id, []),
                 created_at=u.created_at,
                 tokens_used=t.tokens_used if t else 0,
                 tokens_limit=t.tokens_limit if t else 0,
