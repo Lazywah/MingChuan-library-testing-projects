@@ -658,10 +658,14 @@
     //     三份資料後端一次都給了,切換不必重打 API。
     // ZH: 滑條的選項不加「依」—— 區塊標題已經是「依組織」,
     //     選項再寫「依學系」會變成「依組織：依學系」。
+    // ZH: v4.10c 多一個「身分」（擁有者需求 2026-09-11）。
+    //     後端回的是**中文標籤**（學生／老師／職員／訪客／管理員），
+    //     不是 role 代碼 —— 所以這裡不用做任何翻譯，與其他四種一樣。
     var ORGS = [['department', 'an_by_dept', '學系'],
                 ['college', 'an_by_college', '學院'],
                 ['unit', 'an_by_unit', '單位'],
-                ['campus', 'an_by_campus', '校區']];
+                ['campus', 'an_by_campus', '校區'],
+                ['role', 'an_by_rolegrp', '身分']];
     var ORG = 'department';
 
     function orgKey() { return ORG; }

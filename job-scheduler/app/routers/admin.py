@@ -1664,16 +1664,26 @@ def provision_user(
 def reset_user_account(
     user_id: str,
     background_tasks: BackgroundTasks,
+    confirm_username: str = Body("", embed=True,
+                                 description="要初始化的那個帳號（打錯就不做）"),
     db: Session = Depends(get_db),
     current_user: models.User = Depends(require_admin),
 ) -> Any:
     """ZH: 初始化帳號 — 重置密碼 + 歸零 Token 用量 | EN: Reset password and clear token usage
+
+    ZH: v4.10c 加上「打出目標帳號」的確認（擁有者裁定 2026-09-11）。
+        這支做的事跟刪除同級 —— 重設密碼等於把原本的登入方式作廢，
+        歸零用量等於把統計抹掉，兩者都救不回來。
+
+    ZH: ⚠ 這支**目前沒有任何前端入口**（2026-09-11 盤點）。加了確認之後
+        它仍然沒有入口 —— 之後要做介面時，記得送 confirm_username。
 
     @node job-scheduler/app/routers/admin.py::reset_user_account
     """
     db_user = db.query(models.User).filter(models.User.id == user_id).first()
     if not db_user:
         raise HTTPException(status_code=404, detail="ZH: 找不到這個帳號 | EN: User not found")
+    _require_target_confirm(confirm_username, db_user)
 
     import secrets
     temp_password = secrets.token_urlsafe(12)
@@ -2085,7 +2095,8 @@ def _analytics_day(v):
 
 @router.get("/analytics")
 def get_analytics(
-    group_by: str = Query("department", description="department / college / unit"),
+    group_by: str = Query("department",
+                          description="department / college / unit / campus / role"),
     department: Optional[str] = Query("all"),
     days: int = Query(30, ge=0, le=3650, description="ZH: 0 = 全部 | EN: 0 = all time"),
     start: Optional[str] = Query(None, description="YYYY-MM-DD"),
@@ -2108,10 +2119,10 @@ def get_analytics(
 
     @node job-scheduler/app/routers/admin.py::get_analytics
     """
-    if group_by not in ("department", "college", "unit", "campus"):
+    if group_by not in ("department", "college", "unit", "campus", "role"):
         raise HTTPException(status_code=400,
                             detail=f"不支援的分組方式：{group_by}"
-                                   "（可用：department / college / unit / campus）")
+                                   "（可用：department / college / unit / campus / role）")
 
     # ZH: v4.5 依校區（擁有者需求 2026-09-03）。校區是**關聯表**
     #     （user_campuses，教職員可多校區）——直接 join 會把跨校區的人
@@ -2129,6 +2140,22 @@ def get_analytics(
         label_col = models.OrgDepartment.college
     elif group_by == "unit":
         label_col = models.User.unit
+    elif group_by == "role":
+        # ZH: v4.10c 依身分（擁有者需求 2026-09-11）。
+        # ZH: 🔴 這裡回**中文標籤**而不是 role 代碼，理由跟校區那組一樣：
+        #     前端畫分組名時走的是 `orgName(group, group_en)`，
+        #     直接回 "student" 的話中文版畫面就會顯示 "student"。
+        #     回中文＋group_en 給英文，前端一個字都不用改。
+        # ZH: ⚠ 對照要與 _IMPORT_ROLES 收的寫法一致（學生/老師/職員/訪客），
+        #     不然同一個身分在匯入範例與統計圖上是兩個名字。
+        label_col = case(
+            (models.User.role == "student", "學生"),
+            (models.User.role == "teacher", "老師"),
+            (models.User.role == "staff", "職員"),
+            (models.User.role == "guest", "訪客"),
+            (models.User.role == "admin", "管理員"),
+            else_=models.User.role,          # ZH: 沒見過的代碼原樣顯示，不要吞掉
+        )
     else:
         label_col = models.User.department
 
@@ -2166,6 +2193,9 @@ def get_analytics(
         from .. import org_seed
         group_en = dict(org_seed.CAMPUS_EN)
         group_en["多校區"] = "Multi-campus"
+    elif group_by == "role":
+        group_en = {"學生": "Student", "老師": "Teacher", "職員": "Staff",
+                    "訪客": "Guest", "管理員": "Administrator"}
 
     group_stats = [
         {
