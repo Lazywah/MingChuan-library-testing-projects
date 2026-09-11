@@ -346,6 +346,36 @@ settings = Settings()
 # EN: At startup, detect whether OIDC config in sso_policy.yaml is complete
 #     (client_id / client_secret not PENDING)
 #
+# ══════════════════════════════════════════════════════════════════════════
+# ZH: mock 登入的閘門（2026-09-11）
+# ══════════════════════════════════════════════════════════════════════════
+# ZH: `sso_policy.yaml` 的 `mock.users` 裡有測試帳號，而且**帳號等於密碼**
+#     （T1090001/T1090001）。那是給開發用的，不該在正式站可用。
+#
+# ZH: 🔴 這個判準原本散在 routers/sso.py 的三處 `if not mock_mode and …`，
+#     而 **routers/auth.py 的 /auth/login 漏掉了** —— 於是 2026-09-11 實測
+#     發現：provider=oidc、mock_mode=False 的正式站，任何人從外網
+#     `POST /api/v1/auth/login`（T1090001 / T1090001）就能拿到有效 token
+#     並自動開一個學生帳號。sso.py 的註解早就描述過同一類漏洞
+#     （"turns /callback into a password-less login backdoor"），
+#     只是那次修的時候沒有一併看 auth.py。
+#
+# ZH: 所以判準收成這一支，新的入口只要問它就好，不必自己記那條布林。
+#
+# ZH: ⚠ `mock_mode` 的預設是 True（與 sso.py 一致）—— 讀不到 policy 時
+#     代表環境是壞的或是開發機，那時 mock 本來就該可用。正式站的 yaml
+#     一律明寫 `mock_mode: false`。
+# ══════════════════════════════════════════════════════════════════════════
+def mock_login_allowed() -> bool:
+    """
+    ZH: 現在允不允許用 yaml 裡的測試帳號登入。
+
+    @node job-scheduler/app/config.py::mock_login_allowed
+    """
+    return (bool(SSO_POLICY.get("mock_mode", True))
+            or SSO_POLICY.get("provider") == "mock")
+
+
 # ZH: OIDC_ENABLED=True 時，/api/v1/sso/providers 端點才會回傳 "oidc"
 #     前端依此決定是否顯示「使用學校帳號登入」按鈕
 # EN: When OIDC_ENABLED=True, /api/v1/sso/providers includes "oidc";

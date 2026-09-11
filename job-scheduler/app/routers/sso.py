@@ -35,7 +35,7 @@ from ..crud import (
     upgrade_to_sso,
 )
 from ..auth import create_access_token
-from ..config import SSO_POLICY, OIDC_ENABLED
+from ..config import SSO_POLICY, mock_login_allowed, OIDC_ENABLED
 from ..sso_client import get_sso_client, build_oidc_client_if_enabled
 from ..services import alma_service
 
@@ -244,7 +244,7 @@ def mock_sso_login_page():
 
     @node job-scheduler/app/routers/sso.py::mock_sso_login_page
     """
-    if not mock_mode and SSO_POLICY.get("provider") != "mock":
+    if not mock_login_allowed():
         raise HTTPException(status_code=404, detail="ZH: 測試用的 SSO 已停用 | EN: Mock SSO is disabled")
 
     users = SSO_POLICY.get("mock", {}).get("users", [])
@@ -284,7 +284,7 @@ def mock_sso_login_page():
 @router.post("/mock-submit", summary="處理模擬登入表單的送出")
 def mock_sso_submit(ticket: str = Form(...)):
     """@node job-scheduler/app/routers/sso.py::mock_sso_submit"""
-    if not mock_mode and SSO_POLICY.get("provider") != "mock":
+    if not mock_login_allowed():
         raise HTTPException(status_code=404, detail="ZH: 測試用的 SSO 已停用 | EN: Mock SSO is disabled")
     return RedirectResponse(url=f"/api/v1/sso/callback?ticket={ticket}", status_code=303)
 

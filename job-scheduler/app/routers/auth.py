@@ -34,6 +34,7 @@ import hmac as _hmac
 from .. import crud, schemas, models
 from ..auth import (authenticate_user, cookie_name_for, create_access_token,
                     get_current_user, is_expired, require_admin, require_role)
+from ..config import mock_login_allowed
 from ..database import get_db
 from ..services import email_service
 from ..rate_limit import limiter
@@ -113,7 +114,16 @@ async def login(
     user = authenticate_user(db, form_data.username, form_data.password)
     
     # ZH: 嘗試 SSO 快速驗證 (依據 Mock 配置匹配密碼，若未設密碼預設與學號同) | EN: Try seamless SSO auth
-    if not user:
+    #
+    # ZH: 🔴 **這一段只在 mock 模式下成立**（閘門 2026-09-11 補上）。
+    #     在此之前它沒有任何條件：正式站（provider=oidc、mock_mode=False）
+    #     照樣讀 yaml 的測試帳號，而那些帳號**帳號等於密碼**。
+    #     實測結果是任何人從外網打這支就能拿到有效 token 並自動開帳號。
+    #     判準集中在 config.mock_login_allowed()，不要在這裡自己寫布林。
+    #
+    # ZH: 擋下來時**什麼都不做**，讓它落到下面那個 401 —— 與密碼打錯
+    #     回同一句話。回不一樣的訊息等於告訴外面「這個帳號存在」。
+    if not user and mock_login_allowed():
         from ..config import SSO_POLICY
         mock_users = SSO_POLICY.get("mock", {}).get("users", [])
         for sso_user in mock_users:
