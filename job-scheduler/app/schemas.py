@@ -130,6 +130,9 @@ class AdminUserUpdate(BaseModel):
     is_active: Optional[int] = None                  # ZH: 0=停用 1=啟用 | EN: 0=disabled 1=enabled
     tokens_limit: Optional[int] = None               # ZH: Token 月度上限 | EN: Monthly token limit
     department: Optional[str] = None                 # ZH: 學系資訊 | EN: Department
+    # ZH: v4.10 停用／啟用時要把**目標帳號**打出來（見 admin.admin_update_user）。
+    #     其他欄位不需要 —— 改錯了改回來就好，停用會把人擋在門外。
+    confirm_username: Optional[str] = None
 
 
 # ==============================================================================
@@ -246,6 +249,9 @@ class AdminExtendTempAccount(BaseModel):
     @node job-scheduler/app/schemas.py::AdminExtendTempAccount
     """
     expires_on: date
+    # ZH: v4.10b 對既有帳號的操作一律要打出目標帳號確認
+    #     （見 admin._require_target_confirm）。
+    confirm_username: Optional[str] = None
 
     @field_validator("expires_on")
     @classmethod
@@ -268,8 +274,12 @@ class AdminProvisionUser(BaseModel):
     department: Optional[str] = None                 # ZH: 學系資訊 | EN: Department
 
 class AdminDeleteUser(BaseModel):
-    """ZH: 管理員刪除使用者請求 | EN: Admin delete user request"""
-    admin_password: str                              # ZH: 管理員密碼驗證 | EN: Admin password validation
+    """ZH: 管理員刪除使用者請求 | EN: Admin delete user request
+
+    ZH: v4.10 從「管理者密碼」改成「打出要刪的那個帳號」。
+        理由見 admin._require_target_confirm 的註解。
+    """
+    confirm_username: str                            # ZH: 要刪的那個帳號（打錯就不刪）
 
 class AdminVerify(BaseModel):
     """ZH: 管理員權限驗證請求 | EN: Admin privilege verification request"""

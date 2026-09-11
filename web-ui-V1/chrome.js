@@ -702,16 +702,42 @@
             // ZH: 🔴 路徑要帶 `/V1/`。`:8888/` 只是導向，而舊版在 /V0/ ——
             //     nginx 上三個版本各自有路徑：/V0/、/V0.5/、/V1/（現行）。
             //
-            // ZH: token 仍然交棒 —— `admin_hud_token` 是舊版管理端在讀的；
-            //     v2 用自己的 `ai_hud_token`（不同 origin，storage 本來就分開），
-            //     所以到了對面還是會走一次登入。留著交棒是為了舊版還在的期間。
+            // ZH: v4.10 換票跳轉（擁有者裁定 2026-09-11）。
+            //
+            // ZH: 在此之前到了對面還要再登入一次 —— 兩端是不同 origin
+            //     （port 不同），localStorage 本來就不共用。而學校用 SSO，
+            //     SSO 帳號的密碼是建號時隨機產生後丟掉的，**那組密碼不存在**，
+            //     所以管理者根本沒有東西可以輸入。
+            //
+            // ZH: 🔴 票放 **fragment** 不放 query —— fragment 不會送到伺服器，
+            //     不會進 nginx 的 access log。
+            //
+            // ZH: 🔴 `admin_hud_token` 那段已經拿掉：它寫的是**使用者端**的
+            //     localStorage，管理端（不同 origin）從來讀不到，
+            //     留著只是把一份有效 token 多存一個地方。
+            //
+            // ZH: 換票失敗**照樣跳過去** —— 對面還有登入表單，
+            //     總比停在這裡什麼都沒發生好（而且要講出原因）。
             var admin = document.createElement('a');
             admin.href = '#';
-            admin.addEventListener('click', function (ev) {
+            admin.addEventListener('click', async function (ev) {
                 ev.preventDefault();
-                var t = token();
-                if (t) localStorage.setItem('admin_hud_token', t);
-                location.href = location.protocol + '//' + location.hostname + ':8888/V1/';
+                // ZH: 直接落在 login.html —— 跳 `/V1/`（index）的話，
+                //     它的守門會先轉址到登入頁，而轉址不保證帶著 fragment，
+                //     票就這樣不見了。落在處理票的那一頁最不會出錯。
+                var base = location.protocol + '//' + location.hostname
+                         + ':8888/V1/login.html';
+                try {
+                    var r = await fetch(API + '/auth/admin-handoff', {
+                        method: 'POST', headers: authHeaders(),
+                    });
+                    if (r.ok) {
+                        var j = await r.json();
+                        location.href = base + '#ticket=' + encodeURIComponent(j.ticket);
+                        return;
+                    }
+                } catch (e) { /* ZH: 網路不通就走下面那條 */ }
+                location.href = base;
             });
             menu.appendChild(item(admin, 'acct_admin', '管理介面'));
         }

@@ -1777,6 +1777,23 @@ def acknowledge_initial_password(db: Session, user) -> bool:
 #      最壞情況落後一個輪詢週期。UI 需明示上次同步時間，別讓人誤以為是即時推播。
 # ==============================================================================
 ONLINE_WINDOW_MINUTES = 10      # ZH: 平台在線判定（對齊 admin 的 _ONLINE_THRESHOLD）
+
+
+def is_online(user, cut) -> bool:
+    """
+    ZH: 這個人在 `cut` 之後有動作嗎（＝現在算不算在線）。
+
+    ZH: 只有一份定義 —— 額度提醒與即時用量象限用的是同一個判準，
+        兩邊各寫一份的話，「在線」在兩個畫面上會是兩件事。
+
+    @node job-scheduler/app/services/myai_sync.py::is_online
+    """
+    last = getattr(user, "last_activity", None)
+    if not last:
+        return False
+    if last.tzinfo is None:
+        last = last.replace(tzinfo=timezone.utc)
+    return last >= cut
 USAGE_WINDOW_MINUTES = 15       # ZH: MYAI「近期有用量」判定（含輪詢延遲的緩衝）
 
 
@@ -1841,12 +1858,7 @@ def live_usage_quadrants(db: Session, usage_minutes: int = USAGE_WINDOW_MINUTES,
 
     def _online(u) -> bool:
         """@node job-scheduler/app/services/myai_sync.py::live_usage_quadrants.<nested@870>._online"""
-        last = getattr(u, "last_activity", None)
-        if not last:
-            return False
-        if last.tzinfo is None:
-            last = last.replace(tzinfo=timezone.utc)
-        return last >= online_cut
+        return is_online(u, online_cut)
 
     used_user_ids = set()
     using_active, using_offplat, unlinked = [], [], []
@@ -1983,9 +1995,10 @@ def notify_balance_alerts(db: Session) -> dict:
     """
     ZH: MYAI 點數的三段提醒（開始變少／快用完／已用完）—— 寄信的部分。畫面提示走 /external-ai/my-balance。
 
-    ZH: 只寄給**啟用中、有信箱、且真的綁得到 MYAI 帳號**的人。
+    ZH: 只寄給**此刻在線、啟用中、有信箱、且真的綁得到 MYAI 帳號**的人。
         `state == "unknown"`（沒綁帳號）不寄 —— 那個人根本還沒開始用,
         提醒他「額度用完」是錯的。
+        「在線」那個條件是 v4.10 加的，理由寫在下面的區塊註解裡。
 
     ZH: 回傳計數而不是 None,是為了讓排程的日誌看得出「跑了但沒寄」與「根本沒跑」的差別。
 
@@ -2001,12 +2014,33 @@ def notify_balance_alerts(db: Session) -> dict:
     guide = crud.get_system_config(db, "myai_apply_guide_url", "")
     sent = skipped = 0
 
+    # ══════════════════════════════════════════════════════════════════
+    # ZH: v4.10 只提醒**此刻在線**的人（擁有者裁定 2026-09-11）。
+    #
+    # ZH: 在此之前的行為是個很容易忽略的坑：外層的 `_myai_balance_loop`
+    #     已經會「沒有人在線就休息」，所以看起來像是只在有人用的時候才提醒
+    #     —— 但實際上**只要有任何一個人上線，這一輪就會寄給所有低額度的人**，
+    #     包含幾百個根本沒在用的。對那些人來說就是固定週期收到一封
+    #     「你的額度快用完了」，而他們什麼都沒用。
+    #
+    # ZH: 為什麼用「在線」而不是「最近 N 天登入過」：點數只有在用的時候
+    #     才會掉，所以值得提醒的時刻就是他人在那裡的時候。人不在線卻收到
+    #     額度警告，本來就對不上他的經驗。
+    #
+    # ZH: 代價要知道：額度低但從此不再上線的人**永遠不會收到這封信**。
+    #     那是刻意的 —— 他沒在用，那封信對他沒有意義。
+    #     （畫面上的提示仍然在，他下次進來就看得到。）
+    # ══════════════════════════════════════════════════════════════════
+    online_cut = datetime.now(timezone.utc) - timedelta(minutes=ONLINE_WINDOW_MINUTES)
     users = db.query(models.User).filter(
         models.User.is_active == True,           # noqa: E712
         models.User.email.isnot(None),
     ).all()
 
     for u in users:
+        if not is_online(u, online_cut):
+            skipped += 1
+            continue
         row = account_for_user(db, u)
         if row is None:
             continue

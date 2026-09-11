@@ -144,7 +144,7 @@ def get_profile_unlock(
 @router.post("/users/{user_id}/profile-unlock", summary="核可一次性修改個人組織資料")
 def grant_profile_unlock(
     user_id: str,
-    payload: dict = Body(..., description='{"fields": ["campus"], "reason": "轉系"}'),
+    payload: dict = Body(..., description='{"fields": ["campus"], "reason": "轉系", "confirm_username": "…"}'),
     db: Session = Depends(get_db),
     admin: models.User = Depends(require_admin),
 ):
@@ -162,6 +162,9 @@ def grant_profile_unlock(
     user = crud.get_user_by_id(db, user_id) if hasattr(crud, "get_user_by_id") else         db.query(models.User).filter(models.User.id == user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="找不到這個使用者")
+    # ZH: v4.10b 核可解鎖＝讓那個人可以改自己的組織資料一次 ——
+    #     對既有帳號的操作一律要打出目標帳號確認。
+    _require_target_confirm(payload.get("confirm_username"), user)
     try:
         row = crud.grant_profile_unlock(db, user, payload.get("fields") or [],
                                         admin, payload.get("reason") or "")
@@ -743,6 +746,25 @@ def admin_update_user(
     if not db_user:
         raise HTTPException(status_code=404, detail="ZH: 找不到這個帳號 | EN: User not found")
 
+    # ══════════════════════════════════════════════════════════════════
+    # ZH: v4.10b 有後果的欄位要先確認（擁有者裁定 2026-09-11）。
+    #
+    # ZH: 第一版只有「停用」要確認，理由是「其他欄位改錯了再改回來就好」。
+    #     那句話對信箱／學系／身分成立，但這張表單裡還有兩個欄位不是：
+    #       is_admin —— 勾下去就是把管理權給出去
+    #       password —— 設下去就是給那個帳號一組能登入的憑證
+    #     擁有者指出這兩個正是會「亂開」的地方。停用要確認、給管理權不用，
+    #     輕重是反過來的。
+    #
+    # ZH: 🔴 前端一律會問，但判準放在這裡 —— 只擋在前端的話，
+    #     用 curl 送一個沒有 confirm_username 的 PUT 就繞過去了。
+    #
+    # ZH: v4.10b 擴及**整支端點**（擁有者裁定「對帳號的操作基本上都要」）。
+    #     原本只在 is_admin／password 有變時才驗，但那表示確認會時有時無，
+    #     而管理者無從預期 —— 「這次怎麼沒問」正是鬆懈的開始。
+    # ══════════════════════════════════════════════════════════════════
+    _require_target_confirm(update_data.confirm_username, db_user)
+
     if update_data.email is not None:
         db_user.email = update_data.email
     if update_data.is_admin is not None:
@@ -755,6 +777,9 @@ def admin_update_user(
         #     否則每次複查都會再看到同一個已經確認過的人。
         db_user.role_source = "admin"
     if update_data.is_active is not None:
+        # ZH: v4.10 停用會把人擋在門外，啟用是它的反向操作 —— 兩邊都要確認，
+        #     免得介面上一邊要打一邊不用，管理者搞不清楚何時會被問。
+        _require_target_confirm(update_data.confirm_username, db_user)
         db_user.is_active = update_data.is_active
     if update_data.department is not None:
         db_user.department = update_data.department
@@ -788,18 +813,19 @@ def admin_delete_user(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(require_admin),
 ) -> Any:
-    """ZH: 管理員刪除使用者 (需驗證密碼) | EN: Admin delete user (requires password verification)
+    """ZH: 管理員刪除使用者（要打出目標帳號確認）| EN: Admin delete user (type the account to confirm)
+
+    ZH: v4.10 確認方式從「管理者密碼」改成「打出要刪的帳號」——
+        理由見 _require_target_confirm 的區塊註解（SSO 管理者沒有密碼）。
 
     @node job-scheduler/app/routers/admin.py::admin_delete_user
     """
-    if not crud.verify_password(payload.admin_password, current_user.hashed_password):
-        raise HTTPException(status_code=403, detail="ZH: 管理員密碼不對 | EN: Invalid admin password")
-    if user_id == current_user.id:
-        raise HTTPException(status_code=400, detail="ZH: 不能刪除自己的帳號 | EN: Cannot delete yourself")
-
     db_user = db.query(models.User).filter(models.User.id == user_id).first()
     if not db_user:
         raise HTTPException(status_code=404, detail="ZH: 找不到這個帳號 | EN: User not found")
+    _require_target_confirm(payload.confirm_username, db_user)
+    if user_id == current_user.id:
+        raise HTTPException(status_code=400, detail="ZH: 不能刪除自己的帳號 | EN: Cannot delete yourself")
 
     username = db_user.username
 
@@ -975,6 +1001,42 @@ def delete_lab_archive(
     return {"message": "已銷毀", "volume_name": volume_name}
 
 
+# ══════════════════════════════════════════════════════════════════════════
+# ZH: 破壞性操作的確認（擁有者裁定 2026-09-11）
+# ══════════════════════════════════════════════════════════════════════════
+# ZH: 在此之前是「再輸入一次管理者密碼」。那個設計有一個致命前提：
+#     **每個管理者都有一組自己知道的密碼**。學校用 SSO，而 SSO 帳號的密碼
+#     是建號時隨機產生、明文當場丟掉的（crud.create_sso_user）——
+#     那組密碼在世界上已經不存在，所以 SSO 管理者**永遠通不過**這一關。
+#     2026-09-11 盤點時，平台上四個管理者裡有三個是 SSO 帳號。
+#
+# ZH: 改成「把要操作的那個帳號打出來」。要講清楚這是什麼：
+#       這是**防手殘，不是防攻擊**。帳號不是秘密，拿到 session 的人就知道。
+#       它擋的是「點錯一列」——而那正是刪錯人的實際成因。
+#
+# ZH: 🔴 為什麼是打**目標**帳號而不是自己的員編：
+#       自己的員編每次都是同一串，第三次就變肌肉記憶，等於沒有；
+#       而且後端只能拿 current_user.username 去比，比了也證明不了什麼。
+#       打目標帳號則能被後端真正驗證，而且擋得住「我以為我點的是另一個人」。
+# ══════════════════════════════════════════════════════════════════════════
+def _require_target_confirm(given: Optional[str], target: models.User) -> None:
+    """
+    ZH: 確認管理者打出來的帳號就是他要操作的那一個。不符就 400。
+
+    ZH: 比對前 strip + casefold —— 複製貼上常常帶到空白，
+        而大小寫不同不代表他搞錯了人。
+
+    @node job-scheduler/app/routers/admin.py::_require_target_confirm
+    """
+    want = (target.username or "").strip().casefold()
+    got = (given or "").strip().casefold()
+    if not got or got != want:
+        raise HTTPException(
+            status_code=400,
+            detail=(f"ZH: 請輸入要操作的帳號「{target.username}」以確認 | "
+                    f"EN: Type the account name to confirm"))
+
+
 @router.post("/verify")
 def admin_verify_action(
     payload: schemas.AdminVerify,
@@ -1018,6 +1080,9 @@ def extend_temp_user(
     user = db.query(models.User).filter(models.User.id == user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="ZH: 找不到這個帳號 | EN: User not found")
+    # ZH: v4.10b 延長到期日＝把一個可能已經關掉的帳號重新打開（下面會把
+    #     is_active 設回 1）—— 對既有帳號的操作一律要打出目標帳號確認。
+    _require_target_confirm(data.confirm_username, user)
     if user.expires_at is None:
         raise HTTPException(
             status_code=400,
@@ -2674,6 +2739,7 @@ async def myai_grant_points(
     user_id: str,
     points: int = Body(..., embed=True, description="要加的點數"),
     reason: str = Body("", embed=True, description="原因（會寫進稽核與廠商備註）"),
+    confirm_username: str = Body("", embed=True, description="要加點的那個帳號（打錯就不送）"),
     db: Session = Depends(get_db),
     admin: models.User = Depends(require_admin),
 ):
@@ -2690,6 +2756,9 @@ async def myai_grant_points(
     user = db.query(models.User).filter(models.User.id == user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="ZH: 找不到這個使用者 | EN: user not found")
+    # ZH: v4.10b 這一支會**花錢而且不冪等**（加 N，按兩次就發兩次）——
+    #     對既有帳號的操作一律要打出目標帳號確認。
+    _require_target_confirm(confirm_username, user)
     try:
         return await myai_sync.grant_points(db, user, points, admin.id, reason)
     except myai_sync.MyaiSyncError as e:

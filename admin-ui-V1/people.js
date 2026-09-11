@@ -422,13 +422,23 @@
 
 
     function wireExtend(u) {
-        $('x-go').addEventListener('click', async function () {
+        $('x-go').addEventListener('click', function () {
             var expiresOn = $('x-expires').value;
+            // ZH: v4.10b 延長＝把一個可能已經到期關掉的帳號重新打開
+            //     （後端會把 is_active 設回 1）—— 算對帳號的操作，要確認。
+            targetConfirm(T('tmp_ext_title', '確認延長'), null, u.username,
+                          async function (name) { await sendExtend(u, expiresOn, name); });
+        });
+    }
+
+    async function sendExtend(u, expiresOn, name) {
+        {
             try {
                 var out = await api('/admin/users/' + encodeURIComponent(u.id) + '/extend', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ expires_on: expiresOn }),
+                    body: JSON.stringify({ expires_on: expiresOn,
+                                           confirm_username: name }),
                 });
                 // ZH: 後端會順手把 is_active 設回 1（排程可能已經停用它），
                 //     所以本地的兩個欄位都要跟著更新，否則清單還顯示舊狀態。
@@ -439,17 +449,20 @@
                 flash('x-msg', T('tmp_ext_done', '已延到 {d}')
                     .replace('{d}', TW.dateTime(out.expires_at)));
             } catch (e) {
-                say('x-msg', T('tmp_ext_fail', '延期失敗（{w}）').replace('{w}', e.message));
+                // ZH: 丟回 targetConfirm 顯示在彈窗裡（彈窗不關，不用重打）。
+                throw new Error(T('tmp_ext_fail', '延期失敗（{w}）').replace('{w}', e.message));
             }
-        });
+        }
     }
 
 
-    // ── 基本資料：唯讀 → 編輯 → 儲存前確認密碼 ─────────────────────────────
+    // ── 基本資料：唯讀 → 編輯 → 儲存前確認 ───────────────────────────────
     //
-    // ZH: 預設唯讀。按「編輯」直接進編輯；**只在儲存前**確認一次密碼
+    // ZH: 預設唯讀。按「編輯」直接進編輯；**只在儲存前**確認一次
     //     （v4.3b 擁有者裁定 2026-09-03：原本進編輯還要先驗一次，兩道太煩——
     //     真正要擋的是「誤存」，看與改欄位本身不需要門）。
+    // ZH: v4.10b 確認的內容從「管理者密碼」改成「打出目標帳號」——
+    //     SSO 管理者沒有密碼可以輸入（見 targetConfirm）。
     //
     // ZH: 🔴 **這道確認擋的是誤觸與離開座位時被人動到，不是安全機制。**
     //     後端的 `PUT /admin/users/{id}` 本身不要求密碼（改它會弄壞舊版管理介面），
@@ -488,8 +501,8 @@
             + '<div class="pcard__id mono">' + esc(u.id) + '</div>'
             + '</div>'
             // ZH: v4.4b 停用/刪除搬到名片右側（擁有者裁定 2026-09-03）——
-            //     密碼確認在按下去之後用小彈窗問（pwConfirm），
-            //     所以這裡只是兩顆入口鈕，不再擺密碼欄。
+            //     確認在按下去之後用小彈窗問（v4.10 起是打出目標帳號，
+            //     見 targetConfirm），所以這裡只是兩顆入口鈕。
             + '<div class="pcard__acts">'
             + '<button class="btn btn--minor" type="button" id="toggle-active">'
             + esc(u.is_active ? T('pp_disable', '停用帳號') : T('pp_enable', '啟用帳號')) + '</button>'
@@ -547,8 +560,8 @@
             //     提示跟欄位長在一起，開始打字就讓位，不佔一行。
             + field('f-pw', T('pp_new_pw', '新密碼'), '', 'password',
                     ' placeholder="' + esc(T('pp_pw_hint', '留空就不改密碼')) + '"')
-            // ZH: v4.4b 密碼確認改在按「儲存」後用小彈窗問（pwConfirm），
-            //     表單裡不再擺確認欄。
+            // ZH: v4.10b 確認改在按「儲存」後用小彈窗問（打出目標帳號，
+            //     見 targetConfirm），表單裡不擺確認欄。
             + '<div class="ds__actions">'
             + '<button class="btn btn--primary" type="button" id="save">'
             + esc(T('pp_save', '儲存')) + '</button>'
@@ -560,17 +573,31 @@
     }
 
     // ══════════════════════════════════════════════════════════════════
-    // ZH: v4.4b 管理員密碼確認彈窗（擁有者裁定 2026-09-03）：
-    //     停用/刪除/儲存前確認共用。`run(pw)` 負責驗證與動作，
-    //     丟錯就顯示在彈窗裡、彈窗不關；成功才關。
-    //     密碼欄位活在這個彈窗裡，關掉就消失 —— 不殘留在詳情的 DOM。
+    // ZH: v4.10 破壞性操作的確認彈窗（擁有者裁定 2026-09-11）。
+    //
+    // ZH: 前身是「再輸入一次管理者密碼」（v4.4b）。那個設計假設每個管理者
+    //     都有一組自己知道的密碼 —— 但學校用 SSO，SSO 帳號的密碼是建號時
+    //     隨機產生、明文當場丟掉的，**在世界上已經不存在**。
+    //     2026-09-11 盤點：四個管理者裡三個是 SSO 帳號，他們永遠通不過。
+    //
+    // ZH: 改成「把要操作的那個帳號打出來」。這是**防手殘不是防攻擊** ——
+    //     帳號不是秘密。它擋的是「點錯一列」，而那正是刪錯人的實際成因。
+    //
+    // ZH: 🔴 打的是**目標**帳號，不是自己的員編：自己的員編每次都一樣，
+    //     第三次就變肌肉記憶等於沒有；打目標才擋得住「我以為我點的是別人」，
+    //     而且後端驗得了（見 admin._require_target_confirm）。
+    //
+    // ZH: `run(value)` 負責動作，丟錯就顯示在彈窗裡、彈窗不關；成功才關。
     // ══════════════════════════════════════════════════════════════════
-    function pwConfirm(title, hint, run) {
+    function targetConfirm(title, hint, expect, run) {
         var dlg = $('pw-dialog');
         dlg.innerHTML =
             '<h2 class="rmod__title">' + esc(title) + '</h2>'
             + (hint ? '<p class="footnote">' + esc(hint) + '</p>' : '')
-            + field('pwc-in', T('pp_admin_pw', '你的管理員密碼'), '', 'password')
+            + '<p class="footnote">'
+            + esc(T('pp_confirm_type', '請輸入「{n}」以確認。').replace('{n}', expect))
+            + '</p>'
+            + field('pwc-in', T('pp_confirm_label', '帳號'), '', 'text')
             + '<div class="adm-inline rmod__foot">'
             + '<button class="btn btn--primary" type="button" id="pwc-go">'
             + esc(T('pp_pwc_go', '確認')) + '</button>'
@@ -583,7 +610,12 @@
         $('pwc-cancel').addEventListener('click', function () { dlg.close(); });
         async function go() {
             var pw = $('pwc-in').value;
-            if (!pw) { say('pwc-msg', T('pp_need_pw', '請先輸入你的管理員密碼。')); return; }
+            // ZH: 前端先比一次只是省一趟往返 —— **後端才是判準**
+            //     （前端擋得掉的東西，用 curl 一樣送得出來）。
+            if (pw.trim().toLowerCase() !== String(expect).trim().toLowerCase()) {
+                say('pwc-msg', T('pp_confirm_bad', '打的帳號跟要操作的不一樣。'));
+                return;
+            }
             $('pwc-go').disabled = true;
             try {
                 await run(pw);
@@ -594,27 +626,16 @@
             }
         }
         $('pwc-go').addEventListener('click', go);
-        // ZH: 密碼欄按 Enter = 確認 —— 打完還要移滑鼠去按鈕很煩。
+        // ZH: 按 Enter = 確認 —— 打完還要移滑鼠去按鈕很煩。
         $('pwc-in').addEventListener('keydown', function (ev) {
             if (ev.key === 'Enter') { ev.preventDefault(); go(); }
         });
     }
 
-    // ZH: 向後端驗證管理員密碼。用 /admin/verify —— 它專為此而存在，
-    //     而且**不發 token、不更新 last_login**（用 /auth/login 驗的話，
-    //     每次按編輯都會在稽核裡留下一次「登入」）。
-    async function verifyPassword(pw) {
-        try {
-            await api('/admin/verify', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ admin_password: pw }),
-            });
-            return true;
-        } catch (e) {
-            return false;
-        }
-    }
+    // ZH: v4.10 `verifyPassword()` 已移除 —— 它唯一的用途是把管理者輸入的
+    //     密碼送去 `/admin/verify`，而確認方式已改成「打出目標帳號」
+    //     （見 targetConfirm）。後端 `/admin/verify` 端點仍在，
+    //     但前端已經沒有任何地方呼叫它。
 
     // ==================================================================
     // ZH: 檢視切換（平台 / MYAI）—— 與「平台設定」「數據」同一個元件。
@@ -820,13 +841,19 @@
         });
 
         $('save').addEventListener('click', function () {
-            // ZH: 儲存前的密碼確認（唯一一道）——用小彈窗問（v4.4b）。
-            //     欄位值在 run 裡才讀：小彈窗不動編輯表單，值都還在。
-            pwConfirm(T('pp_confirm_save', '管理者密碼確認'), null, async function (pw2) {
-            if (!await verifyPassword(pw2)) {
-                throw new Error(T('pp_unlock_bad', '密碼不對。'));
-            }
-
+            // ZH: v4.10b 儲存一律要確認（擁有者裁定 2026-09-11）。
+            //
+            // ZH: 我一度把確認整個拿掉，理由是「改錯了再改回來就好」。
+            //     那句話對信箱／學系／身分成立，但這張表單同時能改
+            //     **管理權限**與**密碼** —— 那兩個「改回來」救不了：
+            //     權限給出去的期間他做過的事、密碼給出去之後誰用過，
+            //     都不會因為改回來而消失。
+            //
+            // ZH: 為什麼一律問而不是只在那兩欄變動時問：確認出現的時機
+            //     可預測，管理者才不會在「這次怎麼沒問」的時候鬆懈。
+            //     欄位值在 run 裡才讀 —— 小彈窗不動編輯表單，值都還在。
+            targetConfirm(T('pp_confirm_save', '確認儲存'), null, u.username,
+                          async function (name) {
             var patch = {
                 email: $('f-email').value.trim() || null,
                 department: $('f-dept').value.trim() || null,
@@ -838,6 +865,8 @@
             // ZH: 密碼留空 = 不改。送空字串會**把密碼設成空的**。
             var pw = $('f-pw').value;
             if (pw) patch.password = pw;
+            // ZH: 一律帶上 —— 後端在 is_admin／password 有變動時會驗（見 admin.py）。
+            patch.confirm_username = name;
 
             try {
                 await api('/admin/users/' + encodeURIComponent(u.id), {
@@ -846,7 +875,7 @@
                     body: JSON.stringify(patch),
                 });
             } catch (e) {
-                // ZH: 丟給 pwConfirm 顯示在小彈窗裡（彈窗不關，密碼不用重打）。
+                // ZH: 丟給 targetConfirm 顯示在小彈窗裡（彈窗不關，不用重打）。
                 throw new Error(T('pp_save_fail', '存不起來（{w}）').replace('{w}', e.message));
             }
             Object.assign(u, { email: patch.email, department: patch.department, role: patch.role });
@@ -862,20 +891,16 @@
 
     // ZH: 兩種模式都有的部分（危險操作那一區不受唯讀／編輯影響）。
     function wireCommon(u) {
-        // ZH: v4.4b 停用/刪除都走密碼小彈窗。
-        //     ⚠ 舊版「停用」其實**沒驗密碼**（危險卡的欄位只有刪除在讀）——
-        //     這次補齊：停用也要驗（/admin/verify），與卡上的承諾一致。
+        // ZH: v4.10 停用／刪除都走「打出目標帳號」的確認（見 targetConfirm）。
         $('toggle-active').addEventListener('click', function () {
-            pwConfirm(u.is_active ? T('pp_disable', '停用帳號') : T('pp_enable', '啟用帳號'),
-                null,
-                async function (pw) {
-                    if (!await verifyPassword(pw)) {
-                        throw new Error(T('pp_unlock_bad', '密碼不對。'));
-                    }
+            targetConfirm(u.is_active ? T('pp_disable', '停用帳號') : T('pp_enable', '啟用帳號'),
+                null, u.username,
+                async function (name) {
                     await api('/admin/users/' + encodeURIComponent(u.id), {
                         method: 'PUT',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ is_active: u.is_active ? 0 : 1 }),
+                        body: JSON.stringify({ is_active: u.is_active ? 0 : 1,
+                                               confirm_username: name }),
                     });
                     u.is_active = u.is_active ? 0 : 1;
                     renderList();
@@ -885,14 +910,14 @@
 
         $('del').addEventListener('click', function () {
             // ZH: 刪除的確認句直接放在彈窗裡（原本的原生 confirm 併進來了）。
-            pwConfirm(T('pp_delete', '刪除帳號'),
+            targetConfirm(T('pp_delete', '刪除帳號'),
                 T('pp_delete_confirm', '要刪除「{n}」嗎？').replace('{n}', u.username),
-                async function (pw) {
-                    // ZH: 刪除端點自己收 admin_password 驗 —— 不用先打 /admin/verify。
+                u.username,
+                async function (name) {
                     await api('/admin/users/' + encodeURIComponent(u.id) + '/delete', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ admin_password: pw }),
+                        body: JSON.stringify({ confirm_username: name }),
                     });
                     ALL = ALL.filter(function (x) { return x.id !== u.id; });
                     closeUserDialog();
@@ -1073,18 +1098,26 @@
             return;
         }
         var why = $('e-grant-why').value.trim();
-        // ZH: 數字寫進確認訊息 —— 這是唯一擋得住「多打一個 0」的地方。
-        if (!confirm(T('pp_grant_confirm',
+        // ZH: v4.10b 改走 targetConfirm（原本是原生 confirm）。
+        // ZH: 🔴 **數字一定要留在說明裡** —— 那是唯一擋得住「多打一個 0」
+        //     的地方。換彈窗時很容易只搬動作、把這句話丟掉。
+        targetConfirm(T('pp_grant_title', '確認加點'),
+            T('pp_grant_confirm',
                 '要給 {n} 加 {p} 點嗎？點數從平台的管理帳號轉出，送出後收不回來。')
-                .replace('{n}', b.myai_email || u.username).replace('{p}', num(pts)))) return;
+                .replace('{n}', b.myai_email || u.username).replace('{p}', num(pts)),
+            u.username,
+            async function (name) { await sendGrant(u, pts, why, name); });
+    }
 
+    async function sendGrant(u, pts, why, name) {
         var btn = $('e-grant-go');
         btn.disabled = true;            // ZH: 防連點 —— 這一支不冪等
         try {
             var r = await api('/admin/users/' + encodeURIComponent(u.id) + '/myai/grant', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ points: pts, reason: why }),
+                body: JSON.stringify({ points: pts, reason: why,
+                                       confirm_username: name }),
             });
             closeGrant();
             if (r.status === 'unknown') {
@@ -1099,7 +1132,9 @@
                 loadExtAi(u);          // ZH: 重讀，讓點數欄顯示新的值
             }
         } catch (e) {
-            say('e-msg', String(e.message || e));
+            btn.disabled = false;
+            // ZH: 丟回 targetConfirm 顯示在彈窗裡 —— 彈窗不關，不用重打。
+            throw new Error(String(e.message || e));
         } finally {
             btn.disabled = false;
         }
@@ -1221,7 +1256,15 @@
         return out;
     }
 
+    // ZH: v4.10b 核可要確認（等於放行那個人改自己的組織資料）；
+    //     **收回不必** —— 撤銷是把權限收回來，收錯了再核可一次就好。
     async function grantUnlock(u, revoke) {
+        if (revoke) return sendUnlock(u, true, null);
+        targetConfirm(T('unl_confirm_title', '確認開放修改'), null, u.username,
+                      async function (name) { await sendUnlock(u, false, name); });
+    }
+
+    async function sendUnlock(u, revoke, name) {
         var msg = $('unl-msg');
         var fields = revoke ? [] : unlockFieldsFor(u);
         try {
@@ -1233,12 +1276,15 @@
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ fields: fields,
-                                           reason: ($('unl-reason') || {}).value || '' }),
+                                           reason: ($('unl-reason') || {}).value || '',
+                                           confirm_username: name }),
                 });
             }
             loadUnlock(u);          // ZH: 重讀 —— 狀態由後端決定,不要在前端自己推
         } catch (e) {
             if (msg) { msg.textContent = e.message; msg.hidden = false; }
+            // ZH: 核可那條是從彈窗來的 —— 丟回去讓彈窗顯示、彈窗不關。
+            if (!revoke) throw e;
         }
     }
 

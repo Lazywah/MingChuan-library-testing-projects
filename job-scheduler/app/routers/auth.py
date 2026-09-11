@@ -23,16 +23,17 @@ EN: Modular design:
 ==============================================================================
 """
 
-from fastapi import APIRouter, Depends, HTTPException, status, Request, Response, BackgroundTasks
+from fastapi import (APIRouter, Body, Depends, HTTPException, status, Request,
+                     Response, BackgroundTasks)
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 import hmac as _hmac
 
 from .. import crud, schemas, models
 from ..auth import (authenticate_user, cookie_name_for, create_access_token,
-                    get_current_user, require_admin, require_role)
+                    get_current_user, is_expired, require_admin, require_role)
 from ..database import get_db
 from ..services import email_service
 from ..rate_limit import limiter
@@ -209,6 +210,130 @@ async def login(
         path="/",
     )
     logger.info(f"ZH: 使用者登入成功: {user.username} | EN: User logged in: {user.username}")
+    return {"access_token": access_token, "token_type": "bearer"}
+
+
+# ══════════════════════════════════════════════════════════════════════════
+# ZH: 管理端換票（擁有者裁定 2026-09-11）
+# ══════════════════════════════════════════════════════════════════════════
+# ZH: 要解的問題：管理端在 :8888，與使用者端（:443）是**不同 origin**，
+#     localStorage 不共用 —— 所以管理者從使用者端點「管理介面」跳過去，
+#     到了對面還要再登入一次。而學校用 SSO，SSO 帳號的密碼是建號時隨機產生
+#     後就丟掉的（crud.create_sso_user），**那組密碼在世界上已經不存在** ——
+#     也就是說 SSO 管理者根本沒有東西可以輸入。
+#
+# ZH: 🔴 為什麼是「換票」而不是把 token 放進網址：
+#     token 有效 120 分鐘，放進網址會留在瀏覽器歷史、截圖、分享的連結裡。
+#     票只活 30 秒、而且用一次就失效，漏出去的價值低得多。
+#
+# ZH: 🔴 為什麼不共用 cookie：cookie 不分 port，兩端共用一個名稱時
+#     後登入的那邊會覆蓋先登入的（2026-08-27 稽核實測，見 auth.cookie_name_for）。
+#     那個坑已經修過了，不要用「共用」的方式繞回去。
+#
+# ZH: 🔴 **換票不發新權限**。redeem 回的是這個人**原本就有的**身分所簽的 token，
+#     不是升級過的東西。就算票漏出去，拿到的也只是他自己既有的權限；
+#     而管理端每一支 API 仍然掛著 require_admin。
+#     這條性質是這個設計安全的根據 —— 改動這一段時不要弄丟它。
+#
+# ZH: 票存在**行程記憶體**：它只活 30 秒，為它加一張表不划算，
+#     而排程重啟後未兌換的票一起消失也是對的（那些人重按一次就好）。
+# ══════════════════════════════════════════════════════════════════════════
+_HANDOFF_TTL_SECONDS = 30
+_handoff_tickets: dict = {}          # ZH: ticket -> (user_id, 到期時間)
+
+
+def _handoff_sweep() -> None:
+    """
+    ZH: 清掉過期的票。每次發票時順手做 —— 票只活 30 秒、量又小，
+        不值得為它開一支排程。
+
+    @node job-scheduler/app/routers/auth.py::_handoff_sweep
+    """
+    now = datetime.now(timezone.utc)
+    for k in [k for k, (_, exp) in _handoff_tickets.items() if exp <= now]:
+        _handoff_tickets.pop(k, None)
+
+
+@router.post("/admin-handoff", summary="換一張跳轉管理端用的一次性票")
+@limiter.limit("20/minute")
+def admin_handoff(
+    request: Request,
+    current_user: models.User = Depends(get_current_user),
+):
+    """
+    ZH: 使用者端按「管理介面」時呼叫。驗身分＋管理權限，回一張 30 秒的票。
+
+    ZH: 🔴 這裡的 `is_admin` 檢查是**真正的閘門**。前端那個
+        `if (me.is_admin)` 只決定要不要畫連結，任何人都能自己發這個請求。
+
+    @node job-scheduler/app/routers/auth.py::admin_handoff
+    """
+    if not current_user.is_admin:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="ZH: 這個帳號沒有管理權限 | EN: Not an administrator")
+
+    import secrets as _secrets
+    _handoff_sweep()
+    ticket = _secrets.token_urlsafe(32)
+    _handoff_tickets[ticket] = (
+        current_user.id,
+        datetime.now(timezone.utc) + timedelta(seconds=_HANDOFF_TTL_SECONDS),
+    )
+    logger.info("ZH: 管理端換票已發出: %s", current_user.username)
+    return {"ticket": ticket, "expires_in": _HANDOFF_TTL_SECONDS}
+
+
+@router.post("/admin-handoff/redeem", summary="用票換管理端的 token")
+@limiter.limit("20/minute")
+def admin_handoff_redeem(
+    request: Request,
+    response: Response,
+    payload: dict = Body(...),
+    db: Session = Depends(get_db),
+):
+    """
+    ZH: 管理端載入時呼叫。票換 token，並設管理端自己的 cookie。
+
+    ZH: 🔴 票**先拿走再驗**（pop 不是 get）—— 一次性要在這一行成立，
+        不然驗證失敗的路徑會把票留下來給人重試。
+
+    ZH: 🔴 兌換時**重新查一次資料庫**確認現在仍是管理員。發票到兌換之間
+        雖然只有 30 秒，但權限可能剛好在那時被取消 —— 而且這樣就不必
+        相信票裡帶的任何東西，票只是一個索引。
+
+    @node job-scheduler/app/routers/auth.py::admin_handoff_redeem
+    """
+    ticket = (payload or {}).get("ticket") or ""
+    entry = _handoff_tickets.pop(ticket, None)
+    if entry is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="ZH: 這張票無效或已經用過了 | EN: Invalid or already-used ticket")
+
+    user_id, expires = entry
+    if expires <= datetime.now(timezone.utc):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="ZH: 這張票已經過期了，請再按一次 | EN: Ticket expired, try again")
+
+    user = db.query(models.User).filter(models.User.id == user_id).first()
+    if not user or not user.is_active or not user.is_admin or is_expired(user):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="ZH: 這個帳號現在沒有管理權限 | EN: Not an administrator")
+
+    access_token = create_access_token(data={"sub": user.username})
+    # ZH: 設的是**管理端**那個 cookie 名稱（請求帶著 X-AIBase-Surface: admin
+    #     進來，cookie_name_for 會挑對）—— 使用者端那顆不受影響。
+    response.set_cookie(
+        key=cookie_name_for(request),
+        value=access_token,
+        httponly=True,
+        samesite="lax",
+        path="/",
+    )
+    logger.info("ZH: 管理端換票已兌換: %s", user.username)
     return {"access_token": access_token, "token_type": "bearer"}
 
 
