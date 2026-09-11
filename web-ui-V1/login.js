@@ -40,7 +40,7 @@ async function loadProviders() {
         const data = await r.json();
         const list = Array.isArray(data.providers) ? data.providers : [];
         if (!list.includes('oidc')) return noSso();
-        setPrimary({ label: T('login_sso', '用學校帳號登入'), note: '', enabled: true });
+        setPrimary({ label: T('login_sso', '用 Moodle 帳號登入'), note: '', enabled: true });
     } catch (e) {
         failSso(String(e.message || e));
     }
@@ -49,8 +49,8 @@ async function loadProviders() {
 function failSso(why) {
     // ZH: 線框指定的文案。**不自動展開摺疊區**——那是 C2 修正的重點。
     setPrimary({
-        label: T('login_sso', '用學校帳號登入'),
-        note: T('login_sso_down', '學校登入暫時不可用，請稍後再試。') + `（${why}）`,
+        label: T('login_sso', '用 Moodle 帳號登入'),
+        note: T('login_sso_down', 'Moodle 登入暫時不可用，請稍後再試。') + `（${why}）`,
         enabled: false,
     });
 }
@@ -58,8 +58,8 @@ function failSso(why) {
 function noSso() {
     // ZH: 設定上沒有啟用 OIDC —— 這不是錯誤，是這台機器的狀態，文案要分開。
     setPrimary({
-        label: T('login_sso', '用學校帳號登入'),
-        note: T('login_no_sso', '這台伺服器尚未啟用學校登入。若你是管理者，請用下方的本機登入。'),
+        label: T('login_sso', '用 Moodle 帳號登入'),
+        note: T('login_no_sso', '這台伺服器尚未啟用 Moodle 登入。若你是管理者，請用下方的本機登入。'),
         enabled: false,
     });
 }
