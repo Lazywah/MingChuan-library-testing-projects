@@ -658,14 +658,17 @@
     //     三份資料後端一次都給了,切換不必重打 API。
     // ZH: 滑條的選項不加「依」—— 區塊標題已經是「依組織」,
     //     選項再寫「依學系」會變成「依組織：依學系」。
-    // ZH: v4.10c 多一個「身分」（擁有者需求 2026-09-11）。
-    //     後端回的是**中文標籤**（學生／老師／職員／訪客／管理員），
-    //     不是 role 代碼 —— 所以這裡不用做任何翻譯，與其他四種一樣。
+    // ZH: 🔴 **這裡不要加「身分」。** 2026-09-11 加過一次，是錯的：
+    //       1. 這一區的資料來自 MYAI 消耗端點（by_department / by_college /
+    //          by_unit / by_campus），它**沒有**依身分的切片 —— 選下去
+    //          `orgPie` 的 map 查不到鍵，`map[0]` 直接丟 TypeError。
+    //          語法檢查抓不到（見下面 orgPie 的註解，同一個坑）。
+    //       2. 這一區本來就有「依身分」了（an_by_role 那個圓餅）。
+    //     依身分的**平台使用**分組在頁面最下面那個下拉（#an-group）。
     var ORGS = [['department', 'an_by_dept', '學系'],
                 ['college', 'an_by_college', '學院'],
                 ['unit', 'an_by_unit', '單位'],
-                ['campus', 'an_by_campus', '校區'],
-                ['role', 'an_by_rolegrp', '身分']];
+                ['campus', 'an_by_campus', '校區']];
     var ORG = 'department';
 
     function orgKey() { return ORG; }
@@ -865,7 +868,9 @@
     function groupHeadKey() {
         return { college: ['an_dept_college', '學院'],
                  unit:    ['an_dept_unit', '單位'],
-                 campus:  ['an_dept_campus', '校區'] }[groupBy()]
+                 campus:  ['an_dept_campus', '校區'],
+                 // ZH: v4.10c 依身分（擁有者需求 2026-09-11）。
+                 role:    ['an_dept_role', '身分'] }[groupBy()]
             || ['an_dept', '學系'];
     }
 
