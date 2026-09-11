@@ -114,6 +114,81 @@ def get_db():
         db.close()
 
 
+def _relax_admin_actions_admin_id() -> None:
+    """
+    ZH: 把 `admin_actions.admin_id` 的 NOT NULL 拿掉（SQLite 得重建整張表）。
+
+    ZH: 為什麼要重建：SQLite 沒有 `ALTER COLUMN`。標準做法是
+        建新表 → 複製 → 丟舊表 → 改名 → 把索引建回去。
+
+    ZH: 🔴 **冪等**：已經是可為 NULL 就直接返回。這支每次開機都會跑。
+
+    ZH: 🔴 `PRAGMA foreign_keys=OFF` 一定要在**交易之外**設定，
+        否則它是 no-op —— 而 DROP TABLE 會因為別張表指著它而失敗。
+
+    ZH: 🔴 索引要**原樣抄回去**（從 sqlite_master 讀 SQL），不要憑印象重寫。
+        漏掉一個索引不會有任何錯誤，只會讓某些查詢在資料變多之後慢下來，
+        而那時沒有人會想到是這裡。
+
+    @node job-scheduler/app/database.py::_relax_admin_actions_admin_id
+    """
+    from sqlalchemy import text
+    try:
+        # ZH: 🔴 用 AUTOCOMMIT 連線。SQLAlchemy 2.0 會在第一次 execute() 時
+        #     **自動開一個交易**，接著 conn.begin() 就會炸
+        #     （"This connection has already initialized a Transaction"）——
+        #     2026-09-11 第一版就是這樣失敗的。
+        #     AUTOCOMMIT 之下沒有隱式交易，BEGIN/COMMIT 完全由我們自己控制，
+        #     PRAGMA foreign_keys 也才真的生效（它在交易裡是 no-op）。
+        with engine.connect().execution_options(isolation_level="AUTOCOMMIT") as conn:
+            info = conn.execute(text("PRAGMA table_info(admin_actions)")).mappings().all()
+            if not info:
+                return                      # ZH: 表還沒建（全新資料庫，create_all 會直接建對的）
+            cols = {r["name"]: r for r in info}
+            if "admin_id" not in cols or not cols["admin_id"]["notnull"]:
+                return                      # ZH: 已經放寬過了
+            names = [r["name"] for r in info]
+            collist = ", ".join(names)
+            # ZH: 索引原樣抄回去 —— sql IS NULL 的是 PK 的隱式索引，
+            #     新表的 PRIMARY KEY 會自己重建，不要也不能手動建。
+            idx_sql = [r[0] for r in conn.execute(text(
+                "SELECT sql FROM sqlite_master WHERE type='index' "
+                "AND tbl_name='admin_actions' AND sql IS NOT NULL")).all()]
+
+            conn.exec_driver_sql("PRAGMA foreign_keys=OFF")
+            conn.exec_driver_sql("BEGIN")
+            try:
+                conn.exec_driver_sql("""
+                    CREATE TABLE admin_actions_new (
+                        id VARCHAR NOT NULL PRIMARY KEY,
+                        admin_id VARCHAR REFERENCES users(id),
+                        admin_username VARCHAR,
+                        target_user VARCHAR REFERENCES users(id),
+                        action VARCHAR NOT NULL,
+                        payload TEXT,
+                        timestamp DATETIME,
+                        ip_address VARCHAR
+                    )""")
+                conn.exec_driver_sql(
+                    "INSERT INTO admin_actions_new (%s) SELECT %s FROM admin_actions"
+                    % (collist, collist))
+                conn.exec_driver_sql("DROP TABLE admin_actions")
+                conn.exec_driver_sql("ALTER TABLE admin_actions_new RENAME TO admin_actions")
+                for sql in idx_sql:
+                    conn.exec_driver_sql(sql)
+                conn.exec_driver_sql("COMMIT")
+                logger.info("ZH: admin_actions.admin_id 已改為可為 NULL（稽核紀錄保留）")
+            except Exception:
+                conn.exec_driver_sql("ROLLBACK")
+                raise
+            finally:
+                conn.exec_driver_sql("PRAGMA foreign_keys=ON")
+    except Exception as e:      # noqa: BLE001
+        # ZH: 遷移失敗不擋開機 —— 但要**大聲**講，因為失敗的後果是
+        #     「管理者帳號刪不掉」，而那個症狀跟這裡看起來毫無關係。
+        logger.error("🔴 admin_actions 遷移失敗（管理者帳號會刪不掉）：%s", e)
+
+
 def init_db():
     """
     ZH: 初始化資料庫 - 建立所有表 (若不存在)
@@ -367,8 +442,27 @@ def init_db():
             try: conn.execute(text("ALTER TABLE user_storage_state ADD COLUMN frozen_reason VARCHAR"))
             except Exception: pass
 
+            # --- v4.12 稽核紀錄留操作者名字（帳號刪了還要看得出是誰）---
+            # ZH: 🔴 回填放在同一個 try 裡是刻意的（理由同上面 onboarded_at 那段）：
+            #     ADD COLUMN 只有第一次會成功，所以 UPDATE 也只會跑一次。
+            #     拆到外面的話每次重啟都會把 NULL 的再刷一遍 —— 而那些 NULL
+            #     正是「操作者已經被刪掉」的紀錄，刷了會把它們配到錯的人身上。
+            try:
+                conn.execute(text("ALTER TABLE admin_actions ADD COLUMN admin_username VARCHAR"))
+                conn.execute(text(
+                    "UPDATE admin_actions SET admin_username = "
+                    "(SELECT username FROM users WHERE users.id = admin_actions.admin_id) "
+                    "WHERE admin_username IS NULL"))
+            except Exception: pass
+
     except Exception as e:
         logger.warning(f"Manual DB migration skipped or partially failed: {e}")
+
+    # ZH: v4.12 把 admin_actions.admin_id 的 NOT NULL 拿掉。
+    #     **必須在上面那個交易之外**做 —— 它要改 PRAGMA foreign_keys，
+    #     而 PRAGMA 在交易裡是 no-op（改了沒作用，但也不會報錯，
+    #     於是重建會在外鍵檢查開著的情況下 DROP TABLE 而失敗）。
+    _relax_admin_actions_admin_id()
 
     # --- 動態模型清單 — Seed 預設 AI 模型（僅當不存在時）| Seed default AI models (only if absent) ---
     # ZH: 本機 Ollama Llama3 預設公開 (chat+presentation 皆可用)；雲端模型先建檔但不公開，

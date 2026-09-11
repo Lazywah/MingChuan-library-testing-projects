@@ -910,6 +910,37 @@ def admin_delete_user(
         db.query(models.AdminAction).filter(
             models.AdminAction.target_user == user_id
         ).update({models.AdminAction.target_user: None}, synchronize_session=False)
+
+        # ══════════════════════════════════════════════════════════════
+        # ZH: v4.12 解開「這個人做為**操作者**」的稽核參照。
+        #
+        # ZH: 🔴 少了這一段，**做過管理操作的帳號永遠刪不掉** ——
+        #     `admin_actions.admin_id` 沒宣告 ondelete，刪除會直接
+        #     `FOREIGN KEY constraint failed`，而錯誤訊息完全看不出是哪張表。
+        #     2026-09-11 實測：一般使用者刪得掉，12361114（16 筆操作）
+        #     與 admin（4 筆）刪不掉。target_user 早就解了，admin_id 漏掉。
+        #
+        # ZH: 🔴 **先補名字快照再解參照，順序不能顛倒。**
+        #     解成 NULL 之後就再也查不出這些紀錄是誰做的了；
+        #     而稽核的重點正是「誰做了什麼」。
+        #     做法與 issue_reports.username_at_report 相同（帳號刪了，
+        #     紀錄還在、還看得出是誰）——**不要**改成 CASCADE，
+        #     那會讓管理者一離職，他做過的事就從稽核裡蒸發。
+        #
+        # ZH: 為什麼快照補在這裡而不是在每一處 db.add(AdminAction)：
+        #     那樣有七個地方要記得填，漏一個就是一筆查不出操作者的紀錄，
+        #     而且要等到那個人被刪掉才會發現。補在「即將失去這個資訊」的
+        #     這一刻，只有一個地方、也不可能漏。
+        # ══════════════════════════════════════════════════════════════
+        db.query(models.AdminAction).filter(
+            models.AdminAction.admin_id == user_id,
+            models.AdminAction.admin_username.is_(None),
+        ).update({models.AdminAction.admin_username: username},
+                 synchronize_session=False)
+        db.query(models.AdminAction).filter(
+            models.AdminAction.admin_id == user_id
+        ).update({models.AdminAction.admin_id: None}, synchronize_session=False)
+
         db.query(models.QuotaGrant).filter(
             models.QuotaGrant.granted_by == user_id
         ).delete(synchronize_session=False)

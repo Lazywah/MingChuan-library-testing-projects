@@ -634,7 +634,20 @@ class AdminAction(Base):
     __tablename__ = "admin_actions"
 
     id          = Column(String, primary_key=True, default=generate_uuid)
-    admin_id    = Column(String, ForeignKey("users.id"), nullable=False, index=True)
+    # ZH: v4.12 `admin_id` 從 NOT NULL 改成可為 NULL（2026-09-11）。
+    #
+    # ZH: 為什麼：刪除帳號時**解得開 target_user、卻解不開 admin_id** ——
+    #     於是「曾經做過管理操作的人」永遠刪不掉（FOREIGN KEY constraint failed，
+    #     而且錯誤訊息完全看不出是哪一張表擋的）。2026-09-11 實測：
+    #     一般使用者刪得掉，12361114（16 筆操作）與 admin（4 筆）刪不掉。
+    #
+    # ZH: 🔴 解成 NULL 之後「是誰做的」不能跟著消失 —— 所以配一個
+    #     `admin_username` 快照。做法與 `issue_reports.username_at_report`
+    #     完全相同（帳號刪了，紀錄還在、還看得出是誰）。
+    #     **不要**改成 CASCADE：那會讓管理者一離職，他做過的事就從稽核裡蒸發。
+    admin_id    = Column(String, ForeignKey("users.id"), nullable=True, index=True)
+    # ZH: 寫入當下抄下來的操作者帳號名。`admin_id` 解成 NULL 之後就靠它。
+    admin_username = Column(String, nullable=True)
     target_user = Column(String, ForeignKey("users.id"), nullable=True, index=True)
     action      = Column(String, nullable=False, index=True)                  # ZH: grant_quota/revoke_quota/freeze/archive/delete/inject_files/...
     payload     = Column(Text)                                                # ZH: JSON 詳細參數
