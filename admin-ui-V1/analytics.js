@@ -592,7 +592,7 @@
                 + esc(T('an_unmapped', '有 {n} 個模型代碼還沒對應 —— 它們會以原始代碼顯示。')
                     .replace('{n}', d.unmapped_models))
                 + '</span><a class="btn btn--minor" href="platform.html">'
-                + esc(T('ov_a_go', '去看')) + '</a></div>' : '')
+                + esc(T('ov_a_go', '查看')) + '</a></div>' : '')
 
             // ZH: 有交易但完全沒有消耗時（例如這期間只有人登入），後端不會回任何
             //     圖表資料，下面會是一整片空白 —— 那看起來像載入失敗，其實是個

@@ -95,7 +95,7 @@
         ov_a_failed: '最近 24 小時有 {n} 張任務失敗',
         ov_a_waiting: '{n} 張任務排隊超過 {m} 分鐘',
         ov_a_reports: '{n} 則問題回報還沒處理',
-        ov_a_go: '去看',
+        ov_a_go: '查看',
 
         ov_gpu: 'GPU 現況',
         ov_gpu_go: '到平台設定調整這個節點',

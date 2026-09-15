@@ -138,7 +138,7 @@
             return '<div class="adm-alert adm-alert--' + a.sev + '">'
                 + '<span>' + esc(a.text) + '</span>'
                 + (a.go ? '<a class="btn btn--minor" href="' + a.go + '">'
-                    + esc(T('ov_a_go', '去看')) + '</a>' : '')
+                    + esc(T('ov_a_go', '查看')) + '</a>' : '')
                 + '</div>';
         }).join('');
     }
