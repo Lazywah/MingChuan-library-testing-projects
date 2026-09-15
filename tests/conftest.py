@@ -26,8 +26,15 @@ os.environ.setdefault("WORKER_API_TOKEN", "test-worker-token-16c")
 # ZH: v2.0 — SECRETS_MASTER_KEY 須通過 config.py 驗證 (≥32 chars, 非黑名單)
 # EN: v2.0 — SECRETS_MASTER_KEY must pass config.py validator (≥32 chars, not blacklisted)
 os.environ.setdefault("SECRETS_MASTER_KEY", "test-secrets-master-key-with-32-chars-aaa")
-os.environ.setdefault("DATABASE_PATH", "/tmp/test_ai_platform.db")
-os.environ.setdefault("PORTKEY_ENABLED", "false")  # ZH: 測試時不呼叫真實 LLM
+# ZH: 🔴 這兩條**必須直接指派，不能 setdefault** —— 理由與下面 SMTP 那段同源，
+#     但後果嚴重得多：在**容器裡**跑測試時（docker exec … pytest），環境變數
+#     `DATABASE_PATH=/data/ai_platform.db` 早就存在，setdefault 會原封不動留著它，
+#     於是 app 匯入與 lifespan 啟動（建表、種子、排程）全都落在**正式資料庫**上。
+#     PORTKEY_ENABLED 同理：容器裡是 true，測試會以為自己關掉了其實沒有
+#     （`test_env_isolation.py::test_portkey_disabled` 正是在抓這件事，
+#      2026-09-15 第一次在容器裡跑時它就紅了 —— 那支守衛是對的）。
+os.environ["DATABASE_PATH"] = "/tmp/test_ai_platform.db"
+os.environ["PORTKEY_ENABLED"] = "false"   # ZH: 測試時不呼叫真實 LLM
 os.environ["RATELIMIT_ENABLED"] = "False"  # ZH: 測試時停用速率限制，避免跨測試累積
 
 # ZH: 測試絕不碰真實外部服務。config.py 會讀 repo 根目錄的 .env，那裡面是**正式環境**
@@ -52,6 +59,16 @@ os.environ["MYAI_ADMIN_PASSWORD"] = ""
 os.environ["MYAI_BASE_URL"] = "http://127.0.0.1:1"
 os.environ["MYAI_SYNC_INTERVAL_HOURS"] = "0"          # ZH: 0 = 關閉自動同步
 os.environ["MYAI_BALANCE_POLL_MINUTES"] = "0"         # ZH: 0 = 關閉餘額輪詢
+
+# ZH: ── 圖書館 Alma 身分 API ──
+#     🔴 實測踩到（2026-09-15）：測試會**真的打**正式的 Alma API，用的是 .env 裡的
+#     正式 Key。`test_role_from_email` 的 SSO 首登因此拿到真實身分，role_source
+#     變成 alma 而不是測試預期的 sso_email —— 而且結果取決於當下 Alma 通不通，
+#     同一支測試在不同時刻紅綠不一樣。（順帶：拿掉之後那一檔從 7.06 秒降到 1.55 秒。）
+#     閘門與 MYAI 同一招：`alma_service.lookup_identity` 開頭就檢查 ALMA_API_KEY，
+#     空值直接放棄，不會發出任何請求。BASE_URL 指向關閉埠是第二道。
+os.environ["ALMA_API_KEY"] = ""
+os.environ["ALMA_BASE_URL"] = "http://127.0.0.1:1"
 
 # ZH: ── IMAP 退信回收 ──
 #     bounce_reader 的主機預設由 SMTP 主機推導（smtp.x → imap.x），SMTP_SERVER
