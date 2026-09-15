@@ -23,6 +23,33 @@
     // ZH: `T()` 是 prefs.js 提供的全域，不要在這裡再寫一份 ——
     //     兩份定義遲早會漂開（同一個 key 在兩頁翻出不同結果，而且沒有人會發現）。
 
+    // ═════════════════════════════════════════════════════════════════
+    // ZH: 「回使用者端」的網址在這裡組，不寫死在 HTML 裡。
+    //
+    // ZH: 原本寫的是 `http://localhost/v2/`，三處都不對：主機寫死成 localhost
+    //     （正式機是 ai.lib.mcu.edu.tw，接管者從別台電腦點下去會連到他自己那台）、
+    //     明文 http（:80 只剩 301 轉 https）、`/v2/` 是舊路徑（nginx 還留著
+    //     302 到 /V1/，但沒有理由多繞一次）。
+    //
+    // ZH: 🔴 管理端與使用者端是**不同 origin**（:8888 vs :443），
+    //     相對路徑會留在管理端這一側 —— 所以要組絕對網址：
+    //     同協定、同主機、**拿掉 port**（使用者端在該協定的預設埠）。
+    //
+    // ZH: 🔴 :8890 是例外 —— 本機明文測試門把兩端掛在同一個 origin
+    //     （管理端 /admin/、使用者端 /V1/）。在那裡拿掉 port 會跑去 :80，
+    //     而 :80 只會 301 到 https://localhost，憑證簽給網域不簽 localhost
+    //     → 必跳憑證警告。同一個門，用相對路徑才對。
+    // ═════════════════════════════════════════════════════════════════
+    function wireBackToUserSite() {
+        var a = $('adm-to-user');
+        if (!a) return;
+        a.href = (location.port === '8890')
+            ? '/V1/'
+            : location.protocol + '//' + location.hostname + '/V1/';
+    }
+
+    wireBackToUserSite();
+
     function showError(msg) {
         var box = $('adm-error');
         box.textContent = msg;

@@ -54,8 +54,14 @@
     </section>
 
     <nav class="minor">
-        <a href="http://localhost/v2/" data-i18n="adm_to_user_site">回使用者端</a>
-        <a href="/" data-i18n="adm_old_ui">舊版管理介面</a>
+        <!-- ZH: 「回使用者端」的 href 由 login.js 依「現在是從哪一個門進來的」改寫
+                 —— 管理端與使用者端是不同 origin，寫死在這裡一定有一種情況是錯的。
+                 這裡留的值只是 JS 沒跑到時的退路（會落在管理端自己的 /V1/）。 -->
+        <a id="adm-to-user" href="/V1/" data-i18n="adm_to_user_site">回使用者端</a>
+        <!-- ZH: 舊版管理介面在 catch-all（alias admin-ui-V0）底下，
+                 但 `/` 是**精確比對**且 302 到 /V1/ —— 連 `/` 會被送回這一版。
+                 要指到舊版得指一個具體檔名。 -->
+        <a href="/index.html" data-i18n="adm_old_ui">舊版管理介面</a>
     </nav>
 
 </main>
@@ -64,6 +70,6 @@
 <script src="i18n.js?v=5c7bfd7f"></script>
 <script src="i18n-admin.js?v=7824ccbd"></script>
 <script src="prefs.js?v=00b43387"></script>
-<script src="login.js?v=72a23a89"></script>
+<script src="login.js?v=b886910c"></script>
 </body>
 </html>
