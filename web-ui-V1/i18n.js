@@ -34,6 +34,11 @@
             label_account: '帳號',
             label_password: '密碼',
             bal_label: '我的 AI 額度',
+            // ZH: 額度數字後面的單位。MYAI 的計價單位是「點」——
+            //     信件（額度提醒三段）從一開始就寫「點」,畫面卻寫 Token,
+            //     同一件事兩個名字。2026-09-15 統一成「點」。
+            //     ⚠ 這與**平台自己的** Token 額度是兩回事,那邊不動。
+            bal_unit: '點',
             unit_min: ' 分',
             loading: '讀取中…',
             gpu_checking: '檢查算力中…',
@@ -517,6 +522,7 @@
             label_account: 'Username',
             label_password: 'Password',
             bal_label: 'My AI balance',
+            bal_unit: 'credits',
             unit_min: ' min',
             loading: 'Loading…',
             gpu_checking: 'Checking capacity…',
@@ -871,7 +877,7 @@
             usage_models: 'Which models and tools I used',
             usage_bal_fail: 'Balance unavailable right now — the figures below are unaffected',
             usage_valid_until: 'Valid until {d}',
-            usage_consumed: 'Tokens used',
+            usage_consumed: 'Credits used',
             usage_uses: 'AI requests',
             usage_logins: 'Sign-ins',
             usage_peer_avg: 'Everyone: {n}',
