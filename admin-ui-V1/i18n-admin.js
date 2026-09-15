@@ -573,7 +573,10 @@
         an_unbound: '未綁定',
         an_unmapped: '有 {n} 個模型代碼還沒對應 —— 它們會以原始代碼顯示。',
 
-        pf_org_export: '匯出',
+        pf_org_export: '匯出 JSON',
+        pf_org_export_xlsx: '匯出 Excel',
+        pf_org_export_csv: '匯出 CSV',
+        pf_org_exported_sheet: '已匯出 {f}。這一份是給人看的 —— 改完不能匯回，要匯回請用「匯出 JSON」那一份。',
         pf_org_c_src: '來源',
         pf_org_src_alma: 'Alma',
         pf_org_src_admin: '人工',
@@ -1237,7 +1240,10 @@
         an_unbound: 'Unbound',
         an_unmapped: '{n} model code(s) are not mapped yet - they show as raw codes.',
 
-        pf_org_export: 'Export',
+        pf_org_export: 'Export JSON',
+        pf_org_export_xlsx: 'Export Excel',
+        pf_org_export_csv: 'Export CSV',
+        pf_org_exported_sheet: 'Exported {f}. This one is for reading — it cannot be imported back; use Export JSON for that.',
         pf_org_c_src: 'Source',
         pf_org_src_alma: 'Alma',
         pf_org_src_admin: 'Manual',

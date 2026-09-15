@@ -2354,26 +2354,36 @@
     //     「按錯就套用」與「按錯先給你看」的代價差很多。
     var ORG_PENDING = null;      // ZH: 已預覽、等著套用的檔案內容
 
-    async function exportOrg(btn) {
+    // ZH: 三種格式共用這一支。`fmt` 只決定要什麼檔，其餘（授權、下載、回報）都一樣。
+    // ZH: 🔴 檔名**以伺服器給的 Content-Disposition 為準**，不要在前端另外拼一份 ——
+    //     csv/xlsx 的檔名帶時間戳（同一天匯出兩次不會互相覆蓋），
+    //     前端自己拼的話那個時間戳就不見了，而且兩邊遲早對不上。
+    async function exportOrg(btn, fmt) {
         var old = btn.textContent;
         btn.disabled = true;
         btn.textContent = T('pf_org_exporting', '匯出中…');
         try {
             // ZH: 端點要 Authorization，所以不能用 <a href> 直接下載
             //     （那樣帶不上 token，會拿到一個 401 的檔案）。與數據頁匯出同一個做法。
-            var res = await fetch(API + '/admin/org/export',
+            var res = await fetch(API + '/admin/org/export?fmt=' + (fmt || 'json'),
                                   { headers: { Authorization: 'Bearer ' + token() } });
             if (!res.ok) throw new Error('HTTP ' + res.status);
+            // ZH: 解析 Content-Disposition 取檔名（與數據頁匯出同一段做法）。
+            var cd = res.headers.get('content-disposition') || '';
+            var m = cd.match(/filename="?([^";]+)"?/);
+            var name = m ? m[1] : 'org-mapping.' + (fmt || 'json');
             var blob = await res.blob();
             var url = URL.createObjectURL(blob);
             var a = document.createElement('a');
             a.href = url;
-            a.download = 'org-mapping.json';
+            a.download = name;
             document.body.appendChild(a);
             a.click();
             document.body.removeChild(a);
             URL.revokeObjectURL(url);
-            flash('og-msg', T('pf_org_exported', '已匯出 org-mapping.json。可以把它放進版控，換機器時匯回來。'), 8000);
+            flash('og-msg', (fmt && fmt !== 'json')
+                ? T('pf_org_exported_sheet', '已匯出 {f}。這一份是給人看的 —— 改完**不能**匯回，要匯回請用「匯出 JSON」那一份。').replace('{f}', name)
+                : T('pf_org_exported', '已匯出 org-mapping.json。可以把它放進版控，換機器時匯回來。'), 8000);
         } catch (e) {
             // ZH: 失敗要講 —— 下載沒發生時畫面上完全沒有痕跡，
             //     使用者只會以為自己沒按到。
@@ -2451,10 +2461,13 @@
 
     (function wireOrgIo() {
         var ex = $('og-export'), pick = $('og-pick'), f = $('og-file'), ap = $('og-apply');
+        var exX = $('og-export-xlsx'), exC = $('og-export-csv');
         var alma = $('og-alma');
         if (alma) alma.addEventListener('click', openOrgAlma);
         if (!ex || !pick || !f || !ap) return;
-        ex.addEventListener('click', function () { exportOrg(ex); });
+        ex.addEventListener('click', function () { exportOrg(ex, 'json'); });
+        exX.addEventListener('click', function () { exportOrg(exX, 'xlsx'); });
+        exC.addEventListener('click', function () { exportOrg(exC, 'csv'); });
         pick.addEventListener('click', function () { f.click(); });
         f.addEventListener('change', function () {
             if (f.files && f.files[0]) previewImport(f.files[0]);

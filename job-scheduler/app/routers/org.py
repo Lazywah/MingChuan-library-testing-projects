@@ -24,10 +24,13 @@ ZH: ⚠ 校區一律對照 `org_seed.CAMPUSES` 驗。打錯的值存進去之後
 """
 from typing import Any, Optional
 
+import csv
+import io
 import json
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Body, Depends, HTTPException, Response
+from fastapi import APIRouter, Body, Depends, HTTPException, Query, Response
+from fastapi.responses import StreamingResponse
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
@@ -284,18 +287,139 @@ def save_units(payload: dict = Body(...),
 ORG_EXPORT_VERSION = 2   # ZH: v3.9 多了 name_en / college_en
 
 
-@router.get("/export", summary="匯出組織對照表（JSON，可進版控）")
-def export_org(db: Session = Depends(get_db),
+# ZH: 匯出的兩種用途，不要混在一起：
+#       · **JSON** ＝ 給機器的：它同時是**匯入格式**（/import 的 body 就是這份檔），
+#         所以欄位名與值都照資料庫原樣（active 是 0/1）。換機器要救回這張表靠它。
+#       · **CSV / XLSX** ＝ 給人看的：欄位名是中文、`active` 寫成「是／否」、
+#         多一欄「來源」讓人分得出哪幾列是 Alma 來的、哪幾列是人工加的。
+#         🔴 **這兩種格式匯不回去**（/import 只吃 JSON）——
+#         所以介面上必須講明，不然有人會把 Excel 改完拿來匯入，然後發現沒有入口。
+#
+# ZH: CSV 沒有「工作表」的概念，所以學系與行政單位**併成一張表**，
+#     第一欄「類型」分辨。XLSX 則拆成兩個工作表（那是它天生該做的事）。
+_ORG_CSV_HEADERS = ["類型", "名稱", "英文名稱", "上層", "上層英文",
+                    "完整路徑", "校區", "啟用", "來源"]
+_ORG_DEPT_HEADERS = ["學系名稱", "英文名稱", "學院", "學院英文", "校區", "啟用", "來源"]
+_ORG_UNIT_HEADERS = ["完整路徑", "名稱", "英文名稱", "上層", "校區", "啟用", "來源"]
+
+
+def _yn(v) -> str:
+    """ZH: 給人看的啟用欄。0/1 在 Excel 裡看起來像代碼，而這一欄是要用眼睛掃的。
+
+    @node job-scheduler/app/routers/org.py::_yn
+    """
+    return "是" if v else "否"
+
+
+def _org_rows(depts, units):
+    """ZH: CSV 用的單一張表（學系與行政單位併在一起，第一欄分辨）。
+
+    ZH: 行政單位沒有「上層英文」可填 —— 資料庫只存每一列自己的 `name_en`，
+        上層是誰是用 path 串出來的。這裡留空而不是拼一個出來：
+        拼出來的英文名沒有人維護過，看起來卻像是正式的。
+
+    @node job-scheduler/app/routers/org.py::_org_rows
+    """
+    rows = []
+    for d in depts:
+        rows.append(["學系", d.name, d.name_en or "", d.college or "", d.college_en or "",
+                     "", d.campus or "", _yn(d.active), d.source or ""])
+    for u in units:
+        rows.append(["行政單位", u.name, u.name_en or "", u.parent or "", "",
+                     u.path, u.campus or "", _yn(u.active), u.source or ""])
+    return rows
+
+
+def _org_csv(depts, units, stamp: str):
+    """ZH: CSV。**BOM 不能省** —— 沒有它 Excel 會用系統編碼開，中文全變亂碼
+            （與 admin.export_users 同一個理由，那邊也加了）。
+
+    @node job-scheduler/app/routers/org.py::_org_csv
+    """
+    buf = io.StringIO()
+    w = csv.writer(buf)
+    w.writerow(_ORG_CSV_HEADERS)
+    w.writerows(_org_rows(depts, units))
+    content = ("﻿" + buf.getvalue()).encode("utf-8")
+    return StreamingResponse(
+        io.BytesIO(content),
+        # ZH: 只寫 "text/csv" —— Starlette 對 text/* 會自己補 charset，
+        #     自己再寫一次會變成 `text/csv; charset=utf-8; charset=utf-8`。
+        media_type="text/csv",
+        headers={"Content-Disposition": f'attachment; filename="org-mapping-{stamp}.csv"'},
+    )
+
+
+def _org_xlsx(depts, units, stamp: str):
+    """ZH: XLSX。學系與行政單位各一個工作表 —— 兩者的欄位本來就不一樣，
+            併成一張表會有一半的格子是空的。
+
+    @node job-scheduler/app/routers/org.py::_org_xlsx
+    """
+    try:
+        from openpyxl import Workbook
+        from openpyxl.styles import Font, PatternFill
+    except ImportError:
+        raise HTTPException(status_code=500,
+                            detail="ZH: openpyxl 未安裝 | EN: openpyxl not installed")
+
+    wb = Workbook()
+    sheets = [
+        ("學系", _ORG_DEPT_HEADERS,
+         [[d.name, d.name_en or "", d.college or "", d.college_en or "",
+           d.campus or "", _yn(d.active), d.source or ""] for d in depts]),
+        ("行政單位", _ORG_UNIT_HEADERS,
+         [[u.path, u.name, u.name_en or "", u.parent or "",
+           u.campus or "", _yn(u.active), u.source or ""] for u in units]),
+    ]
+    for i, (title, headers, rows) in enumerate(sheets):
+        ws = wb.active if i == 0 else wb.create_sheet()
+        ws.title = title
+        ws.append(headers)
+        for r in rows:
+            ws.append(r)
+        for cell in ws[1]:
+            cell.font = Font(bold=True)
+            cell.fill = PatternFill("solid", fgColor="DDEBF7")
+        ws.freeze_panes = "A2"
+        for col_idx, col_name in enumerate(headers, start=1):
+            longest = max([len(str(col_name))]
+                          + [len(str(r[col_idx - 1])) for r in rows[:200]] or [0])
+            ws.column_dimensions[ws.cell(row=1, column=col_idx).column_letter].width =                 min(longest + 2, 40)
+
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    return StreamingResponse(
+        buf,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="org-mapping-{stamp}.xlsx"'},
+    )
+
+
+@router.get("/export", summary="匯出組織對照表（json 可匯回／csv・xlsx 給人看）")
+def export_org(fmt: str = Query("json", pattern="^(json|csv|xlsx)$",
+                                description="ZH: json（可匯回）／csv／xlsx"),
+               db: Session = Depends(get_db),
                _: models.User = Depends(require_admin)):
     """
-    ZH: 回一個可下載的 JSON。**不含人數** —— 那是衍生資料，
+    ZH: 回一個可下載的檔案。**不含人數** —— 那是衍生資料，
         帶著它會讓兩台機器的檔案內容不同而看起來像有差異。
+
+    ZH: `fmt=json`（預設，維持舊行為）＝ 版控／匯回用；
+        `fmt=csv`、`fmt=xlsx` ＝ 給人用 Excel 看的，**不能匯回**。
 
     @node job-scheduler/app/routers/org.py::export_org
     """
     depts = (db.query(models.OrgDepartment)
              .order_by(models.OrgDepartment.college, models.OrgDepartment.name).all())
     units = db.query(models.OrgUnit).order_by(models.OrgUnit.path).all()
+
+    if fmt in ("csv", "xlsx"):
+        stamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+        return (_org_csv(depts, units, stamp) if fmt == "csv"
+                else _org_xlsx(depts, units, stamp))
+
     body = {
         "_說明": [
             "組織對照表（學系→學院、行政單位）。這是給版控用的匯出檔。",
