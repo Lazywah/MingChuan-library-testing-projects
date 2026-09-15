@@ -25,6 +25,7 @@
         zh: {
             // ── 共用 ─────────────────────────────────────────────
             nav_home: '首頁',
+            nav_menu: '選單',
             myai_title: '體驗付費版 AI 工具 · MCU AI Base',
             myai_sub1: '學校採購的 MYAI 教育平台。',
             myai_sub2: '可以聊天、問問題、幫你寫東西和整理文件。',
@@ -506,6 +507,7 @@
         en: {
             // ── Shared ───────────────────────────────────────────
             nav_home: 'Home',
+            nav_menu: 'Menu',
             myai_title: 'Try the paid AI tools · MCU AI Base',
             myai_sub1: 'MYAI, the education AI platform the university subscribes to.',
             myai_sub2: 'Chat, ask questions, draft and tidy up documents.',

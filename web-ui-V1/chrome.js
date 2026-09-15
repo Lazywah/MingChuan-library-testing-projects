@@ -154,6 +154,42 @@
             (bar.querySelector('.topbar__brand') || bar.firstChild).after(sp);
         }
 
+        // ── 手機版把右側整塊收進 ☰（v4.13，擁有者需求 2026-09-15）────────
+        //
+        // ZH: 在此之前手機上的頂部列會**擠成三排**（LOGO／導覽／語言＋帳號），
+        //     而且四個導覽鈕各自再折成兩行（「首／頁」「AI 工具／一把罩」）——
+        //     375px 寬實測佔掉約 300px 高，等於一開頁就先看一整頁的導覽。
+        //
+        // ZH: 做法是**只包一層**：導覽、語言、帳號全部進 `.topbar__tools`，
+        //     桌面上那一層是普通的 flex 列（版面與原本逐像素相同），
+        //     手機上同一層變成 ☰ 底下展開的面板。
+        //     🔴 不做「依寬度把節點搬來搬去」—— 那要監聽 resize、要處理
+        //     搬到一半使用者正好開著選單，而且每次搬完事件都要重接。
+        //     一個容器 + 一條 media query 沒有這些狀態。
+        var tools = bar.querySelector('.topbar__tools');
+        if (!tools) {
+            tools = document.createElement('div');
+            tools.className = 'topbar__tools';
+            tools.id = 'topbar-tools';
+            var burger = document.createElement('button');
+            burger.type = 'button';
+            burger.className = 'topbar__burger';
+            burger.setAttribute('aria-controls', 'topbar-tools');
+            burger.setAttribute('aria-expanded', 'false');
+            // ZH: 名稱要翻譯 —— 這顆鈕**沒有文字**，螢幕閱讀器唸的就是這個標籤。
+            burger.setAttribute('data-i18n-aria', 'nav_menu');
+            burger.setAttribute('aria-label', T('nav_menu', '選單'));
+            // ZH: ☰ 放在 aria-hidden 的 span 裡 —— 不然閱讀器會把它唸成
+            //     「三條橫線」之類的字元名，與上面的標籤重複。
+            var bars = document.createElement('span');
+            bars.setAttribute('aria-hidden', 'true');
+            bars.textContent = '☰';
+            burger.appendChild(bars);
+            bar.appendChild(burger);
+            bar.appendChild(tools);
+            wireBurger(burger, tools);
+        }
+
         var page = (location.pathname.split('/').pop() || 'index.html');
 
         // ── 導覽：首頁 + 三個分類下拉（v3.9，擁有者裁定 2026-08-30）
@@ -165,7 +201,7 @@
         //
         // ZH: 「首頁」是新增的第一項（擁有者裁定）。原本第一項是 MYAI，
         //     而它其實連到首頁 —— **名字與去處不一致**，點下去會意外。
-        var nav = bar.querySelector('.topnav');
+        var nav = tools.querySelector('.topnav');
         if (!nav) {
             nav = document.createElement('nav');
             nav.className = 'topnav';
@@ -174,8 +210,8 @@
             nav.setAttribute('aria-label', T('nav_aria', '主要'));
             // ZH: 插在色系切換**之前**。色系切換是開發期的東西（Decision Log #16，
             //     上線擇一後整塊移除），順序要讓「移除它之後仍然正確」。
-            var theme = bar.querySelector('.theme-switch');
-            if (theme) bar.insertBefore(nav, theme); else bar.appendChild(nav);
+            var theme = tools.querySelector('.theme-switch');
+            if (theme) tools.insertBefore(nav, theme); else tools.appendChild(nav);
         }
         nav.textContent = '';
         // ZH: 重建導覽時把上一輪的關閉函式丟掉 —— 不清的話每重建一次就多累積
@@ -324,9 +360,9 @@
             + (topLang === 'en' ? 'true' : 'false')
             + '" data-i18n-aria="prefs_lang_en" aria-label="切換成英文">EN</button>'
             + '</div>';
-        bar.appendChild(langBox.firstChild);
+        tools.appendChild(langBox.firstChild);
 
-        bar.appendChild(acc);
+        tools.appendChild(acc);
 
         wireToggle(toggle, menu);
         fillAccount(toggle, menu);
@@ -363,6 +399,44 @@
             if (!menu.hidden && !inside) close();
         });
         // ZH: Esc 關閉——只能用滑鼠關的選單對鍵盤使用者是陷阱。
+        document.addEventListener('keydown', function (ev) {
+            if (ev.key === 'Escape') close();
+        });
+    }
+
+    // ZH: ☰ 的開關（v4.13）。與上面那些下拉是**不同性質的東西**，所以分開寫：
+    //     下拉彼此互斥（開一個關其他），而 ☰ 是那些下拉的**容器** ——
+    //     🔴 所以它的 close 絕對不能放進 MENUS：放進去的話，
+    //     在面板裡點開「AI 工具一把罩」會把整個面板一起關掉。
+    function wireBurger(btn, panel) {
+        function close() {
+            panel.classList.remove('is-open');
+            btn.setAttribute('aria-expanded', 'false');
+        }
+        btn.addEventListener('click', function (ev) {
+            ev.stopPropagation();
+            var open = !panel.classList.contains('is-open');
+            // ZH: 關起來的時候順便把裡面展開的下拉收掉 —— 不收的話，
+            //     下次打開面板會看到上次點開的那一組還開著。
+            if (!open) MENUS.forEach(function (fn) { fn(); });
+            panel.classList.toggle('is-open', open);
+            btn.setAttribute('aria-expanded', String(open));
+        });
+        // ZH: 點面板以外的地方就關。理由同 wireToggle 的那段：
+        //     判斷要在**捕獲階段**先記下來，因為面板裡的字級／顏色按鈕
+        //     會讓 prefs.js 重畫整塊，冒泡到這裡時 ev.target 已經不在 DOM 上。
+        var inside = false;
+        document.addEventListener('click', function (ev) {
+            inside = panel.contains(ev.target) || btn.contains(ev.target);
+        }, true);
+        document.addEventListener('click', function () {
+            if (panel.classList.contains('is-open') && !inside) close();
+        });
+        // ZH: 點面板裡的連結要關 —— 大部分會導頁不必處理，但**指向目前這一頁**的
+        //     那一個不會導頁（例如停在首頁時點「首頁」），面板就會一直開著。
+        panel.addEventListener('click', function (ev) {
+            if (ev.target.closest && ev.target.closest('a')) close();
+        });
         document.addEventListener('keydown', function (ev) {
             if (ev.key === 'Escape') close();
         });

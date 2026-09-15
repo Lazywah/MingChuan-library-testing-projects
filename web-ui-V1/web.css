@@ -777,3 +777,108 @@ html.aibot-docked #aibot-fab { display: none; }
 }
 /* ZH: 卡片式入口刪節號會很醜，改成整張淡掉就好。 */
 .gcard.is-off { text-decoration: none; background-color: var(--surface-2); }
+
+/* ==========================================================================
+ * ZH: 手機版把頂部列右側整塊收進 ☰（v4.13，擁有者需求 2026-09-15）
+ *
+ * ZH: 在此之前 375px 寬的頂部列會擠成**三排**（LOGO／導覽／語言＋帳號），
+ *     四個導覽鈕各自再折成兩行，實測佔掉約 300px 高 ——
+ *     等於一開頁先看一整頁的導覽。
+ *
+ * ZH: 只包一層 `.topbar__tools`：桌面上它是普通的 flex 列（版面與包之前相同），
+ *     手機上同一層變成 ☰ 底下展開的面板。不做「依寬度搬節點」，
+ *     那要監聽 resize、要處理搬到一半選單正開著，而且搬完事件要重接。
+ *
+ * ZH: ⚠ 覆寫既有規則時**一律多帶一個 class**（`.topbar__tools .account__menu`），
+ *     不靠「web.css 載得比 styles.css 晚」—— 那個依賴會被檔案順序改動打翻
+ *     （同一份理由見上面 `.topnav .navmenu__menu a` 的註解）。
+ * ========================================================================== */
+.topbar__tools {
+    display: flex;
+    align-items: center;
+    gap: var(--space-4);
+}
+/* ZH: ☰ 只在手機出現；桌面留一顆按不出東西的鈕只會讓人按一次才知道。 */
+.topbar__burger { display: none; }
+
+@media (max-width: 640px) {
+    .topbar__burger {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-width: var(--tap-min);
+        min-height: var(--tap-min);
+        padding: 0 var(--space-2);
+        font-size: 1.25rem;
+        line-height: 1;
+        color: var(--text);
+        background: transparent;
+        border: 1px solid var(--hairline);
+        border-radius: var(--radius-md);
+        cursor: pointer;
+    }
+    .topbar__burger[aria-expanded="true"] {
+        background-color: var(--surface-2);
+        border-color: var(--link);
+    }
+
+    /* ZH: 面板錨在 .topbar 上。`.topbar` 是 sticky —— sticky 也是一種
+     *     positioned，絕對定位的子元素就以它為準，不必另外加 position: relative。 */
+    .topbar__tools {
+        display: none;
+        position: absolute;
+        top: 100%;
+        left: 0;
+        right: 0;
+        flex-direction: column;
+        align-items: stretch;
+        gap: var(--space-1);
+        padding: var(--space-3) var(--space-4) var(--space-4);
+        background-color: var(--surface);
+        border-bottom: 1px solid var(--hairline);
+        box-shadow: var(--shadow-2);
+        z-index: 25;
+        /* ZH: 字級放大或選單全開時可能比螢幕高 —— 給它自己捲，
+         *     不要讓面板把頁面撐長（那會出現「關掉選單後頁面還是那麼長」）。 */
+        max-height: calc(100vh - 56px);
+        overflow-y: auto;
+    }
+    .topbar__tools.is-open { display: flex; }
+
+    /* ── 面板裡的導覽改直排 ──────────────────────────────────────── */
+    .topbar__tools .topnav {
+        flex-direction: column;
+        align-items: stretch;
+        gap: var(--space-1);
+        width: 100%;
+    }
+    .topbar__tools .topnav > a,
+    .topbar__tools .navmenu__toggle {
+        width: 100%;
+        justify-content: flex-start;
+    }
+    .topbar__tools .navmenu { display: block; }
+    /* ZH: 分類下拉在面板裡**就地展開**，不再浮一層 —— 手機上浮層會蓋住
+     *     底下其他分類，而使用者是來找東西的，看得到全貌比較好按。
+     *     左邊那條線是在說「這幾項屬於上面那一組」。 */
+    .topbar__tools .navmenu__menu,
+    .topbar__tools .account__menu {
+        position: static;
+        min-width: 0;
+        border: 0;
+        border-left: 2px solid var(--hairline);
+        border-radius: 0;
+        box-shadow: none;
+        margin: var(--space-1) 0 var(--space-2) var(--space-3);
+        padding: 0 0 0 var(--space-2);
+    }
+    /* ZH: 帳號選單原本靠 `.account { position: relative }` 定位，
+     *     就地展開之後那個相對定位沒有用處，留著反而讓它變成新的錨點。 */
+    .topbar__tools .account { position: static; }
+    .topbar__tools .account__toggle {
+        width: 100%;
+        justify-content: space-between;
+    }
+    /* ZH: 語言切換不要撐滿 —— 它是兩顆小鈕，拉滿一整列會看起來像可以按整條。 */
+    .topbar__tools .lang-switch { align-self: flex-start; }
+}
