@@ -10,8 +10,10 @@
  *      主題換了圖表不會跟著換——在只有一種主題時看不出來，v2 有兩種。
  *   3. 模型清單被截斷時明講截了幾個（v1.5 靜默取前 5/8）。
  *
- * 隱私邊界沿用後端設計，前端不得放寬：只有自己的用量 + 全體「人均」，
- * 無排名、無他人資訊；樣本不足時後端直接不給對照（show=false）。
+ * 隱私邊界：這一頁只顯示**你自己的**用量，無排名、無他人資訊。
+ * ZH: v4.11 拿掉「全體人均」對照（擁有者裁定 2026-09-15：比較留給管理端）。
+ *     後端 my-consumption 仍會回 `peer`（含 MIN_PEER_COHORT 那套樣本保護），
+ *     這一頁單純不看它 —— 要連後端一起收的話是另一件事。
  * ========================================================================== */
 const API = '/api/v1';
 const FORCED = new URLSearchParams(location.search).get('state');
@@ -110,7 +112,8 @@ function renderBalance(acc, bal) {
         parts.push(`<a href="report.html?topic=quota">`
                    + `${T('idx_ask_quota', '向管理員申請額度')}</a>`);
     }
-    if (acc.expiry) parts.push(T('usage_valid_until', '有效至 {d}').replace('{d}', acc.expiry));
+    // ZH: v4.11 拿掉「有效至 {d}」（擁有者裁定 2026-09-15：效期由管理者管）。
+    //     `acc.expiry` 後端照樣會給,這裡不顯示。
     // ZH: 這裡改用 innerHTML 是因為要放連結；除了 safeUrl 過的網址之外，
     //     其餘都是字典裡的固定字串與數字，沒有資料庫來的自由文字。
     $('bal-meta').innerHTML = parts.join(' · ');
@@ -119,34 +122,17 @@ function renderBalance(acc, bal) {
 // ── 三個數字 ─────────────────────────────────────────────────────────
 function renderStats(d) {
     const s = d.summary || {};
-    const peer = d.peer || {};
-    const show = !!peer.show;
 
-    const cell = (label, value, sub) => `
+    const cell = (label, value) => `
         <div class="stat">
             <div class="stat__label">${label}</div>
             <div class="stat__value">${num(value)}</div>
-            ${sub ? `<div class="stat__sub">${sub}</div>` : ''}
         </div>`;
 
-    // ZH: 倍率只在人均 > 0 時算 —— 除以 0 會得到 Infinity，畫面上會出現「∞×平均」。
-    const ratio = (show && peer.avg_consumed > 0)
-        ? (s.consumed || 0) / peer.avg_consumed : null;
-
     $('stats').innerHTML =
-        cell(T('usage_consumed', '消耗點數'), s.consumed,
-             show ? T('usage_peer_avg', '全體人均 {n}').replace('{n}', num(peer.avg_consumed))
-                    + (ratio != null ? ` · ${ratio.toFixed(1)}× ${T('usage_avg', '平均')}` : '') : '')
-        + cell(T('usage_uses', 'AI 使用次數'), s.uses,
-               show ? T('usage_peer_avg', '全體人均 {n}').replace('{n}', num(peer.avg_uses)) : '')
-        + cell(T('usage_logins', '登入次數'), s.logins, '');
-
-    const np = $('no-peer');
-    np.hidden = show;
-    if (!show) {
-        np.textContent = T('usage_small_sample',
-            '目前使用者樣本太少，暫不顯示全體人均對照——樣本太小時「人均」會反推出特定個人。你自己的數字不受影響。');
-    }
+        cell(T('usage_consumed', '消耗點數'), s.consumed)
+        + cell(T('usage_uses', 'AI 使用次數'), s.uses)
+        + cell(T('usage_logins', '登入次數'), s.logins);
 }
 
 // ── 圖表 ─────────────────────────────────────────────────────────────
@@ -160,27 +146,20 @@ function drawCharts(d) {
     destroyCharts();
 
     const me = tok('--chart-me');
-    const pr = tok('--chart-peer');
     const grid = { color: tok('--chart-grid') };
     const txt = tok('--text');
-    const show = !!(d.peer && d.peer.show);
     const base = {
         responsive: true, maintainAspectRatio: false,
         plugins: { legend: { labels: { color: txt, boxWidth: 10, font: { size: 11 } } } },
     };
 
-    // 趨勢：我＝實線；全體人均＝虛線（樣本足夠時才有）
+    // 趨勢：只有自己的線（v4.11 拿掉人均虛線）
     const series = d.series || [];
     const ds = [{
         label: T('usage_me', '我'), data: series.map((x) => x.consumed),
         borderColor: me, backgroundColor: me + '22',
         fill: true, tension: 0.25, pointRadius: 0, borderWidth: 2,
     }];
-    if (show) ds.push({
-        label: T('usage_peer', '全體人均'), data: series.map((x) => x.peer_avg),
-        borderColor: pr, borderDash: [5, 4], borderWidth: 2,
-        fill: false, tension: 0.25, pointRadius: 0,
-    });
     charts.trend = new Chart($('trend').getContext('2d'), {
         type: 'line',
         data: { labels: series.map((x) => x.date), datasets: ds },
@@ -189,14 +168,12 @@ function drawCharts(d) {
             y: { ticks: { color: txt, font: { size: 10 } }, grid, beginAtZero: true } } },
     });
 
-    // 模型別：有對照時比佔比 %，否則直接看點數
+    // 模型別：直接看點數（v4.11 之前有對照時改比「佔比 %」，對照拿掉後只剩這一種）
     const all = d.models || [];
-    const cap = show ? 5 : 8;
+    const cap = 8;
     const mdl = all.slice(0, cap);
-    const mds = show
-        ? [{ label: T('usage_my_share', '我的佔比 %'), data: mdl.map((m) => m.share), backgroundColor: me, borderRadius: 3 },
-           { label: T('usage_peer_share', '全體佔比 %'), data: mdl.map((m) => m.peer_share), backgroundColor: pr, borderRadius: 3 }]
-        : [{ label: T('usage_consumed', '消耗點數'), data: mdl.map((m) => m.points), backgroundColor: me, borderRadius: 3 }];
+    const mds = [{ label: T('usage_consumed', '消耗點數'), data: mdl.map((m) => m.points),
+                   backgroundColor: me, borderRadius: 3 }];
 
     charts.models = new Chart($('models').getContext('2d'), {
         type: 'bar',
@@ -286,19 +263,16 @@ function mock(kind) {
     const series = Array.from({ length: days }, (_, i) => ({
         date: `08/${String(i + 1).padStart(2, '0')}`,
         consumed: Math.round(200 + 150 * Math.sin(i / 2)),
-        peer_avg: 180,
     }));
     const models = ['gpt-4o', 'claude', 'gemini', 'llama', 'qwen', 'mistral', 'phi', 'gemma', 'yi', 'glm']
         .map((m, i) => ({ model: m, display_name: m, points: 900 - i * 80,
-                          count: 40 - i * 3, share: 30 - i * 3, peer_share: 25 - i * 2 }));
-    const base = { bound: true, account: { points: 4820, expiry: '2026-12-31' },
+                          count: 40 - i * 3 }));
+    const base = { bound: true, account: { points: 4820 },
                    summary: { consumed: 3180, uses: 214, logins: 37 },
-                   peer: { show: true, avg_consumed: 1900, avg_uses: 120 },
                    series, models };
     if (kind === 'error') throw new Error('強制錯誤狀態');
     if (kind === 'unbound') return { ...base, bound: false, account: {} };
     if (kind === 'empty') return { ...base, summary: { consumed: 0, uses: 0, logins: 0 } };
-    if (kind === 'nopeer') return { ...base, peer: { show: false } };
     if (kind === 'overflow') return base;                 // models 有 10 個，會截斷
     return base;
 }
