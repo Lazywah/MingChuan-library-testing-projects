@@ -1767,3 +1767,98 @@ textarea.field__input {
     gap: 0 var(--space-5);
     align-items: start;
 }
+
+/* ==========================================================================
+ * ZH: 手機版把頂部列右側整塊收進 ☰（v4.13，與使用者端 web.css 同一套）
+ *
+ * ZH: 375px 實測原本擠成**三排**（品牌／導覽／語言＋帳號）約 280px 高。
+ *     現在固定一排：品牌在左、☰ 在右。
+ *
+ * ZH: 為什麼不寫進 styles.css：那一份與使用者端**逐位元組相同**
+ *     （scripts/check_shared_ui_files.py 會擋），而 `.adm-nav` 只有管理端有。
+ *     使用者端那一份在 web.css，兩邊各自維護自己的 nav 差異。
+ *
+ * ZH: ⚠ 覆寫既有規則一律多帶一個 class（`.topbar__tools .account__menu`），
+ *     不靠檔案載入順序 —— 同一份理由見使用者端 web.css 那段。
+ * ========================================================================== */
+.topbar__tools {
+    display: flex;
+    align-items: center;
+    gap: var(--space-4);
+}
+.topbar__burger { display: none; }
+
+@media (max-width: 640px) {
+    .topbar__burger {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-width: var(--tap-min);
+        min-height: var(--tap-min);
+        padding: 0 var(--space-2);
+        font-size: 1.25rem;
+        line-height: 1;
+        color: var(--text);
+        background: transparent;
+        border: 1px solid var(--hairline);
+        border-radius: var(--radius-md);
+        cursor: pointer;
+    }
+    .topbar__burger[aria-expanded="true"] {
+        background-color: var(--surface-2);
+        border-color: var(--link);
+    }
+
+    /* ZH: 面板錨在 .topbar 上 —— 它是 sticky，sticky 也是一種 positioned，
+     *     絕對定位的子元素就以它為準，不必另外加 position: relative。 */
+    .topbar__tools {
+        display: none;
+        position: absolute;
+        top: 100%;
+        left: 0;
+        right: 0;
+        flex-direction: column;
+        align-items: stretch;
+        gap: var(--space-2);
+        padding: var(--space-3) var(--space-4) var(--space-4);
+        background-color: var(--surface);
+        border-bottom: 1px solid var(--hairline);
+        box-shadow: var(--shadow-2);
+        z-index: 25;
+        /* ZH: 字級放大時可能比螢幕高 —— 給它自己捲，不要把頁面撐長。 */
+        max-height: calc(100vh - 56px);
+        overflow-y: auto;
+    }
+    .topbar__tools.is-open { display: flex; }
+
+    /* ZH: 五個導覽項改直排。它原本就有 flex-wrap，在窄螢幕上會折成兩行 ——
+     *     折行與「一項一行」看起來很像，但折行的斷點是文字寬度決定的，
+     *     同一組會被拆開；直排則每一項都對齊，掃起來快得多。 */
+    .topbar__tools .adm-nav {
+        flex-direction: column;
+        align-items: stretch;
+        gap: var(--space-1);
+        width: 100%;
+    }
+    .topbar__tools .adm-nav__item { width: 100%; }
+
+    /* ZH: 帳號選單在面板裡就地展開，不要再浮一層 —— 浮層會蓋住底下的東西，
+     *     而面板本身就已經是一層了。左邊那條線表示「這幾項屬於上面那顆鈕」。 */
+    .topbar__tools .account { position: static; }
+    .topbar__tools .account__toggle {
+        width: 100%;
+        justify-content: space-between;
+    }
+    .topbar__tools .account__menu {
+        position: static;
+        min-width: 0;
+        border: 0;
+        border-left: 2px solid var(--hairline);
+        border-radius: 0;
+        box-shadow: none;
+        margin: var(--space-1) 0 0 var(--space-3);
+        padding: 0 0 0 var(--space-2);
+    }
+    /* ZH: 語言切換不要撐滿 —— 兩顆小鈕拉成一整列會看起來像可以按整條。 */
+    .topbar__tools .lang-switch { align-self: flex-start; }
+}

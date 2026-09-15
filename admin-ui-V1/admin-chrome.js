@@ -108,6 +108,18 @@
             '<span class="topbar__brand" data-i18n="adm_brand">'
             + esc(T('adm_brand', 'MCU AI Base 管理端')) + '</span>'
             + '<span class="topbar__spacer"></span>'
+            // ZH: 手機版把右側整塊收進 ☰（v4.13，與使用者端同一套做法）——
+            //     375px 實測原本擠成三排（品牌／導覽／語言＋帳號）約 280px 高。
+            // ZH: ☰ 沒有文字，唸出來的就是 aria-label，所以要翻譯；
+            //     符號本身包在 aria-hidden 裡，不然閱讀器會唸字元名。
+            + '<button type="button" class="topbar__burger" id="adm-burger"'
+            + '        aria-controls="adm-tools" aria-expanded="false"'
+            + '        data-i18n-aria="nav_menu" aria-label="'
+            +      esc(T('nav_menu', '選單')) + '"><span aria-hidden="true">☰</span></button>'
+            // ZH: 桌面上這一層是普通的 flex 列（版面與包之前相同），
+            //     手機上同一層變成 ☰ 底下展開的面板。一個容器 + 一條 media query，
+            //     不做「依寬度搬節點」那種有狀態的做法。
+            + '<div class="topbar__tools" id="adm-tools">'
             + '<nav class="adm-nav" aria-label="' + esc(T('adm_nav_aria', '管理端導覽'))
             +      '" data-i18n-aria="adm_nav_aria">'
             // ZH: 🔴 用 `T(n.key, n.zh)` 建，**不要**寫成 `esc(n.zh)` 等 applyLang 來翻。
@@ -151,6 +163,7 @@
             + '  <button class="account__toggle" type="button" id="adm-acct"'
             + '          aria-haspopup="menu" aria-expanded="false"></button>'
             + '  <div class="account__menu" role="menu" hidden id="adm-menu"></div>'
+            + '</div>'
             + '</div>';
 
         document.body.insertBefore(bar, document.body.firstChild);
@@ -167,6 +180,46 @@
         el.setAttribute('data-i18n', key);
         el.textContent = T(key, fallback);
         return el;
+    }
+
+    // ZH: ☰ 的開關（v4.13）。與帳號下拉是不同性質的東西：帳號選單是面板**裡面**
+    //     的一個項目，所以兩者不能共用同一套互斥邏輯 —— 收面板時要順手把帳號
+    //     選單也收掉，反過來則不行（開帳號選單不該把面板關掉）。
+    function wireBurger(btn, panel) {
+        if (!btn || !panel) return;
+        function close() {
+            panel.classList.remove('is-open');
+            btn.setAttribute('aria-expanded', 'false');
+            if (_menu) {
+                _menu.hidden = true;
+                if (_toggle) _toggle.setAttribute('aria-expanded', 'false');
+            }
+        }
+        btn.addEventListener('click', function (ev) {
+            ev.stopPropagation();
+            var open = !panel.classList.contains('is-open');
+            if (!open) { close(); return; }
+            panel.classList.add('is-open');
+            btn.setAttribute('aria-expanded', 'true');
+        });
+        // ZH: 點面板外面就關。判斷要在**捕獲階段**先記 —— 理由與 wireToggle
+        //     那段相同：面板裡的字級／顏色按鈕會讓 prefs.js 重畫整塊，
+        //     冒泡到這裡時 ev.target 已經不在 DOM 上。
+        var inside = false;
+        document.addEventListener('click', function (ev) {
+            inside = panel.contains(ev.target) || btn.contains(ev.target);
+        }, true);
+        document.addEventListener('click', function () {
+            if (panel.classList.contains('is-open') && !inside) close();
+        });
+        // ZH: 點面板裡的連結要關 —— 導覽多半會換頁不必處理，但**目前這一頁**
+        //     那一個不會換頁（停在總覽時點「總覽」），面板就會一直開著。
+        panel.addEventListener('click', function (ev) {
+            if (ev.target.closest && ev.target.closest('a')) close();
+        });
+        document.addEventListener('keydown', function (ev) {
+            if (ev.key === 'Escape') close();
+        });
     }
 
     function wireToggle(toggle, menu) {
@@ -300,6 +353,8 @@
         _toggle = document.getElementById('adm-acct');
         _menu = document.getElementById('adm-menu');
         wireToggle(_toggle, _menu);
+        wireBurger(document.getElementById('adm-burger'),
+                   document.getElementById('adm-tools'));
         renderMenu();
         loadWho();
     }
