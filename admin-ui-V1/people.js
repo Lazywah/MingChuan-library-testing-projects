@@ -1774,6 +1774,47 @@
     $('import-temp').addEventListener('click', openTempImport);
     $('alma-sync').addEventListener('click', openAlma);
 
+    // ── 帳號匯出（v4.12）────────────────────────────────────────────────
+    //
+    // ZH: 端點要 Authorization，所以**不能用 <a href> 直接下載**
+    //     （那樣帶不上 token，會拿到一個 401 的檔案）——
+    //     fetch → blob → 臨時 <a download>，與數據頁、組織對照表同一個做法。
+    //
+    // ZH: `scope=all`：匯出全部帳號。上面那個搜尋框是**前端**的，
+    //     而端點只認 auth_source 這一種篩選 —— 接成「跟著畫面」會是假的
+    //     （使用者以為匯出的是他看到的那幾筆）。欄位用端點的預設值。
+    //
+    // ZH: 成功不另外給訊息 —— 檔案下載本身就是回饋。失敗**一定要講**：
+    //     下載沒發生時畫面上完全沒有痕跡，使用者只會以為自己沒按到。
+    async function exportUsers(fmt, btn) {
+        var old = btn.textContent;
+        btn.disabled = true;
+        btn.textContent = T('pp_exporting', '匯出中…');
+        try {
+            var res = await fetch(API + '/admin/users/export?scope=all&fmt=' + fmt,
+                                  { headers: { Authorization: 'Bearer ' + token() } });
+            if (!res.ok) throw new Error('HTTP ' + res.status);
+            var cd = res.headers.get('content-disposition') || '';
+            var m = cd.match(/filename="?([^";]+)"?/);
+            var name = m ? m[1] : 'users-export.' + fmt;
+            var blob = await res.blob();
+            var url = URL.createObjectURL(blob);
+            var a = document.createElement('a');
+            a.href = url; a.download = name;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        } catch (e) {
+            alert(T('pp_export_fail', '匯出失敗（{w}）').replace('{w}', e.message));
+        } finally {
+            btn.disabled = false;
+            btn.textContent = old;
+        }
+    }
+    $('ux-xlsx').addEventListener('click', function () { exportUsers('xlsx', $('ux-xlsx')); });
+    $('ux-csv').addEventListener('click', function () { exportUsers('csv', $('ux-csv')); });
+
     // ── 廠商帳號對應（維運）───────────────────────────────────────────────
     //
     // ZH: 四件事放同一區，因為它們是同一條動線：

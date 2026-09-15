@@ -29,7 +29,7 @@ import io
 import json
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Body, Depends, HTTPException, Query, Response
+from fastapi import APIRouter, Body, Depends, File, HTTPException, Query, Response, UploadFile
 from fastapi.responses import StreamingResponse
 from sqlalchemy import func
 from sqlalchemy.orm import Session
@@ -292,8 +292,8 @@ ORG_EXPORT_VERSION = 2   # ZH: v3.9 多了 name_en / college_en
 #         所以欄位名與值都照資料庫原樣（active 是 0/1）。換機器要救回這張表靠它。
 #       · **CSV / XLSX** ＝ 給人看的：欄位名是中文、`active` 寫成「是／否」、
 #         多一欄「來源」讓人分得出哪幾列是 Alma 來的、哪幾列是人工加的。
-#         🔴 **這兩種格式匯不回去**（/import 只吃 JSON）——
-#         所以介面上必須講明，不然有人會把 Excel 改完拿來匯入，然後發現沒有入口。
+#         這兩種**也匯得回來**（`/import-file`），但有一個差別要講明：
+#         🔴 試算表的**空格一律當成「別動」**，所以匯入永遠不會清空欄位。
 #
 # ZH: CSV 沒有「工作表」的概念，所以學系與行政單位**併成一張表**，
 #     第一欄「類型」分辨。XLSX 則拆成兩個工作表（那是它天生該做的事）。
@@ -406,8 +406,9 @@ def export_org(fmt: str = Query("json", pattern="^(json|csv|xlsx)$",
     ZH: 回一個可下載的檔案。**不含人數** —— 那是衍生資料，
         帶著它會讓兩台機器的檔案內容不同而看起來像有差異。
 
-    ZH: `fmt=json`（預設，維持舊行為）＝ 版控／匯回用；
-        `fmt=csv`、`fmt=xlsx` ＝ 給人用 Excel 看的，**不能匯回**。
+    ZH: `fmt=json`（預設，維持舊行為）＝ 版控用（原始值、可 diff）；
+        `fmt=csv`、`fmt=xlsx` ＝ 給人用 Excel 看的。三種都能經 `/import-file` 匯回，
+        差別是試算表的空格＝「別動」（見那一段的說明）。
 
     @node job-scheduler/app/routers/org.py::export_org
     """
@@ -445,18 +446,15 @@ def export_org(fmt: str = Query("json", pattern="^(json|csv|xlsx)$",
     )
 
 
-@router.post("/import", summary="匯入組織對照表（預設先預覽）")
-def import_org(payload: dict = Body(...),
-               dry_run: bool = True,
-               db: Session = Depends(get_db),
-               _: models.User = Depends(require_admin)) -> Any:
+def _apply_org_import(db: Session, payload: dict, dry_run: bool) -> Any:
     """
-    ZH: body 就是匯出檔的內容。`dry_run=true`（預設）只回報會發生什麼，不寫入。
+    ZH: 匯入的本體。JSON 與試算表兩個入口都走這裡 ——
+        解析格式是兩回事，**套用規則只能有一份**（兩份遲早一邊有防呆一邊沒有）。
 
     ZH: 🔴 預設是預覽而不是直接寫 —— 這張表牽動全站的分群統計，
         「按錯就套用」與「按錯先給你看」的代價差很多。
 
-    @node job-scheduler/app/routers/org.py::import_org
+    @node job-scheduler/app/routers/org.py::_apply_org_import
     """
     # ZH: v3.9 —— 版本改成「不高於現在」就收，不再要求相等。
     #     格式是**往上相容的疊加**（v2 只是多了 name_en / college_en），
@@ -491,6 +489,13 @@ def import_org(payload: dict = Body(...),
         if not name or not college:
             raise HTTPException(status_code=400,
                                 detail=f"ZH: 學系缺欄位：{r} | EN: bad department row")
+        # ZH: v4.12 `campus` / `active` 也照 name_en 的規矩：**缺鍵＝保留現值**。
+        #     這是為了試算表匯入 —— 試算表沒有「省略欄位」這回事，欄一定在、
+        #     只有格子是空的，所以解析器把空格**不放進 dict**，語意才接得上。
+        #     若不這樣：空白校區會清掉現有校區，空白啟用會把停用的系**重新打開**，
+        #     兩者都是安靜地發生。新增的列仍用預設（校區空、啟用）。
+        has_campus = "campus" in r
+        has_active = "active" in r
         campus = _clean_campus(r.get("campus"))
         active = _as_active(r.get("active", 1))
         # ZH: v3.9 英文名。舊版匯出檔沒有這兩個鍵 → 會是 None，
@@ -512,6 +517,8 @@ def import_org(payload: dict = Body(...),
         else:
             want_en = name_en if has_en else cur.name_en
             want_cen = college_en if has_cen else cur.college_en
+            campus = campus if has_campus else cur.campus
+            active = active if has_active else cur.active
             if ((cur.college, cur.campus, cur.active, cur.name_en, cur.college_en)
                     != (college, campus, active, want_en, want_cen)):
                 report["departments"]["updated"].append(name)
@@ -529,6 +536,8 @@ def import_org(payload: dict = Body(...),
         parent = (r.get("parent") or "").strip() or None
         # ZH: path 一律重算，不採用檔案裡的 —— 檔案可能是別的版本組出來的。
         path = f"{parent}/{name}" if parent else name
+        has_campus = "campus" in r       # ZH: 理由同學系那段（試算表的空格＝別動）
+        has_active = "active" in r
         campus = _clean_campus(r.get("campus"))
         active = _as_active(r.get("active", 1))
         has_en = "name_en" in r          # ZH: 理由同上：舊檔缺鍵時不要清掉現值
@@ -543,6 +552,8 @@ def import_org(payload: dict = Body(...),
                                       source='admin'))
         else:
             want_en = name_en if has_en else cur.name_en
+            campus = campus if has_campus else cur.campus
+            active = active if has_active else cur.active
             if (cur.name, cur.campus, cur.active, cur.name_en) != (name, campus, active, want_en):
                 report["units"]["updated"].append(path)
                 if not dry_run:
@@ -564,3 +575,245 @@ def import_org(payload: dict = Body(...),
     else:
         db.commit()
     return report
+
+
+# ══════════════════════════════════════════════════════════════════════════
+# ZH: 匯入的三種入口。**套用規則只有 `_apply_org_import` 一份**，
+#     這一層只負責「把檔案變成 payload」。
+#
+# ZH: 🔴 試算表沒有「省略欄位」這回事 —— 欄一定在，只有格子是空的。
+#     所以解析器遇到空格就**不把那個鍵放進 dict**，讓它落在
+#     `_apply_org_import` 的「缺鍵＝保留現值」那條路上。
+#     這是整段最重要的一個決定：不這樣做的話，一個沒填英文名的 Excel
+#     匯進來會把全校的英文名清空，而且畫面上不會有任何錯誤。
+#     代價講明白：**匯入無法用來清空欄位**，要清空請用管理端的編輯器。
+# ══════════════════════════════════════════════════════════════════════════
+_ORG_TRUE = {"1", "是", "y", "yes", "true", "啟用", "on"}
+_ORG_FALSE = {"0", "否", "n", "no", "false", "停用", "off"}
+
+
+def _cell(v) -> str:
+    """ZH: 儲存格 → 去頭尾空白的字串。None／空白都變空字串。
+
+    ZH: openpyxl 會把「1」這種格子給成數值，而 str(1.0) 是 "1.0" ——
+        那會讓「啟用」與代碼類欄位長出一個小數點。
+
+    @node job-scheduler/app/routers/org.py::_cell
+    """
+    if v is None:
+        return ""
+    if isinstance(v, float) and v.is_integer():
+        v = int(v)
+    return str(v).strip()
+
+
+def _active_cell(v):
+    """ZH: 啟用欄 → 1／0／None（None＝空白＝別動）。認不得的值要吵，不要猜。
+
+    @node job-scheduler/app/routers/org.py::_active_cell
+    """
+    t = _cell(v)
+    if not t:
+        return None
+    low = t.lower()
+    if low in _ORG_TRUE:
+        return 1
+    if low in _ORG_FALSE:
+        return 0
+    raise HTTPException(
+        status_code=400,
+        detail="ZH: 啟用欄看不懂「%s」，請填「是」或「否」 | EN: bad active value" % t)
+
+
+def _put(d: dict, key: str, value: str):
+    """ZH: 只有非空才放進去 —— 空的就讓它「缺鍵」。見本段開頭的說明。
+
+    @node job-scheduler/app/routers/org.py::_put
+    """
+    if value:
+        d[key] = value
+
+
+def _row_to_payload(kind: str, get, depts: list, units: list):
+    """ZH: 一列 → 學系或行政單位。`get` 是「欄名 → 值」的取值函式。
+
+    @node job-scheduler/app/routers/org.py::_row_to_payload
+    """
+    name = _cell(get("名稱"))
+    if not name:
+        return                          # ZH: 整列空白（試算表尾巴常有）→ 跳過
+    active = _active_cell(get("啟用"))
+    if kind == "學系":
+        row = {"name": name, "college": _cell(get("上層"))}
+        _put(row, "name_en", _cell(get("英文名稱")))
+        _put(row, "college_en", _cell(get("上層英文")))
+        _put(row, "campus", _cell(get("校區")))
+        if active is not None:
+            row["active"] = active
+        depts.append(row)
+    else:
+        row = {"name": name}
+        _put(row, "name_en", _cell(get("英文名稱")))
+        _put(row, "parent", _cell(get("上層")))
+        _put(row, "campus", _cell(get("校區")))
+        if active is not None:
+            row["active"] = active
+        units.append(row)
+
+
+def _norm_headers(headers: list) -> list:
+    """ZH: 表頭正規化 —— xlsx 兩張工作表用的是各自的欄名（「學系名稱」「學院」…），
+        CSV 併成一張用的是通用欄名（「名稱」「上層」…）。統一成後者再解析，
+        才不會有兩份幾乎一樣的欄位對應表。
+
+    @node job-scheduler/app/routers/org.py::_norm_headers
+    """
+    out = []
+    for h in headers:
+        h = _cell(h)
+        if h in ("學系名稱", "單位名稱"):
+            h = "名稱"
+        elif h in ("學院", "上層單位"):
+            h = "上層"
+        elif h == "學院英文":
+            h = "上層英文"
+        out.append(h)
+    return out
+
+
+def _payload_from_csv(raw: bytes) -> dict:
+    """ZH: CSV → payload。第一欄「類型」分辨學系／行政單位（匯出時就是這樣併的）。
+
+    @node job-scheduler/app/routers/org.py::_payload_from_csv
+    """
+    # ZH: utf-8-sig 才吃得下自己匯出的 BOM；再退一步試 cp950
+    #     （有人會在 Excel 裡「另存新檔 → CSV」，那在中文 Windows 上是 cp950）。
+    text = None
+    for enc in ("utf-8-sig", "cp950"):
+        try:
+            text = raw.decode(enc)
+            break
+        except UnicodeDecodeError:
+            continue
+    if text is None:
+        raise HTTPException(status_code=400,
+                            detail="ZH: CSV 編碼看不懂，請存成 UTF-8 | EN: undecodable CSV")
+    rows = list(csv.reader(io.StringIO(text)))
+    if not rows:
+        raise HTTPException(status_code=400, detail="ZH: 檔案是空的 | EN: empty file")
+    headers = _norm_headers(rows[0])
+    if "類型" not in headers or "名稱" not in headers:
+        raise HTTPException(
+            status_code=400,
+            detail="ZH: CSV 要有「類型」與「名稱」欄（請用本頁匯出的 CSV 當範本） | "
+                   "EN: CSV needs 類型 and 名稱 columns")
+    depts = []
+    units = []
+    for r in rows[1:]:
+        def get(col, _r=r):
+            """@node job-scheduler/app/routers/org.py::_payload_from_csv.<get>"""
+            if col not in headers:
+                return ""
+            i = headers.index(col)
+            return _r[i] if i < len(_r) else ""
+        kind = _cell(get("類型"))
+        if not kind and not _cell(get("名稱")):
+            continue                     # ZH: 空白列
+        if kind not in ("學系", "行政單位"):
+            raise HTTPException(
+                status_code=400,
+                detail="ZH: 類型只能是「學系」或「行政單位」，看到「%s」 | "
+                       "EN: bad 類型" % kind)
+        _row_to_payload(kind, get, depts, units)
+    return {"departments": depts, "units": units}
+
+
+def _payload_from_xlsx(raw: bytes) -> dict:
+    """ZH: XLSX → payload。工作表名就是類型（匯出時分成「學系」「行政單位」兩張）。
+
+    @node job-scheduler/app/routers/org.py::_payload_from_xlsx
+    """
+    try:
+        from openpyxl import load_workbook
+    except ImportError:
+        raise HTTPException(status_code=500,
+                            detail="ZH: openpyxl 未安裝 | EN: openpyxl not installed")
+    try:
+        wb = load_workbook(io.BytesIO(raw), data_only=True)
+    except Exception as e:
+        raise HTTPException(status_code=400,
+                            detail="ZH: 這個檔案不是有效的 Excel（.xlsx）：%s | EN: bad xlsx" % e)
+    known = [n for n in wb.sheetnames if n in ("學系", "行政單位")]
+    if not known:
+        raise HTTPException(
+            status_code=400,
+            detail="ZH: 找不到「學系」或「行政單位」工作表（請用本頁匯出的 Excel 當範本） | "
+                   "EN: need 學系 / 行政單位 sheets")
+    depts = []
+    units = []
+    for kind in known:
+        ws = wb[kind]
+        rows = list(ws.iter_rows(values_only=True))
+        if not rows:
+            continue
+        headers = _norm_headers(list(rows[0]))
+        if "名稱" not in headers:
+            raise HTTPException(
+                status_code=400,
+                detail="ZH: 工作表「%s」找不到名稱欄 | EN: no name column" % kind)
+        for r in rows[1:]:
+            def get(col, _r=r, _h=headers):
+                """@node job-scheduler/app/routers/org.py::_payload_from_xlsx.<get>"""
+                if col not in _h:
+                    return ""
+                i = _h.index(col)
+                return _r[i] if i < len(_r) else ""
+            _row_to_payload(kind, get, depts, units)
+    return {"departments": depts, "units": units}
+
+
+@router.post("/import", summary="匯入組織對照表（JSON；預設先預覽）")
+def import_org(payload: dict = Body(...),
+               dry_run: bool = True,
+               db: Session = Depends(get_db),
+               _: models.User = Depends(require_admin)) -> Any:
+    """
+    ZH: body 就是 JSON 匯出檔的內容。`dry_run=true`（預設）只回報會發生什麼，不寫入。
+
+    @node job-scheduler/app/routers/org.py::import_org
+    """
+    return _apply_org_import(db, payload, dry_run)
+
+
+@router.post("/import-file", summary="匯入組織對照表（.xlsx／.csv／.json；預設先預覽）")
+async def import_org_file(file: UploadFile = File(...),
+                          dry_run: bool = True,
+                          db: Session = Depends(get_db),
+                          _: models.User = Depends(require_admin)) -> Any:
+    """
+    ZH: 上傳匯出檔（副檔名決定怎麼解析），預設一樣只預覽。
+
+    ZH: 🔴 **匯入不會清空欄位**：試算表的空格一律當成「別動」
+        （理由見本段開頭那塊註解）。要清空請用管理端的編輯器。
+
+    @node job-scheduler/app/routers/org.py::import_org_file
+    """
+    name = (file.filename or "").lower()
+    raw = await file.read()
+    if not raw:
+        raise HTTPException(status_code=400, detail="ZH: 檔案是空的 | EN: empty file")
+    if name.endswith(".xlsx"):
+        payload = _payload_from_xlsx(raw)
+    elif name.endswith(".csv"):
+        payload = _payload_from_csv(raw)
+    elif name.endswith(".json"):
+        try:
+            payload = json.loads(raw.decode("utf-8-sig"))
+        except Exception as e:
+            raise HTTPException(status_code=400,
+                                detail="ZH: JSON 讀不出來：%s | EN: bad json" % e)
+    else:
+        raise HTTPException(
+            status_code=400,
+            detail="ZH: 只收 .xlsx / .csv / .json | EN: only .xlsx / .csv / .json")
+    return _apply_org_import(db, payload, dry_run)

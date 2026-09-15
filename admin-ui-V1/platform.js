@@ -2352,7 +2352,9 @@
     //
     // ZH: 🔴 匯入一律**先預覽**。這張表牽動全站分群，
     //     「按錯就套用」與「按錯先給你看」的代價差很多。
-    var ORG_PENDING = null;      // ZH: 已預覽、等著套用的檔案內容
+    // ZH: v4.12 存的是**檔案本身**不是解析後的內容 —— 三種格式（xlsx/csv/json）
+    //     一律交給後端解析，前端不再自己 JSON.parse。套用時把同一個檔再送一次。
+    var ORG_PENDING = null;      // ZH: 已預覽、等著套用的那個 File
 
     // ZH: 三種格式共用這一支。`fmt` 只決定要什麼檔，其餘（授權、下載、回報）都一樣。
     // ZH: 🔴 檔名**以伺服器給的 Content-Disposition 為準**，不要在前端另外拼一份 ——
@@ -2414,22 +2416,19 @@
         return line;
     }
 
+    // ZH: 🔴 **不要自己設 Content-Type** —— multipart 的 boundary 由瀏覽器產生，
+    //     手動指定 'multipart/form-data' 會少掉 boundary，後端直接解不出檔案。
+    function sendImport(file, dryRun) {
+        var fd = new FormData();
+        fd.append('file', file);
+        return api('/admin/org/import-file?dry_run=' + (dryRun ? 'true' : 'false'),
+                   { method: 'POST', body: fd });
+    }
+
     async function previewImport(file) {
-        var text = await file.text();
-        var body;
         try {
-            body = JSON.parse(text);
-        } catch (e) {
-            say('og-msg', T('pf_org_badjson', '這個檔案不是有效的 JSON。'));
-            return;
-        }
-        try {
-            var rep = await api('/admin/org/import?dry_run=true', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(body),
-            });
-            ORG_PENDING = body;
+            var rep = await sendImport(file, true);
+            ORG_PENDING = file;
             $('og-apply').hidden = false;
             note('og-msg', orgImportSummary(rep) + ' '
                  + T('pf_org_confirm', '確認無誤請按「套用匯入」。'));
@@ -2443,11 +2442,9 @@
     async function applyImport() {
         if (!ORG_PENDING) return;
         try {
-            var rep = await api('/admin/org/import?dry_run=false', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(ORG_PENDING),
-            });
+            // ZH: 把**預覽過的那個檔**再送一次（dry_run=false）。
+            //     檔案在這中間不會變 —— 使用者要換檔就得重選，而重選會重跑預覽。
+            var rep = await sendImport(ORG_PENDING, false);
             ORG_PENDING = null;
             $('og-apply').hidden = true;
             $('og-file').value = '';      // ZH: 清掉，否則選同一個檔不會觸發 change

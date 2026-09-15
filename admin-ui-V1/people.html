@@ -37,6 +37,16 @@
                  這顆是「現在就跑一次」。兩段式（預覽 → 確認），因為它會改身分。 -->
         <button class="btn btn--minor" type="button" id="alma-sync" data-view="platform"
                 data-i18n="alma_btn">Alma 身分回填</button>
+        <!-- ZH: v4.12 帳號匯出（擁有者裁定 2026-09-15）。後端 /users/export 一直都在，
+                 V0／V0.5 有接、**V1 漏掉了** —— 換到這一版之後這個功能就從畫面上
+                 消失了，而端點還活著所以測不出來。
+             ZH: 匯出的是**全部帳號**與預設欄位（帳號／Email／角色／登入來源／啟用／
+                 學系／最後登入／Token 已用與配額）。上面那個搜尋框是前端的，
+                 端點只認 auth_source 篩選 —— 把它接成「跟著搜尋框」會是假的。 -->
+        <button class="btn btn--minor" type="button" id="ux-xlsx" data-view="platform"
+                data-i18n="pp_export_xlsx">匯出 Excel</button>
+        <button class="btn btn--minor" type="button" id="ux-csv" data-view="platform"
+                data-i18n="pp_export_csv">匯出 CSV</button>
         <!-- ZH: 檢視滑條。與「平台設定」「數據」同一個元件 ——
                  它是**篩選**不是分頁：兩邊講的都是同一批帳號,
                  只是「平台這邊的資料」與「廠商那邊的對應」。
@@ -167,10 +177,10 @@
 <script src="tz.js?v=2e214a8b"></script>
 <!-- ⚠ ZH: 順序不能動 —— i18n-admin 在 i18n 之後、prefs 之前。 -->
 <script src="i18n.js?v=d2d4af9a"></script>
-<script src="i18n-admin.js?v=3b39d764"></script>
+<script src="i18n-admin.js?v=4a8ac56c"></script>
 <script src="tip.js?v=0699f4a2"></script>
 <script src="prefs.js?v=00b43387"></script>
 <script src="admin-chrome.js?v=7449f91c"></script>
-<script src="people.js?v=19d80925"></script>
+<script src="people.js?v=7377395a"></script>
 </body>
 </html>

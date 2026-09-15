@@ -224,9 +224,9 @@
                      所以是背景任務＋進度，不是按了就等。 -->
             <button class="btn btn--minor" type="button" id="og-alma"
                     data-i18n="pf_org_alma">用 Alma 重建</button>
-            <!-- ZH: 三種格式，用途不同：Excel／CSV 是給人開來看的（中文欄名、
-                     啟用寫「是／否」、多一欄來源）；JSON 是**匯回用的那一份**。
-                     常用的放前面，JSON 在最後 —— 會用到它的人知道自己在找什麼。 -->
+            <!-- ZH: 三種格式都匯得回來，差別在給誰看：Excel／CSV 是給人開的
+                     （中文欄名、啟用寫「是／否」、多一欄來源）；JSON 是給版控的
+                     （欄位是原始值，可以 diff）。常用的放前面。 -->
             <button class="btn btn--minor" type="button" id="og-export-xlsx"
                     data-i18n="pf_org_export_xlsx">匯出 Excel</button>
             <button class="btn btn--minor" type="button" id="og-export-csv"
@@ -234,7 +234,11 @@
             <button class="btn btn--minor" type="button" id="og-export"
                     data-i18n="pf_org_export">匯出 JSON</button>
             <!-- ZH: file input 藏起來，用按鈕代按 —— 原生的檔案選擇器樣式無法與其他鈕一致。 -->
-            <input type="file" id="og-file" accept="application/json,.json" hidden>
+            <!-- ZH: 三種格式都收，後端依副檔名決定怎麼解析。
+                     ⚠ 匯入**不會清空欄位** —— 試算表的空格一律當「別動」，
+                     否則一份沒填英文名的 Excel 會把全校的英文名洗掉。 -->
+            <input type="file" id="og-file"
+                   accept=".xlsx,.csv,.json,application/json" hidden>
             <button class="btn btn--minor" type="button" id="og-pick" data-i18n="pf_org_import">匯入</button>
             <button class="btn btn--primary" type="button" id="og-apply" data-i18n="pf_org_apply" hidden>套用匯入</button>
             <button class="btn btn--minor" type="button" id="og-add" data-i18n="pf_org_add" hidden>新增一列</button>
@@ -265,10 +269,10 @@
 <script src="tz.js?v=2e214a8b"></script>
 <!-- ⚠ ZH: 順序不能動 —— i18n-admin 在 i18n 之後、prefs 之前。 -->
 <script src="i18n.js?v=d2d4af9a"></script>
-<script src="i18n-admin.js?v=3b39d764"></script>
+<script src="i18n-admin.js?v=4a8ac56c"></script>
 <script src="tip.js?v=0699f4a2"></script>
 <script src="prefs.js?v=00b43387"></script>
 <script src="admin-chrome.js?v=7449f91c"></script>
-<script src="platform.js?v=1580833d"></script>
+<script src="platform.js?v=cc850ba4"></script>
 </body>
 </html>
