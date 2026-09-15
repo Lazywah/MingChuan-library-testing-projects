@@ -96,16 +96,6 @@ def _current_myai_points(db: Session, current_user: models.User):
     return row.points if row else None
 
 
-# ZH: 學生端對照的「最小樣本數」。人均 + 活躍人數會反推出個體：
-#     若期間內只有 2 個活躍帳號（我＋另一人），總量＝人均×2，對方＝總量−我的 → 精準洩漏。
-#     3 人以上就無法反推「特定個人」（只能得到其餘人的總和），這裡取 5 更保守。
-#     樣本不足時不給對照（前端顯示說明），只顯示使用者自己的用量。
-# EN: minimum cohort for showing the peer baseline to students. avg × active_accounts
-#     lets a student solve for another individual when active==2. 3 is the mathematical
-#     floor; 5 is the conservative small-cell suppression threshold used here.
-MIN_PEER_COHORT = 5
-
-
 def _peer_baseline(db: Session, since):
     """ZH: 同期間「全體基準」—— 只回聚合數字，**不含任何個人身分**（無姓名/email/sn 對外）。
             人均分母＝期間內真的有用量的帳號數（沒用的人不該稀釋平均）。
@@ -195,19 +185,23 @@ def _aligned_series(daily_me: dict, peer: dict):
     } for d in sorted(peer["daily"].keys())]
 
 
-def _ranked_models(model_agg: dict, consumed: int, peer: dict):
-    """ZH: 模型別排序 + 佔比。share=自己佔比、peer_share=全體佔比
+def _ranked_models(model_agg: dict, consumed: int, peer: dict = None):
+    """ZH: 模型別排序 + 佔比。share=自己佔比；給了 peer 才多一欄 peer_share=全體佔比
             → 並排比得出「我特別吃哪種模型」（絕對點數量級差太多，比不動）。
-       EN: per-model list with own vs all-accounts share (%), sorted by points.
+       EN: per-model list sorted by points; peer_share only when a baseline is given.
+
+    ZH: `peer` 是選配的（v4.11）—— 學生端不再算全體基準，但管理端個人查詢還要，
+        所以這支保留對照欄位的能力，只是不再強迫呼叫端先算一份 peer 出來。
 
     @node job-scheduler/app/routers/external_ai.py::_ranked_models
     """
     rows = sorted(model_agg.values(), key=lambda x: x["points"], reverse=True)
-    total_all = peer["total"]
+    total_all = peer["total"] if peer else 0
     for m in rows:
         m["share"] = round(100 * m["points"] / consumed, 1) if consumed else 0
-        m["peer_share"] = (round(100 * peer["model_points"].get(m["model"], 0) / total_all, 1)
-                           if total_all else 0)
+        if peer:
+            m["peer_share"] = (round(100 * peer["model_points"].get(m["model"], 0) / total_all, 1)
+                               if total_all else 0)
     return rows
 
 
@@ -373,14 +367,20 @@ def get_my_consumption(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user),
 ) -> Any:
-    """ZH: v3.0 學生端「我的使用量」—— 只給**自己的**用量 + **全體聚合**趨勢對照。
-       EN: v3.0 student-facing usage: own usage only, plus aggregate-only baseline.
+    """ZH: v3.0 學生端「我的使用量」—— 只給**自己的**用量。
+       EN: v3.0 student-facing usage: own usage only.
 
     ⚠ 隱私邊界（刻意設計，不要放寬）：
       1. 身分只從 JWT 的 current_user 推導，**不吃任何查詢身分的參數** → 無法查別人。
       2. 回傳裡**沒有**其他人的姓名/email/序號、沒有 Top 消耗者、沒有逐帳號清單。
-      3. **不給排名**：排名會變成比賽/公審，且隱含他人相對位置。全體只以「人均」出現。
-      4. 對照數字全是聚合值（人均、佔比），單一使用者無法從中反推特定他人。
+      3. **不給排名**：排名會變成比賽/公審，且隱含他人相對位置。
+
+    ZH: v4.11 連「全體人均」對照也拿掉了（擁有者裁定 2026-09-15：比較留給管理端）。
+        省掉的不只是幾個欄位 —— `_peer_baseline` 會把期間內**所有**帳號的 ai_usage
+        交易撈進來逐筆聚合，那是每個學生每次開頁面各跑一次的全表掃描。
+    🔴 **若之後要把對照加回來**：人均 + 活躍人數會反推出個體 —— 期間內只有 2 個活躍
+        帳號時，總量＝人均×2、對方＝總量−我的，是精準洩漏。3 人是數學下限，
+        當初取 5 作為保守門檻（`MIN_PEER_COHORT`，一併移除）。不要無條件回傳。
 
     @node job-scheduler/app/routers/external_ai.py::get_my_consumption
     """
@@ -389,7 +389,7 @@ def get_my_consumption(
     if not row:
         # ZH: 沒綁定廠商帳號（或還沒同步到）→ 前端顯示友善說明，不是錯誤
         return {"bound": False, "days": (30 if days is None else int(days)), "summary": {}, "series": [],
-                "models": [], "peer": {}, "account": {}}
+                "models": [], "account": {}}
 
     # ZH: 不能用 `days or 30` —— 0 在 Python 是 falsy，前端「全部」送的正是 0，
     #     會被悄悄換成 30，導致「全部」實際只看近 30 天（同頁的「個人查詢」
@@ -398,18 +398,10 @@ def get_my_consumption(
     since = datetime.now() - timedelta(days=min(days, 3650)) if days > 0 else None
     mmap = {m.code: m for m in db.query(models.MyaiModelMap).all()}
     own = _own_usage(db, {row.vendor_sn}, since, mmap)
-    peer = _peer_baseline(db, since)
-    active = peer["active"]
-    # ZH: 5.「樣本太少就不給對照」—— 見 MIN_PEER_COHORT：人均會反推出特定個人。
-    #     不足時仍完整顯示「自己的」用量，只是拿掉全體對照。
-    show_peer = active >= MIN_PEER_COHORT
-    series = _aligned_series(own["daily"], peer) if show_peer else [
-        {"date": d, "consumed": own["daily"][d]} for d in sorted(own["daily"].keys())
-    ]
-    model_list = _ranked_models(own["model_agg"], own["consumed"], peer)
-    if not show_peer:
-        for m in model_list:
-            m.pop("peer_share", None)     # 全體佔比同樣是對照資料，一併拿掉
+    # ZH: 趨勢軸＝自己有用量的日子。對照還在的時候軸是「全體有活動的日子」
+    #     （`_aligned_series`，管理端仍在用）—— 沒有對照就沒有理由撈全體的日期。
+    series = [{"date": d, "consumed": own["daily"][d]} for d in sorted(own["daily"].keys())]
+    model_list = _ranked_models(own["model_agg"], own["consumed"])
     return {
         "bound": True,
         "days": days,
@@ -418,14 +410,6 @@ def get_my_consumption(
         "summary": {"consumed": own["consumed"], "uses": own["uses"], "logins": own["logins"]},
         "series": series,
         "models": model_list,
-        # ZH: 聚合值 only —— 刻意沒有 rank、沒有逐帳號資訊；樣本不足時連人均都不給。
-        "peer": {
-            "show": show_peer,
-            "active_accounts": active,
-            "min_cohort": MIN_PEER_COHORT,
-            **({"avg_consumed": round(peer["total"] / (active or 1), 1),
-                "avg_uses": round(peer["uses"] / (active or 1), 1)} if show_peer else {}),
-        },
     }
 
 

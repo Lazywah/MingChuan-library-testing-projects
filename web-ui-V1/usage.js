@@ -12,8 +12,8 @@
  *
  * 隱私邊界：這一頁只顯示**你自己的**用量，無排名、無他人資訊。
  * ZH: v4.11 拿掉「全體人均」對照（擁有者裁定 2026-09-15：比較留給管理端）。
- *     後端 my-consumption 仍會回 `peer`（含 MIN_PEER_COHORT 那套樣本保護），
- *     這一頁單純不看它 —— 要連後端一起收的話是另一件事。
+ *     後端 my-consumption 也**不再計算** peer（同一批改動）——
+ *     回應裡沒有 `peer`，series 也只剩自己的日子。
  * ========================================================================== */
 const API = '/api/v1';
 const FORCED = new URLSearchParams(location.search).get('state');
