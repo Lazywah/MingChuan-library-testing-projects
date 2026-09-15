@@ -656,7 +656,9 @@ def export_users(
         content = ("﻿" + buf.getvalue()).encode("utf-8")
         return StreamingResponse(
             io.BytesIO(content),
-            media_type="text/csv; charset=utf-8",
+            # ZH: 只寫 "text/csv" —— Starlette 對 text/* 會自己補 charset，
+            #     自己再寫一次會變成 `text/csv; charset=utf-8; charset=utf-8`（實測）。
+            media_type="text/csv",
             headers={"Content-Disposition": f'attachment; filename="{filename}"'},
         )
 
@@ -1304,7 +1306,7 @@ def temp_import_template(
     csv_text = "\n".join(",".join(r) for r in [header] + demo) + "\n"
     return Response(
         csv_text.encode("utf-8-sig"),
-        media_type="text/csv; charset=utf-8",
+        media_type="text/csv",          # ZH: charset 由 Starlette 補，見上面那支匯出
         headers={"Content-Disposition":
                  "attachment; filename=temp-accounts-template.csv"})
 
