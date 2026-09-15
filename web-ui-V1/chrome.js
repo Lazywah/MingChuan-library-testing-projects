@@ -200,7 +200,7 @@
                     //     兩個選單項同一個去處，點下去會意外。
                     // ZH: 「按了被擋」的處理跟著搬過去了：myai.html 是現在唯一有
                     //     #handoff 的地方，那段邏輯仍然只有一份。
-                    { href: 'myai.html', key: 'grp_ai_t', zh: '體驗大模型' },
+                    { href: 'myai.html', key: 'grp_ai_t', zh: '體驗付費版 AI 工具' },
                     { href: 'gpu.html', key: 'grp_go_t', zh: '體驗現有模型訓練' },
                     { href: 'lab.html', key: 'nav_lab', zh: '程式實驗室' }
                 ]
