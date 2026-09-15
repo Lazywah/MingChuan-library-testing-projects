@@ -424,7 +424,6 @@ const TRANSLATIONS = {
         usage_expiry: "有效至",
         usage_unbound: "你的帳號尚未綁定外部 AI 平台，或資料尚未同步。若確定已開通，請聯絡管理員。",
         usage_nodata: "這段期間還沒有使用紀錄。換個期間看看，或先去用用看 AI 助手。",
-        usage_no_peer: "目前使用人數太少，暫不顯示全體對照（為了避免從平均值反推出特定同學的用量）。你自己的數字不受影響。",
         usage_failed: "載入失敗，請稍後再試。",
         profile_basic: "基本資訊",
         profile_auth: "認證與登入",
@@ -860,7 +859,6 @@ const TRANSLATIONS = {
         usage_expiry: "Valid until",
         usage_unbound: "Your account isn't linked to the external AI platform yet, or the data hasn't synced. If you believe it's active, please contact an administrator.",
         usage_nodata: "No usage recorded in this period. Try another period, or go give the AI assistant a try.",
-        usage_no_peer: "Too few people are using it right now, so the all-accounts comparison is hidden (otherwise the average could be used to work out a specific classmate's usage). Your own numbers are unaffected.",
         usage_failed: "Couldn't load. Please try again later.",
         profile_basic: "Basic Info",
         profile_auth: "Authentication",
@@ -2646,10 +2644,13 @@ function renderMyUsage(d) {
         ${stat(t.usage_logins || '登入次數', s.logins, '')}
     </div>`;
 
-    // 樣本太少 → 說明為什麼沒有對照（不要讓人以為是壞了）
-    const noPeer = showPeer ? '' : `<p style="font-size:11px; color:var(--text-muted); background:rgba(128,128,128,0.12);
-        border-radius:8px; padding:8px 10px; margin:0 0 12px; line-height:1.6;">
-        <ion-icon name="information-circle-outline" style="vertical-align:-2px; margin-right:4px;"></ion-icon>${t.usage_no_peer || ''}</p>`;
+    // ZH: 這裡原本會說「目前使用人數太少，暫不顯示全體對照」——
+    //     2026-09-15 起**後端不再回 peer**（擁有者裁定：比較留給管理端），
+    //     `showPeer` 因此永遠是 false，那句話就變成在解釋一個假的原因：
+    //     對照不是因為人太少才不見的，是這個功能不給使用者看了。
+    //     沒有對照本來就不需要解釋（V1 也是什麼都不顯示），所以整塊拿掉。
+    //     ⚠ 這兩版是凍結的舊版，只有本機 :8890 那道門進得去
+    //     （正式面 443 一律 302 轉 V1），改動刻意只限這一處。
 
     const pane = (title, id) => `<div>
         <h4 style="font-size:12px; margin:0 0 6px; color:var(--text-muted);">${title}</h4>
@@ -2660,7 +2661,7 @@ function renderMyUsage(d) {
         ${pane(t.usage_models || '我用了哪些模型／工具', 'usage-model-chart')}
     </div>`;
 
-    box.innerHTML = summary + noPeer + charts;
+    box.innerHTML = summary + charts;
     _renderUsageCharts(d, showPeer);
 }
 
