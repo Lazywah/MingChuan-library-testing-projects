@@ -10,6 +10,7 @@ import threading
 import shutil
 import hashlib
 import pathlib
+from typing import Optional
 import tempfile
 import zipfile
 import sys
@@ -256,17 +257,35 @@ def safe_extract_zip(zip_path: pathlib.Path, dest: pathlib.Path) -> int:
     return count
 
 
-def prepare_dataset(job_id: str) -> str:
-    """ZH: 下載 → 快取判斷 → 解壓，回傳**訓練容器看到的**資料夾路徑。
+def prepare_dataset(job_id: str, digest_hint: Optional[str] = None) -> str:
+    """ZH: 快取判斷 → （需要時）下載 → 解壓，回傳**訓練容器看到的**資料夾路徑。
 
     ZH: 快取鍵是壓縮檔的內容雜湊。完成的目錄會放一個 `.ready` 記號檔——
         **沒有記號就不算完成**：解壓到一半斷掉留下的半套資料夾，下次不會被誤用。
 
+    ZH: v4.19（方案二 2.6）—— 服務層派工時會帶 `dataset_digest`（上傳時算好的
+        SHA-256 前 16 碼，與這裡的目錄名同一個規則）。有 hint 而且快取齊全就
+        **直接用，不下載**：同一包 2 GB 資料再訓練一次，一個 byte 都不用再傳。
+        沒有 hint（舊資料）照舊先下載再算。hint 與實際算出來的不一致時信實際的，
+        並記一筆 warning —— 那代表服務層存的檔換了內容，值得有人看一眼。
+
     @node gpu-worker/worker.py::prepare_dataset
     """
+    if digest_hint:
+        cache = pathlib.Path(HOST_STORAGE_MOUNT) / "datasets" / digest_hint
+        ready = cache / ".ready"
+        if ready.exists():
+            logger.info("Dataset %s already extracted (digest from service layer), "
+                        "skipping the download", digest_hint)
+            _touch(ready)
+            return f"{TRAIN_WORKSPACE}/datasets/{digest_hint}"
+
     tmp = download_dataset(job_id)
     try:
         digest = file_sha256(tmp)[:16]
+        if digest_hint and digest != digest_hint:
+            logger.warning("Dataset digest mismatch for job %s: service layer said %s, "
+                           "file is %s - using the file", job_id[:8], digest_hint, digest)
         cache = pathlib.Path(HOST_STORAGE_MOUNT) / "datasets" / digest
         ready = cache / ".ready"
 
@@ -1461,7 +1480,7 @@ def execute_job(job):
     if has_dataset:
         try:
             report_update(job_id, {"log": "正在取得資料集… / Fetching the dataset…"})
-            dataset_dir = prepare_dataset(job_id)
+            dataset_dir = prepare_dataset(job_id, job.get("dataset_digest"))
             report_update(job_id, {"log": f"資料集就緒 / Dataset ready at {dataset_dir}"})
         except Exception as e:
             logger.error("Job %s: could not prepare the dataset: %s", job_id, e)

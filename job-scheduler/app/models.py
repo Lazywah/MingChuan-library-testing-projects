@@ -241,6 +241,11 @@ class Dataset(Base):
     # ZH: 磁碟上的實際檔名（已清成安全字元）。與 user_id 一起就能推出完整路徑。
     stored_name = Column(String, nullable=False)
     size_bytes = Column(Integer, nullable=False, default=0)
+    # ZH: v4.19（方案二 2.6）—— 整個檔案的 SHA-256（十六進位）。上傳時邊存邊算。
+    #     派工時送前 16 碼給 worker，worker 的解壓快取就是用同一個雜湊當目錄名，
+    #     所以**還沒下載就知道快取在不在**；在的話 2 GB 的 zip 一個 byte 都不用再傳。
+    #     舊資料是 NULL（v4.19 之前上傳的）→ worker 照舊先下載再算。
+    sha256 = Column(String, nullable=True, index=True)
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
 

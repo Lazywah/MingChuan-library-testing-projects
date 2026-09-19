@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session
 from typing import Dict, Any
 import os
 import uuid
+import hashlib
 import shutil
 import pathlib
 import re
@@ -102,9 +103,17 @@ async def upload_dataset(
         raise HTTPException(status_code=400, detail="ZH: 檔名不合法 | EN: Invalid filename")
 
     # 儲存檔案
+    # ZH: v4.19 —— 邊存邊算 SHA-256（1 MB 一塊）。2 GB 的檔多讀一次要好幾秒，
+    #     而存的時候本來就要讀過每個 byte，順手算掉不多花 IO。
+    digest = hashlib.sha256()
     try:
         with open(file_path, "wb") as buffer:
-            shutil.copyfileobj(file.file, buffer)
+            while True:
+                chunk = file.file.read(1024 * 1024)
+                if not chunk:
+                    break
+                digest.update(chunk)
+                buffer.write(chunk)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"ZH: 檔案存不起來：{str(e)} | EN: Failed to save file: {str(e)}")
 
@@ -149,7 +158,8 @@ async def upload_dataset(
     #     是 0fad32ff_dataset.zip，列表裡沒得顯示）。
     ds = crud.create_dataset(db, user_id=current_user.id, original_name=safe_base_original,
                              stored_name=safe_filename,
-                             size_bytes=os.path.getsize(file_path))
+                             size_bytes=os.path.getsize(file_path),
+                             sha256=digest.hexdigest())
 
     return {
         "message": "Upload successful",

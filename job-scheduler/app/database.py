@@ -254,6 +254,9 @@ def init_db():
             try: conn.execute(text("ALTER TABLE chat_history ADD COLUMN tool_type VARCHAR DEFAULT 'chat'"))
             except Exception: pass
 
+            # --- datasets 表遷移（v4.19 內容摘要）| datasets migrations ---
+            try: conn.execute(text("ALTER TABLE datasets ADD COLUMN sha256 VARCHAR"))
+            except Exception: pass
             # --- training_jobs 表遷移（v1 Notebook 欄位，先前漏 ALTER）---
             # --- training_jobs migrations (v1 Notebook columns, missed in v1) ---
             try: conn.execute(text("ALTER TABLE training_jobs ADD COLUMN docker_image VARCHAR"))

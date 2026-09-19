@@ -952,14 +952,35 @@ def delete_dataset(db: Session, ds, remove_file) -> None:
 
 
 def create_dataset(db: Session, user_id: str, original_name: str,
-                   stored_name: str, size_bytes: int) -> models.Dataset:
+                   stored_name: str, size_bytes: int,
+                   sha256: Optional[str] = None) -> models.Dataset:
     """@node job-scheduler/app/crud.py::create_dataset"""
     ds = models.Dataset(user_id=user_id, original_name=original_name,
-                        stored_name=stored_name, size_bytes=size_bytes)
+                        stored_name=stored_name, size_bytes=size_bytes,
+                        sha256=sha256)
     db.add(ds)
     db.commit()
     db.refresh(ds)
     return ds
+
+
+# ZH: worker 的解壓快取目錄名用的是 SHA-256 的前幾碼（gpu-worker/worker.py prepare_dataset）。
+#     兩邊要一致，不然 worker 永遠比不到 —— 症狀是「每次都重新下載」而且沒有任何錯誤。
+DATASET_DIGEST_CHARS = 16
+
+
+def dataset_digest_for(db: Session, job) -> Optional[str]:
+    """ZH: 這張單的資料集內容摘要（前 16 碼），給派工 payload 用；沒有就 None。
+
+    ZH: v4.19（方案二 2.6）—— 讓 worker **還沒下載**就能比對本地快取。
+        舊資料（v4.19 之前上傳、sha256 是 NULL）回 None，worker 照舊先下載再算。
+
+    @node job-scheduler/app/crud.py::dataset_digest_for
+    """
+    ds = get_dataset(db, job.dataset_id) if getattr(job, "dataset_id", None) else None
+    if ds is None or not ds.sha256:
+        return None
+    return ds.sha256[:DATASET_DIGEST_CHARS]
 
 
 def purge_artifact(db: Session, job, remove_file) -> int:

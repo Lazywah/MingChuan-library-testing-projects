@@ -333,6 +333,9 @@ def take_job(
                                      if job.dataset_path else None),
                 # ZH: v3.6 內建訓練腳本（使用者只上傳資料、不寫程式時）。None ＝ 自己帶程式。
                 "builtin_task":     builtin_task,
+                # ZH: v4.19（方案二 2.6）—— 資料集內容摘要（前 16 碼）。worker 先看本地快取
+                #     有沒有這個目錄，有就**不下載**。None ＝ 舊資料或沒有資料集。
+                "dataset_digest":   crud.dataset_digest_for(db, job),
                 "config":       config,
                 "gpu_id":       gpu_id_str,       # ZH: 字串格式，供 Worker 執行 docker --gpus | EN: String for worker's docker --gpus
                 # ZH: Notebook 欄位 | EN: Notebook fields
