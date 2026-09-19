@@ -462,6 +462,55 @@
       "tests": [
         "tests/test_delete_audit.py"
       ]
+    },
+    {
+      "id": "builtin-tasks",
+      "name": "內建訓練種類（圖片／表格／文字分類 + 三份範例；train.html 三選一）",
+      "claimed": false,
+      "files": [
+        "gpu-worker/builtin_scripts/image_classification.py",
+        "gpu-worker/builtin_scripts/tabular_classification.py",
+        "gpu-worker/builtin_scripts/text_classification.py",
+        "scripts/make_training_samples.py",
+        "web-ui-V1/train.js"
+      ],
+      "tests": [
+        "tests/test_builtin_tasks.py"
+      ]
+    },
+    {
+      "id": "dataset-digest",
+      "name": "資料集內容摘要（上傳算、派工送、worker 先比快取再下載；方案二 2.6）",
+      "claimed": false,
+      "files": [
+        "job-scheduler/app/routers/datasets.py",
+        "job-scheduler/app/routers/worker.py",
+        "gpu-worker/worker.py"
+      ],
+      "tests": [
+        "tests/test_dataset_digest.py",
+        "tests/test_image_prepull.py"
+      ]
+    },
+    {
+      "id": "job-control",
+      "name": "方案二控制模型（指令通道／終態守衛／孤兒回收／GPU epilog／日誌批次／每人配額／SSE 探針）",
+      "claimed": false,
+      "files": [
+        "job-scheduler/app/routers/worker.py",
+        "job-scheduler/app/routers/jobs.py",
+        "job-scheduler/app/crud.py",
+        "gpu-worker/worker.py"
+      ],
+      "tests": [
+        "tests/test_job_cancellation.py",
+        "tests/test_gpu_epilog.py",
+        "tests/test_log_pump.py",
+        "tests/test_job_log_cap.py",
+        "tests/test_job_quota.py",
+        "tests/test_job_stream.py",
+        "tests/test_job_output_permissions.py"
+      ]
     }
   ]
 }
