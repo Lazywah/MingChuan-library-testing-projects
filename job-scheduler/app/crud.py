@@ -22,7 +22,7 @@ EN: Modular design:
 """
 
 from sqlalchemy.orm import Session
-from sqlalchemy import desc
+from sqlalchemy import desc, func
 from passlib.context import CryptContext
 from datetime import datetime, timedelta, timezone
 from typing import Optional, List
@@ -637,6 +637,21 @@ def has_colocated_worker(db: Session, timeout_seconds: int = 90) -> bool:
         if node_dispatch_state(get_gpu_node(db, n.node_id))["allowed"]:
             return True
     return False
+
+
+def running_jobs_by_user(db: Session) -> dict:
+    """ZH: 每個使用者目前有幾張 running。**一次查詢**，不要在派工迴圈裡逐張問。
+
+    ZH: 派工端每來一次 /take 都要算一次配額；佇列長的時候，
+        逐張查 = 佇列長度 × 查詢數，而這支每 5 秒被 30 台各打一次。
+
+    @node job-scheduler/app/crud.py::running_jobs_by_user
+    """
+    rows = (db.query(models.TrainingJob.user_id, func.count(models.TrainingJob.id))
+            .filter(models.TrainingJob.status == "running")
+            .group_by(models.TrainingJob.user_id)
+            .all())
+    return {uid: n for uid, n in rows}
 
 
 def get_pending_jobs(db: Session) -> List[models.TrainingJob]:
@@ -1589,7 +1604,7 @@ _GROUP_KEYS = {g["key"] for g in SETTING_GROUPS}
 # ZH: 沒列到的 key 排在該組最後（照 registry 順序）—— 新增旋鈕忘了列，
 #     只是排尾不會消失；列了不存在的 key 則在載入時就炸（見下方自檢）。
 SETTING_ORDER = {
-    "platform": ["job_timeout_minutes", "lab_gpu_max_minutes", "lab_archive_days",
+    "platform": ["job_timeout_minutes", "max_jobs_per_user", "lab_gpu_max_minutes", "lab_archive_days",
                  "announcement_file_max_mb", "announcement_total_gb"],
     "myai":     ["myai_autoprovision", "myai_initial_credit", "myai_init_pwd_days",
                  "myai_monthly_topup_to", "myai_monthly_topup_day",
@@ -1627,6 +1642,19 @@ SYSTEM_SETTINGS = {
                                  "label": "GPU 相關功能對一般使用者開放(1=開, 0=暫停；管理員不受限)",
                                  "label_en": "GPU features available to non-admin users (1 = on, 0 = paused; admins unaffected)"},
     "job_timeout_minutes":      {"starred": True, "public": True, "group": "platform", "type": "int",   "default": lambda: settings.JOB_TIMEOUT_MINUTES,         "min": 1,   "max": None, "label": "任務逾時(分鐘)", "label_en": "Job timeout (minutes)"},
+    # ZH: v4.17（方案二 2.4）每人同時執行中的訓練上限。
+    #
+    # ZH: 這是**公平**的旋鈕，不是容量的旋鈕 —— 容量本來就由「有幾張空卡」決定
+    #     （worker 只在有空卡時才來領工作）。沒有這一條的話，一個人送 50 張單
+    #     就會把 30 台佔滿，其他人得等到他全部跑完。
+    #
+    # ZH: ⚠ 超過上限的單**不會被拒絕**，只是先不派 —— 它留在佇列裡，
+    #     等這個人手上的跑完就會輪到。與舊行為（送單時回 429）的差別在於
+    #     使用者看到的是「你排第幾位」而不是一個他無法處理的錯誤。
+    #
+    # ZH: 預設 2：單卡環境下第二張本來就得等空卡，所以不影響現況；
+    #     節點多起來之後這個值要跟著調（管理端可改，不必重啟）。
+    "max_jobs_per_user":        {"starred": True, "group": "platform", "type": "int",   "default": lambda: 2,   "min": 1,   "max": 100,  "label": "每人同時執行中的訓練上限", "label_en": "Max running jobs per user"},
     # ZH: 公告附件。上限調小**不會**動到已經上傳的檔案，只擋之後的上傳。
     "announcement_file_max_mb": {"group": "platform", "type": "int",   "default": lambda: settings.ANNOUNCEMENT_FILE_MAX_MB,    "min": 1,   "max": 500,  "label": "公告附件單檔上限(MB)", "label_en": "Announcement attachment: max per file (MB)"},
     "announcement_total_gb":    {"group": "platform", "type": "int",   "default": lambda: settings.ANNOUNCEMENT_FILES_TOTAL_GB, "min": 1,   "max": 100,  "label": "公告附件總量上限(GB)", "label_en": "Announcement attachments: total cap (GB)"},

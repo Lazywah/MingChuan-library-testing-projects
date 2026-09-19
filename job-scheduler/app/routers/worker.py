@@ -160,6 +160,21 @@ def take_job(
     if not pending_jobs:
         return {"job": None}
 
+    # ZH: v4.17（方案二 2.4）派工端的配額。
+    #
+    # ZH: 這在 v4.17 之前是**送單**時做的，而且是叢集層級的一個數字（預設 4）——
+    #     30 台上線那天會有 26 台因為那一行空著。容量本來就由「有幾張空卡」
+    #     決定（worker 只在有空卡時才來領工作），所以這裡要管的是**公平**：
+    #     一個人同時跑幾張。沒有這一條的話，一個人送 50 張單就會佔滿整個叢集。
+    #
+    # ZH: 🔴 超過上限的單是**跳過**不是拒絕 —— 它留在佇列裡等這個人手上的跑完。
+    #     跳過它就等於讓下一個人的單先出場，公平是這樣達成的。
+    #
+    # ZH: ⚠ 一次查出所有人的在跑數，不要在迴圈裡逐張問：
+    #     這支每 5 秒被每一台節點各打一次。
+    per_user_cap = crud.get_setting(db, "max_jobs_per_user")
+    running_by_user = crud.running_jobs_by_user(db)
+
     # ZH: v3.0 本地 GPU 路由分流（首選對應池 + batch 墊底）
     #   領取端池 = interactive → 只領 interactive 任務（服務層 GPU 不跑重量級 batch 訓練）
     #   領取端池 = batch        → 一律可領 batch 任務；interactive 任務「只有互動池目前沒有
@@ -203,6 +218,17 @@ def take_job(
                 "service layer - leaving it pending", job.id[:8], req.node_id
             )
             continue
+
+        # ZH: v4.17 配額 —— 這個人手上已經有夠多張在跑了，先讓別人的單出場。
+        #     admin / teacher 免檢（沿用 v4.17 之前送單端的同一條規則，
+        #     不在這次改動裡順手改變誰有特權）。
+        if job.user_id and running_by_user.get(job.user_id, 0) >= per_user_cap:
+            owner = db.get(models.User, job.user_id)
+            if not (owner and (owner.is_admin or owner.role == "teacher")):
+                logger.debug(
+                    "Job %s skipped: its owner already has %d running (cap %d)",
+                    job.id[:8], running_by_user.get(job.user_id, 0), per_user_cap)
+                continue
 
         # ZH: 若任務指定偏好節點且與當前節點不符則跳過（讓對應節點來領）
         # EN: If job has a preferred_node and it doesn't match this node, skip it

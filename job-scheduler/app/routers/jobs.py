@@ -62,7 +62,7 @@ router = APIRouter(tags=["訓練任務 Training Jobs"])
 #   1. 驗證 JWT → 取得使用者
 #   2. 政策檢查（scheduler_policy.yaml）：
 #      a. allow_students        → 學生申請開關
-#      b. max_concurrent_jobs   → 叢集執行中任務上限（admin/teacher 免檢）
+#      b. （v4.17 移走）叢集上限已改到派工端，見 routers/worker.py::take_job
 #      c. max_epochs_per_job    → 單筆任務迭代次數上限
 #      d. max_batch_size        → 單筆任務批次大小上限
 #   3. 計算預估 Token 消耗 (epochs × 1000)
@@ -74,7 +74,7 @@ router = APIRouter(tags=["訓練任務 Training Jobs"])
 #   1. Verify JWT → get user
 #   2. Policy checks (scheduler_policy.yaml):
 #      a. allow_students        → student submission gate
-#      b. max_concurrent_jobs   → cluster-wide running jobs cap (admin/teacher bypass)
+#      b. (moved in v4.17) capacity is enforced at dispatch, see take_job
 #      c. max_epochs_per_job    → per-job epochs cap
 #      d. max_batch_size        → per-job batch size cap
 #   3. Estimate token cost (epochs × 1000)
@@ -109,20 +109,26 @@ def submit_job(
         )
 
     # ------------------------------------------------------------------
-    # ZH: 政策檢查 b — 叢集執行中任務上限（admin / teacher 免檢）
-    # EN: Policy check b — cluster running jobs cap (admin/teacher bypass)
+    # ZH: 政策檢查 b — v4.17（方案二 2.4）**已搬到派工端**
     # ------------------------------------------------------------------
-    if current_user.role not in ("admin", "teacher"):
-        max_concurrent = policy.get("max_concurrent_jobs", 4)
-        running_count = crud.get_running_jobs_count(db)
-        if running_count >= max_concurrent:
-            raise HTTPException(
-                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-                detail=f"ZH: 叢集目前已有 {running_count}/{max_concurrent} 個任務執行中，"
-                       f"請稍後再試 | "
-                       f"EN: Cluster at capacity ({running_count}/{max_concurrent} running), "
-                       f"please try again later"
-            )
+    # ZH: 這裡原本會算「叢集現在有幾張在跑」，超過 max_concurrent_jobs 就回 429。
+    #     兩個問題：
+    #
+    #       1. **那是容量判斷，卻放在送單這一刻做。** 送單當下滿了不代表
+    #          三十秒後還滿，而使用者拿到的是一個他無法處理的錯誤
+    #          （他唯一能做的就是自己重試）。現在一律收下，進佇列，
+    #          回應裡本來就有 `queue_position`。
+    #
+    #       2. 🔴 **那個數字是叢集層級的（預設 4）。** 30 台節點上線那天，
+    #          26 台會因為這一行空著 —— 而畫面上只看得到學生一直被拒絕。
+    #
+    # ZH: 容量本來就由「有幾張空卡」決定（worker 只在有空卡時才來領工作），
+    #     所以派工端要管的不是容量而是**公平**：一個人同時跑幾張
+    #     （`max_jobs_per_user`，管理端可調）。見 routers/worker.py 的 take_job。
+    #
+    # ZH: ⚠ 送單仍然會擋的：學生開關、epochs、batch_size、資料集歸屬、
+    #     內建種類、Lab 任務要同機節點 —— 那些是**驗證**，不是容量，
+    #     在送單當下就知道答案，放在這裡才對。
 
     # ------------------------------------------------------------------
     # ZH: 政策檢查 c — 單筆任務迭代次數上限
