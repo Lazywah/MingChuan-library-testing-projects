@@ -500,6 +500,9 @@ class JobStatusResponse(BaseModel):
     # ZH: v3.6 訓練指標。DB 存的是 JSON **字串**，這裡出去必須是陣列——
     #     不轉的話前端拿到一坨字串，而 `JSON.parse` 該由誰做會變成兩邊各猜一次。
     metrics: Optional[List[Dict[str, Any]]] = None
+    # ZH: v4.19 —— 這張單跑的是哪一種內建任務（image_classification / tabular_… / text_…），
+    #     自帶程式或自訂入口的單是 None。前端用它決定「常見原因」要講圖片還是資料。
+    task: Optional[str] = None
     # ZH: v3.6 —— 這張單有沒有可下載的模型檔，以及多大。
     #     前端靠這個決定要不要顯示下載鈕；不要讓它自己去猜。
     has_model: bool = False

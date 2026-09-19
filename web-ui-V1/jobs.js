@@ -119,6 +119,8 @@ function render(all) {
         $('list').innerHTML = jobs.map(row).join('');
         $('list').querySelectorAll('[data-dl]').forEach((b) =>
             b.addEventListener('click', () => downloadModel(b.dataset.dl, b)));
+        $('list').querySelectorAll('[data-cancel]').forEach((b) =>
+            b.addEventListener('click', () => cancelJob(b.dataset.cancel, b)));
     }
 
     // ZH: 只有「還有東西在跑」時才輪詢。全部跑完還每 5 秒打一次，
@@ -147,8 +149,34 @@ function row(j) {
             ${j.has_model ? `<button class="btn btn--minor" type="button" data-dl="${esc(j.job_id)}">
                 ${esc(T('tr_download', '下載模型檔'))}${j.model_bytes ? '（' + human(j.model_bytes) + '）' : ''}
             </button>` : ''}
+            ${active ? `<button class="btn btn--minor" type="button" data-cancel="${esc(j.job_id)}">
+                ${esc(T('jl_cancel', '取消這個訓練'))}</button>` : ''}
         </div>
     </div>`;
+}
+
+// ── 取消（v4.19）─────────────────────────────────────────────────────
+// ZH: 後端從 v4.14 起排隊中**與訓練中**都可以取消，但畫面上一直沒有按鈕 ——
+//     送錯的單只能看著它跑完。這裡補上。
+// ZH: 先問一次再送：取消不能復原，而這顆按鈕就在「看進度」旁邊，誤點很容易。
+//     用瀏覽器原生的 confirm 就夠了，不另做對話框。
+// ZH: 回 200 的意思是「已受理」，容器要幾秒後才真的停 —— 所以按完先把狀態
+//     寫成「取消中…」，等下一輪 load() 拿到 cancelled 再換成正式文字。
+async function cancelJob(jobId, btn) {
+    if (!window.confirm(T('jl_cancel_confirm', '確定要取消這個訓練嗎？取消之後不能恢復。'))) return;
+    btn.disabled = true;
+    btn.textContent = T('jl_cancelling', '取消中…');
+    try {
+        const r = await fetch(`${API}/jobs/${encodeURIComponent(jobId)}`,
+                              { method: 'DELETE', headers: authHeaders() });
+        if (r.status === 401 || r.status === 403) return signedOut();
+        const body = await r.json().catch(() => ({}));
+        if (!r.ok) throw new Error(clean(body.detail) || `HTTP ${r.status}`);
+        load();
+    } catch (e) {
+        btn.disabled = false;
+        btn.textContent = T('jl_cancel_fail', '取消失敗，請再試一次') + (e.message ? `（${e.message}）` : '');
+    }
 }
 
 // ── 輪詢（只在有東西在跑時）───────────────────────────────────────────

@@ -24,6 +24,9 @@
 #     而同一條路徑在正式環境裝的是學生上傳的檔案。
 # EN: User-uploaded datasets must never be committed.
 **/data/datasets/
+# ZH: 訓練產出的模型檔（worker 回傳、使用者下載的那份）—— 2026-09-20 第一張真的跑完的單
+#     就讓 43 MB 的 .pt 出現在 git status 裡；與 datasets 同理絕不進版控。
+**/data/artifacts/
 # ZH: 公告附件（管理端上傳的使用者內容，與 datasets 同理絕不進版控）
 **/data/announcements/
 

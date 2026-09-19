@@ -1,9 +1,10 @@
 /* ==========================================================================
- * [畫面: 交給平台訓練] — 使用者在這裡要完成：把一包分好類的圖片變成一個模型，
+ * [畫面: 交給平台訓練] — 使用者在這裡要完成：把一包資料變成一個模型，
  *                        全程不寫程式。
  *
- * ZH: 這一頁只問兩件事（圖片、幾輪），其餘由平台決定。會調 batch_size 的人
+ * ZH: 這一頁只問三件事（哪一種、資料、幾輪），其餘由平台決定。會調 batch_size 的人
  *     本來就該去程式實驗室；不會調的人看到那些欄位只會卡住。
+ * ZH: v4.19 —— 「哪一種」有三個：圖片分類、表格資料分類、文字分類（見 TASKS）。
  *
  * ZH: 失敗要說得出「為什麼」。這條路上有四個地方會失敗，症狀完全不同：
  *       上傳（檔案太大／型別不對）、送單（沒算力／配額不足）、
@@ -36,6 +37,89 @@ let scriptSource = null;
 let jobId = null;
 let polling = null;
 let lastLogLen = 0;
+
+// ── 訓練種類（v4.19）─────────────────────────────────────────────────
+// ZH: 三種內建任務。**這裡是畫面上文案的真相**；後端認得哪些種類是
+//     crud.BUILTIN_TASKS 說了算（多寫一種後端不認得的，送單會直接 400）。
+// ZH: 每一種要換的東西：頁首那句、壓縮檔說明三段、失敗的常見原因、
+//     範例檔、預設輪數。用 T() 一個個寫而不是塞成表，
+//     是因為 scripts/check_i18n.py 靠 `T('key', '中文')` 的形狀找「用到的 key」。
+const TASKS = {
+    image_classification: {
+        sub1:     () => T('tr_sub1', '上傳一包分好類的圖片，平台幫你訓練，不用寫程式。'),
+        fmtP:     () => T('tr_fmt_p', '每個類別一個資料夾，圖片放進去，整包壓成 zip。資料夾的名字就是類別的名字。'),
+        tree:     () => T('tr_tree', '我的資料.zip\n├── 貓/\n│   ├── 001.jpg\n│   └── 002.jpg\n└── 狗/\n    ├── 001.jpg\n    └── 002.jpg'),
+        fmtNote:  () => T('tr_fmt_note', '外面多包一層資料夾也沒關係，平台會自己往下找。至少要兩個類別。'),
+        failHint: () => T('tr_failed_hint', '常見原因：類別少於兩個、或圖片太少。'),
+        sampleName: () => T('tr_sample_name_image', '範例_貓狗圖片.zip'),
+        keys: { sub1: 'tr_sub1', fmtP: 'tr_fmt_p', tree: 'tr_tree', fmtNote: 'tr_fmt_note' },
+        epochs: 10,
+    },
+    tabular_classification: {
+        sub1:     () => T('tr_sub1_tabular', '上傳一份表格（CSV），其中一欄是答案，平台幫你訓練一個會預測那一欄的模型。'),
+        fmtP:     () => T('tr_fmt_p_tabular', 'zip 裡放一個 CSV。每一列一筆資料，每一欄一個特徵，其中一欄是答案（叫 label，或放在最後一欄）。'),
+        tree:     () => T('tr_tree_tabular', '學生資料.zip\n└── students.csv\n      study_hours,attendance,midterm,label\n      3.5,0.9,72,pass\n      1.0,0.4,40,fail'),
+        fmtNote:  () => T('tr_fmt_note_tabular', '數字欄照用、文字欄自動轉成類別、缺值自動補。至少要兩種答案，每種至少幾十筆。Excel 請「另存新檔 → CSV UTF-8」。'),
+        failHint: () => T('tr_failed_hint_tabular', '常見原因：答案欄只有一種值、資料太少、或 CSV 不是 UTF-8。'),
+        sampleName: () => T('tr_sample_name_tabular', '範例_學生及格預測.zip'),
+        keys: { sub1: 'tr_sub1_tabular', fmtP: 'tr_fmt_p_tabular', tree: 'tr_tree_tabular', fmtNote: 'tr_fmt_note_tabular' },
+        // ZH: 表格小、每輪只有幾十步，10 輪常常還沒收斂；30 輪也只要幾秒。
+        epochs: 30,
+    },
+    text_classification: {
+        sub1:     () => T('tr_sub1_text', '上傳一份句子與答案的表格（CSV），平台幫你訓練一個會分類句子的模型。'),
+        fmtP:     () => T('tr_fmt_p_text', 'zip 裡放一個 CSV，兩欄：句子（text）與答案（label）。中英文都可以。'),
+        tree:     () => T('tr_tree_text', '評論.zip\n└── reviews.csv\n      text,label\n      這家店的服務很好，會再來,正面\n      等了四十分鐘餐還沒來,負面'),
+        fmtNote:  () => T('tr_fmt_note_text', '至少要兩種答案，每種至少幾十句。不用下載任何語言模型，中文逐字、英文逐字學。'),
+        failHint: () => T('tr_failed_hint_text', '常見原因：答案欄只有一種值、句子太少、或 CSV 只有一欄。'),
+        sampleName: () => T('tr_sample_name_text', '範例_餐廳評論情緒.zip'),
+        keys: { sub1: 'tr_sub1_text', fmtP: 'tr_fmt_p_text', tree: 'tr_tree_text', fmtNote: 'tr_fmt_note_text' },
+        epochs: 20,
+    },
+};
+let task = 'image_classification';
+
+// ZH: 切換種類 → 換文案、換預設輪數。已經選好的檔案**不清掉**：
+//     使用者常是先選了檔再發現種類不對，清掉等於罰他重選一次。
+function setTask(t) {
+    if (!TASKS[t]) return;
+    task = t;
+    const c = TASKS[t];
+    $('task-seg').querySelectorAll('button').forEach((b) =>
+        b.setAttribute('aria-pressed', String(b.dataset.task === t)));
+    // ZH: 同時改 data-i18n 與文字：prefs.js 換語言時是重掃 data-i18n，
+    //     只改文字的話，一切換語言就會跳回圖片那一版。
+    const targets = [['tr-sub1', 'sub1'], ['fmt-p', 'fmtP'], ['tree', 'tree'], ['fmt-note', 'fmtNote']];
+    targets.forEach(([id, key]) => {
+        $(id).setAttribute('data-i18n', c.keys[key]);
+        $(id).textContent = c[key]();
+    });
+    $('epochs').value = c.epochs;
+}
+$('task-seg').addEventListener('click', (e) => {
+    const b = e.target.closest('button[data-task]');
+    if (b) setTask(b.dataset.task);
+});
+
+// ZH: 範例資料：抓靜態 zip 回來當成使用者選的檔案，之後走**同一條**上傳路。
+//     檔名用翻譯過的名字（會變成任務名與「我的資料集」裡的名字）。
+$('sample').addEventListener('click', async () => {
+    const btn = $('sample');
+    const original = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = T('tr_sample_loading', '正在取得範例…');
+    try {
+        const r = await fetch(`samples/${task}.zip`, { cache: 'force-cache' });
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        const blob = await r.blob();
+        choose(new File([blob], TASKS[task].sampleName(), { type: 'application/zip' }));
+    } catch {
+        setNote(T('tr_sample_fail', '範例暫時拿不到，請稍後再試，或上傳自己的資料。'));
+    } finally {
+        btn.disabled = false;
+        btn.textContent = original;
+    }
+});
 
 // ── 主要動作的樣貌 ───────────────────────────────────────────────────
 function setNote(html) {
@@ -176,7 +260,7 @@ async function submitJob(datasetRef, jobName) {
                 ...(scriptSource ? { script_source: scriptSource } : {}),
                 // ZH: 種類寫明。不寫也會落到預設，但寫出來的話**日後多一種任務時
                 //     這張舊單仍然指向同一支腳本**，不會跟著預設值漂走。
-                config: { epochs: epochs, task: 'image_classification' },
+                config: { epochs: epochs, task: task },
             }, datasetRef)),
         });
         if (r.status === 401 || r.status === 403) {
@@ -388,9 +472,11 @@ function finish(j) {
         $('log-fold').open = true;
         // ZH: 只看模式下 `#note` 在收起來的卡片裡，改用結果面板下方那一塊，
         //     不然失敗原因會整個看不到。
+        // ZH: 「常見原因」要對種類講：後端回的 `task` 是派工時判定的那一個
+        //     （自帶程式的單是 null —— 那時候講「類別太少」是在猜，不講）。
+        const hint = TASKS[j.task] ? ' ' + TASKS[j.task].failHint() : '';
         (viewJobId ? setRunNote : setNote)(T('tr_failed_note', '這次沒有跑完') +
-                (j.error_message ? `（${clean(j.error_message)}）` : '') +
-                ' ' + T('tr_failed_hint', '常見原因：類別少於兩個、或圖片太少。'));
+                (j.error_message ? `（${clean(j.error_message)}）` : '') + hint);
     }
 }
 
@@ -408,14 +494,20 @@ function renderMetrics(metrics) {
         // ZH: 頓號是中文的列舉符號；英文模式要用逗號。這種字元層級的東西
         //     字典掃描抓不到——它不是一個 key，是一個 join 的參數。
         const sep = currentLang() === 'en' ? ', ' : '、';
-        cards.push([T('tr_m_classes', '類別'), (ds.classes || []).join(sep) || '—',
-                    T('tr_m_images', '{n} 張圖片').replace('{n}', ds.images)]);
+        // ZH: 圖片任務回 images、表格／文字任務回 samples —— 用哪個欄位存在來決定
+        //     要寫「張圖片」還是「筆資料」，不另外查任務種類（指標自己就說得清）。
+        const count = ds.images != null
+            ? T('tr_m_images', '{n} 張圖片').replace('{n}', ds.images)
+            : T('tr_m_samples', '{n} 筆資料').replace('{n}', ds.samples ?? '—');
+        cards.push([T('tr_m_classes', '類別'), (ds.classes || []).join(sep) || '—', count]);
     }
     const best = sum ? sum.best_val_accuracy
                      : (eps.length ? Math.max(...eps.map((e) => e.val_accuracy)) : null);
     if (best != null) {
+        const onImages = !ds || ds.images != null;
         cards.push([T('tr_m_acc', '正確率'), (best * 100).toFixed(1) + '%',
-                    T('tr_m_acc_sub', '在沒看過的圖片上')]);
+                    onImages ? T('tr_m_acc_sub', '在沒看過的圖片上')
+                             : T('tr_m_acc_sub_rows', '在沒看過的資料上')]);
     }
     if (sum) {
         cards.push([T('tr_m_time', '花費時間'),

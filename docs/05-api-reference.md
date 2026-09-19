@@ -374,7 +374,7 @@ GET /api/v1/admin/analytics?group_by=department&start=2026-08-01&end=2026-08-31
 |---|---|
 | `has_dataset` | 這張單有沒有資料集；要檔案就 GET 上面那個端點 |
 | `dataset_filename` | 原始檔名（只供顯示與判斷副檔名）|
-| `builtin_task` | 用哪一支內建訓練腳本；`null` ＝ 使用者自己帶程式 |
+| `builtin_task` | 用哪一支內建訓練腳本（`image_classification` / `tabular_classification` / `text_classification`）；`null` ＝ 使用者自己帶程式 |
 | `shares_service_storage`（請求端）| worker 宣告自己與服務層同機，見部署文件 |
 
 ```bash

@@ -43,6 +43,8 @@ services:
       # ZH: UI v1.5 —— 與上面兩份並存，供新舊對照。改完版本定案後再決定要不要取代。
       - ./web-ui-V0.5:/usr/share/nginx/html/V0.5:ro
       - ./web-ui-V1:/usr/share/nginx/html/V1:ro
+      # ZH: v4.19 —— 「交給平台訓練」的貓狗範例（nginx.conf 的 /V1/samples/image_classification.zip）。
+      - ./infrastructure/base-images/code-server/samples/cat_dog_data.zip:/usr/share/nginx/html/lab-samples/cat_dog_data.zip:ro
       - ./admin-ui-V0.5:/usr/share/nginx/html/admin-ui-V0.5:ro
       # ZH: 管理端 UI V1（規格 docs/10-admin-ui-V1-design.md）。
       - ./admin-ui-V1:/usr/share/nginx/html/admin-ui-V1:ro

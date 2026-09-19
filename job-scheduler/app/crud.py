@@ -546,6 +546,17 @@ BUILTIN_TASKS = {
         #     因為日後不同任務**可能**需要不同映像（那時這裡就會分岔）。
         "image": "aibase/pytorch:2026-spring",
     },
+    # ZH: v4.19（2026-09-20）—— 貓狗之外的兩種範例。都是「zip 裡一個 CSV」，
+    #     答案欄的判定規則寫在各自的腳本開頭。兩支都只用 torch 標準件
+    #     （MLP / EmbeddingBag），不下載任何預訓練權重 —— 離線的節點也跑得起來。
+    "tabular_classification": {
+        "desc":  "ZH: 表格資料分類（一個 CSV，一欄是答案）| EN: Tabular classification (one CSV, one column is the label)",
+        "image": "aibase/pytorch:2026-spring",
+    },
+    "text_classification": {
+        "desc":  "ZH: 文字分類（一個 CSV：句子、答案）| EN: Text classification (one CSV: text, label)",
+        "image": "aibase/pytorch:2026-spring",
+    },
 }
 DEFAULT_BUILTIN_TASK = "image_classification"
 

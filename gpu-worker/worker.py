@@ -111,13 +111,28 @@ MAX_DOWNLOAD_BYTES  = int(os.environ.get("MAX_DOWNLOAD_BYTES", str(4 * 1024 ** 3
 BUILTIN_SCRIPT_DIR = pathlib.Path(__file__).resolve().parent / "builtin_scripts"
 
 
-def _host_dir(*parts) -> pathlib.Path:
+def _host_dir(*parts, writable_by_anyone: bool = False) -> pathlib.Path:
     """ZH: 組出 worker 這一側的共享儲存路徑，並確保目錄存在。
+
+    ZH: 🔴 `writable_by_anyone=True` 的目錄會 chmod 777。原因（2026-09-20 實測）：
+        worker 是 root，建出來的目錄是 root:root 0755；而平台映像
+        `aibase/pytorch:2026-spring` 以 **coder（uid 1000）** 跑訓練 ——
+        於是 `torch.save` 到 /workspace/output 直接 Permission denied，
+        `/workspace/.torch/hub` 也建不出來。症狀是「內建訓練 100% 失敗」，
+        而錯誤訊息長得像網路問題（預訓練權重下載失敗）。
+        共享儲存是**專門給訓練容器寫**的，裡面每張單各有自己的目錄，
+        開 777 不會多曝露什麼（唯讀掛載的 datasets/scripts 不在此列）。
+        Windows 主機上 chmod 是 no-op，所以用 try 包住。
 
     @node gpu-worker/worker.py::_host_dir
     """
     d = pathlib.Path(HOST_STORAGE_MOUNT).joinpath(*parts)
     d.mkdir(parents=True, exist_ok=True)
+    if writable_by_anyone:
+        try:
+            d.chmod(0o777)
+        except OSError as e:
+            logger.warning("Could not chmod %s: %s", d, e)
     return d
 
 
@@ -787,6 +802,12 @@ def upload_artifact(job_id: str) -> bool:
 
     logger.info("Uploaded model for job %s (%.1f MB)", job_id[:8], size / 1024 ** 2)
     return True
+
+
+# ZH: Python traceback 的最後一行長這樣：`RuntimeError: …`、`torch.cuda.OutOfMemoryError: …`。
+#     只認「識別字（可帶點）+ 冒號」而且識別字以 Error/Exception 結尾，避免把
+#     一般的 `key: value` 輸出當成例外。
+_EXCEPTION_LINE = re.compile(r"^[A-Za-z_][\w.]*(Error|Exception|Interrupt|Exit)\b\s*:")
 
 
 def parse_metric(log_line):
@@ -1560,10 +1581,11 @@ def execute_job(job):
     #     training container. Narrow it for the dataset path now that user code runs there.
     narrow = bool(dataset_dir or builtin_task or script_source)
     if narrow:
-        # ZH: 掛載點的**主機端目錄要先存在**。交給 docker 自己建的話擁有者會是 root，
-        #     之後 worker（非 root）想清理或讀產出就會踩到權限。
-        _host_dir("outputs", job_id)
-        _host_dir(".torch")
+        # ZH: 掛載點的**主機端目錄要先存在**，而且要讓**非 root 的訓練容器**寫得進去
+        #     （平台映像以 coder 跑；見 _host_dir 的說明）。交給 docker 自己建的話
+        #     是 root 0755，訓練容器連 model.pt 都存不下來。
+        _host_dir("outputs", job_id, writable_by_anyone=True)
+        _host_dir(".torch", writable_by_anyone=True)
         storage_mounts = [
             "-v", f"{STORAGE_MOUNT_PATH}/outputs/{job_id}:/workspace/output:rw",
             "-v", f"{STORAGE_MOUNT_PATH}/.torch:/workspace/.torch:rw",
@@ -1648,11 +1670,18 @@ def execute_job(job):
         #     失敗時把它當成 error_message，不要只回「exited with code 1」——
         #     後者對學生毫無用處，而真正的原因就在 log 裡沒人撿。
         friendly_error = []
+        # ZH: v4.19 —— 沒有 `[錯誤]` 行時（自帶程式、或內建腳本在意料之外的地方炸掉），
+        #     至少把 traceback 的最後一行帶上：「exited with code 1」對誰都沒用，
+        #     而 `RuntimeError: File /workspace/output/model.pt cannot be opened`
+        #     一眼就看得出是權限問題（2026-09-20 就是靠這行找到 bug 的）。
+        last_exception_line = None
 
         for line in process.stdout:
             line = line.strip()
             if not line:
                 continue
+            if _EXCEPTION_LINE.match(line):
+                last_exception_line = line[:300]
 
             if line.startswith(("[錯誤]", "[怎麼修]", "[ERROR]", "[FIX]")):
                 # ZH: 只留**最後一組**：腳本可能先印警告再印真正的失敗原因。
@@ -1712,10 +1741,12 @@ def execute_job(job):
             # ZH: 有講人話的原因就用它；沒有才退回 exit code。
             #     ⚠ 退回的那條**不要拿掉** —— 使用者自己帶的程式不會照這個格式印，
             #       那時「exited with code 1」雖然難懂，但至少是真的。
+            fallback = f"Docker container exited with code {process.returncode}"
+            if last_exception_line:
+                fallback += f"：{last_exception_line}"
             report_update(job_id, {
                 "status":        "failed",
-                "error_message": ("　".join(friendly_error) if friendly_error
-                                  else f"Docker container exited with code {process.returncode}")
+                "error_message": ("　".join(friendly_error) if friendly_error else fallback)
             })
 
     except Exception as e:

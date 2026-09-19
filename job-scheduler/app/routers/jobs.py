@@ -390,6 +390,8 @@ def get_job_status(
         #     漏了這一行的症狀是「指標存進 DB 了，但前端永遠拿到 null」。踩過。
         #     DB 存的是 JSON 字串，由 schema 的 field_validator 轉成陣列。
         "metrics": job.metrics,
+        # ZH: v4.19 —— 用派工時同一條規則判定，不要另外猜 config 裡的字串。
+        "task": crud.builtin_task_for(job),
         # ZH: v3.6 —— 手工組的 dict，欄位要自己加（只加 schema 不會自動帶上，踩過）
         "has_model": bool(job.artifact_bytes),
         "model_bytes": job.artifact_bytes,
@@ -399,8 +401,8 @@ def get_job_status(
 # ==============================================================================
 # ZH: DELETE /{job_id} - 取消任務
 # EN: DELETE /{job_id} - Cancel job
-# ZH: 限制：僅 pending/queued 狀態可取消
-# EN: Constraint: only pending/queued jobs can be cancelled
+# ZH: 限制：pending/queued/running 可取消（v4.14 起 running 也放行；終態不行）
+# EN: Constraint: pending/queued/running can be cancelled (running since v4.14; terminal states cannot)
 # ==============================================================================
 @router.delete("/{job_id}", response_model=schemas.JobCancelResponse)
 def cancel_job(

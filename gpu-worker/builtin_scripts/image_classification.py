@@ -168,6 +168,11 @@ def main() -> int:
     os.environ.setdefault("TORCH_HOME", "/workspace/.torch")
     try:
         model = models.resnet18(weights=models.ResNet18_Weights.DEFAULT)
+    except PermissionError as e:
+        # ZH: 快取目錄不可寫是**平台設定**的問題（2026-09-20 實測：worker 建的目錄
+        #     是 root 0755，而這個映像以 coder 跑），不是網路；照網路那句去查會查錯方向。
+        fail(f"預訓練權重的快取目錄不可寫：{e}",
+             "這是平台的儲存權限設定問題，不是你的資料有錯。請用「問題回報」告訴管理者。")
     except Exception as e:
         fail(f"取不到 ResNet-18 的預訓練權重：{e}",
              "這台機器第一次跑需要連得到 download.pytorch.org。"
