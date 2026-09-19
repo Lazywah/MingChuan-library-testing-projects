@@ -3485,6 +3485,9 @@ window.openJobDetails = function(jobId) {
                         // Append Logs
                         if (data.logs !== undefined) {
                             jobLogsContainer.textContent = data.logs;
+                        } else if (data.reset) {
+                            // ZH: v4.19 —— 伺服器把日誌砍頭了，new_logs 是整份現況，整段換掉不要接在後面。
+                            jobLogsContainer.textContent = data.new_logs || '';
                         } else if (data.new_logs) {
                             jobLogsContainer.textContent += data.new_logs;
                         }
