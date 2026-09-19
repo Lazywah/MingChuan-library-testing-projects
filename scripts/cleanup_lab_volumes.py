@@ -26,6 +26,15 @@ EN: Classify all `home_*` volumes (in-use / archived / legacy-dash / orphan) and
 """
 import sys
 
+# ZH: 主控台／管線若為 cp950（中文 Windows 預設），遇到不可編碼字元改為替代字而非崩潰。
+#     deploy_check 用 subprocess 跑這支，stdout 是管線 → Windows 上取地區編碼不是 UTF-8。
+#     沒有這段的話，印一個 ⚠ 就會 UnicodeEncodeError、exit 1，被回報成「檢查失敗」。
+try:
+    sys.stdout.reconfigure(errors="replace")
+    sys.stderr.reconfigure(errors="replace")
+except (AttributeError, ValueError):
+    pass
+
 sys.path.insert(0, "/app")
 
 IN_USE, ARCHIVED, LEGACY, ORPHAN = "使用中", "封存", "舊命名(dash)", "孤兒"

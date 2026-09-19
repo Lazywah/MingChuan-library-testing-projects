@@ -41,6 +41,15 @@ SCRIPTS_DIR = Path(__file__).parent.resolve()
 sys.path.insert(0, str(SCRIPTS_DIR))
 import setup_env as se   # 重用：路徑、.env 解析、漂移稽核、顏色輔助（其 console 設定也一併生效）
 
+# ZH: 主控台／管線若為 cp950（中文 Windows 預設），遇到不可編碼字元改為替代字而非崩潰。
+#     deploy_check 用 subprocess 跑這支，stdout 是管線 → Windows 上取地區編碼不是 UTF-8。
+#     沒有這段的話，印一個 ⚠ 就會 UnicodeEncodeError、exit 1，被回報成「檢查失敗」。
+try:
+    sys.stdout.reconfigure(errors="replace")
+    sys.stderr.reconfigure(errors="replace")
+except (AttributeError, ValueError):
+    pass
+
 # 必填秘鑰的最小長度（對齊 job-scheduler/app/config.py 的 validator）
 SECRET_MIN_LEN = {
     "JWT_SECRET_KEY": 32,

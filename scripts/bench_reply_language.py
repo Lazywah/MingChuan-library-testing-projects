@@ -40,6 +40,15 @@ from app.database import SessionLocal
 from app.config import settings
 from app.services import rag_service as R
 
+# ZH: 主控台／管線若為 cp950（中文 Windows 預設），遇到不可編碼字元改為替代字而非崩潰。
+#     deploy_check 用 subprocess 跑這支，stdout 是管線 → Windows 上取地區編碼不是 UTF-8。
+#     沒有這段的話，印一個 ⚠ 就會 UnicodeEncodeError、exit 1，被回報成「檢查失敗」。
+try:
+    sys.stdout.reconfigure(errors="replace")
+    sys.stderr.reconfigure(errors="replace")
+except (AttributeError, ValueError):
+    pass
+
 Q = "How do I submit a training job?"
 REPEATS = 2
 
