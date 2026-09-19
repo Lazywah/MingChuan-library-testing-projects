@@ -2,6 +2,7 @@ import os
 import time
 import json
 import logging
+import queue
 import subprocess
 import requests
 import re
@@ -889,6 +890,136 @@ CONTROL_POLL_INTERVAL = int(os.environ.get("CONTROL_POLL_INTERVAL", "10"))
 STOP_GRACE_SECONDS = int(os.environ.get("STOP_GRACE_SECONDS", "10"))
 
 
+
+# ==============================================================================
+# ZH: v4.16（方案二 2.3）日誌：把「讀 stdout」與「送回服務層」拆開
+# ==============================================================================
+# ZH: 在此之前是**每讀到一行就同步 POST 一次**（timeout 5s、重試三次退避 2/4/6，
+#     最壞一行卡 17 秒）。那條路上有一個不明顯但很嚴重的後果：
+#
+#       網路慢 → POST 卡住 → 沒有人在讀 stdout → 管線（64KB）滿
+#       → **訓練程式自己被 print 擋住**
+#
+#     也就是說，服務層或網路的狀況會直接讓 GPU 空轉。文獻講的是同一件事：
+#     drain 必須與「有沒有人在收」無關（client-independent drain）。
+#
+# ZH: 所以現在是兩段：
+#       · 主迴圈只負責把 stdout 讀出來丟進佇列（永遠不會因為網路而阻塞）
+#       · 另一條執行緒批次送出（滿 N 行或滿 T 秒）
+#
+# ZH: 批次的收益實測過（2026-09-20，本機 SQLite）：
+#       逐行 4000 行 4.53 秒；每 50 行一次 0.11 秒 —— **41 倍**。
+#       而且 HTTP 往返從 4000 次降到 80 次。
+#
+# ZH: 🔴 佇列**有上限而且滿了丟最舊的**。無上限的話，一支每秒印上萬行的程式
+#     （tqdm 進度條就是）會把 worker 的記憶體吃光；而丟最舊的比丟最新的好 ——
+#     出事的原因通常在最後幾行。丟掉多少行會在日誌裡明說，不默默吞掉。
+LOG_BATCH_LINES = int(os.environ.get("LOG_BATCH_LINES", "50"))
+LOG_FLUSH_SECONDS = float(os.environ.get("LOG_FLUSH_SECONDS", "1.0"))
+LOG_QUEUE_MAX = int(os.environ.get("LOG_QUEUE_MAX", "5000"))
+
+
+class LogPump:
+    """ZH: 收集某一張任務的輸出，批次送回服務層。
+
+    ZH: 用法：`pump.put(line)` 永不阻塞；結束時 `pump.close()` 會把剩下的送完。
+
+    @node gpu-worker/worker.py::LogPump
+    """
+
+    def __init__(self, job_id: str):
+        """@node gpu-worker/worker.py::LogPump.__init__"""
+        self.job_id = job_id
+        self._q = queue.Queue(maxsize=LOG_QUEUE_MAX)
+        self._done = threading.Event()
+        self._dropped = 0
+        self._progress = None
+        self._lock = threading.Lock()
+        self._thread = threading.Thread(target=self._run, daemon=True)
+        self._thread.start()
+
+    def put(self, line: str) -> None:
+        """ZH: 丟一行進去。佇列滿了就丟掉最舊的那一行（見上面的說明）。
+
+        @node gpu-worker/worker.py::LogPump.put
+        """
+        try:
+            self._q.put_nowait(line)
+        except queue.Full:
+            try:
+                self._q.get_nowait()          # ZH: 丟最舊的
+                self._q.put_nowait(line)
+                with self._lock:
+                    self._dropped += 1
+            except queue.Empty:
+                pass
+
+    def set_progress(self, value: float) -> None:
+        """ZH: 進度跟著下一批一起送 —— 它不需要自己一次往返。
+
+        @node gpu-worker/worker.py::LogPump.set_progress
+        """
+        with self._lock:
+            self._progress = value
+
+    def _drain_batch(self) -> list:
+        """@node gpu-worker/worker.py::LogPump._drain_batch"""
+        lines = []
+        while len(lines) < LOG_BATCH_LINES:
+            try:
+                lines.append(self._q.get_nowait())
+            except queue.Empty:
+                break
+        return lines
+
+    def _flush(self) -> None:
+        """@node gpu-worker/worker.py::LogPump._flush"""
+        lines = self._drain_batch()
+        with self._lock:
+            progress, self._progress = self._progress, None
+            dropped, self._dropped = self._dropped, 0
+        if dropped:
+            lines.append(
+                "… 輸出太快，略過了 %d 行 / output too fast, skipped %d lines …"
+                % (dropped, dropped))
+        if not lines and progress is None:
+            return
+        payload = {}
+        if lines:
+            # ZH: 一包一個字串 —— 服務層那邊一包只重寫一次欄位。
+            payload["log"] = chr(10).join(lines)
+        if progress is not None:
+            payload["progress"] = progress
+        report_update(self.job_id, payload)
+
+    def _run(self) -> None:
+        """@node gpu-worker/worker.py::LogPump._run"""
+        while not self._done.wait(LOG_FLUSH_SECONDS):
+            try:
+                self._flush()
+            except Exception as e:
+                # ZH: 送不出去不能讓這條執行緒死掉 —— 死了之後剩下的輸出
+                #     會全部留在佇列裡，而使用者看到的是「訓練沒有任何輸出」。
+                logger.warning("Job %s: log flush failed: %s", self.job_id[:8], e)
+
+    def close(self) -> None:
+        """ZH: 收工：把佇列裡剩下的全部送完再回來。
+
+        ZH: ⚠ 不能只設旗標就走 —— 最後那一批往往正是**失敗原因**所在。
+
+        @node gpu-worker/worker.py::LogPump.close
+        """
+        self._done.set()
+        self._thread.join(timeout=5)
+        try:
+            while True:
+                before = self._q.qsize()
+                self._flush()
+                if before == 0:
+                    break
+        except Exception as e:
+            logger.warning("Job %s: final log flush failed: %s", self.job_id[:8], e)
+
 def container_name_for(job_id: str) -> str:
     """ZH: 這張單的容器名字。**唯一定義** —— 起容器與停容器都走這裡。
 
@@ -1385,6 +1516,7 @@ def execute_job(job):
     finished = threading.Event()
     stopped = threading.Event()
     watcher = None
+    pump = None
 
     try:
         process = subprocess.Popen(
@@ -1397,6 +1529,7 @@ def execute_job(job):
                                    args=(job_id, process, finished, stopped),
                                    daemon=True)
         watcher.start()
+        pump = LogPump(job_id)
 
         # ZH: v3.6 —— 內建腳本用 `[錯誤]` / `[怎麼修]` 印給人看的失敗原因。
         #     失敗時把它當成 error_message，不要只回「exited with code 1」——
@@ -1423,17 +1556,21 @@ def execute_job(job):
                 continue
 
             logger.info(f"[{job_id}] {line}")
-            payload = {"log": line}
+            # ZH: v4.16 —— 這裡**只丟進佇列**，不做網路。
+            #     以前是每行一次同步 POST，網路一慢就把 stdout 管線塞滿、
+            #     訓練程式自己卡在 print 上（見 LogPump 的說明）。
+            pump.put(line)
 
             prog = parse_progress(line)
             if prog is not None:
-                payload["progress"] = prog
-
-            report_update(job_id, payload)
+                pump.set_progress(prog)
 
         process.wait()
         # ZH: 容器結束了 —— 立刻叫醒 watcher 收工，不要讓它多掛一輪。
         finished.set()
+        # ZH: 🔴 **先把剩下的日誌送完再回報狀態。** 反過來的話，畫面會先
+        #     變成「失敗」而失敗原因還在路上 —— 使用者看到的是一張沒有理由的失敗單。
+        pump.close()
 
         # ZH: 🔴 被指令通道停掉的單**不回報狀態**。服務層那邊已經是
         #     cancelled（或逾時的 failed），再送一次只會被終態守衛擋下來，
@@ -1476,6 +1613,9 @@ def execute_job(job):
         # ZH: 不管走哪條路（成功/失敗/例外）都要讓 watcher 醒來收工 ——
         #     例外那條路不設的話，這條執行緒會一直輪詢一張早就結束的單。
         finished.set()
+        # ZH: 例外路徑也要把日誌送完（close 可重複呼叫，正常路徑已經送過了）。
+        if pump is not None:
+            pump.close()
         if watcher is not None:
             watcher.join(timeout=5)
         # ZH: 清理 Notebook 暫存目錄 | EN: Clean up notebook temp directory

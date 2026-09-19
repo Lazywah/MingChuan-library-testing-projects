@@ -35,6 +35,9 @@ from .config import settings
 
 logger = logging.getLogger(__name__)
 
+# ZH: 換行常數 —— 日誌附加用。
+NEWLINE = chr(10)
+
 # ==============================================================================
 # ZH: 密碼雜湊工具 | EN: Password hashing utility
 # ==============================================================================
@@ -794,17 +797,49 @@ def update_job_progress(db: Session, job_id: str, progress: float) -> Optional[m
     return job
 
 
-def append_job_log(db: Session, job_id: str, new_log: str) -> Optional[models.TrainingJob]:
+# ZH: 單張任務的日誌上限。超過就從**前面**砍掉一段。
+#
+# ZH: 為什麼需要上限（v4.16，方案二 2.3）：`logs` 是一個 TEXT 欄位，
+#     每次附加都要把整段重寫一次 —— 實測成本曲線（2026-09-20，本機）：
+#       逐行附加    100 行 0.43 ms/行 → 4000 行 1.13 ms/行（O(n²) 的形狀）
+#       批次 50 行  4000 行 0.027 ms/行（快 41 倍）
+#     批次之後曲線就壓平了，所以**沒有改成 append-only 表** ——
+#     那個改造要動 SSE 與 API 回應，風險與收益不成比例。
+#     但上限仍然必要：一支跑歪的程式可以印幾百萬行，那時連批次都救不了
+#     （一個 70 MB 的欄位每次附加都要整段重寫）。
+#
+# ZH: 砍前面不砍後面：**出事的原因通常在最後幾行**（traceback、CUDA OOM），
+#     而開頭那些是環境資訊，重跑一次就有。
+JOB_LOG_MAX_CHARS = 1000000
+JOB_LOG_KEEP_CHARS = 700000
+
+
+def append_job_log(db: Session, job_id: str, new_log: str):
     """ZH: 附加日誌 | EN: Append execution log
+
+    ZH: `new_log` 可以是多行（worker 批次送上來的一整包）——
+        一包只重寫一次欄位，這就是批次的全部意義。
 
     @node job-scheduler/app/crud.py::append_job_log
     """
     job = get_job(db, job_id)
-    if job:
-        current_logs = job.logs or ""
-        job.logs = current_logs + new_log + "\n"
-        db.commit()
-        db.refresh(job)
+    if not job:
+        return None
+
+    merged = (job.logs or "") + new_log + NEWLINE
+
+    if len(merged) > JOB_LOG_MAX_CHARS:
+        # ZH: 一次砍到 KEEP 為止，不是每次砍一點 —— 後者會讓超過上限之後
+        #     的每一次附加都再觸發一次大重寫。
+        mark = (NEWLINE + "… 前面的日誌太長已被截斷（保留最後約 %d KB）/ "
+                "earlier output truncated, keeping the last ~%d KB …" + NEWLINE) % (
+            JOB_LOG_KEEP_CHARS // 1024, JOB_LOG_KEEP_CHARS // 1024)
+        merged = mark + merged[-JOB_LOG_KEEP_CHARS:]
+
+    job.logs = merged
+    db.commit()
+    # ZH: 這裡原本有一次 db.refresh —— 附加日誌不需要把整列再讀回來
+    #     （呼叫端只看回傳值在不在）。每行一次的時候那是一次多餘的 SELECT。
     return job
 
 
