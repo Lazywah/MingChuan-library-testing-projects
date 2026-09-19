@@ -27,7 +27,7 @@ def admin_and_victim(db):
 
 def _delete(client, victim_id):
     return client.post(f"/api/v1/admin/users/{victim_id}/delete",
-                       json={"admin_password": "password123"},
+                       json={"admin_password": "password123", "confirm_username": "victim"},
                        headers=auth_headers(client, "adm", "password123"))
 
 
@@ -68,19 +68,24 @@ class TestDeletionIsAudited:
         assert db.query(models.User).filter_by(id=vid).first() is None
 
     def test_a_failed_delete_writes_nothing(self, client, db, admin_and_victim):
-        """ZH: 密碼錯就該擋在最前面,不能留下一筆「刪了」的假紀錄。"""
+        """ZH: 確認打錯就該擋在最前面,不能留下一筆「刪了」的假紀錄。
+
+        ZH: v4.10 起確認方式是「打出要刪的帳號」而不是管理者密碼
+            （SSO 管理者沒有密碼；見 admin._require_target_confirm）。
+            這條原本送錯密碼等 403 —— 那個欄位現在根本不看，所以會 200 真的刪掉。
+        """
         adm, victim = admin_and_victim
         r = client.post(f"/api/v1/admin/users/{victim.id}/delete",
-                        json={"admin_password": "wrong-password"},
+                        json={"confirm_username": "victor"},
                         headers=auth_headers(client, "adm", "password123"))
-        assert r.status_code == 403
+        assert r.status_code == 400, r.text
         assert db.query(models.AdminAction).filter_by(action="delete_user").count() == 0
         assert db.query(models.User).filter_by(id=victim.id).first() is not None
 
     def test_deleting_yourself_is_refused_and_unaudited(self, client, db, admin_and_victim):
         adm, _ = admin_and_victim
         r = client.post(f"/api/v1/admin/users/{adm.id}/delete",
-                        json={"admin_password": "password123"},
+                        json={"admin_password": "password123", "confirm_username": "adm"},
                         headers=auth_headers(client, "adm", "password123"))
         assert r.status_code == 400
         assert db.query(models.AdminAction).filter_by(action="delete_user").count() == 0

@@ -283,7 +283,8 @@ def test_deleting_a_user_removes_their_dataset_files(client, db, dataset_dir):
     from app import models
     uid = db.query(models.User).filter_by(username="victim").first().id
     r = client.post(f"/api/v1/admin/users/{uid}/delete",
-                    json={"admin_password": "password123"}, headers=root)
+                    json={"admin_password": "password123", "confirm_username": "victim"},
+                    headers=root)
     assert r.status_code == 200, r.text
 
     assert not path.exists(), "帳號刪了，但他上傳的資料集還留在磁碟上"

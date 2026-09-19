@@ -55,7 +55,8 @@ class TestGrouping:
         assert got["資訊網路處/桃園資訊服務組"] == 1
 
     def test_bad_dimension_is_refused(self, client, people):
-        r = client.get("/api/v1/admin/analytics?group_by=role",
+        # ZH: role 後來成了合法維度（admin.py 的白名單），換一個永遠不會支援的。
+        r = client.get("/api/v1/admin/analytics?group_by=shoe_size",
                        headers=auth_headers(client, "adm", "password123"))
         assert r.status_code == 400
 

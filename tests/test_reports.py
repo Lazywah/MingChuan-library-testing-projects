@@ -201,7 +201,7 @@ def test_deleting_user_keeps_report_and_does_not_500(client, db):
     client.put(f"/api/v1/admin/reports/{rid}", json={"admin_reply": "看到了"}, headers=ha)
 
     r = client.post(f"/api/v1/admin/users/{stu.id}/delete",
-                    json={"admin_password": "password123"}, headers=ha)
+                    json={"admin_password": "password123", "confirm_username": "stu"}, headers=ha)
     assert r.status_code == 200, f"刪帳號失敗（issue_reports 沒解參照？）：{r.text}"
 
     rows = client.get("/api/v1/admin/reports", headers=ha).json()
@@ -224,7 +224,7 @@ def test_deleting_the_replying_admin_keeps_the_reply(client, db):
                headers=h1)
 
     r = client.post(f"/api/v1/admin/users/{a1.id}/delete",
-                    json={"admin_password": "password123"}, headers=h2)
+                    json={"admin_password": "password123", "confirm_username": "admin1"}, headers=h2)
     assert r.status_code == 200, f"刪回覆者失敗（replied_by 沒解參照？）：{r.text}"
     rows = client.get("/api/v1/admin/reports", headers=h2).json()
     assert rows[0]["admin_reply"] == "由 admin1 回覆"

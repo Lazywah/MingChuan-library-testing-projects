@@ -12,7 +12,8 @@ from conftest import make_user, auth_headers
 from app import crud
 
 
-PUBLIC_KEYS = {"job_timeout_minutes", "lab_archive_days"}
+# ZH: v4.6（2026-09-07）多了 gpu_features_enabled —— 使用者端靠它把 GPU 頁換成「暫停使用」。
+PUBLIC_KEYS = {"job_timeout_minutes", "lab_archive_days", "gpu_features_enabled"}
 
 
 class TestPublicSettingWhitelist:

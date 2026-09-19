@@ -134,7 +134,7 @@ class TestAdminOverrideMarksItManual:
         db.commit()
 
         resp = client.put(f"/api/v1/admin/users/{target.id}",
-                          json={"role": "teacher"},
+                          json={"role": "teacher", "confirm_username": "tgt"},
                           headers=auth_headers(client, "adm", "password123"))
         assert resp.status_code == 200, resp.text
         db.refresh(target)

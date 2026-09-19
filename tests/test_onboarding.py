@@ -56,21 +56,23 @@ class TestCompletion:
         assert u.onboarded_at is not None
         assert (u.department, u.unit) == (None, None)
 
-    def test_campus_is_mandatory(self, db):
+    def test_first_time_fields_are_optional(self, db):
+        """ZH: v4.13（擁有者裁定 2026-09-11）：初次設定**不再**強制校區／學系 ——
+            使用者端只問常用信箱，組織資料由管理者維護。什麼都不送也算完成。"""
         crud.seed_org_tables(db)
         u = make_user(db)
-        with pytest.raises(ValueError, match="校區"):
-            crud.complete_onboarding(db, u, [], "資訊工程學系")
-        assert u.onboarded_at is None, "驗證失敗卻標成已完成 —— 之後再也不會問他"
+        crud.complete_onboarding(db, u, [], None)
+        assert u.onboarded_at is not None
+        assert crud.campuses_of(db, u.id) == []
 
-    def test_org_field_is_mandatory_when_it_applies(self, db):
+    def test_blank_org_is_treated_as_not_sent(self, db):
         crud.seed_org_tables(db)
         u = make_user(db)
-        with pytest.raises(ValueError, match="學系"):
-            crud.complete_onboarding(db, u, ["台北"], "")
-        assert u.onboarded_at is None
+        crud.complete_onboarding(db, u, ["台北"], "  ")
+        assert u.onboarded_at is not None
+        assert u.department is None
 
-    @pytest.mark.parametrize("bad", ["外星人學系", "資訊學院", "  "])
+    @pytest.mark.parametrize("bad", ["外星人學系", "資訊學院"])
     def test_free_text_departments_are_rejected(self, db, bad):
         """ZH: 自由文字會讓分組統計長出一堆打錯字的類別,而且不會報錯。"""
         crud.seed_org_tables(db)
@@ -103,11 +105,12 @@ class TestEndpoint:
         """ZH: 訊息是給人看的,不能只回 400 —— 使用者要知道該補什麼。"""
         crud.seed_org_tables(db)
         make_user(db)
+        # ZH: v4.13 起校區不再必填，改用「不在清單裡的學系」觸發驗證。
         r = client.post("/api/v1/system/onboarding",
-                        json={"campuses": [], "org_value": "資訊工程學系"},
+                        json={"campuses": ["台北"], "org_value": "外星人學系"},
                         headers=auth_headers(client))
         assert r.status_code == 400
-        assert "校區" in r.json()["detail"]
+        assert "學系" in r.json()["detail"]
 
     def test_me_reports_onboarding_state_and_campuses(self, client, db):
         """

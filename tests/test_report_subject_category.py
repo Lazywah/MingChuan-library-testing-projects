@@ -125,7 +125,8 @@ def test_unknown_category_filter_is_rejected_not_ignored(client, db):
 
 def _codes_in_js(path):
     """ZH: 從 JS 的 CATEGORIES 陣列抓第一欄（代碼）。"""
-    src = open(os.path.join(ROOT, path), encoding="utf-8").read()
+    from conftest import repo_file
+    src = open(repo_file(*path.split("/")), encoding="utf-8").read()
     m = re.search(r"CATEGORIES = \[(.*?)\];", src, re.S)
     assert m, f"{path} 裡找不到 CATEGORIES"
     return set(re.findall(r"\['(\w+)',", m.group(1)))

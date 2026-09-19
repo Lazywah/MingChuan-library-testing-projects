@@ -82,7 +82,7 @@ class TestAdminUpdateUser:
         target = next(u for u in users if u["username"] == "target")
 
         r = client.put(f"/api/v1/admin/users/{target['id']}",
-                       json={"role": "teacher"}, headers=admin_h)
+                       json={"role": "teacher", "confirm_username": "target"}, headers=admin_h)
         assert r.status_code == 200
         assert r.json()["role"] == "teacher"
 
@@ -93,7 +93,7 @@ class TestAdminUpdateUser:
         target = next(u for u in users if u["username"] == "tl")
 
         r = client.put(f"/api/v1/admin/users/{target['id']}",
-                       json={"tokens_limit": 9999}, headers=admin_h)
+                       json={"tokens_limit": 9999, "confirm_username": "tl"}, headers=admin_h)
         assert r.status_code == 200
         assert r.json()["tokens_limit"] == 9999
 

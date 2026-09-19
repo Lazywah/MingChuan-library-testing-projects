@@ -199,6 +199,26 @@ def client(db_engine):
 
 # ── Helper factories ───────────────────────────────────────────────────────────
 
+def repo_file(*parts):
+    """ZH: 找 repo 裡的檔案。本機是 <repo>/job-scheduler/app/…；在 scheduler 容器裡跑時
+        tests 被 cp 到 /app/tests，而 /app **就是** job-scheduler —— 沒有那一層。
+        四支讀原始碼的測試（admin_flag / legacy_user_fields / myai_confirm_transport /
+        report_subject_category）在容器裡因此一直紅，被當成「陳舊測試」放了一個月。
+
+    @node tests/conftest.py::repo_file
+    """
+    import pathlib as _pl
+    root = _pl.Path(__file__).resolve().parents[1]
+    p = root.joinpath(*parts)
+    if p.exists():
+        return p
+    if parts and parts[0] == "job-scheduler":
+        alt = root.joinpath(*parts[1:])
+        if alt.exists():
+            return alt
+    return p
+
+
 def make_user(db, username="testuser", email="test@example.com",
               password="password123", role="student"):
     """

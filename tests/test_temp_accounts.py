@@ -246,9 +246,11 @@ def test_admin_list_shows_expiry_and_purpose(client, db, admin_headers):
 #     而畫面上完全沒有錯誤訊息。兩個原因各自獨立，要各自釘住。
 # ──────────────────────────────────────────────────────────────────────────
 
-def _extend(client, headers, uid, expires_on=None):
+def _extend(client, headers, uid, expires_on=None, name="guest1"):
+    # ZH: 延長也要打帳號名確認（與刪帳號同一道 _require_target_confirm）。
     return client.post(f"/api/v1/admin/users/{uid}/extend",
-                       json={"expires_on": expires_on or _day(7)}, headers=headers)
+                       json={"expires_on": expires_on or _day(7), "confirm_username": name},
+                       headers=headers)
 
 
 def test_extend_pushes_the_expiry_out(client, db, admin_headers):
@@ -312,7 +314,7 @@ def test_cannot_extend_a_normal_account(client, db, admin_headers):
     """
     make_user(db, username="normal", email="n@example.com")
     uid = db.query(models.User).filter_by(username="normal").first().id
-    r = _extend(client, admin_headers, uid)
+    r = _extend(client, admin_headers, uid, name="normal")
     assert r.status_code == 400, r.text
 
 

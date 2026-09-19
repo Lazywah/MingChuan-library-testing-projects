@@ -17,7 +17,10 @@
 
 # ZH: 佇列排程參數 | EN: Queue Scheduling Parameters
 scheduling:
-  max_concurrent_jobs: 4              # ZH: 整個叢集最多同時運行的任務數
+  # ZH: ⚠ v4.16（方案二 2.4，2026-09-20）起**沒有任何地方讀這個值來擋任務**：
+  #     叢集上限由「有幾張卡」自然決定，每人同時幾張由管理端「平台設定」的
+  #     max_jobs_per_user 控制。留著只為了設定檔相容（/health 仍會回顯）。
+  max_concurrent_jobs: 4              # ZH: （已無作用）整個叢集最多同時運行的任務數
   job_check_interval_seconds: 10      # ZH: 背景排程輪詢間隔 (秒)
   allow_students: true                # ZH: 學生是否開放申請排程
   max_epochs_per_job: 1000            # ZH: 每筆任務最高迭代次數

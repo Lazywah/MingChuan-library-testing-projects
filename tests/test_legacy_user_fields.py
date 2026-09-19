@@ -25,7 +25,8 @@ class TestNoStartupDeletionOfTestAccounts:
         ZH: 這條測試讀原始碼而不是跑 lifespan —— 開機事件在測試裡很難重現,
             而要防的東西（那個查詢重新出現）在原始碼層面看得一清二楚。
         """
-        src = io.open(REPO / "job-scheduler" / "app" / "main.py", encoding="utf-8").read()
+        from conftest import repo_file
+        src = io.open(repo_file("job-scheduler", "app", "main.py"), encoding="utf-8").read()
         code = "\n".join(l for l in src.splitlines() if not l.strip().startswith("#"))
         assert "is_test_account" not in code, (
             "main.py 又出現 is_test_account 的程式碼 —— "

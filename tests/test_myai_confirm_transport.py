@@ -96,9 +96,8 @@ def test_no_caller_passes_a_list_to_httpx_data():
         這是保守的檢查：抓不到全部，但抓得到我當初寫的那一種。
     """
     import re
-    src_path = os.path.join(os.path.dirname(os.path.dirname(
-        os.path.abspath(__file__))), "job-scheduler", "app", "services",
-        "myai_sync.py")
+    from conftest import repo_file
+    src_path = repo_file("job-scheduler", "app", "services", "myai_sync.py")
     src = open(src_path, encoding="utf-8").read()
     src = re.sub(r'"""[\s\S]*?"""', "", src)          # ZH: 去掉 docstring
     src = "\n".join(l for l in src.split("\n") if not l.strip().startswith("#"))

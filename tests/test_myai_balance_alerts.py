@@ -82,6 +82,9 @@ def _bind(db, user, points):
     row = models.MyaiAccount(vendor_sn=f"sn-{user.username}", email=user.email,
                              name=user.username, points=points)
     db.add(row)
+    # ZH: v4.10（擁有者裁定 2026-09-11）只提醒**此刻在線**的人 —— 不在線的一律 skipped。
+    #     測試裡的人要算在線，last_activity 得是剛剛。
+    user.last_activity = datetime.now(timezone.utc)
     db.commit()
     return row
 

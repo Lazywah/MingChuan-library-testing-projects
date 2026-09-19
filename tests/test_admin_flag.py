@@ -48,7 +48,9 @@ class TestUsersCannotGrantThemselvesAdmin:
                         json={"campuses": ["台北"], "org_value": "資訊工程學系",
                               "is_admin": 1, "role": "admin"},
                         headers=auth_headers(client))
-        assert r.status_code == 200, r.text
+        # ZH: v4.2 起初次設定送 role 會被當場拒絕（400），不是默默忽略 ——
+        #     兩種結果都不能給到權限，這條守的是後者。
+        assert r.status_code in (200, 400), r.text
         db.refresh(user)
         assert (user.is_admin, user.role) == (0, "student")
 
@@ -107,12 +109,13 @@ class TestAdminCanSetIt:
         h = auth_headers(client, "a1", "password123")
 
         assert client.put(f"/api/v1/admin/users/{target.id}",
-                          json={"is_admin": 1}, headers=h).status_code == 200
+                          json={"is_admin": 1, "confirm_username": "t1"}, headers=h).status_code == 200
         db.refresh(target)
         assert target.is_admin == 1
         assert target.role == "student", "設管理權限不該動到身分"
 
-        client.put(f"/api/v1/admin/users/{target.id}", json={"is_admin": 0}, headers=h)
+        client.put(f"/api/v1/admin/users/{target.id}",
+                   json={"is_admin": 0, "confirm_username": "t1"}, headers=h)
         db.refresh(target)
         assert target.is_admin == 0
 
@@ -126,7 +129,8 @@ class TestOnlyOneGate:
             只會留下一個仍用舊判準的入口。
         """
         import pathlib, io as _io
-        root = pathlib.Path(__file__).resolve().parents[1] / "job-scheduler" / "app"
+        from conftest import repo_file
+        root = repo_file("job-scheduler", "app")
         defs = []
         for f in root.rglob("*.py"):
             for i, line in enumerate(_io.open(f, encoding="utf-8"), 1):
@@ -149,8 +153,8 @@ class TestAdminCreationPathsGrantTheFlag:
 
     def _read(self, *parts):
         import pathlib, io as _io
-        return _io.open(pathlib.Path(__file__).resolve().parents[1].joinpath(*parts),
-                        encoding="utf-8", errors="replace").read()
+        from conftest import repo_file
+        return _io.open(repo_file(*parts), encoding="utf-8", errors="replace").read()
 
     def test_bootstrap_admin_gets_the_flag(self):
         src = self._read("job-scheduler", "app", "main.py")

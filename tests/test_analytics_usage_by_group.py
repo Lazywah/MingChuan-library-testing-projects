@@ -81,9 +81,10 @@ def test_topups_are_not_counted_as_usage(client, db, admin_headers):
     db.add(models.ExternalAiAccount(user_id=a.id, vendor_username="s-d",
                                     myai_vendor_sn="sn-d", status="active"))
     now = datetime.now()          # ZH: 廠商時間是 naive，跟著它
-    db.add(models.MyaiTransaction(vendor_sn="sn-d", occurred_at=now,
+    # ZH: 分析只算 event_type == "ai_usage"（admin.py 的 tx_q）—— 沒標種類的交易不算使用量。
+    db.add(models.MyaiTransaction(vendor_sn="sn-d", occurred_at=now, event_type="ai_usage",
                                   points_delta=-500, dedup_key="k1"))
-    db.add(models.MyaiTransaction(vendor_sn="sn-d", occurred_at=now,
+    db.add(models.MyaiTransaction(vendor_sn="sn-d", occurred_at=now, event_type="ai_usage",
                                   points_delta=+9000, dedup_key="k2"))
     db.commit()
 

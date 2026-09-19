@@ -27,6 +27,7 @@ EN: Modular design:
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from fastapi.responses import StreamingResponse, FileResponse
 from fastapi.concurrency import run_in_threadpool
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 from typing import Optional
 import asyncio
@@ -460,6 +461,25 @@ def cancel_job(
 # ZH: GET /{job_id}/stream - 串流任務日誌與指標 (SSE)
 # EN: GET /{job_id}/stream - Stream job logs and metrics via Server-Sent Events
 # ==============================================================================
+
+def _log_delta(logs: Optional[str], last_len: int):
+    """ZH: 從上一次送到的位置推進日誌游標。回 (要送的片段, 是否整份重送, 新游標)。
+
+    ZH: v4.19 —— 日誌超過上限會被砍掉前面（crud.append_job_log 的 1 MB 上限），
+        那之後舊游標指到的位置已經不存在：長度變短時什麼都不送，等它再長回
+        舊長度之後送出的是**錯位**的片段（從舊 offset 切）。所以長度變短一律
+        整份重送並標 reset，讓前端整段換掉而不是接在後面。
+
+    @node job-scheduler/app/routers/jobs.py::_log_delta
+    """
+    logs = logs or ""
+    cur = len(logs)
+    if cur < last_len:
+        return logs, True, cur
+    if cur > last_len:
+        return logs[last_len:], False, cur
+    return "", False, cur
+
 @router.get("/{job_id}/stream")
 async def stream_job_logs(
     job_id: str,
@@ -493,18 +513,34 @@ async def stream_job_logs(
         # Then poll for updates
         last_log_len = len(job.logs) if job.logs else 0
         last_metrics_len = len(history_data["metrics"])
-        
-        while True:
-            # ZH: M4 修復 — sync db.refresh 在 async generator 內會阻塞事件迴圈，
-            #     多人同時看 stream 時會排隊。改丟給 threadpool 執行。
-            # EN: M4 fix — sync db.refresh blocks the async event loop. Offload to
-            #     threadpool so concurrent SSE streams don't queue on a single worker.
-            await run_in_threadpool(db.refresh, job)
+        last_probe = None
 
-            new_logs = ""
-            if job.logs and len(job.logs) > last_log_len:
-                new_logs = job.logs[last_log_len:]
-                last_log_len = len(job.logs)
+        def _probe():
+            """ZH: 一列小查詢：狀態、進度、日誌長度、指標長度。變了才去讀整列。
+
+            ZH: v4.19（方案二「SSE 讀取成本」）—— 在此之前每秒 `db.refresh(job)`
+                會把整個 logs 欄（上限 1 MB）從 SQLite 讀回來，**不管有沒有變**；
+                十個人同時看就是每秒 10 MB 的無意義讀取。長度沒變就什麼都不讀。
+            """
+            return (db.query(models.TrainingJob.status, models.TrainingJob.progress,
+                             func.length(models.TrainingJob.logs),
+                             func.length(models.TrainingJob.metrics))
+                      .filter(models.TrainingJob.id == job_id).first())
+
+        while True:
+            # ZH: M4 修復 — sync 查詢在 async generator 內會阻塞事件迴圈，
+            #     多人同時看 stream 時會排隊。改丟給 threadpool 執行。
+            # EN: M4 fix — sync DB work blocks the async event loop. Offload to
+            #     threadpool so concurrent SSE streams don't queue on a single worker.
+            probe = await run_in_threadpool(_probe)
+            if probe is None:
+                break                                   # ZH: 任務被刪了
+            if probe == last_probe:
+                await asyncio.sleep(1)
+                continue
+            last_probe = probe
+            await run_in_threadpool(db.refresh, job)
+            new_logs, reset, last_log_len = _log_delta(job.logs, last_log_len)
 
             current_metrics = []
             if job.metrics:
@@ -524,7 +560,9 @@ async def stream_job_logs(
                     "status": job.status,
                     "progress": job.progress,
                     "new_logs": new_logs,
-                    "new_metrics": current_metrics
+                    "new_metrics": current_metrics,
+                    # ZH: true ＝ new_logs 是整份重送（日誌被砍頭），前端要整段換掉。
+                    "reset": reset,
                 }
                 yield f"data: {json.dumps(update_data)}\n\n"
                 

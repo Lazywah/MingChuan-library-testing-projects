@@ -249,11 +249,13 @@ async def lifespan(app: FastAPI):
     _kb_task = asyncio.create_task(_ingest_kb_in_background())
     app.state.kb_ingest_task = _kb_task        # ZH: 留參照，見上面的 ⚠
 
-    sched_config = SCHEDULER_POLICY.get("scheduling", {})
     logger.info(
         f"ZH: 服務就緒 | EN: Service ready | "
         f"GPU_MOCK={SCHEDULER_POLICY.get('mock_mode', True)} | "
-        f"MAX_JOBS={sched_config.get('max_concurrent_jobs', 4)}"
+        # ZH: v4.16（方案二 2.4）起 max_concurrent_jobs 已無作用 —— 真正的閘門是
+        #     管理端「平台設定」的 max_jobs_per_user（每人同時幾張）。這裡不再印它，
+        #     印一個沒有人讀的數字只會讓接手的人去找一個不存在的限制。
+        f"quota=per-user (max_jobs_per_user in platform settings)"
     )
 
     yield  # ZH: 應用運行中 | EN: Application running
@@ -415,7 +417,9 @@ def health_check():
         "service": "job-scheduler",
         "version": "1.0.0",
         "gpu_mock_mode": SCHEDULER_POLICY.get("mock_mode", True),
-        "max_concurrent_jobs": sched_config.get("max_concurrent_jobs", 4)
+        # ZH: v4.16 起無作用，僅回顯設定檔的值（監控若有讀這個鍵，不要突然拿掉）。
+        "max_concurrent_jobs": sched_config.get("max_concurrent_jobs", 4),
+        "max_concurrent_jobs_enforced": False,
     }
 
 

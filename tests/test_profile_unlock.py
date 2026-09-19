@@ -149,7 +149,8 @@ class TestEndpoint:
 
         h_adm = auth_headers(client, "a2", "password123")
         r = client.post(f"/api/v1/admin/users/{u.id}/profile-unlock",
-                        json={"fields": ["campus"], "reason": "轉校區"}, headers=h_adm)
+                        json={"fields": ["campus"], "reason": "轉校區",
+                              "confirm_username": "testuser"}, headers=h_adm)
         assert r.status_code == 200, r.text
         assert r.json()["used_at"] is None
 
@@ -166,7 +167,7 @@ class TestEndpoint:
         u = make_user(seeded)
         adm = _admin(seeded, "a3")
         client.post(f"/api/v1/admin/users/{u.id}/profile-unlock",
-                    json={"fields": ["campus"], "reason": "轉校區"},
+                    json={"fields": ["campus"], "reason": "轉校區", "confirm_username": "testuser"},
                     headers=auth_headers(client, "a3", "password123"))
         row = (seeded.query(models.AdminAction)
                .filter_by(action="grant_profile_unlock").first())
