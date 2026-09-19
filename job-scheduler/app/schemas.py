@@ -682,6 +682,9 @@ class WorkerHeartbeatPayload(BaseModel):
     # ZH: v3.6 —— 此節點是否與服務層同機（看得到 per-user 的 home_<uid> volume）。
     #     預設 False：舊版 worker 不送這欄位，於是被當成「不同機」——寧可不派工。
     shares_service_storage: bool = False
+    # ZH: v4.15 —— 這個節點上被 GPU epilog 判定壞掉、已停止使用的卡。
+    #     選填：舊版 worker 不送這個欄位，預設空陣列（＝一切正常）。
+    unhealthy_gpus: Optional[List[str]] = None
 
 
 # ZH: Notebook Schema 已於 Phase E 移除 — 被 v2.0 Lab schemas 取代

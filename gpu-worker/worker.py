@@ -613,6 +613,9 @@ def get_available_gpus():
                     "GPU %s: utilization unreadable (%r) - skipping this card, "
                     "not the whole node", idx, util)
                 continue
+            # ZH: v4.15 —— 被 epilog 判定壞掉的卡不再列入可用（見 gpu_epilog）。
+            if idx in quarantined_snapshot():
+                continue
             if float(util) < GPU_IDLE_UTIL_THRESHOLD and idx not in busy:
                 # ZH: 使用率低於門檻且未在本機 busy-set，才視為空閒
                 # EN: Idle only if util < threshold AND not in local busy-set
@@ -691,6 +694,10 @@ def send_heartbeat(available_gpus: list) -> None:
             "gpus_detail": get_gpu_details(),
             "pool_type": POOL_TYPE,
             "shares_service_storage": SHARES_SERVICE_STORAGE,   # ZH: v3.6 見檔頭說明
+            # ZH: v4.15 —— 被 epilog 判定壞掉的卡。空陣列是常態。
+            #     ⚠ 不只是「少報一張卡」而已：少報是**安靜的**，
+            #     管理端只會看到數字變小，沒有人知道是壞了還是被停用。
+            "unhealthy_gpus": quarantined_snapshot(),
         }
         resp = requests.post(
             f"{SERVICE_LAYER_URL}/api/v1/worker/heartbeat",
@@ -938,6 +945,117 @@ def stop_container(job_id: str) -> None:
     except Exception as e:
         logger.error("Job %s: could not stop container %s: %s", job_id[:8], name, e)
 
+
+
+# ==============================================================================
+# ZH: v4.15（方案二 2.5）GPU epilog —— 每張任務結束後檢查那張卡還健康嗎
+# ==============================================================================
+# ZH: 為什麼需要（Slurm 在共享 GPU 叢集上做了二十年的事）：
+#     `docker run --rm` 清得掉容器，**清不掉卡的狀態** —— 殘留的 compute
+#     context、沒釋放的 VRAM、驅動層的錯誤。單機時人在旁邊看得到；
+#     30 台無人值守的機房裡，症狀會是「某一台從此每一張單都失敗」，
+#     而**沒有任何人知道為什麼**，因為每一張單的錯誤訊息都不一樣
+#     （CUDA out of memory / no kernel image / 初始化失敗…）。
+#
+# ZH: 🔴 分成兩級，因為這兩種情況的確定性差很多：
+#
+#       · 硬失敗（問不到這張卡）→ **隔離**：不再把它報成可用，並告警。
+#         這種情況沒有第二種解釋，誤判的風險極低。
+#
+#       · VRAM 比開跑前高 → **只警告，不隔離**。這台的 GPU 是與 Ollama
+#         和 Code Lab **共用**的，它們會在任務執行期間自己載入／釋放模型 ——
+#         把「用量變高」當成洩漏會一直誤報，而一個會誤報的檢查會被整支忽略，
+#         連它真的抓到東西的那一天也一起（deploy_check 的註解講過同一件事）。
+#         台北那 30 台是專用卡，那裡的訊號會乾淨得多，但判準先保守。
+#
+# ZH: ⚠ 隔離是**行程內**的（重啟 worker 就清掉）。這是刻意的：
+#     真正壞掉的卡重啟也不會好，訊號會立刻再出現；而如果是誤判，
+#     重啟就自己復原了，不需要人去解鎖一個被錯誤鎖住的節點。
+GPU_LEAK_WARN_MB = int(os.environ.get("GPU_LEAK_WARN_MB", "512"))
+
+# ZH: 被判定為壞掉、不再領工作的 GPU。get_available_gpus 會把它們濾掉。
+_quarantined_gpus = set()
+_quarantine_lock = threading.Lock()
+
+
+def _quarantine_gpu(gpu_id: str, reason: str) -> None:
+    """ZH: 把一張卡從可用清單裡拿掉，並大聲說出來。
+
+    @node gpu-worker/worker.py::_quarantine_gpu
+    """
+    with _quarantine_lock:
+        first_time = gpu_id not in _quarantined_gpus
+        _quarantined_gpus.add(gpu_id)
+    if first_time:
+        logger.error(
+            "GPU %s marked UNHEALTHY and will not take more work: %s. "
+            "Restart the worker after fixing it (quarantine is in-process only).",
+            gpu_id, reason,
+        )
+
+
+def quarantined_snapshot() -> list:
+    """ZH: 目前被隔離的卡（給心跳上報用）。
+
+    @node gpu-worker/worker.py::quarantined_snapshot
+    """
+    with _quarantine_lock:
+        return sorted(_quarantined_gpus)
+
+
+def gpu_memory_used(gpu_id: str):
+    """ZH: 這張卡目前用掉多少 MiB。問不到回 None（**不是 0**）。
+
+    ZH: 🔴 問不到與「用了 0」必須分得開：前者是「這張卡有問題」，
+        後者是「這張卡很空」—— 回 0 的話 epilog 會把壞掉的卡當成乾淨的。
+
+    @node gpu-worker/worker.py::gpu_memory_used
+    """
+    try:
+        r = subprocess.run(
+            ["nvidia-smi", "--query-gpu=memory.used", "--format=csv,noheader,nounits",
+             "-i", str(gpu_id)],
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=20,
+        )
+        if r.returncode != 0:
+            return None
+        text = (r.stdout or "").strip().splitlines()[0].strip()
+        # ZH: 某些驅動/虛擬化組合會回 [N/A]（get_available_gpus 也處理過同一件事）
+        return int(text) if text.isdigit() else None
+    except Exception:
+        return None
+
+
+def gpu_epilog(gpu_id: str, mem_before, job_id: str) -> None:
+    """ZH: 任務結束後的收尾檢查。壞掉就隔離這張卡，可疑就留下紀錄。
+
+    ZH: `mem_before` 是開跑前的用量（None ＝ 當時就問不到，那就只做健康檢查）。
+
+    @node gpu-worker/worker.py::gpu_epilog
+    """
+    mem_after = gpu_memory_used(gpu_id)
+
+    if mem_after is None:
+        _quarantine_gpu(gpu_id, "nvidia-smi could not query this GPU after job %s"
+                                % job_id[:8])
+        report_update(job_id, {
+            "log": "⚠ 這張 GPU 在任務結束後無法查詢，節點已停止使用它 / "
+                   "This GPU could not be queried after the job; the node stopped using it",
+        })
+        return
+
+    if mem_before is None:
+        return
+
+    leaked = mem_after - mem_before
+    if leaked > GPU_LEAK_WARN_MB:
+        # ZH: 只警告不隔離 —— 共用卡上這個訊號不乾淨（見本段開頭）。
+        logger.warning(
+            "Job %s: GPU %s still holds %d MiB more than before the job "
+            "(%d -> %d MiB). Not quarantining - this card may be shared with "
+            "Ollama or a Code Lab session.",
+            job_id[:8], gpu_id, leaked, mem_before, mem_after,
+        )
 
 def reconcile_orphans() -> None:
     """ZH: 開機時認領（或清掉）上一輪留下的訓練容器。
@@ -1259,6 +1377,10 @@ def execute_job(job):
             skip_next = True
     logger.info(f"CMD: {' '.join(safe_cmd)}")
 
+    # ZH: v4.15 —— epilog 的基準線：開跑**之前**這張卡用了多少。
+    #     跑完之後比對，才分得出「這張卡本來就有人在用」與「這張單漏了記憶體」。
+    mem_before = gpu_memory_used(gpu_id)
+
     # ZH: v4.14 —— 取消/逾時偵測。與容器的輸出無關，固定節奏問服務層。
     finished = threading.Event()
     stopped = threading.Event()
@@ -1360,6 +1482,14 @@ def execute_job(job):
         if code_dir and os.path.exists(code_dir):
             shutil.rmtree(code_dir, ignore_errors=True)
             logger.debug(f"Cleaned up temp dir: {code_dir}")
+        # ZH: v4.15 —— GPU epilog。**在放掉旗標之前**跑：這張卡若已經壞了，
+        #     不該在放行之後才發現（那之間可能已經又派了一張單進來）。
+        try:
+            gpu_epilog(gpu_id, mem_before, job_id)
+        except Exception as e:
+            # ZH: epilog 自己壞掉不能影響任務的收尾 —— 它是檢查不是主線。
+            logger.error("Job %s: GPU epilog failed: %s", job_id[:8], e)
+
         # ZH: M3 修復 — 任務結束（成功 / 失敗 / 例外）一律釋放 GPU 標記
         # EN: M3 fix — always free the GPU flag when the job finishes, no matter how
         _mark_gpu_free(gpu_id)

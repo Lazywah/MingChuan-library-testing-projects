@@ -345,6 +345,32 @@ def worker_heartbeat(
         source_ip=source_ip, shares_storage=payload.shares_service_storage,
     )
     logger.debug(f"Heartbeat from {payload.node_id}, gpus={payload.available_gpus}, pool={payload.pool_type}")
+
+    # ZH: v4.15（方案二 2.5）—— 節點回報有卡壞掉。
+    #
+    # ZH: 🔴 一定要寄信，不能只記 log。這種故障的症狀是「某一台從此每張單都失敗」，
+    #     而每一張單的錯誤訊息都不一樣（CUDA OOM / no kernel image / 初始化失敗…），
+    #     從使用者回報根本拼不出「是那台機器壞了」。而容器日誌沒有人會定期翻
+    #     （_alert 的註解講的就是同一件事）。
+    #
+    # ZH: ⚠ 節流與「收件人留空就不寄」都在 email_service.send_admin_alert 裡，
+    #     所以這裡**每次心跳都呼叫是安全的** —— 不會每 30 秒寄一封。
+    if payload.unhealthy_gpus:
+        logger.error("ZH: 節點 %s 回報 GPU 異常：%s | EN: node %s reports unhealthy GPUs: %s",
+                     payload.node_id, payload.unhealthy_gpus,
+                     payload.node_id, payload.unhealthy_gpus)
+        try:
+            # ZH: 延遲匯入 —— routers 在 import 期就拉進 scheduler 會繞回來。
+            from ..scheduler import _alert
+            _alert(
+                "gpu_unhealthy",
+                "GPU 節點回報有卡不能用 / A GPU node reports an unusable card",
+                _unhealthy_detail(payload.node_id, payload.unhealthy_gpus),
+            )
+        except Exception as e:
+            # ZH: 告警失敗不能讓心跳跟著失敗 —— 節點會以為服務層掛了。
+            logger.error("Could not send the unhealthy-GPU alert: %s", e)
+
     return {"status": "ok", "node_id": payload.node_id}
 
 
@@ -363,6 +389,20 @@ def worker_heartbeat(
 #
 # ZH: ⚠ 這支刻意**不寫任何東西**（純讀）。它會被每個執行中的任務每隔幾秒打一次，
 #     帶上寫入的話，30 台 × N 張單就變成一個沒有必要的持續寫入來源。
+def _unhealthy_detail(node_id: str, gpus) -> str:
+    """ZH: 壞卡告警的內文。抽出來是為了用三引號寫多行，不必在字串裡處理跳脫。
+
+    @node job-scheduler/app/routers/worker.py::_unhealthy_detail
+    """
+    return """節點 / node: {node}
+有問題的 GPU / unhealthy: {gpus}
+
+這張卡已經不再接受新任務。修好之後重啟該節點的 worker 即可恢復
+（隔離是行程內的，重啟就會重新評估）。
+The card has stopped taking work; restart that node's worker once it is fixed.""".format(
+        node=node_id, gpus=", ".join(gpus))
+
+
 @router.get("/jobs/{job_id}/control", summary="v4.14 worker 問這張單該不該繼續")
 def job_control(
     job_id: str,
