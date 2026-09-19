@@ -403,8 +403,16 @@ def cancel_job(
     db: Session = Depends(get_db)
 ):
     """
-    ZH: 取消訓練任務 (僅 pending/queued 可取消)
-    EN: Cancel training job (only pending/queued can be cancelled)
+    ZH: 取消訓練任務（pending / queued / running 都可以）
+    EN: Cancel a training job (pending, queued or running)
+
+    ZH: v4.14（方案二 2.2）running 也放行了。在此之前送錯的單一旦被領走
+        就沒有人停得了它 —— 使用者只能看著自己的錯誤跑完，而那張卡整段時間
+        都不能給別人用。
+
+    ZH: ⚠ 回應回來時容器**還沒停**。真正的停止由 worker 執行：
+        它每隔幾秒問一次 control 端點，看到終態才 `docker stop`。
+        所以這支回 200 的意思是「已受理」，不是「已經停了」。
 
     @node job-scheduler/app/routers/jobs.py::cancel_job
     """
@@ -422,11 +430,13 @@ def cancel_job(
             detail="ZH: 無權限取消此任務 | EN: Not authorized to cancel this job"
         )
 
-    if job.status not in ("pending", "queued"):
+    if job.status not in ("pending", "queued", "running"):
+        # ZH: 已經結束的單沒有東西可以取消 —— 講清楚是「已經結束」，
+        #     不要只說「不能取消」，後者會讓人以為是權限或時機問題。
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"ZH: 無法取消 '{job.status}' 狀態的任務 | "
-                   f"EN: Cannot cancel job with status '{job.status}'"
+            detail=f"ZH: 這張任務已經是 '{job.status}'，沒有東西可以取消 | "
+                   f"EN: This job is already '{job.status}'; there is nothing to cancel"
         )
 
     cancelled_job = crud.cancel_job(db, job_id=job_id)

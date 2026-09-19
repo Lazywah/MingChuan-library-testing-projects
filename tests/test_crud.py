@@ -126,12 +126,26 @@ class TestJobCRUD:
         assert cancelled.status == "cancelled"
         assert cancelled.completed_at is not None
 
-    def test_cancel_running_job_returns_none(self, db):
+    def test_cancel_running_job_now_works(self, db):
+        """ZH: v4.14（方案二 2.2）**行為刻意改了**：running 現在可以取消。
+
+        ZH: 這支原本叫 `test_cancel_running_job_returns_none`，斷言 running
+            不能取消 —— 那個契約下，一張送錯的大任務一旦被領走就沒有人停得了它。
+            改動的另一半在 worker：它輪詢 control 端點，看到終態才真的 docker stop。
+        """
         user = make_user(db, username="crj", email="crj@example.com")
         job = crud.create_job(db, self._job_in(), user.id)
         crud.update_job_status(db, job.id, "running")
         result = crud.cancel_job(db, job.id)
-        assert result is None  # ZH: running 不能取消
+        assert result is not None
+        assert result.status == "cancelled"
+
+    def test_cancel_finished_job_returns_none(self, db):
+        """ZH: 已經結束的仍然不能取消 —— 放行 running 不等於放行所有狀態。"""
+        user = make_user(db, username="cfj", email="cfj@example.com")
+        job = crud.create_job(db, self._job_in(), user.id)
+        crud.update_job_status(db, job.id, "completed")
+        assert crud.cancel_job(db, job.id) is None
 
     def test_get_pending_jobs_priority_order(self, db):
         user = make_user(db, username="prio", email="prio@example.com")

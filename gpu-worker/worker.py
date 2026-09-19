@@ -860,6 +860,174 @@ def _mask_secret(value: str) -> str:
     return f"{value[:2]}****{value[-2:]}"
 
 
+
+# ==============================================================================
+# ZH: v4.14（方案二 2.2）取消／逾時的執行端 —— 讓跑起來的容器停得下來
+# ==============================================================================
+# ZH: 在此之前，平台**沒有任何辦法停止一個已經在跑的容器**：
+#     取消端點只准取消還沒開跑的單；逾時迴圈也只是把資料庫標成 failed，
+#     容器繼續跑、卡繼續被佔，而服務層已經不把它算進「正在跑」——
+#     於是那張卡會被當成空的再借給別人（實驗室或下一張單）。
+#
+# ZH: 做法是一條與容器輸出**無關**的固定節奏輪詢。為什麼不能只看 /update 的回應：
+#     一個安靜的訓練可以幾十分鐘不吐一行，而那正是最需要停掉它的情況。
+#     （Buildkite agent 的 Job Cancellation Checker 是同一個結構。）
+#
+# ZH: 🔴 **問不到就繼續跑（fail-open）。** 服務層掛掉或網路斷掉時，
+#     選擇「全部殺掉」會把整個叢集正在跑的訓練一起毀掉，而那些訓練
+#     本身沒有任何問題。停不下來的代價是一張卡被多佔一會兒；
+#     殺錯的代價是所有人的幾小時。這個取捨是刻意的。
+CONTROL_POLL_INTERVAL = int(os.environ.get("CONTROL_POLL_INTERVAL", "10"))
+# ZH: `docker stop` 的寬限秒數。時間到還沒退出就 SIGKILL。
+STOP_GRACE_SECONDS = int(os.environ.get("STOP_GRACE_SECONDS", "10"))
+
+
+def container_name_for(job_id: str) -> str:
+    """ZH: 這張單的容器名字。**唯一定義** —— 起容器與停容器都走這裡。
+
+    ZH: 取名字是為了停得掉。沒有名字的話只能靠 `docker ps` 反查，
+        而那要嘛比對映像（同一個映像可能有好幾張單）、要嘛比對指令列（很脆）。
+
+    @node gpu-worker/worker.py::container_name_for
+    """
+    return "job-%s" % job_id
+
+
+def job_should_stop(job_id: str) -> bool:
+    """ZH: 問服務層這張單還要不要跑。問不到一律回 False（繼續跑）。
+
+    ZH: 🔴 fail-open 的理由見上面那段註解。這裡**刻意不重試**：
+        下一次輪詢很快就到，重試只會讓「服務層掛掉」時每一張單都卡住
+        一整輪退避時間。
+
+    @node gpu-worker/worker.py::job_should_stop
+    """
+    url = "%s/api/v1/worker/jobs/%s/control" % (SERVICE_LAYER_URL, job_id)
+    try:
+        r = requests.get(url, headers=HEADERS, timeout=5)
+        if r.status_code != 200:
+            return False
+        body = r.json() or {}
+        if body.get("action") == "stop":
+            logger.info("Job %s: service layer says stop (%s)",
+                        job_id[:8], body.get("reason") or "?")
+            return True
+    except Exception as e:
+        logger.debug("control check failed for %s: %s", job_id[:8], e)
+    return False
+
+
+def stop_container(job_id: str) -> None:
+    """ZH: 停掉這張單的容器。已經退出的話 docker 會抱怨，那不是錯誤。
+
+    @node gpu-worker/worker.py::stop_container
+    """
+    name = container_name_for(job_id)
+    try:
+        r = subprocess.run(
+            ["docker", "stop", "-t", str(STOP_GRACE_SECONDS), name],
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=60,
+        )
+        if r.returncode == 0:
+            logger.info("Job %s: container %s stopped", job_id[:8], name)
+        else:
+            # ZH: 多半是「已經不在了」（跑完自己退出 + --rm）。用 debug 不用 error，
+            #     不然每一張正常結束的取消單都會在 log 裡留一筆紅字。
+            logger.debug("Job %s: docker stop said: %s",
+                         job_id[:8], (r.stderr or "").strip())
+    except Exception as e:
+        logger.error("Job %s: could not stop container %s: %s", job_id[:8], name, e)
+
+
+def reconcile_orphans() -> None:
+    """ZH: 開機時認領（或清掉）上一輪留下的訓練容器。
+
+    ZH: 🔴 為什麼需要這一段（2026-09-20 實測踩到的）：
+        容器是**兄弟容器**，跑在主機的 docker 上，不是 worker 的子行程。
+        worker 重啟（更新、當機、機器重開）之後，那些容器照樣在跑，
+        而新的 worker 完全不知道它們存在 —— 沒有人會去停它們，
+        它們佔著 GPU 直到自己跑完。實測情境：一張**已取消**的單，
+        它的容器在 worker 重啟後又活了好幾分鐘。
+
+    ZH: 做法：容器名字裡就有 job_id（見 container_name_for），
+        拿去問服務層「這張單還要不要跑」——
+          · 終態／查無此單 → 停掉（這是絕大多數情況）
+          · 還在 running   → **留著**。那多半是 worker 自己重啟而任務仍有效，
+            殺掉等於平白毀掉一個還在跑的訓練。
+        ⚠ 留著的那些目前沒有人接手監看（它的 watcher 隨舊行程死了）——
+        逾時仍會把它標成終態，下一次 reconcile 或下一輪重啟才會收掉。
+        要完整解決要等租約那一版（方案二 2.1）。
+
+    @node gpu-worker/worker.py::reconcile_orphans
+    """
+    try:
+        r = subprocess.run(
+            ["docker", "ps", "--filter", "name=^job-", "--format", "{{.Names}}"],
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=30,
+        )
+        names = [n.strip() for n in (r.stdout or "").splitlines() if n.strip()]
+    except Exception as e:
+        logger.warning("Could not list leftover job containers: %s", e)
+        return
+
+    if not names:
+        return
+
+    logger.info("Found %d leftover job container(s) from a previous run", len(names))
+    for name in names:
+        job_id = name[len("job-"):]
+        if job_should_stop(job_id):
+            logger.warning("Orphan %s belongs to a finished/unknown job - stopping it", name)
+            stop_container(job_id)
+        else:
+            # ZH: 服務層說這張單還有效 —— 不要動它。
+            logger.info("Orphan %s is still a live job - leaving it alone", name)
+
+
+def kill_runner(process, job_id: str) -> None:
+    """ZH: 停掉本地這支 `docker run` 行程。
+
+    ZH: 🔴 為什麼光有 `docker stop` 不夠（2026-09-20 實測抓到的）：
+        `docker run` 在**拉映像**的那段時間裡**還沒有容器**，所以 docker stop
+        找不到東西可停 —— 實測按下取消之後，那支 docker run 又拉了 64 秒以上
+        才被我手動中止。而拉一個幾 GB 的映像可能要好幾分鐘，那整段時間
+        使用者按了取消卻什麼都沒發生，那張卡也還被佔著。
+
+    ZH: 順序不能反：**先 `docker stop`（容器存在時）再殺這支 CLI**。
+        反過來的話，容器會活著而 CLI 不見了 —— 那就真的沒有人停得掉它了。
+
+    @node gpu-worker/worker.py::kill_runner
+    """
+    # ZH: 給 docker stop 的寬限期加一點餘裕；它成功的話這支 CLI 會自己退出。
+    deadline = time.time() + STOP_GRACE_SECONDS + 5
+    while time.time() < deadline:
+        if process.poll() is not None:
+            return
+        time.sleep(0.5)
+    try:
+        process.kill()
+        logger.info("Job %s: killed the local `docker run` process", job_id[:8])
+    except Exception as e:
+        logger.debug("Job %s: could not kill the runner: %s", job_id[:8], e)
+
+
+def watch_for_stop(job_id: str, process, finished: threading.Event,
+                   stopped: threading.Event) -> None:
+    """ZH: 背景輪詢：服務層說停就停。容器自己結束時由 `finished` 叫醒收工。
+
+    ZH: ⚠ 用 `Event.wait(timeout)` 不要用 `time.sleep` —— 容器正常結束時
+        這條執行緒要**立刻**醒來離開，不然每張單結束後都會多掛著一輪的時間
+        （而且行程要等它才收得乾淨）。
+
+    @node gpu-worker/worker.py::watch_for_stop
+    """
+    while not finished.wait(CONTROL_POLL_INTERVAL):
+        if job_should_stop(job_id):
+            stopped.set()
+            stop_container(job_id)   # ZH: 容器已經在跑 → 停容器
+            kill_runner(process, job_id)  # ZH: 還在拉映像 → 停這支 CLI（見上）
+            return
+
 def execute_job(job):
     """@node gpu-worker/worker.py::execute_job"""
     job_id    = job.get("job_id")
@@ -1056,6 +1224,8 @@ def execute_job(job):
     # EN: Build docker run command (sibling container pattern)
     cmd = [
         "docker", "run", "--rm",
+        # ZH: v4.14 —— 取個固定的名字才停得掉（見 container_name_for）。
+        "--name", container_name_for(job_id),
         "--gpus", f"device={gpu_id}",
         # ZH: v4.2 —— Docker 預設 /dev/shm 只有 64MB，PyTorch DataLoader 開
         #     num_workers>0 時 batch 走共享記憶體，224px 的圖一兩個 worker 就爆
@@ -1089,6 +1259,11 @@ def execute_job(job):
             skip_next = True
     logger.info(f"CMD: {' '.join(safe_cmd)}")
 
+    # ZH: v4.14 —— 取消/逾時偵測。與容器的輸出無關，固定節奏問服務層。
+    finished = threading.Event()
+    stopped = threading.Event()
+    watcher = None
+
     try:
         process = subprocess.Popen(
             cmd,
@@ -1096,6 +1271,10 @@ def execute_job(job):
             stderr=subprocess.STDOUT,
             text=True
         )
+        watcher = threading.Thread(target=watch_for_stop,
+                                   args=(job_id, process, finished, stopped),
+                                   daemon=True)
+        watcher.start()
 
         # ZH: v3.6 —— 內建腳本用 `[錯誤]` / `[怎麼修]` 印給人看的失敗原因。
         #     失敗時把它當成 error_message，不要只回「exited with code 1」——
@@ -1131,8 +1310,21 @@ def execute_job(job):
             report_update(job_id, payload)
 
         process.wait()
+        # ZH: 容器結束了 —— 立刻叫醒 watcher 收工，不要讓它多掛一輪。
+        finished.set()
 
-        if process.returncode == 0:
+        # ZH: 🔴 被指令通道停掉的單**不回報狀態**。服務層那邊已經是
+        #     cancelled（或逾時的 failed），再送一次只會被終態守衛擋下來，
+        #     而且會在 log 裡留下一筆看起來像出事的 WARNING。
+        #     只補一行給人看的紀錄，說明它不是自己壞掉的。
+        if stopped.is_set():
+            logger.info("Job %s: stopped on request from the service layer", job_id[:8])
+            report_update(job_id, {
+                "log": "任務已被停止（取消或逾時），容器已結束 / "
+                       "Job stopped on request (cancelled or timed out); container ended",
+            })
+
+        elif process.returncode == 0:
             logger.info(f"Job {job_id} completed successfully.")
             # ZH: v3.6 —— **先傳檔再回報完成**。反過來的話畫面會先顯示「完成、可下載」，
             #     使用者按下去卻是 404（檔案還在路上）。
@@ -1159,6 +1351,11 @@ def execute_job(job):
         report_update(job_id, {"status": "failed", "error_message": str(e)})
 
     finally:
+        # ZH: 不管走哪條路（成功/失敗/例外）都要讓 watcher 醒來收工 ——
+        #     例外那條路不設的話，這條執行緒會一直輪詢一張早就結束的單。
+        finished.set()
+        if watcher is not None:
+            watcher.join(timeout=5)
         # ZH: 清理 Notebook 暫存目錄 | EN: Clean up notebook temp directory
         if code_dir and os.path.exists(code_dir):
             shutil.rmtree(code_dir, ignore_errors=True)
@@ -1377,4 +1574,7 @@ if __name__ == "__main__":
     # ZH: 先驗設定再進輪詢。帶著錯的設定跑起來，最壞的情況不是「不會動」，
     #     而是「會動、而且結果是錯的」（見 validate_config 第 2 項）。
     run_startup_checks()
+    # ZH: 先收拾上一輪留下的容器再開始領新工作 —— 不然一張已取消的單
+    #     留下的容器會一直佔著卡，而新來的工作以為那張卡是空的。
+    reconcile_orphans()
     poll_loop()

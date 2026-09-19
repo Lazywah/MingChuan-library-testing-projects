@@ -21,11 +21,21 @@ from fastapi.testclient import TestClient
 # EN: Set test env vars to override settings
 # ZH: C3 修復：secrets 須通過 config.py 的長度與黑名單驗證 (JWT ≥32, Worker ≥16)
 # EN: C3 fix: secrets must satisfy config.py length & blacklist (JWT ≥32, Worker ≥16)
-os.environ.setdefault("JWT_SECRET_KEY", "test-secret-key-with-32-chars-padding-aaa")
-os.environ.setdefault("WORKER_API_TOKEN", "test-worker-token-16c")
+# ZH: 🔴 密鑰類的三條**必須直接指派**（理由與下面 DATABASE_PATH 那段同源）：
+#     在容器裡 `docker exec … pytest` 時，這三個環境變數都是**正式值**
+#     （2026-09-20 實測：WORKER_API_TOKEN / JWT_SECRET_KEY / SECRETS_MASTER_KEY
+#     在 scheduler 容器內都有值），setdefault 會原封不動留著它們。
+#
+# ZH: 後果有兩種，都不好：
+#       · 功能上：測試寫死 "test-worker-token-16c" 當 header，而伺服器拿到的是
+#         正式 token → 所有 worker 端點的測試**全部 401**，而錯誤訊息只說沒授權。
+#       · 安全上：測試期間鑄出來的 JWT 是用**正式金鑰**簽的 —— 那種 token
+#         對正式站是有效的。測試不該有能力製造這種東西。
+os.environ["JWT_SECRET_KEY"] = "test-secret-key-with-32-chars-padding-aaa"
+os.environ["WORKER_API_TOKEN"] = "test-worker-token-16c"
 # ZH: v2.0 — SECRETS_MASTER_KEY 須通過 config.py 驗證 (≥32 chars, 非黑名單)
 # EN: v2.0 — SECRETS_MASTER_KEY must pass config.py validator (≥32 chars, not blacklisted)
-os.environ.setdefault("SECRETS_MASTER_KEY", "test-secrets-master-key-with-32-chars-aaa")
+os.environ["SECRETS_MASTER_KEY"] = "test-secrets-master-key-with-32-chars-aaa"
 # ZH: 🔴 這兩條**必須直接指派，不能 setdefault** —— 理由與下面 SMTP 那段同源，
 #     但後果嚴重得多：在**容器裡**跑測試時（docker exec … pytest），環境變數
 #     `DATABASE_PATH=/data/ai_platform.db` 早就存在，setdefault 會原封不動留著它，

@@ -348,6 +348,48 @@ def worker_heartbeat(
     return {"status": "ok", "node_id": payload.node_id}
 
 
+# ==============================================================================
+# ZH: v4.14（方案二 2.2）指令通道 —— worker 問「這張單還要不要繼續」
+# ==============================================================================
+# ZH: 為什麼需要一支**專門**的端點，而不是只靠 /update 的回應：
+#     /update 只有在容器**印東西出來**時才會被呼叫。一個安靜的訓練
+#     （或一個已經卡死的容器）可以幾十分鐘不吐一行 ——
+#     那正是最需要停掉它的情況，卻剛好是 /update 永遠不會來的情況。
+#     所以 worker 另外開一條固定節奏的輪詢，與容器有沒有輸出無關。
+#     （Buildkite agent 的 Job Cancellation Checker 是同一個結構。）
+#
+# ZH: 🔴 找不到這張單也回 stop —— 那是**孤兒容器**：服務層的資料庫裡沒有它，
+#     代表沒有任何人在等它的結果，而它還佔著一張卡。
+#
+# ZH: ⚠ 這支刻意**不寫任何東西**（純讀）。它會被每個執行中的任務每隔幾秒打一次，
+#     帶上寫入的話，30 台 × N 張單就變成一個沒有必要的持續寫入來源。
+@router.get("/jobs/{job_id}/control", summary="v4.14 worker 問這張單該不該繼續")
+def job_control(
+    job_id: str,
+    db: Session = Depends(get_db),
+    _: None = Depends(verify_worker_token),
+):
+    """
+    ZH: 回 `{"action": "continue" | "stop"}`。
+    EN: Tell the worker whether to keep running this job.
+
+    @node job-scheduler/app/routers/worker.py::job_control
+    """
+    job = crud.get_job(db, job_id=job_id)
+    if not job:
+        logger.warning(
+            "ZH: control：資料庫裡沒有任務 %s，要求 worker 停掉（孤兒容器） | "
+            "EN: control: unknown job %s, telling the worker to stop",
+            job_id[:8], job_id[:8],
+        )
+        return {"action": "stop", "reason": "unknown_job"}
+
+    if job.status in crud.TERMINAL_JOB_STATES:
+        return {"action": "stop", "reason": job.status}
+
+    return {"action": "continue"}
+
+
 @router.post("/jobs/{job_id}/update")
 def update_job(
     job_id: str,
@@ -384,7 +426,15 @@ def update_job(
         if payload.status == "completed":
             crud.update_job_progress(db, job_id, progress=100.0)
 
-    return {"status": "ok"}
+    # ZH: v4.14 —— 回應順便當指令通道。容器有在印東西的時候，
+    #     這條路比固定節奏的 control 輪詢更快（不必等下一次輪詢）。
+    #     ⚠ 這裡要**重讀一次**狀態：上面的 update_job_status 可能因為終態守衛
+    #     而沒有套用 payload，job 物件手上的值不一定是資料庫的現況。
+    fresh = crud.get_job(db, job_id=job_id)
+    if fresh and fresh.status in crud.TERMINAL_JOB_STATES:
+        return {"status": "ok", "action": "stop", "reason": fresh.status}
+
+    return {"status": "ok", "action": "continue"}
 
 
 # ==============================================================================

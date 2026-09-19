@@ -714,6 +714,21 @@ def get_running_jobs_count(db: Session) -> int:
     ).count()
 
 
+# ZH: 任務的**終態**。到了這三個就不再往回走。
+#
+# ZH: 🔴 為什麼需要這個常數與下面的守衛（v4.14，方案二 2.1）：
+#     逾時迴圈把一張單標成 failed 之後，**worker 上的容器其實還在跑**
+#     （在此之前平台沒有任何停止它的手段）。那個「殭屍」跑完會回報 completed，
+#     於是 failed 被翻回 completed、`completed_at` 也被蓋掉 ——
+#     畫面上看起來是一張正常完成的單，沒有任何痕跡顯示它曾被判定逾時。
+#     取消也是同一件事：使用者按了取消，容器跑完照樣回報成功。
+#
+# ZH: 這是分散式排程的標準做法（fencing）：**舊世代的寫入一律拒絕**。
+#     我們這裡用「狀態機不可逆」達成同一件事，成本低得多 ——
+#     完整的 execution_id 版本等 30 台實際跑起來、有真實樣本再做。
+TERMINAL_JOB_STATES = ("completed", "failed", "cancelled")
+
+
 def update_job_status(
     db: Session,
     job_id: str,
@@ -732,6 +747,17 @@ def update_job_status(
     job = get_job(db, job_id)
     if not job:
         return None
+
+    # ZH: 🔴 終態不可逆（見 TERMINAL_JOB_STATES 的說明）。
+    #     ⚠ 相同狀態重送**不算違規**（worker 的 report_update 會重試，
+    #     重試成功兩次是正常的），直接當成已完成回傳。
+    if job.status in TERMINAL_JOB_STATES and status != job.status:
+        logger.warning(
+            "ZH: 拒絕把任務 %s 從終態 %s 改成 %s（多半是已被取消/逾時的容器回報） | "
+            "EN: refused %s: terminal %s -> %s",
+            job_id[:8], job.status, status, job_id[:8], job.status, status,
+        )
+        return job
 
     job.status = status
 
@@ -971,15 +997,24 @@ def append_job_metric(db: Session, job_id: str, metric: dict) -> Optional[models
 
 def cancel_job(db: Session, job_id: str) -> Optional[models.TrainingJob]:
     """
-    ZH: 取消任務 (僅 pending/queued 可取消)
-    EN: Cancel job (only pending/queued can be cancelled)
+    ZH: 取消任務（pending / queued / running 都可以）
+    EN: Cancel a job (pending, queued or running)
+
+    ZH: v4.14（方案二 2.2）**running 也能取消了**。在此之前只准取消還沒開跑的單，
+        於是一張送錯的 1000 epoch 任務一旦被領走就**沒有任何人停得了它**
+        —— 連管理者也不行，只能等它自己跑完或撞到逾時。
+
+    ZH: 這裡只改資料庫；真正停掉容器的是 worker ——
+        它每 `CONTROL_POLL_INTERVAL` 秒問一次 `/worker/jobs/{id}/control`，
+        看到終態就 `docker stop`。所以「按下去」到「容器真的停」之間
+        有幾秒到十幾秒的落差，那是刻意的（見該端點的說明）。
 
     @node job-scheduler/app/crud.py::cancel_job
     """
     job = get_job(db, job_id)
     if not job:
         return None
-    if job.status not in ("pending", "queued"):
+    if job.status not in ("pending", "queued", "running"):
         return None
     job.status = "cancelled"
     job.completed_at = datetime.now(timezone.utc)
