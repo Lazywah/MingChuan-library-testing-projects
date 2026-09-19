@@ -42,6 +42,24 @@ import subprocess
 import sys
 import tempfile
 
+# ZH: 主控台／管線若為 cp950（中文 Windows 的預設），遇到不可編碼字元改為替代字而非崩潰。
+#
+# ZH: 🔴 這不是潔癖，是實際發生過的事（2026-09-20，Docker 起不來那次）：
+#     Docker 不在時會走到「第 2 段沒有跑（⚠️ …）」那一行，而 `⚠️` 在 cp950 編不出來
+#     → 這支自己 UnicodeEncodeError 崩掉、exit 1
+#     → `deploy_check` 把它讀成「Python 相容 ✗」。
+#     也就是說 **Docker 沒開會被回報成程式碼有相容性問題**，而那是假的。
+#
+# ZH: ⚠ 為什麼子行程也會中：`deploy_check` 用 subprocess 跑這支，
+#     stdout 是**管線**，Windows 上 Python 對管線取的是地區編碼（cp950），
+#     不是 UTF-8。所以「在終端機看起來好好的」不代表它在 deploy_check 底下沒事。
+#     （同一段防呆 `bump_assets.py` / `check_i18n.py` / `check_timezone.py` 早就有了。）
+try:
+    sys.stdout.reconfigure(errors="replace")
+    sys.stderr.reconfigure(errors="replace")
+except (AttributeError, ValueError):
+    pass
+
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 
 # ZH: 最低支援版本。出處見上面的 docstring（docs/01-quick-start.md）。
