@@ -415,6 +415,32 @@ def worker_heartbeat(
 #
 # ZH: ⚠ 這支刻意**不寫任何東西**（純讀）。它會被每個執行中的任務每隔幾秒打一次，
 #     帶上寫入的話，30 台 × N 張單就變成一個沒有必要的持續寫入來源。
+@router.get("/images", summary="v4.18 這個平台可能派出哪些映像（給節點預拉用）")
+def dispatchable_images(
+    _: None = Depends(verify_worker_token),
+):
+    """
+    ZH: 回平台**自己會指派**的映像清單，讓節點開機時先拉起來放著。
+
+    ZH: 🔴 為什麼由服務層回答，不是讓 worker 自己猜：選映像的規則在
+        `crud.default_training_image` / `builtin_task_image` 裡，
+        worker 手上沒有那份規則。各自維護一份清單的結果是
+        「預拉了一堆用不到的，而真正要用的那個還是冷的」——
+        那時症狀跟沒有預拉一模一樣，只是多花了頻寬。
+
+    ZH: ⚠ 這裡**不含** worker 自己的 `DEFAULT_IMAGE`：那是節點端的設定
+        （不同節點可以不一樣），由 worker 自己加進去。
+
+    @node job-scheduler/app/routers/worker.py::dispatchable_images
+    """
+    images = {crud.PLATFORM_TRAINING_IMAGE}
+    for task in crud.BUILTIN_TASKS:
+        img = crud.builtin_task_image(task)
+        if img:
+            images.add(img)
+    return {"images": sorted(images)}
+
+
 def _unhealthy_detail(node_id: str, gpus) -> str:
     """ZH: 壞卡告警的內文。抽出來是為了用三引號寫多行，不必在字串裡處理跳脫。
 

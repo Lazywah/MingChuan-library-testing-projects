@@ -1188,6 +1188,119 @@ def gpu_epilog(gpu_id: str, mem_before, job_id: str) -> None:
             job_id[:8], gpu_id, leaked, mem_before, mem_after,
         )
 
+
+# ==============================================================================
+# ZH: v4.18（方案二 2.6）映像預拉 —— 開機時先把要用的映像拉好
+# ==============================================================================
+# ZH: 在此之前，映像是**第一張任務執行時才拉**的。那有兩個後果：
+#
+#   1. 冷拉的時間算在**任務**頭上。`started_at` 在搶單那一刻就寫下了，
+#      所以逾時的時鐘從拉映像就開始跑 —— 實測（2026-09-20）一張
+#      `pytorch/pytorch:2.7.0-cuda12.8-cudnn9-runtime`（12 GB）的單，
+#      「running」了六分鐘而**一行訓練都還沒開始**。
+#
+#   2. 30 台節點首次開機時會各拉一次幾 GB 的映像，同時打同一個來源。
+#
+# ZH: 要拉哪些**由服務層說**（GET /worker/images）—— 選映像的規則在
+#     crud.default_training_image / builtin_task_image 裡，worker 手上沒有。
+#     自己猜的話會變成「預拉了一堆用不到的，真正要用的還是冷的」。
+#
+# ZH: 🔴 **已經在本機的就不要拉。** 平台自己的 `aibase/*` 映像在同機節點上
+#     是**本地建出來的**，Docker Hub 上根本沒有 —— 對它們跑 docker pull
+#     會失敗（manifest unknown），而那個失敗完全沒有意義。
+#     遠端節點則是靠 IMAGE_REGISTRY_PREFIX 從私有 registry 拉，
+#     所以判斷一律是「先看本機有沒有」而不是「是不是平台的映像」。
+#
+# ZH: ⚠ 在背景執行緒做，不擋領工作。節點在預拉完成前仍然可以接任務 ——
+#     那時 docker 會把兩個 pull 合成一個等，不會拉兩次。
+PREPULL_TIMEOUT_SECONDS = int(os.environ.get("PREPULL_TIMEOUT_SECONDS", "3600"))
+PREPULL_ENABLED = os.environ.get("PREPULL_ENABLED", "true").strip().lower() in (
+    "1", "true", "yes", "on")
+
+
+def dispatchable_images() -> list:
+    """ZH: 問服務層「平台可能派出哪些映像」。問不到回空清單（＝這次不預拉）。
+
+    @node gpu-worker/worker.py::dispatchable_images
+    """
+    try:
+        r = requests.get("%s/api/v1/worker/images" % SERVICE_LAYER_URL,
+                         headers=HEADERS, timeout=10)
+        if r.status_code != 200:
+            logger.info("Pre-pull: service layer returned HTTP %s, skipping", r.status_code)
+            return []
+        return list((r.json() or {}).get("images") or [])
+    except Exception as e:
+        # ZH: 服務層還沒起來是**開機時的常態**（同機部署兩邊同時啟動）。
+        #     這不是錯誤，下次重啟會再試；用 info 不用 warning。
+        logger.info("Pre-pull: could not ask the service layer (%s), skipping", e)
+        return []
+
+
+def image_present(image: str) -> bool:
+    """ZH: 這個映像已經在本機了嗎。
+
+    @node gpu-worker/worker.py::image_present
+    """
+    try:
+        r = subprocess.run(["docker", "image", "inspect", image],
+                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                           timeout=60)
+        return r.returncode == 0
+    except Exception:
+        return False
+
+
+def prepull_images() -> None:
+    """ZH: 把平台可能派出的映像先拉好。缺一個就記一筆，不中斷其他的。
+
+    @node gpu-worker/worker.py::prepull_images
+    """
+    wanted = dispatchable_images()
+    # ZH: 加上這個節點自己的預設映像 —— 服務層回 None 時走的就是它
+    #     （實驗室、自訂入口那幾條路），而它往往是最大的那個。
+    if DEFAULT_IMAGE:
+        wanted.append(DEFAULT_IMAGE)
+
+    seen = set()
+    todo = []
+    for image in wanted:
+        resolved = resolve_image(image)
+        if resolved in seen:
+            continue
+        seen.add(resolved)
+        if image_present(resolved):
+            logger.info("Pre-pull: %s already here", resolved)
+            continue
+        todo.append(resolved)
+
+    if not todo:
+        logger.info("Pre-pull: everything is already local, nothing to do")
+        return
+
+    logger.info("Pre-pull: %d image(s) missing, fetching in the background: %s",
+                len(todo), ", ".join(todo))
+    for image in todo:
+        t0 = time.time()
+        try:
+            r = subprocess.run(["docker", "pull", image],
+                               stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                               text=True, timeout=PREPULL_TIMEOUT_SECONDS)
+            if r.returncode == 0:
+                logger.info("Pre-pull: %s ready (%.0fs)", image, time.time() - t0)
+            else:
+                # ZH: 拉不到不是致命的 —— 真的要用時 docker run 會再試一次，
+                #     那時的錯誤訊息會直接掛在那張任務上（有上下文，比較好查）。
+                tail = (r.stdout or "").strip().splitlines()[-1:] or [""]
+                logger.warning("Pre-pull: %s failed: %s", image, tail[0][:200])
+        except subprocess.TimeoutExpired:
+            logger.warning("Pre-pull: %s timed out after %ds",
+                           image, PREPULL_TIMEOUT_SECONDS)
+        except Exception as e:
+            logger.warning("Pre-pull: %s failed: %s", image, e)
+
+
+
 def reconcile_orphans() -> None:
     """ZH: 開機時認領（或清掉）上一輪留下的訓練容器。
 
@@ -1847,4 +1960,7 @@ if __name__ == "__main__":
     # ZH: 先收拾上一輪留下的容器再開始領新工作 —— 不然一張已取消的單
     #     留下的容器會一直佔著卡，而新來的工作以為那張卡是空的。
     reconcile_orphans()
+    # ZH: v4.18 —— 預拉在**背景**做，不擋領工作。詳見 prepull_images 的說明。
+    if PREPULL_ENABLED:
+        threading.Thread(target=prepull_images, daemon=True).start()
     poll_loop()
