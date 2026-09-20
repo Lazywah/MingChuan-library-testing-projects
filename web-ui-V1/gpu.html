@@ -79,20 +79,9 @@
     </ol>
     </section>
 
-    <!-- 層級 2 · 旁路連結（文字連結，不是第二顆按鈕）
-         ZH: v3.9 兩排合成一排。原本是兩個各自的 <nav class="minor">，
-             中間夾著磁碟配額那一行 —— .minor 自己帶 border-top，
-             兩個疊起來就是畫面上那兩條橫線把一句話夾在中間。
-         ZH: 🔴 順帶修掉一個看不出來的：文件庫沒有內容時（docs-entry.js 讓 <a>
-             維持 hidden），第二個 <nav> 會變成**只剩一條橫線的空殼** ——
-             nav 本身沒有隱藏，而 border-top 與 padding 照樣畫出來。
-             合併之後那個殼不存在了。 -->
-    <nav class="minor">
-        <a href="#" id="link-own-data" data-i18n="gpu_own_data">我已經有資料了，直接開實驗室</a>
-        <!-- ZH: 「看別人做過什麼」僅在文件庫有內容時出現（V3 修正）。
-                 由 docs-entry.js 統一處理，本頁不做判斷。 -->
-        <a href="docs.html" data-docs-entry hidden data-i18n="entry_docs_title">看別人做過什麼</a>
-    </nav>
+    <!-- ZH: 原本這裡有一排旁路連結（「我已經有資料了，直接開實驗室」「看別人做過什麼」），
+             擁有者 2026-09-20 裁定拿掉：前者與主按鈕「學習程式碼」同一個去處，
+             後者首頁卡片已經有。少一排，兩顆按鈕的取捨才看得清楚。 -->
 
     <!-- 層級 3 · 次要 -->
     <div class="footnote" id="quota" data-i18n="gpu_quota_loading">磁碟配額：讀取中…</div>
@@ -101,11 +90,11 @@
 
 <script src="docs-entry.js?v=131ee7af"></script>
 <script src="tz.js?v=2e214a8b"></script>
-<script src="i18n.js?v=db2cd0d1"></script>
+<script src="i18n.js?v=17fde0a1"></script>
 <script src="prefs.js?v=00b43387"></script>
 <!-- ZH: 小基（浮動助手）。客服模式公開，登入頁也放 —— 設計文件的使用者需求是「不會用這個平台時想直接問」。 -->
 <script src="assistant-widget.js?v=74e3c4b6"></script>
 <script src="chrome.js?v=ae70c50a"></script>
-<script src="gpu.js?v=651f7e53"></script>
+<script src="gpu.js?v=68a5a45c"></script>
 </body>
 </html>

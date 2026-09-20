@@ -98,11 +98,6 @@ $('go-example').addEventListener('click', async () => {
     }
 });
 
-$('link-own-data').addEventListener('click', (ev) => {
-    ev.preventDefault();
-    location.href = 'lab.html';
-});
-
 // ── 層級 3：磁碟配額 ─────────────────────────────────────────────────
 async function loadQuota() {
     if (FORCED === 'noquota') { $('quota').textContent = T('gpu_quota_unknown', '磁碟配額：暫時查不到（不影響開始）'); return; }

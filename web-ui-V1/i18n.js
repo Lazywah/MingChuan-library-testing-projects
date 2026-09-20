@@ -369,7 +369,6 @@
             gpu_waiting: '等待機器上線。',
             gpu_opening: '正在開啟實驗室…',
             gpu_open_fail: '開啟失敗',
-            gpu_own_data: '我已經有資料了，直接開實驗室',
             gpu_quota: '磁碟配額：{g} GB',
             gpu_quota_unknown: '磁碟配額：暫時查不到（不影響開始）',
 
@@ -875,7 +874,6 @@
             gpu_waiting: 'Waiting for a machine to come online.',
             gpu_opening: 'Opening the Lab…',
             gpu_open_fail: 'Could not open',
-            gpu_own_data: 'I already have data — open the Lab',
             gpu_quota: 'Disk quota: {g} GB',
             gpu_quota_unknown: 'Disk quota: unavailable right now (does not stop you starting)',
 
