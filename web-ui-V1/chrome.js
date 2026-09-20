@@ -1226,16 +1226,26 @@
                         contact: me.contact_email || '' };
         }
         if (prefill) {
+            // ZH: 🔴 v4.19 —— 初次設定（v4.13 起）**沒有校區欄位**，`#onb-campus` 是 null。
+            //     這裡原本直接 `cs.value = …`，於是 TypeError 在**按鈕還沒綁事件之前**炸掉：
+            //     遮罩已經掛上、兩顆按鈕都沒反應，而且沒有任何畫面上的錯誤 ——
+            //     每一個還沒完成初次設定的人從 09-11 起都進不了平台（2026-09-20 回報）。
             var cs = box.querySelector('#onb-campus');
-            if (multi) {
-                Array.prototype.forEach.call(cs.options, function (o) {
-                    o.selected = prefill.campuses.indexOf(o.value) >= 0;
-                });
-            } else {
-                cs.value = prefill.campuses[0] || '';
+            if (cs) {
+                if (multi) {
+                    Array.prototype.forEach.call(cs.options, function (o) {
+                        o.selected = prefill.campuses.indexOf(o.value) >= 0;
+                    });
+                } else {
+                    cs.value = prefill.campuses[0] || '';
+                }
             }
             var oe = box.querySelector('#onb-org');
             if (oe && prefill.org) oe.value = prefill.org;
+            // ZH: 常用信箱也要真的填進欄位 —— 上面 prefill.contact 算好了卻沒有人用，
+            //     欄位是空的，按「儲存」會把 Alma 回填的真信箱洗掉。
+            var ce = box.querySelector('#onb-contact');
+            if (ce && prefill.contact && !ce.value) ce.value = prefill.contact;
         }
 
         // ZH: v4.13 這裡原本有一段「換身分就整個重畫」的處理，
@@ -1259,7 +1269,9 @@
         var later = box.querySelector('#onb-later');
         if (later) {
             later.addEventListener('click', function () {
-                submitOnboarding(box, [], null, null, '');
+                // ZH: v4.19 「稍後再說」送**現有的**常用信箱而不是空字串 ——
+                //     後端把空字串當「清除」，Alma 回填過信箱的人按一下就被洗掉了。
+                submitOnboarding(box, [], null, null, (me && me.contact_email) || '');
             });
         }
 
@@ -1382,7 +1394,11 @@
     // ZH: 收的是**確認頁顯示過的那份值**,不是重新讀欄位 ——
     //     重讀的話「他看到的」與「送出去的」會是兩次不同的讀取。
     async function submitOnboarding(box, campuses, orgValue, roleValue, contactValue) {
-        var btn = box.querySelector('#onb-yes');
+        // ZH: 🔴 v4.19 —— 初次設定（v4.13 起不走二次確認頁）是從 #onb-go / #onb-later 直接
+        //     進來的，這裡原本只認二次確認頁的 #onb-yes → null.disabled 炸掉，
+        //     按「儲存」「稍後再說」都沒反應（與 buildOnboarding 那個 null 是同一族）。
+        var btn = box.querySelector('#onb-yes') || box.querySelector('#onb-go')
+                  || box.querySelector('#onb-later');
         var err = box.querySelector('#onb-err');
 
         btn.disabled = true;
