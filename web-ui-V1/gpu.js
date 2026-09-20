@@ -80,12 +80,76 @@ function poolDown(nextOpen, why) {
 }
 
 // ── 主要動作：用範例開始 ──────────────────────────────────────────────
+// ── 範例種類（v4.19）─────────────────────────────────────────────────
+// ZH: 三種範例。選哪一種決定畫面上五段文案、開實驗室時放進工作區的範例
+//     （後端 lab_manager.LAB_SAMPLE_KINDS 認得的名字）、以及「用自己的資料訓練」
+//     預選的內建任務。用 T() 一個個寫是為了 check_i18n 抓得到 key。
+const KINDS = {
+    cats_dogs: {
+        task: 'image_classification',
+        h1:   () => T('gpu_h1', '做出一個能分辨貓和狗的模型'),
+        sub1: () => T('gpu_sub1', '用學校的 GPU，大約 20 分鐘。'),
+        s1d:  () => T('gpu_s1d', '每個類別一個資料夾。用範例的話這步跳過。'),
+        s3d:  () => T('gpu_s3d', '正確率、以及模型判斷錯的那幾張圖。'),
+        where: () => T('gpu_sample_where', '範例在哪？開啟實驗室後，左邊的檔案列表裡就有 cat_dog_data/（500 張貓、500 張狗）和 sample_cats_dogs.py —— 資料和程式都已經幫你放好，所以不用先上傳資料集，直接執行就能訓練。要用自己的資料才需要上傳。'),
+        keys: { h1: 'gpu_h1', sub1: 'gpu_sub1', s1d: 'gpu_s1d', s3d: 'gpu_s3d', where: 'gpu_sample_where' },
+    },
+    tabular: {
+        task: 'tabular_classification',
+        h1:   () => T('gpu_h1_tab', '做出一個能預測學生會不會及格的模型'),
+        sub1: () => T('gpu_sub1_tab', '用一份表格（CSV），幾秒鐘就訓練完。'),
+        s1d:  () => T('gpu_s1d_tab', '一份 CSV：一列一筆、一欄一個特徵、其中一欄是答案。用範例的話這步跳過。'),
+        s3d:  () => T('gpu_s3d_tab', '正確率、以及模型猜錯的那幾筆。'),
+        where: () => T('gpu_sample_where_tab', '範例在哪？開啟實驗室後，左邊的檔案列表裡就有 students.csv（320 筆）和 sample_tabular.py —— 資料和程式都已經幫你放好，直接執行就能訓練。要用自己的資料才需要上傳。'),
+        keys: { h1: 'gpu_h1_tab', sub1: 'gpu_sub1_tab', s1d: 'gpu_s1d_tab', s3d: 'gpu_s3d_tab', where: 'gpu_sample_where_tab' },
+    },
+    text: {
+        task: 'text_classification',
+        h1:   () => T('gpu_h1_text', '做出一個能分辨評論是正面還是負面的模型'),
+        sub1: () => T('gpu_sub1_text', '用一份句子＋答案的表格（CSV），幾秒鐘就訓練完。'),
+        s1d:  () => T('gpu_s1d_text', '一份 CSV，兩欄：句子與答案。用範例的話這步跳過。'),
+        s3d:  () => T('gpu_s3d_text', '正確率、模型猜錯的那幾句，還可以拿自己寫的句子試。'),
+        where: () => T('gpu_sample_where_text', '範例在哪？開啟實驗室後，左邊的檔案列表裡就有 reviews.csv（240 句）和 sample_text.py —— 資料和程式都已經幫你放好，直接執行就能訓練。要用自己的資料才需要上傳。'),
+        keys: { h1: 'gpu_h1_text', sub1: 'gpu_sub1_text', s1d: 'gpu_s1d_text', s3d: 'gpu_s3d_text', where: 'gpu_sample_where_text' },
+    },
+};
+let kind = 'cats_dogs';
+
+// ZH: 同時改 data-i18n 與文字：prefs.js 換語言時是重掃 data-i18n，只改文字會跳回貓狗。
+function setKind(k) {
+    if (!KINDS[k]) return;
+    kind = k;
+    const c = KINDS[k];
+    $('kind-seg').querySelectorAll('button').forEach((b) =>
+        b.setAttribute('aria-pressed', String(b.dataset.kind === k)));
+    [['gpu-title', 'h1'], ['gpu-sub1', 'sub1'], ['gpu-s1d', 's1d'], ['gpu-s3d', 's3d'], ['sample-where', 'where']]
+        .forEach(([id, key]) => {
+            const el = $(id);
+            if (!el) return;
+            el.setAttribute('data-i18n', c.keys[key]);
+            el.textContent = c[key]();
+        });
+    // ZH: 「用自己的資料訓練」預選同一種 —— 他在這裡選了表格，過去不該又是圖片。
+    const own = $('go-own-zip');
+    if (own) own.href = `train.html?task=${encodeURIComponent(c.task)}`;
+}
+$('kind-seg').addEventListener('click', (e) => {
+    const b = e.target.closest('button[data-kind]');
+    if (b) setKind(b.dataset.kind);
+});
+setKind(kind);
+
 $('go-example').addEventListener('click', async () => {
     const btn = $('go-example');
     btn.disabled = true;
     btn.textContent = T('gpu_opening', '正在開啟實驗室…');
     try {
-        await fetch(`${API}/lab/start`, { method: 'POST', headers: authHeaders() });
+        // ZH: v4.19 帶著選的範例；後端啟動容器後會把它放進 ~/projects/。
+        await fetch(`${API}/lab/start`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', ...authHeaders() },
+            body: JSON.stringify({ sample: kind }),
+        });
         // ZH: 交給 v2 自己的 Lab 畫面接手 —— 它會輪詢到就緒才開新分頁（D3）。
         //     這裡不直接開 /code/，因為容器剛送出 start 還沒起來。
         location.href = 'lab.html';

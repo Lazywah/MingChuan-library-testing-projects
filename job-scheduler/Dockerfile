@@ -29,6 +29,9 @@ COPY app/ /app/app/
 # ZH: 複製 RAG 客服知識庫 (v2.6)；KNOWLEDGE_DIR 解析為 /app/knowledge
 # EN: Copy RAG support knowledge base (v2.6); KNOWLEDGE_DIR resolves to /app/knowledge
 COPY knowledge/ /app/knowledge/
+# ZH: v4.19 —— 「學習程式碼」的實驗室範例（表格／文字）。啟動實驗室時由 lab_manager
+#     用 put_archive 放進使用者的 ~/projects/；貓狗那份仍烤在 code-server 映像裡。
+COPY lab_samples/ /app/lab_samples/
 
 # ZH: 建立 SSH 目錄 | EN: Create SSH directory
 RUN mkdir -p /root/.ssh && chmod 700 /root/.ssh

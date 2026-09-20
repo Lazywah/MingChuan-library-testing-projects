@@ -27,6 +27,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import pathlib
 import secrets as _stdlib_secrets
 from datetime import datetime, timedelta, timezone
 from typing import Optional, Protocol, Dict
@@ -117,6 +118,81 @@ class ContainerLifecycle(Protocol):
 # ZH: CodeServerLifecycle — v2.0 唯一實作
 # EN: CodeServerLifecycle — sole v2.0 implementation
 # ==============================================================================
+
+# ==============================================================================
+# ZH: v4.19 —— 「學習程式碼」可選範例
+# ==============================================================================
+# ZH: 貓狗那份烤在 code-server 映像裡，entrypoint 第一次啟動時放進 ~/projects/。
+#     表格／文字這兩份**不進映像**（兩個映像加起來 26 GB，為了 100 KB 重建不划算）：
+#     放在服務層自己的映像裡（/app/lab_samples/<kind>/），啟動實驗室時用 docker 的
+#     put_archive 直接寫進容器的 ~/projects/。每次啟動都放（會覆蓋同名檔）——
+#     範例是可以隨時還原的東西，使用者自己的檔案不同名不會被動到。
+# ZH: kind → 目錄名。None ＝ 不用放（貓狗已經在映像裡）。
+LAB_SAMPLE_KINDS = {"cats_dogs": None, "tabular": "tabular", "text": "text"}
+LAB_SAMPLES_DIR = pathlib.Path(os.environ.get("LAB_SAMPLES_DIR", "/app/lab_samples"))
+# ZH: code-server 映像的 coder 使用者。檔案要是他的，不然 VS Code 裡改不了。
+_LAB_UID = 1000
+
+
+def sample_tar(kind: str) -> Optional[bytes]:
+    """ZH: 把一種範例打成 tar（放到 /home/coder 底下：projects/<檔名>）。沒東西要放回 None。
+
+    ZH: 連 `projects/` 目錄本身也放一筆進 tar：全新使用者的容器剛起來時 entrypoint
+        可能還沒 mkdir，put_archive 到不存在的目錄會 404。目錄與檔案都標 uid 1000。
+
+    @node job-scheduler/app/services/lab_manager.py::sample_tar
+    """
+    import io
+    import tarfile
+    if kind not in LAB_SAMPLE_KINDS:
+        raise ValueError(f"unknown sample kind: {kind!r}")
+    sub = LAB_SAMPLE_KINDS[kind]
+    if sub is None:
+        return None
+    src = LAB_SAMPLES_DIR / sub
+    files = sorted(p for p in src.iterdir() if p.is_file()) if src.is_dir() else []
+    if not files:
+        logger.warning("Lab sample %r has no files under %s", kind, src)
+        return None
+    import time as _time
+    now = int(_time.time())          # ZH: 不設的話檔案總管裡顯示 1970 年
+    buf = io.BytesIO()
+    with tarfile.open(fileobj=buf, mode="w") as tf:
+        d = tarfile.TarInfo("projects")
+        d.type = tarfile.DIRTYPE
+        d.mode = 0o755
+        d.uid = d.gid = _LAB_UID
+        d.mtime = now
+        tf.addfile(d)
+        for p in files:
+            data = p.read_bytes()
+            ti = tarfile.TarInfo(f"projects/{p.name}")
+            ti.size = len(data)
+            ti.mode = 0o644
+            ti.uid = ti.gid = _LAB_UID
+            ti.mtime = now
+            tf.addfile(ti, io.BytesIO(data))
+    return buf.getvalue()
+
+
+def seed_sample(container, kind: Optional[str]) -> bool:
+    """ZH: 把選定的範例放進剛啟動的容器。放不進去**不影響開實驗室**（記 warning）。
+
+    @node job-scheduler/app/services/lab_manager.py::seed_sample
+    """
+    if not kind:
+        return False
+    try:
+        data = sample_tar(kind)
+        if data is None:
+            return False
+        container.put_archive(LAB_HOME, data)
+        logger.info("Seeded lab sample %r into %s", kind, container.name)
+        return True
+    except Exception as e:  # noqa: BLE001 - 範例放不進去不該讓實驗室開不起來
+        logger.warning("Could not seed lab sample %r: %s", kind, e)
+        return False
+
 
 def _write_gpu_notice(container, until_text: str) -> None:
     """
@@ -301,6 +377,8 @@ class CodeServerLifecycle:
             logger.info("Started code-server container %s for user %s", name, user_id[:8])
             if gpu_until:
                 _write_gpu_notice(container, gpu_until)
+            # ZH: v4.19 「學習程式碼」選的範例（沒選＝不放，貓狗那份本來就在映像裡）
+            seed_sample(container, config.get("sample"))
             return container.id, name
         except APIError as e:
             logger.error("Failed to start container %s: %s", name, e)
@@ -682,7 +760,8 @@ def _stop_other_running(db: Session, user_id: str, keep: str) -> Optional[str]:
 
 
 def start_session(db: Session, user_id: str, base_image: Optional[str] = None,
-                  session: str = DEFAULT_SESSION, want_gpu: bool = False) -> dict:
+                  session: str = DEFAULT_SESSION, want_gpu: bool = False,
+                  sample: Optional[str] = None) -> dict:
     """
     ZH: 啟動使用者的 code-server session（含配額檢查、secrets 注入、DB 紀錄）
     EN: Start a user's code-server session (with quota check, secrets injection, DB record)
@@ -827,6 +906,8 @@ def start_session(db: Session, user_id: str, base_image: Optional[str] = None,
             # ZH: 🔴 少了這個鍵，開哪一份存檔都會啟動 default 的容器
             "session":      session,
             "gpu_index":    gpu_index,
+            # ZH: v4.19 「學習程式碼」選的範例（cats_dogs / tabular / text；None ＝ 不放）
+            "sample":       sample,
         })
     except Exception as e:
         row.status = "stopped"

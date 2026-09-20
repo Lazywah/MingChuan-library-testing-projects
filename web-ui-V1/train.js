@@ -101,6 +101,9 @@ $('task-seg').addEventListener('click', (e) => {
     const b = e.target.closest('button[data-task]');
     if (b) setTask(b.dataset.task);
 });
+// ZH: v4.19 從 gpu.html 的三選一過來時帶 ?task=<種類>，這裡預選同一種。
+//     不認得的值就維持預設（圖片），不報錯。
+if (TASKS[QS.get('task')]) setTask(QS.get('task'));
 
 // ZH: 範例資料：抓靜態 zip 回來當成使用者選的檔案，之後走**同一條**上傳路。
 //     檔名用翻譯過的名字（會變成任務名與「我的資料集」裡的名字）。

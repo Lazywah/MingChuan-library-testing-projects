@@ -64,10 +64,19 @@ def start_lab(
     #     他會以為 A 壞了。
     # ZH: v3.9 要不要 GPU。沒帶＝不要（既有前端不必改，行為與 v3.8 相同）。
     want_gpu = bool((payload or {}).get("gpu"))
+    # ZH: v4.19 「學習程式碼」選的範例。不認得就當場 400 —— 默默略過的話使用者
+    #     選了「文字」卻開出貓狗，會以為功能壞了。
+    sample = (payload or {}).get("sample") or None
+    if sample is not None and sample not in lab_manager.LAB_SAMPLE_KINDS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"ZH: 不認得的範例 '{sample}'，可用：{', '.join(lab_manager.LAB_SAMPLE_KINDS)} | "
+                   f"EN: Unknown sample '{sample}'")
     switched_from = lab_manager._stop_other_running(db, current_user.id, keep=session)
     try:
         result = lab_manager.start_session(db, current_user.id, base_image=base_image,
-                                           session=session, want_gpu=want_gpu)
+                                           session=session, want_gpu=want_gpu,
+                                           sample=sample)
     except lab_manager.StorageFrozenError as e:
         # ZH: 🔴 **訊息一定要帶數字。** 只說「你的儲存被凍結」的話，
         #     使用者不知道要刪到多少才夠，只能來問管理員。

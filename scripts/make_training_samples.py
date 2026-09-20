@@ -100,12 +100,27 @@ def text_sample() -> list:
     return rows
 
 
+# ZH: 實驗室用的同一份資料（不壓縮）：「學習程式碼」選表格／文字時，
+#     服務層把這兩個目錄整包放進使用者的 ~/projects/（lab_manager.seed_sample）。
+LAB = ROOT / "job-scheduler" / "lab_samples"
+
+
+def _csv_to(path: pathlib.Path, rows) -> None:
+    """@node scripts/make_training_samples.py::_csv_to"""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with open(path, "w", encoding="utf-8-sig", newline="") as f:
+        csv.writer(f, lineterminator=chr(10)).writerows(rows)
+
+
 def main() -> int:
     """@node scripts/make_training_samples.py::main"""
-    _zip_with("students.csv", tabular_sample(), OUT / "tabular_classification.zip")
-    _zip_with("reviews.csv", text_sample(), OUT / "text_classification.zip")
-    for p in sorted(OUT.glob("*.zip")):
-        print("  %-32s %6.1f KB" % (p.name, p.stat().st_size / 1024))
+    tab, txt = tabular_sample(), text_sample()
+    _zip_with("students.csv", tab, OUT / "tabular_classification.zip")
+    _zip_with("reviews.csv", txt, OUT / "text_classification.zip")
+    _csv_to(LAB / "tabular" / "students.csv", tab)
+    _csv_to(LAB / "text" / "reviews.csv", txt)
+    for p in sorted(OUT.glob("*.zip")) + sorted(LAB.glob("*/*.csv")):
+        print("  %-52s %6.1f KB" % (p.relative_to(ROOT), p.stat().st_size / 1024))
     return 0
 
 
