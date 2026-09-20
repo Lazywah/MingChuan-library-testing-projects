@@ -92,11 +92,22 @@ def list_my_reports(
 ) -> Any:
     """ZH: 自己的歷史回報（含管理者回應），最新的在前
 
+    ZH: v4.19 —— 也把**帳號重建前**送的回報算進來。帳號被刪再建（SSO 重新佈建、
+        管理者刪掉重開）會拿到新的 user_id，而 issue_reports.user_id 在刪帳號時
+        是 SET NULL —— 舊回報還在、管理者的回覆也還在，只是 `/mine` 用 id 對不到，
+        畫面就寫「你還沒有送出過回報」。2026-09-20 一個學生四筆回報全部這樣消失。
+        對應規則：user_id 是 NULL **且** username_at_report 等於現在的帳號名 ——
+        學號是穩定身分，同名就是同一個人；有 user_id 的一律仍以 id 為準。
+
     @node job-scheduler/app/routers/reports.py::list_my_reports
     """
+    from sqlalchemy import and_, or_
+    mine = models.IssueReport.user_id == current_user.id
+    orphaned_but_mine = and_(models.IssueReport.user_id.is_(None),
+                             models.IssueReport.username_at_report == current_user.username)
     return (
         db.query(models.IssueReport)
-        .filter(models.IssueReport.user_id == current_user.id)
+        .filter(or_(mine, orphaned_but_mine))
         .order_by(models.IssueReport.created_at.desc())
         .limit(limit)
         .all()

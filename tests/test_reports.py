@@ -246,3 +246,49 @@ def test_timestamps_are_marked_utc(client, db):
         assert v is not None
         assert v.endswith("+00:00") or v.endswith("Z"), \
             f"{k} 沒有時區標記：{v!r} —— 前端會當成本地時間，差 8 小時"
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# ZH: v4.19 —— 帳號重建後仍看得到自己以前的回報
+# ──────────────────────────────────────────────────────────────────────────
+
+def test_reports_survive_account_recreation(client, db):
+    """ZH: 🔴 帳號被刪再建（新 user_id）之後，「我的回報」變成空的。
+
+    ZH: 刪帳號時 issue_reports.user_id 是 SET NULL（刻意的：問題可能還在），
+        username_at_report 留著快照。學號是穩定身分 —— 同名的新帳號要看得到那些舊回報，
+        管理者的回覆也要跟著回來。2026-09-20 一個學生的四筆回報就是這樣「消失」的。
+    """
+    stu = make_user(db, username="s123", email="s123@example.com")
+    boss = make_user(db, username="boss", email="boss@example.com", role="admin")
+    hs, ha = auth_headers(client, "s123"), auth_headers(client, "boss")
+    rid = _submit(client, hs, body="舊帳號送的").json()["id"]
+    client.put(f"/api/v1/admin/reports/{rid}", json={"admin_reply": "已處理"}, headers=ha)
+
+    # ZH: 刪掉再用同一個學號建一個新帳號（新的 id）。id 先抄下來 —— 刪了之後
+    #     再碰 ORM 物件會 ObjectDeletedError。
+    old_id = stu.id
+    r = client.post(f"/api/v1/admin/users/{old_id}/delete",
+                    json={"confirm_username": "s123"}, headers=ha)
+    assert r.status_code == 200, r.text
+    db.expire_all()
+    again = make_user(db, username="s123", email="s123@example.com")
+    assert again.id != old_id
+
+    mine = client.get("/api/v1/reports/mine", headers=auth_headers(client, "s123")).json()
+    assert [m["body"] for m in mine] == ["舊帳號送的"]
+    assert mine[0]["admin_reply"] == "已處理"
+
+
+def test_orphaned_reports_of_someone_else_are_not_shown(client, db):
+    """ZH: 陰性對照 —— 只認**同一個帳號名**的孤兒回報，別人的不會跑進來。"""
+    a = make_user(db, username="alice", email="a@example.com")
+    boss = make_user(db, username="boss", email="boss@example.com", role="admin")
+    ha = auth_headers(client, "boss")
+    _submit(client, auth_headers(client, "alice"), body="alice 的")
+    assert client.post(f"/api/v1/admin/users/{a.id}/delete",
+                       json={"confirm_username": "alice"}, headers=ha).status_code == 200
+
+    make_user(db, username="bob", email="b@example.com")
+    assert client.get("/api/v1/reports/mine", headers=auth_headers(client, "bob")).json() == []
+
