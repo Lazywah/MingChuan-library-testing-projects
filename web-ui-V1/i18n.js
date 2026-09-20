@@ -345,7 +345,7 @@
             tr_th_loss: '誤差',
             tr_back: '回到上一頁',
             tr_to_lab: '改用程式實驗室自己寫',
-            gpu_own_zip: '我有自己的資料（圖片、表格或文字），交給平台訓練',
+            gpu_own_zip: '用自己的資料訓練',
 
             // ── GPU 引導 ─────────────────────────────────────────
             gpu_title: '訓練你的第一個模型 · MCU AI Base',
@@ -361,7 +361,7 @@
             gpu_s2d: '開啟後已經有寫好的程式，逐格執行即可。或者交給平台，完全不用寫。',
             gpu_s3t: '看結果',
             gpu_s3d: '正確率、以及模型判斷錯的那幾張圖。',
-            gpu_start_sample: '用範例資料開始',
+            gpu_start_sample: '學習程式碼',
             gpu_no_capacity: '目前無可用算力',
             gpu_next_open: '下次開放：{w}。這段說明照常可看，之後再回來開始即可。',
             gpu_state_fail: '暫時查不到算力狀態',
@@ -850,7 +850,7 @@
             tr_th_loss: 'Loss',
             tr_back: 'Back',
             tr_to_lab: 'Write it myself in the Code Lab instead',
-            gpu_own_zip: 'I have my own data (images, a table or text) — let the platform train it',
+            gpu_own_zip: 'Train with your own data',
 
             // ── GPU walkthrough ──────────────────────────────────
             gpu_title: 'Train your first model · MCU AI Base',
@@ -866,7 +866,7 @@
             gpu_s2d: 'The code is already written — just run the cells one by one. Or hand it to the platform and write no code at all.',
             gpu_s3t: 'Look at the results',
             gpu_s3d: 'Accuracy, and the images the model got wrong.',
-            gpu_start_sample: 'Start with the example data',
+            gpu_start_sample: 'Learn the code',
             gpu_no_capacity: 'No GPU capacity right now',
             gpu_next_open: 'Next available: {w}. You can still read this page and come back later.',
             gpu_state_fail: 'GPU status unavailable',

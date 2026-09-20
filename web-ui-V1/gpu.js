@@ -57,7 +57,7 @@ async function loadPool() {
         //     後端語意：interactive 已含 batch 墊底。
         const pool = p.interactive || p.batch || {};
         if (pool.available) {
-            setPrimary({ label: T('gpu_start_sample', '用範例資料開始'), note: '', enabled: true });
+            setPrimary({ label: T('gpu_start_sample', '學習程式碼'), note: '', enabled: true });
         } else {
             poolDown(pool.next_open, null);
         }
@@ -91,7 +91,7 @@ $('go-example').addEventListener('click', async () => {
         location.href = 'lab.html';
     } catch (e) {
         setPrimary({
-            label: T('gpu_start_sample', '用範例資料開始'),
+            label: T('gpu_start_sample', '學習程式碼'),
             note: T('gpu_open_fail', '開啟失敗') + `（${e.message || e}）。` + T('retry_once', '可以再試一次。'),
             enabled: true,
         });
