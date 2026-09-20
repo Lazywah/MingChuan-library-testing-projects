@@ -851,7 +851,12 @@
             + '</div>';
         document.body.appendChild(box);
         var input = box.querySelector('#ct-mail');
-        input.focus();
+        // ZH: v4.19 —— 手機（粗略指標）不自動聚焦：iOS 一彈鍵盤就把 fixed 遮罩往上推，
+        //     兩顆按鈕畫在一個位置、實際在另一個位置，怎麼點都沒反應（2026-09-20 回報）。
+        //     桌機照舊聚焦，但不捲頁。
+        if (!(window.matchMedia && window.matchMedia('(pointer: coarse)').matches)) {
+            try { input.focus({ preventScroll: true }); } catch (e) { input.focus(); }
+        }
         box.querySelector('#ct-cancel').addEventListener('click', function () { box.remove(); });
         box.querySelector('#ct-save').addEventListener('click', async function () {
             var btn = box.querySelector('#ct-save');

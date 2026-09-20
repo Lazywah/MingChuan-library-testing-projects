@@ -1164,6 +1164,9 @@ textarea.field__input { resize: vertical; min-height: 6rem; }
 .onb {
     position: fixed;
     inset: 0;
+    /* ZH: v4.19 手機的動態視口：100vh 在 iOS 含網址列高度，遮罩會比可見區高，
+       按鈕被推到看不到／點不到的地方。支援 dvh 的瀏覽器用 dvh，不支援的維持 inset。 */
+    height: 100dvh;
     z-index: 1000;
     display: flex;
     align-items: center;
@@ -1174,12 +1177,16 @@ textarea.field__input { resize: vertical; min-height: 6rem; }
 .onb__box {
     width: min(520px, 100%);
     max-height: calc(100vh - var(--space-6));
+    max-height: calc(100dvh - var(--space-6));
     overflow-y: auto;                 /* ZH: 內容比視窗高時捲內層,不要讓整頁捲 */
     background: var(--surface);
     border-radius: var(--radius-lg);
     padding: var(--space-5);
     box-shadow: 0 12px 32px rgb(31 35 40 / 24%);
 }
+/* ZH: v4.19 遮罩開著時鎖住整頁捲動 —— 手機上底下的頁面還能捲的話，fixed 遮罩會跟著
+   視口位移，按鈕的「看起來在哪」與「實際在哪」就對不上。:has 不支援的舊瀏覽器只是少了鎖。 */
+html:has(.onb) { overflow: hidden; }
 .onb__title { margin: 0 0 var(--space-2); color: var(--text-strong); font-size: 1.25rem; }
 .onb__sub   { margin: 0 0 var(--space-4); color: var(--text-muted); font-size: 0.9rem; }
 .onb__field { margin-bottom: var(--space-4); }
