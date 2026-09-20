@@ -36,6 +36,7 @@ let picked = null;        // ZH: 使用者選的檔案（尚未上傳）
 let scriptSource = null;
 let jobId = null;
 let polling = null;
+let finished = false;     // ZH: 目前這張單已到終態 —— 分頁回前景時不要再把輪詢開回來
 let lastLogLen = 0;
 
 // ── 訓練種類（v4.19）─────────────────────────────────────────────────
@@ -276,6 +277,8 @@ async function submitJob(datasetRef, jobName) {
         const body = await r.json().catch(() => ({}));
         if (!r.ok) throw new Error(detailText(body.detail) || `HTTP ${r.status}`);
         jobId = body.job_id;
+        finished = false;
+        lastLogLen = 0;
     } catch (e) {
         setNote(T('tr_submit_fail', '送不出去') + `（${clean(e.message)}）`);
         setGo({ label: T('tr_go', '開始訓練'), enabled: true });
@@ -286,7 +289,7 @@ async function submitJob(datasetRef, jobName) {
     $('run').hidden = false;
     $('run').scrollIntoView({ behavior: 'smooth', block: 'start' });
     poll();
-    polling = setInterval(poll, 3000);
+    startPolling();
 }
 
 // ZH: 帶著 ?dataset= 進來時，把拖放區換成「用這一包」的說明，
@@ -347,8 +350,26 @@ function initViewMode() {
     $('run').hidden = false;
     poll();
     // ZH: 已經跑完的單 poll() 一次就會 clearInterval，所以這裡照常起輪詢沒關係。
-    polling = setInterval(poll, 3000);
+    startPolling();
 }
+
+// ── 輪詢的開關 ───────────────────────────────────────────────────────
+// ZH: v4.19 —— 分頁切到背景就停，回到前景再問一次並重新開始。
+//     原本這一頁每 3 秒問一次而且**永遠不停**：一個開著沒關的分頁一小時就是
+//     1200 個請求，而 2026-09-20 一台校外電腦就是因為這種節奏被邊界防火牆
+//     當成 DoS 攔下來（整個 IP 被封，連首頁都開不了）。jobs.js 早就這樣做，這裡漏了。
+function startPolling() {
+    if (!polling && jobId && !finished) polling = setInterval(poll, 3000);
+}
+
+function stopPolling() {
+    if (polling) { clearInterval(polling); polling = null; }
+}
+
+document.addEventListener('visibilitychange', () => {
+    if (document.hidden) { stopPolling(); return; }
+    if (jobId && !finished) { poll(); startPolling(); }
+});
 
 // ZH: 目前的語言。**唯一定義** —— 散在各處自己取的話，總有一處會寫錯而且看不出來。
 function currentLang() {
@@ -431,8 +452,10 @@ async function poll() {
     }
 
     if (j.status === 'completed' || j.status === 'failed' || j.status === 'cancelled') {
-        clearInterval(polling);
-        polling = null;
+        stopPolling();
+        // ZH: 終態之後 visibilitychange 也不該再把輪詢開回來 —— jobId 留著給下載用，
+        //     所以用一個旗標擋。
+        finished = true;
         finish(j);
     }
 }
