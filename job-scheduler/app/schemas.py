@@ -429,6 +429,8 @@ class UserResponse(BaseModel):
     ui_font_scale: int = 100
     ui_lang: str = "zh"
     ui_theme: str = "yellow"
+    # ZH: v4.22 已按掉的提醒（逗號分隔）。前端用它決定要不要再顯示說明彈窗。
+    ui_dismissed: str = ""
     created_at: UtcDatetime
 
 
@@ -997,10 +999,13 @@ FONT_SCALE_MIN, FONT_SCALE_MAX = 80, 150      # ZH: 沿用 v1.5 的範圍
 
 
 class UserPreferencesUpdate(BaseModel):
-    """ZH: 兩個欄位都可選——只改字級、只改語言、兩個一起改，都是合法的。"""
+    """ZH: 每個欄位都可選——只改其中一個、全部一起改，都是合法的。"""
     ui_font_scale: Optional[int] = Field(None, ge=FONT_SCALE_MIN, le=FONT_SCALE_MAX)
     ui_lang: Optional[str] = None
     ui_theme: Optional[str] = None
+    # ZH: v4.22 已按掉的提醒。**整份覆蓋**（前端送完整清單），不是增量 ——
+    #     增量的話「取消不再提醒」就沒有表達方式了。
+    ui_dismissed: Optional[str] = None
 
     @field_validator("ui_lang")
     @classmethod
@@ -1014,4 +1019,25 @@ class UserPreferencesUpdate(BaseModel):
     def _known_theme(cls, v: Optional[str]) -> Optional[str]:
         if v is not None and v not in UI_THEMES:
             raise ValueError(f"ui_theme 必須是 {UI_THEMES} 其中之一")
+        return v
+
+    @field_validator("ui_dismissed")
+    @classmethod
+    def _sane_dismissed(cls, v: Optional[str]) -> Optional[str]:
+        """ZH: 這是使用者送上來的字串 —— 擋住長度與字元，不要讓它變成塞任意資料的地方。
+
+        ZH: key 由前端定義（目前只有 `myai`），所以不做白名單 ——
+            白名單會讓「前端加一種彈窗」變成「後端也要改一次」。
+            但格式要管：只收 a-z0-9_- 與逗號，總長 200。
+
+        @node job-scheduler/app/schemas.py::UserPreferencesUpdate._sane_dismissed
+        """
+        if v is None:
+            return None
+        v = v.strip()
+        if len(v) > 200:
+            raise ValueError("ui_dismissed 太長")
+        import re as _re
+        if v and not _re.fullmatch(r"[a-z0-9_,-]+", v):
+            raise ValueError("ui_dismissed 只能是小寫英數字、底線、連字號與逗號")
         return v

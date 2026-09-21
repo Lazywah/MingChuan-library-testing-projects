@@ -50,8 +50,9 @@
      *       scope='session' → sessionStorage：只在這次開著的瀏覽器裡有效，
      *         關掉就忘。用在**登入頁**（那時還沒登入，沒有帳號可綁，
      *         而公用電腦換人就是換一次 session）。
-     *       scope='local'（預設）→ localStorage，但呼叫端要把**身分放進 key**
-     *         （例如 myai_<email>），換一個人就是換一把鑰匙。
+     *       scope='account'（預設）→ 跟著**帳號**走（users.ui_dismissed，由 prefs.js
+     *         管理）。換一台裝置也記得；公用電腦換人登入就換一份，不會互相影響。
+     *         prefs.js 沒載到時退回 localStorage（登入頁以外的頁面都有它）。
      */
     function store(scope) {
         try {
@@ -61,8 +62,13 @@
         }
     }
 
+    function useAccount(scope) {
+        return scope !== 'session' && global.Prefs && global.Prefs.isDismissed;
+    }
+
     function dismissed(key, scope) {
         if (!key) return false;
+        if (useAccount(scope)) return global.Prefs.isDismissed(key);
         try {
             var st = store(scope);
             return !!st && st.getItem(LS_PREFIX + key) === '1';
@@ -73,6 +79,7 @@
 
     function remember(key, scope) {
         if (!key) return;
+        if (useAccount(scope)) return global.Prefs.dismiss(key);
         try {
             var st = store(scope);
             if (st) st.setItem(LS_PREFIX + key, '1');

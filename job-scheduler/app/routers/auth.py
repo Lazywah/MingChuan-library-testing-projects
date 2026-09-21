@@ -504,6 +504,9 @@ def update_my_preferences(
         current_user.ui_lang = payload.ui_lang
     if payload.ui_theme is not None:
         current_user.ui_theme = payload.ui_theme
+    if payload.ui_dismissed is not None:
+        # ZH: v4.22 整份覆蓋（見 schema 的說明）。
+        current_user.ui_dismissed = payload.ui_dismissed
     db.commit()
     db.refresh(current_user)
     return current_user

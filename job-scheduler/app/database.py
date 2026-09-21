@@ -328,6 +328,8 @@ def init_db():
             except Exception: pass
             try: conn.execute(text("ALTER TABLE users ADD COLUMN ui_theme VARCHAR DEFAULT 'yellow'"))
             except Exception: pass
+            try: conn.execute(text("ALTER TABLE users ADD COLUMN ui_dismissed VARCHAR DEFAULT ''"))
+            except Exception: pass
 
             try: conn.execute(text("ALTER TABLE users ADD COLUMN last_activity DATETIME"))
             except Exception: pass

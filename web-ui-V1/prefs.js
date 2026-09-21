@@ -26,11 +26,14 @@
     var KEY_SCALE = 'ai_hud_font_scale';
     var KEY_LANG = 'ai_hud_lang';
     var KEY_THEME = 'ai_hud_theme';
+    // ZH: v4.22 —— 已按掉的說明彈窗（逗號分隔）。真相在帳號（users.ui_dismissed），
+    //     這裡只是快取，作用與字級/語言那三個完全相同：避免「先畫一次再跳一下」。
+    var KEY_DISMISSED = 'ai_hud_dismissed';
     var MIN = 80, MAX = 150;              // ZH: 與後端 schemas.FONT_SCALE_MIN/MAX 一致
     var LANGS = ['zh', 'en'];
     var THEMES = ['yellow', 'blue'];
 
-    var state = { ui_font_scale: 100, ui_lang: 'zh', ui_theme: 'yellow' };
+    var state = { ui_font_scale: 100, ui_lang: 'zh', ui_theme: 'yellow', ui_dismissed: '' };
 
     function clampScale(v) {
         var n = parseInt(v, 10);
@@ -129,7 +132,40 @@
     }
 
     function getState() {
-        return { ui_font_scale: state.ui_font_scale, ui_lang: state.ui_lang, ui_theme: state.ui_theme };
+        return { ui_font_scale: state.ui_font_scale, ui_lang: state.ui_lang,
+                 ui_theme: state.ui_theme, ui_dismissed: state.ui_dismissed };
+    }
+
+    // ── 已按掉的說明彈窗（v4.22）──────────────────────────────────────
+    // ZH: 🔴 跟著**帳號**走（擁有者 2026-09-21）。理由與字級/語言相同：
+    //     換一台裝置登入，設定要跟著在。副作用也一樣要知道 ——
+    //     他在手機按掉之後，第一次坐到教室電腦也不會再看到那段說明。
+    // ZH: ⚠ 公用電腦不會因此互相影響：這是帳號的欄位，換人登入就換一份。
+    //     localStorage 的那份只是快取，syncFrom 會用帳號的值蓋掉它。
+    function dismissedList() {
+        return (state.ui_dismissed || '').split(',').filter(Boolean);
+    }
+    function isDismissed(key) {
+        return !!key && dismissedList().indexOf(key) >= 0;
+    }
+    // ZH: 🔴 `keepalive` 是這一支的重點 —— 呼叫端按完就會跳走（開新分頁／整頁轉址），
+    //     一般的 fetch 會**被導覽取消**，於是「不再提醒」看起來有效、
+    //     下次登入又冒出來。keepalive 讓請求在頁面離開後仍然送完。
+    // ZH: 先更新本機再送出 —— 送失敗至少這台記得（與 set() 同一個原則）。
+    function dismiss(key) {
+        if (!key || isDismissed(key)) return;
+        var list = dismissedList();
+        list.push(key);
+        state.ui_dismissed = list.join(',');
+        saveCache();
+        try {
+            fetch(API + '/auth/me/preferences', {
+                method: 'PATCH',
+                headers: Object.assign({ 'Content-Type': 'application/json' }, authHeaders()),
+                body: JSON.stringify({ ui_dismissed: state.ui_dismissed }),
+                keepalive: true,
+            }).catch(function () { /* ZH: 存不回帳號只是下次會再問一次 */ });
+        } catch (e) { /* ZH: 同上 */ }
     }
 
     // ── 快取（第一次繪製前就要套用，所以是同步的）────────────────────
@@ -139,11 +175,13 @@
         // ZH: 'v2-theme' 是舊鍵（只有 app.js 用過）。讀得到就沿用，使用者不會突然被重設。
         state.ui_theme = okTheme(localStorage.getItem(KEY_THEME)
                                  || localStorage.getItem('v2-theme') || 'yellow');
+        state.ui_dismissed = localStorage.getItem(KEY_DISMISSED) || '';
     }
     function saveCache() {
         localStorage.setItem(KEY_SCALE, String(state.ui_font_scale));
         localStorage.setItem(KEY_LANG, state.ui_lang);
         localStorage.setItem(KEY_THEME, state.ui_theme);
+        localStorage.setItem(KEY_DISMISSED, state.ui_dismissed || '');
     }
 
     // ── 與帳號對帳 ────────────────────────────────────────────────────
@@ -167,10 +205,16 @@
         var s = (me.ui_font_scale == null) ? state.ui_font_scale : clampScale(me.ui_font_scale);
         var l = (me.ui_lang == null) ? state.ui_lang : okLang(me.ui_lang);
         var th = (me.ui_theme == null) ? state.ui_theme : okTheme(me.ui_theme);
-        if (s === state.ui_font_scale && l === state.ui_lang && th === state.ui_theme) return;
+        // ZH: v4.22 已按掉的提醒。⚠ 同樣遵守「缺值不是預設值」——
+        //     舊版後端不回這個欄位時維持目前的值，不要當成「沒按掉過」
+        //     （那會讓每次登入都再問一次）。
+        var dm = (me.ui_dismissed == null) ? state.ui_dismissed : String(me.ui_dismissed);
+        if (s === state.ui_font_scale && l === state.ui_lang && th === state.ui_theme
+            && dm === state.ui_dismissed) return;
         state.ui_font_scale = s;
         state.ui_lang = l;
         state.ui_theme = th;
+        state.ui_dismissed = dm;
         saveCache();
         apply();
     }
@@ -229,6 +273,7 @@
     global.Prefs = {
         MIN: MIN, MAX: MAX, LANGS: LANGS, THEMES: THEMES,
         get: getState, set: set, syncFrom: syncFrom, apply: apply,
+        isDismissed: isDismissed, dismiss: dismiss,
         t: function (key, fallback) {
             var dict = (global.I18N && global.I18N[state.ui_lang]) || null;
             return (dict && dict[key]) || fallback;

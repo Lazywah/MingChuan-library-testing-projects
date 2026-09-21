@@ -128,6 +128,12 @@ class User(Base):
     ui_font_scale = Column(Integer, default=100)                              # ZH: 介面字級 %（80–150）| EN: UI font scale %
     ui_lang       = Column(String, default="zh")                              # ZH: 介面語言 zh / en | EN: UI language
     ui_theme      = Column(String, default="yellow")                          # ZH: 色系 yellow / blue | EN: colour scheme
+    # ZH: v4.22 —— 使用者已經按掉的「不用再提醒」清單（逗號分隔的 key）。
+    #     做成**一個通用欄位**而不是一個開關一欄：日後多一種說明彈窗時
+    #     不必再改 schema、不必再遷移一次資料庫。
+    #     🔴 跟著帳號走是刻意的（擁有者 2026-09-21）——換一台裝置也記得。
+    #     代價：他在手機按掉之後，第一次坐到教室電腦也不會再看到那段說明。
+    ui_dismissed  = Column(String, default="")                                # ZH: 已按掉的提醒 key（逗號分隔）
     login_count = Column(Integer, default=0)                                  # ZH: 登入次數 | EN: Login count
     lifetime_tokens_used = Column(Integer, default=0)                         # ZH: 歷史累計 Token 數 | EN: Lifetime tokens used
     disk_quota_gb = Column(Integer, default=10)                               # ZH: 個人磁碟配額 GB (v2.0 Lab) | EN: Personal disk quota GB
