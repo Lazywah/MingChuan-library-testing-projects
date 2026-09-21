@@ -1550,6 +1550,8 @@
         fd.append('purpose', $('ti-why').value.trim());
         fd.append('expires_on', $('ti-expires').value);
         fd.append('dry_run', dryRun ? 'true' : 'false');
+        // ZH: v4.20 整批開通 MYAI（與單筆同契約：兩平台同一組密碼）。
+        if ($('ti-myai') && $('ti-myai').checked) fd.append('provision_myai', 'true');
         return fd;
     }
 
@@ -1583,6 +1585,12 @@
                 + '信箱可空（不寄信）；密碼可空（系統產生，建立後顯示一次）；'
                 + '身分可空（預設學生），可用：學生/老師/職員/訪客。')) + '</p>'
             + field('ti-why', T('tmp_purpose', '用途（必填）'), '')
+            // ZH: v4.20 —— 勾了的話**每一列都要有 Email**，否則預覽就會擋下來
+            //     （後端驗，理由：沒 Email 會在廠商端留下救不回密碼的垃圾帳號）。
+            + '<label class="adm-inline" style="margin:.25rem 0 .5rem">'
+            +   '<input type="checkbox" id="ti-myai"> '
+            +   '<span>' + esc(T('tmpi_myai', '同時開通 MYAI 帳號（每一列都要有 Email；密碼與該列同一組）')) + '</span>'
+            + '</label>'
             + field('ti-expires', T('tmp_expires_on', '到期日'), twDay(1), 'date',
                     ' min="' + twDay(0) + '" max="' + twDay(TEMP_MAX_DAYS) + '"')
             + '<div class="adm-inline">'
@@ -1623,8 +1631,11 @@
             $('ti-result').innerHTML = '';
         });
         // ZH: 內容一改，上一份預覽就不算數（同手動補齊：看 A 的預覽送出 B 很危險）。
-        ['ti-why', 'ti-expires'].forEach(function (id) {
-            $(id).addEventListener('input', function () {
+        // ZH: 🔴 勾選也要作廢預覽 —— 預覽過的是「不開通」那一版，
+        //     勾完直接按建立的話，看到的與送出的是兩件事（後端的驗證規則也不同）。
+        ['ti-why', 'ti-expires', 'ti-myai'].forEach(function (id) {
+            if (!$(id)) return;
+            $(id).addEventListener($(id).type === 'checkbox' ? 'change' : 'input', function () {
                 $('ti-apply').hidden = true;
                 $('ti-result').innerHTML = '';
             });
@@ -1694,6 +1705,11 @@
     function showImportResult(r) {
         // ZH: 有系統產生的密碼 → 鎖 ESC（與單筆同一個「只顯示一次」契約）。
         var gen = r.created.filter(function (x) { return x.password; });
+        // ZH: v4.20 —— 這一批有沒有做 MYAI 開通（決定表格要不要多一欄）。
+        var anyMyai = r.created.some(function (x) { return x.myai; });
+        // ZH: 🔴 自己填了密碼的那幾列不在 `gen` 裡（密碼不回顯），但它們**也開通了**。
+        //     開通結果對那幾列同樣重要（尤其 linked_only），所以另外列一段。
+        var otherMyai = anyMyai ? r.created.filter(function (x) { return !x.password && x.myai; }) : [];
         var dlg = _tempDlg(gen.length > 0);
         dlg.innerHTML =
             '<form method="dialog" class="rmod__x">'
@@ -1710,10 +1726,26 @@
                   + '<div class="adm-tablewrap"><table class="adm-table"><thead><tr>'
                   + '<th>' + esc(T('pp_c_user', '帳號')) + '</th>'
                   + '<th>' + esc(T('tmp_pw', '密碼')) + '</th>'
+                  // ZH: v4.20 有開通才多這一欄 —— 沒開通時多一欄空白只是雜訊。
+                  + (anyMyai ? '<th>MYAI</th>' : '')
                   + '</tr></thead><tbody>'
                   + gen.map(function (x) {
                       return '<tr><td class="mono">' + esc(x.username) + '</td>'
-                          + '<td class="mono">' + esc(x.password) + '</td></tr>';
+                          + '<td class="mono">' + esc(x.password) + '</td>'
+                          + (anyMyai ? '<td>' + esc(myaiText(x.myai)) + '</td>' : '')
+                          + '</tr>';
+                  }).join('')
+                  + '</tbody></table></div>'
+                : '')
+            + (otherMyai.length
+                ? '<p class="footnote">' + esc(T('tmpi_myai_others',
+                    '你自己填了密碼的那幾列（密碼不回顯）的 MYAI 結果：')) + '</p>'
+                  + '<div class="adm-tablewrap"><table class="adm-table"><thead><tr>'
+                  + '<th>' + esc(T('pp_c_user', '帳號')) + '</th><th>MYAI</th>'
+                  + '</tr></thead><tbody>'
+                  + otherMyai.map(function (x) {
+                      return '<tr><td class="mono">' + esc(x.username) + '</td>'
+                          + '<td>' + esc(myaiText(x.myai)) + '</td></tr>';
                   }).join('')
                   + '</tbody></table></div>'
                 : '')

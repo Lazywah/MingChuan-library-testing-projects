@@ -315,6 +315,48 @@ def check_env_completeness(env: dict):
     return PASS, ".env 已涵蓋 .env.example 全部 key"
 
 
+def check_gates():
+    """ZH: 三個「會改變全站行為」的旋鈕現在是開還是關。
+
+    ZH: 為什麼值得一條檢查：它們決定**使用者看得到什麼**，而預設值與現值常常不同
+        （這台三個都被調過）。上線當天最容易發生的事就是「忘了把某個開關打開」，
+        而那種錯誤沒有任何症狀 —— 平台看起來好好的，只是學生進不來或看不到功能。
+
+    ZH: 一律回 WARN 或 PASS，**不回 FAIL** —— 這裡沒有「錯的值」，只有
+        「你要知道現在是什麼值」。關著的時候用 WARN 讓它在畫面上跳出來。
+
+    @node scripts/deploy_check.py::check_gates
+    """
+    import sqlite3
+    db_path = se.ROOT_DIR / "data" / "ai_platform.db"
+    if not db_path.exists():
+        return WARN, "找不到資料庫，略過閘門檢查（平台還沒跑起來？）"
+    # ZH: key → (人看得懂的名字, 預設值, 關著時要講的話)
+    gates = {
+        "sso_autocreate":       ("SSO 自動建帳號", "1", "只有管理端建立的帳號登得進來"),
+        "gpu_features_enabled": ("GPU 功能對學生開放", "1", "學生看到的是「暫停使用」"),
+        "myai_autoprovision":   ("MYAI 首登自動建號", "0", "首次登入不會在廠商端開帳號"),
+    }
+    try:
+        # ZH: 唯讀開啟 —— 這支腳本絕不該動到正在服務的資料庫。
+        con = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True, timeout=3)
+        rows = dict(con.execute(
+            "SELECT key, value FROM system_config WHERE key IN (?,?,?)",
+            tuple(gates)).fetchall())
+        con.close()
+    except Exception as e:     # noqa: BLE001 - 讀不到不該讓整份檢查失敗
+        return WARN, f"讀不到閘門設定（{type(e).__name__}）"
+    parts, off = [], []
+    for key, (label, default, why) in gates.items():
+        val = str(rows.get(key, default))
+        parts.append(f"{label}={val}")
+        if val == "0":
+            off.append(f"{label} 關閉（{why}）")
+    if off:
+        return WARN, "；".join(off) + "　【現值】" + "、".join(parts)
+    return PASS, "三個閘門都開著：" + "、".join(parts)
+
+
 def check_worker_convergence():
     """@node scripts/deploy_check.py::check_worker_convergence"""
     if se.WORKER_ENV.exists():
@@ -674,6 +716,7 @@ def main():
         ("設定漂移",       check_drift()),
         (".env 完整性",    check_env_completeness(env)),
         ("gpu-worker 收斂", check_worker_convergence()),
+        ("功能閘門",       check_gates()),
         ("前端 ?v=",       check_asset_versions()),
         ("時間時區",       check_timezone()),
         ("翻譯完整性",     check_i18n()),

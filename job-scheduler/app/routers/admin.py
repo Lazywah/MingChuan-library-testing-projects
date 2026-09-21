@@ -1437,6 +1437,8 @@ async def import_temp_users(
     purpose: str = Form(...),
     expires_on: str = Form(...),
     dry_run: bool = Form(False),
+    # ZH: v4.20 —— 整批順手開通 MYAI（與單筆那支同一個契約：兩平台同一組密碼）。
+    provision_myai: bool = Form(False),
     db: Session = Depends(get_db),
     admin: models.User = Depends(require_admin),
 ) -> Any:
@@ -1454,6 +1456,11 @@ async def import_temp_users(
         密碼——管理者的檔案裡本來就有，多回一次只是多一份外洩面。
 
     ZH: 絕不寄信（臨時帳號的鐵則，理由見單筆端點）。
+    ZH: v4.20 `provision_myai=true` 時**每一列都必須有 Email** —— 沒有的話那一列
+        驗不過（整批不建）。理由與單筆相同：沒有 Email 時平台會合成 `.invalid`
+        位址，拿去廠商註冊會留下一個收不到信、救不回密碼的垃圾帳號。
+        開通在**帳號全部建好之後**才跑；廠商失敗不回滾已建立的帳號，
+        每一列的結果回在 `created[].myai` 裡（linked_only 代表密碼不是我們給的那組）。
 
     @node job-scheduler/app/routers/admin.py::import_temp_users
     """
@@ -1511,6 +1518,12 @@ async def import_temp_users(
             seen_emails.add(email.lower())
         if pw and len(pw) < 8:
             problems.append("密碼太短（至少 8 字）")
+        # ZH: v4.20 密碼上限跟著廠商規則（8~20）—— 要開通 MYAI 時才有意義，
+        #     但一律檢查比較單純（超過 20 碼的密碼在這個平台上也沒有意義）。
+        if pw and len(pw) > 20:
+            problems.append("密碼太長（上限 20 字，MYAI 廠商的規則）")
+        if provision_myai and not email:
+            problems.append("要開通 MYAI 但沒有 Email")
         role = _IMPORT_ROLES.get(role_raw.lower() if role_raw.isascii() else role_raw)
         if role is None:
             problems.append("身分看不懂（可用：學生/老師/職員/訪客）")
@@ -1565,8 +1578,33 @@ async def import_temp_users(
         created.append({"username": uname, "role": role,
                         "has_email": bool(email_given),
                         # ZH: 只有系統產生的才回明文（見 docstring）。
-                        "password": (None if pw_given else pw)})
+                        "password": (None if pw_given else pw),
+                        # ZH: v4.20 —— 開通要等帳號寫進 DB 之後才跑，先佔位。
+                        #     `_user` 不回給前端，下面用完就拿掉。
+                        "myai": None, "_user": user, "_pw": pw})
     db.commit()
+
+    # ══════════════════════════════════════════════════════════════════
+    # ZH: v4.20 —— 整批開通 MYAI（擁有者 2026-09-21）
+    # ══════════════════════════════════════════════════════════════════
+    # ZH: 🔴 在**帳號全部建好並 commit 之後**才跑。順序相反的話，廠商端會出現
+    #     一批對不到平台帳號的孤兒（而那些帳號刪不掉）。
+    # ZH: 一列失敗不影響其他列 —— 這是批次不是交易。結果逐列回報，
+    #     管理者看得出哪幾個要重做。
+    if provision_myai:
+        from ..services import myai_sync
+        for row in created:
+            try:
+                row["myai"] = await myai_sync.provision_user(
+                    db, row["_user"], password=row["_pw"])
+            except Exception as e:   # noqa: BLE001 - 廠商掛了不該讓整批失敗
+                logger.error("批次匯入：%s 的 MYAI 開通失敗：%s", row["username"], e)
+                row["myai"] = {"status": "failed", "error": str(e)[:200]}
+        ok = sum(1 for r in created if (r["myai"] or {}).get("status") in ("created", "linked_only", "bound"))
+        logger.info("批次匯入：MYAI 開通 %d/%d 成功", ok, len(created))
+    for row in created:
+        row.pop("_user", None)
+        row.pop("_pw", None)
 
     logger.info("批次匯入臨時帳號 %d 個（到期 %s，用途：%s，檔案 %s）by %s",
                 len(created), exp_date.isoformat(), purpose,

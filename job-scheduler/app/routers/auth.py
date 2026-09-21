@@ -133,6 +133,13 @@ async def login(
             if sso_id == form_data.username and _hmac.compare_digest(sso_pwd, form_data.password):
                 # 符合列表，擷取或建立此使用者
                 user = crud.get_user_by_username(db, username=form_data.username)
+                if not user and str(crud.get_setting(db, "sso_autocreate")) == "0":
+                    # ZH: v4.20 —— 這條分支也會建帳號，所以也要看同一個閘門。
+                    #     🔴 不看的話「關掉自動建號」只擋得住 SSO 那三條路，
+                    #     而這裡是側門：把 mock_mode 打開（除錯時很常做）就繞過去了。
+                    #     擋下來時什麼都不做，落到下面那個 401（與密碼打錯同一句話）。
+                    logger.warning("mock 登入被回絕（自動建號已關閉）：%s", form_data.username)
+                    break
                 if not user:
                     user = crud.create_sso_user(
                         db,
