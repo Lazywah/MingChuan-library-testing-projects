@@ -50,7 +50,7 @@
     <!-- 層級 1 · 這是什麼（給第一次來的人）—— 線框只允許這一項在第一眼 -->
     <section class="primary-card" aria-labelledby="hero-title">
         <h1 class="hero__title" id="hero-title" data-i18n="login_h1">銘傳大學圖書館 AI 基地</h1>
-        <p class="hero__sub"><span data-i18n="login_sub">請用 Moodle 帳號密碼登入，可使用付費版 AI 工具和 GPU 訓練模型</span></p>
+        <p class="hero__sub"><span data-i18n="login_sub">請用 Moodle 帳號密碼登入，可使用付費版 AI 工具和 GPU 訓練模型。拿到臨時帳號的校外人士請用下方的帳號密碼登入。</span></p>
 
         <!-- 主要動作（唯一）。載入中／錯誤都在這顆按鈕上表達，不用整頁 spinner。 -->
         <button class="btn btn--primary" id="go-sso" type="button" disabled data-i18n="login_sso">
@@ -59,10 +59,13 @@
         <div class="handoff" id="sso-note" data-i18n="login_checking">正在確認登入方式…</div>
     </section>
 
-    <!-- ZH: 層級 3 —— 管理者本機登入。**預設收合，且錯誤時不自動展開**（C2 修正）：
-             自動展開會把管理者通道曝光給學生，而 admin 本來就知道它在哪。 -->
+    <!-- ZH: 層級 3 —— 帳號密碼登入。**預設收合，且錯誤時不自動展開**（C2 修正）：
+             自動展開會把管理者通道曝光給學生，而 admin 本來就知道它在哪。
+         ZH: v4.19 標題從「管理者本機登入」改成含臨時帳號（擁有者 2026-09-21）——
+             校外人士拿到臨時帳號後只看得到「用 Moodle 帳號登入」，
+             而唯一能用的那個入口寫著「管理者」，等於告訴他這裡沒有他的位置。 -->
     <details class="fold" id="admin-fold">
-        <summary class="fold__summary" data-i18n="login_admin_fold">管理者本機登入</summary>
+        <summary class="fold__summary" data-i18n="login_admin_fold">用帳號密碼登入（管理者、臨時帳號）</summary>
 
         <form class="fold__body" id="admin-form" autocomplete="on">
             <label class="field">
@@ -86,7 +89,7 @@
 
 </main>
 
-<script src="i18n.js?v=ac2b09e3"></script>
+<script src="i18n.js?v=cc3c04aa"></script>
 <script src="prefs.js?v=00b43387"></script>
 <!-- ZH: 小基（浮動助手）**不放在登入頁**（擁有者 2026-09-20）：未登入就能對話等於
          匿名洗對話、燒 Ollama 算力。原本的設計是「不會登入時想直接問」——

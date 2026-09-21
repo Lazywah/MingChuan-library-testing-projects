@@ -339,7 +339,7 @@
         tmp_fail: '建立失敗（{w}）',
 
         tmp_done: '帳號建好了',
-        tmp_pw_once: '🔴 這組密碼只會顯示這一次。現在就抄下來交給對方 —— 關掉之後就看不到了。',
+        tmp_pw_once: '🔴 這組密碼只會顯示這一次。現在就抄下來交給對方 —— 關掉之後就看不到了。請告訴對方：登入頁不要按「用 Moodle 帳號登入」，要展開下面的「用帳號密碼登入」。',
         tmp_pw: '密碼',
         tmp_expires: '到期',
         tmp_copy: '複製帳號與密碼',
@@ -1008,7 +1008,7 @@
         tmp_fail: 'Could not create ({w})',
 
         tmp_done: 'Account created',
-        tmp_pw_once: '🔴 This password is shown once only. Copy it now and hand it over — it cannot be retrieved later.',
+        tmp_pw_once: '🔴 This password is shown once only. Copy it now and hand it over — it cannot be retrieved later. Tell them not to use the Moodle button: expand "Sign in with a username and password" on the login page.',
         tmp_pw: 'Password',
         tmp_expires: 'Expires',
         tmp_copy: 'Copy username and password',
