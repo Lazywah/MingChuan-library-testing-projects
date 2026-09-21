@@ -83,6 +83,18 @@ def _finalize_sso_login(db: Session, user_info: dict, request: Request = None) -
         user = get_user_by_username(db, username)
 
     if user is None:
+        # ══════════════════════════════════════════════════════════════
+        # ZH: v4.20 —— 自動建帳號的閘門（擁有者 2026-09-21，測試期間）
+        # ══════════════════════════════════════════════════════════════
+        # ZH: 關掉時**只有管理端手動建立的帳號登得進來**，其他人一律回絕。
+        #     🔴 擋的是「建新帳號」，不是 SSO —— 已經存在的帳號在上面就找到了，
+        #     走的是同一條 SSO，完全不受影響。
+        # ZH: 回絕要**回得到登入頁並說得出原因**。丟 500 或空白頁的話，
+        #     使用者只會以為平台壞了，然後來問管理員「為什麼登不進去」。
+        if str(crud.get_setting(db, "sso_autocreate")) == "0":
+            logger.warning("SSO 登入被回絕（自動建號已關閉）：username=%s email=%s",
+                           username, user_info.get("email"))
+            return RedirectResponse(url="/V1/login.html?sso_error=no_account")
         # 首次登入：建新 SSO 帳號
         # ZH: v4.2 身分優先問 **Alma**（圖書館 API，擁有者裁定 2026-09-02 保守版）：
         #       user_group 在已知對照表上 → 直接定角色（老師/職員/學生分得出來），

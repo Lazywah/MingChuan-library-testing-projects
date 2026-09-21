@@ -1641,9 +1641,11 @@ def create_temp_user(
         payload=json.dumps({
             "username": data.username,
             "purpose": data.purpose,
-            "expires_on": data.expires_on.isoformat(),
+            # ZH: v4.20 永久帳號沒有到期日 —— 稽核裡明寫 permanent，不要留 null
+            #     讓人以為是漏記的。
+            "expires_on": data.expires_on.isoformat() if data.expires_on else "permanent",
             "role": user.role,
-            "expires_at": expires_at.isoformat(),
+            "expires_at": expires_at.isoformat() if expires_at else None,
         }, ensure_ascii=False),
         timestamp=datetime.now(timezone.utc),
         ip_address=(request.client.host if request.client else None),
@@ -1651,14 +1653,16 @@ def create_temp_user(
     db.commit()
 
     logger.info("建立臨時帳號 %s（到期 %s，用途：%s）by %s",
-                data.username, data.expires_on.isoformat(), data.purpose, admin.username)
+                data.username,
+                data.expires_on.isoformat() if data.expires_on else "永久",
+                data.purpose, admin.username)
 
     return {
         "id": user.id,
         "username": user.username,
         # ZH: 只有這一次拿得到明文 —— 畫面要提醒管理者現在就抄走。
         "password": temp_password,
-        "expires_at": expires_at.isoformat(),
+        "expires_at": expires_at.isoformat() if expires_at else None,
         "purpose": data.purpose,
         "role": user.role,
         # ZH: 讓前端知道要不要顯示信箱（合成的那個不該給人看）

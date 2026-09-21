@@ -1636,7 +1636,8 @@ _GROUP_KEYS = {g["key"] for g in SETTING_GROUPS}
 # ZH: 沒列到的 key 排在該組最後（照 registry 順序）—— 新增旋鈕忘了列，
 #     只是排尾不會消失；列了不存在的 key 則在載入時就炸（見下方自檢）。
 SETTING_ORDER = {
-    "platform": ["job_timeout_minutes", "max_jobs_per_user", "lab_gpu_max_minutes", "lab_archive_days",
+    "platform": ["sso_autocreate", "gpu_features_enabled",
+                 "job_timeout_minutes", "max_jobs_per_user", "lab_gpu_max_minutes", "lab_archive_days",
                  "announcement_file_max_mb", "announcement_total_gb"],
     "myai":     ["myai_autoprovision", "myai_initial_credit", "myai_init_pwd_days",
                  "myai_monthly_topup_to", "myai_monthly_topup_day",
@@ -1669,6 +1670,14 @@ SYSTEM_SETTINGS = {
     #     MYAI、使用量、作品集、問題回報照常開放。
     # ZH: 做成設定而不是寫死：這是**暫時**的措施，重開時按一下就好，不必再改程式、
     #     不必重新部署。`public` 讓前台讀得到（見 get_public_settings）。
+    # ZH: v4.20（擁有者 2026-09-21）SSO 首次登入要不要自動建帳號。
+    #     測試期間關掉：**只有管理端手動建立的帳號登得進來**，其他人一律回絕。
+    #     🔴 關掉的是「建新帳號」這一步，不是 SSO 本身 —— 已經存在的帳號照常用 SSO 登入。
+    #     預設 1（既有部署的行為不變）；這台在 2026-09-21 設成 0。
+    "sso_autocreate":           {"starred": True, "group": "platform", "type": "int",
+                                 "default": lambda: 1, "min": 0, "max": 1,
+                                 "label": "SSO 首次登入自動建立帳號(1=開, 0=關；關閉時只有管理端建立的帳號登得進來)",
+                                 "label_en": "Create an account on first SSO login (1 = on, 0 = off; when off only admin-created accounts can sign in)"},
     "gpu_features_enabled":     {"starred": True, "public": True, "group": "platform", "type": "int",
                                  "default": lambda: 1, "min": 0, "max": 1,
                                  "label": "GPU 相關功能對一般使用者開放(1=開, 0=暫停；管理員不受限)",

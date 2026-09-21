@@ -227,6 +227,12 @@
                     ' min="' + twDay(0) + '" max="' + twDay(TEMP_MAX_DAYS) + '"')
             + '<p class="footnote">' + esc(T('tmp_expires_hint',
                 '選到哪一天，帳號就用到那天結束（台灣時間）。最多 90 天。')) + '</p>'
+            // ZH: v4.20 永久有效（擁有者 2026-09-21）—— 勾了就不設到期日，
+            //     與一般帳號同形。用途仍然必填：永久的帳號更需要有人說得出它為什麼在。
+            + '<label class="adm-inline" style="margin:.25rem 0 .5rem">'
+            +   '<input type="checkbox" id="t-forever"> '
+            +   '<span>' + esc(T('tmp_forever', '永久有效（不設到期日，與一般帳號一樣）')) + '</span>'
+            + '</label>'
             + field('t-email', T('tmp_email', 'Email（可留空，平台不會寄信）'), '', 'email')
             + '<div class="adm-inline rmod__foot">'
             + '<button class="btn btn--primary" type="button" id="t-go">'
@@ -239,17 +245,27 @@
         dlg.showModal();
         $('t-cancel').addEventListener('click', function () { dlg.close(); });
         $('t-go').addEventListener('click', createTemp);
+        // ZH: 勾了永久就把日期欄灰掉 —— 兩個都填是矛盾的輸入，
+        //     後端會擋（422），但在這裡就讓它按不到比較好。
+        $('t-forever').addEventListener('change', function () {
+            var d = $('t-expires');
+            d.disabled = this.checked;
+            d.style.opacity = this.checked ? '.5' : '';
+        });
         $('t-user').focus();
     }
 
     async function createTemp() {
+        var forever = $('t-forever') && $('t-forever').checked;
         var body = {
             username: $('t-user').value.trim(),
             purpose: $('t-why').value.trim(),
-            // ZH: 送日期字串本身，**不在前端換算成天數**。
-            //     換算會因為時區與一天中的時刻而差一天，而且差了不會報錯。
-            expires_on: $('t-expires').value,
         };
+        // ZH: 永久就**完全不送** expires_on（送空字串會被當成填了但格式錯）。
+        // ZH: 送日期字串本身，**不在前端換算成天數**。
+        //     換算會因為時區與一天中的時刻而差一天，而且差了不會報錯。
+        if (forever) body.never_expires = true;
+        else body.expires_on = $('t-expires').value;
         var em = $('t-email').value.trim();
         if (em) body.email = em;
 
@@ -284,8 +300,12 @@
             + '<span class="kv__v mono">' + esc(out.username) + '</span></div>'
             + '<div class="kv"><span class="kv__k">' + esc(T('tmp_pw', '密碼')) + '</span>'
             + '<span class="kv__v mono" id="t-pw">' + esc(out.password) + '</span></div>'
+            // ZH: v4.20 永久帳號沒有到期日 —— 明寫「永久有效」，不要留一格空白
+            //     （空白看起來像資料沒讀到，管理者會以為建錯了）。
             + '<div class="kv"><span class="kv__k">' + esc(T('tmp_expires', '到期')) + '</span>'
-            + '<span class="kv__v">' + esc(TW.dateTime(out.expires_at)) + '</span></div>'
+            + '<span class="kv__v">' + esc(out.expires_at
+                ? TW.dateTime(out.expires_at)
+                : T('tmp_forever_value', '永久有效（不會到期）')) + '</span></div>'
             + '<div class="adm-inline rmod__foot">'
             + '<button class="btn btn--primary" type="button" id="t-copy">'
             + esc(T('tmp_copy', '複製帳號與密碼')) + '</button>'
@@ -336,7 +356,15 @@
 
         var out = '<span class="adm-pill adm-pill--' + (u.is_active ? 'ok' : 'disabled') + '">'
             + esc(u.is_active ? T('pp_active', '啟用') : T('pp_inactive', '已停用')) + '</span>';
-        if (!u.expires_at) return out;
+        if (!u.expires_at) {
+            // ZH: v4.20 永久的臨時帳號 —— 沒有到期日，但仍然是為了某個用途開的。
+            //     不標的話它跟一般帳號長得一模一樣，而那正是這個標示要防的事。
+            if (u.temp_purpose) {
+                out += ' <span class="adm-pill adm-pill--temp" title="' + esc(u.temp_purpose) + '">'
+                    + esc(T('tmp_forever_pill', '永久（手動建立）')) + '</span>';
+            }
+            return out;
+        }
 
         // ZH: 還沒到期的臨時帳號 —— 標出**哪一天**失效，不是只標「臨時」。
         //     只寫「臨時」的話你還是得點進去才知道剩幾天。

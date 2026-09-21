@@ -119,6 +119,27 @@ $('forgot').addEventListener('click', (ev) => {
     err.hidden = false;
 });
 
+// ── 被回絕的 SSO 登入（v4.20）─────────────────────────────────────────
+// ZH: 自動建號關閉時，後端把人 302 回這一頁並帶 ?sso_error=no_account。
+//     🔴 要說得出**是什麼情況**與**下一步找誰** —— 只寫「登入失敗」的話，
+//     人會一直重按那顆按鈕，然後來問管理員為什麼平台壞了。
+// ZH: 訊息顯示完就把參數從網址拿掉，重新整理不會再跳一次。
+(function ssoError() {
+    const code = new URLSearchParams(location.search).get('sso_error');
+    if (!code) return;
+    // ZH: 用自己的元素，不要借 #sso-note —— loadProviders() 回來會把它覆蓋掉。
+    const box = $('sso-error');
+    if (box) {
+        box.textContent = code === 'no_account'
+            ? T('login_no_account', '這個帳號還沒有被建立。目前是測試階段，暫不開放自行建立帳號 —— 請聯絡圖書館 AI 基地管理者為你開通。')
+            : T('login_failed', '登入失敗');
+        box.hidden = false;
+    }
+    const url = new URL(location.href);
+    url.searchParams.delete('sso_error');
+    history.replaceState({}, '', url.toString());
+}());
+
 // ── 啟動 ─────────────────────────────────────────────────────────────
 loadProviders();
 

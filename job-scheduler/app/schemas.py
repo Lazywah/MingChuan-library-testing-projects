@@ -24,7 +24,7 @@ EN: Modular design:
 """
 
 from pydantic import (BaseModel, EmailStr, Field, ConfigDict, field_validator,
-                      field_serializer, PlainSerializer)
+                      field_serializer, model_validator, PlainSerializer)
 from typing_extensions import Annotated
 from datetime import datetime, timezone, date, time, timedelta
 # ZH: 台灣時區只定義一次。gpu_schedule 只依賴標準庫，沒有循環匯入風險。
@@ -202,7 +202,12 @@ class AdminTempUserCreate(BaseModel):
     """
     username: str
     purpose: str                                     # ZH: 為什麼開這個帳號 —— **必填**
-    expires_on: date                                 # ZH: 台灣時間的到期「日」（當天結束才失效）
+    # ZH: v4.20 —— 可以不設到期日（擁有者 2026-09-21）。`never_expires=True` 時
+    #     `expires_on` 留空，帳號與一般帳號一樣永久有效。
+    #     🔴 用途（purpose）**仍然必填** —— 永久的臨時帳號如果連理由都沒有，
+    #     半年後就沒有人敢刪它，那正是這個欄位當初存在的原因。
+    expires_on: Optional[date] = None                # ZH: 台灣時間的到期「日」（當天結束才失效）
+    never_expires: bool = False                      # ZH: 勾了就不設到期日
     role: Optional[str] = "student"
     department: Optional[str] = None
     email: Optional[EmailStr] = None                 # ZH: 有就填，沒有就留空（不寄信）
@@ -223,17 +228,32 @@ class AdminTempUserCreate(BaseModel):
 
     @field_validator("expires_on")
     @classmethod
-    def expires_on_in_range(cls, v: date) -> date:
+    def expires_on_in_range(cls, v: Optional[date]) -> Optional[date]:
         """@node job-scheduler/app/schemas.py::AdminTempUserCreate.expires_on_in_range"""
-        return _check_expires_on(v)
+        return None if v is None else _check_expires_on(v)
+
+    @model_validator(mode="after")
+    def one_of_expiry(self):
+        """ZH: 到期日與「永久」二選一，而且一定要選一個。
+
+        ZH: 兩個都不給時**不要默默當成永久** —— 那會讓「忘記填日期」
+            變成「開了一個永遠不會消失的帳號」，而且沒有任何人會發現。
+
+        @node job-scheduler/app/schemas.py::AdminTempUserCreate.one_of_expiry
+        """
+        if self.never_expires and self.expires_on is not None:
+            raise ValueError("ZH: 勾了「永久有效」就不要再填到期日 | EN: Do not set an expiry date when the account never expires")
+        if not self.never_expires and self.expires_on is None:
+            raise ValueError("ZH: 請填到期日，或勾選「永久有效」 | EN: Set an expiry date, or tick 'never expires'")
+        return self
 
     @property
-    def expires_at_utc(self) -> datetime:
-        """ZH: 給端點直接寫進 DB 的值。
+    def expires_at_utc(self) -> Optional[datetime]:
+        """ZH: 給端點直接寫進 DB 的值。永久帳號是 None（與一般帳號同形）。
 
         @node job-scheduler/app/schemas.py::AdminTempUserCreate.expires_at_utc
         """
-        return expires_on_to_utc(self.expires_on)
+        return None if self.expires_on is None else expires_on_to_utc(self.expires_on)
 
 
 class AdminExtendTempAccount(BaseModel):
