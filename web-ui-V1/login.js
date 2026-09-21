@@ -75,6 +75,10 @@ $('go-sso').addEventListener('click', () => {
     if (!window.Jump) return go();          // ZH: 檔案沒載到也要能登入
     Jump.confirm({
         rememberKey: 'sso',
+        // ZH: 🔴 記在 sessionStorage 而不是 localStorage（見 jump.js 的說明）——
+        //     這一頁在登入**之前**，沒有帳號可以綁。用 localStorage 的話，
+        //     公用電腦上第一個人勾掉，之後每個人都不會再看到說明。
+        scope: 'session',
         title: T('jump_sso_title', '接下來會離開這個網站'),
         lines: [
             T('jump_sso_l1', '會跳到學校的單一登入頁面，用你平常登 Moodle 的帳號密碼。'),

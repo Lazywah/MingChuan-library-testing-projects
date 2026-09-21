@@ -75,7 +75,9 @@ async function goMyai() {
             }
             lines.push(T('jump_myai_l3', '點數是學校共用的額度，用完之後回到這一頁就看得到還剩多少。'));
             Jump.confirm({
-                rememberKey: 'myai',
+                // ZH: 🔴 key 帶身分 —— 公用電腦換一個人就是換一把鑰匙，
+                //     不會因為前一個人勾過就對他靜音（見 jump.js 的說明）。
+                rememberKey: 'myai_' + (JUMP_INFO.email || 'anon'),
                 force: !!JUMP_INFO.password,
                 title: T('jump_myai_title', '接下來會前往 MYAI'),
                 lines: lines,

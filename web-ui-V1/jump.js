@@ -40,19 +40,42 @@
         });
     }
 
-    function dismissed(key) {
+    /* ZH: 🔴 「不再提醒」記在哪裡，決定了它會影響到誰。
+     *
+     * ZH: localStorage 綁的是**瀏覽器設定檔 + 網域**，與帳號、IP 都無關。
+     *     圖書館的公用電腦上，第一個人勾掉之後，後面每一個坐下來的人都不會
+     *     再看到那段說明 —— 而那些人正是最需要看到的（第一次來、不知道會跳去哪）。
+     *
+     * ZH: 所以分兩種：
+     *       scope='session' → sessionStorage：只在這次開著的瀏覽器裡有效，
+     *         關掉就忘。用在**登入頁**（那時還沒登入，沒有帳號可綁，
+     *         而公用電腦換人就是換一次 session）。
+     *       scope='local'（預設）→ localStorage，但呼叫端要把**身分放進 key**
+     *         （例如 myai_<email>），換一個人就是換一把鑰匙。
+     */
+    function store(scope) {
+        try {
+            return scope === 'session' ? sessionStorage : localStorage;
+        } catch (e) {
+            return null;                // ZH: 無痕／關掉網站資料時會丟例外
+        }
+    }
+
+    function dismissed(key, scope) {
         if (!key) return false;
         try {
-            return localStorage.getItem(LS_PREFIX + key) === '1';
+            var st = store(scope);
+            return !!st && st.getItem(LS_PREFIX + key) === '1';
         } catch (e) {
             return false;               // ZH: 讀不到就當沒看過（見檔頭）
         }
     }
 
-    function remember(key) {
+    function remember(key, scope) {
         if (!key) return;
         try {
-            localStorage.setItem(LS_PREFIX + key, '1');
+            var st = store(scope);
+            if (st) st.setItem(LS_PREFIX + key, '1');
         } catch (e) { /* ZH: 記不起來只是下次會再問一次，不是錯誤 */ }
     }
 
@@ -70,7 +93,7 @@
     function confirmJump(opts) {
         var o = opts || {};
         // ZH: 已經說過不用再提醒，而且這次沒有非看不可的東西 → 直接走，不打斷。
-        if (!o.force && dismissed(o.rememberKey)) {
+        if (!o.force && dismissed(o.rememberKey, o.scope)) {
             if (o.onGo) o.onGo();
             return;
         }
@@ -101,7 +124,9 @@
             + (o.rememberKey && !o.force
                 ? '<label class="onb__sub" style="display:flex;gap:.5rem;align-items:center">'
                   + '<input type="checkbox" id="jump-skip">'
-                  + '<span>' + esc(t('jump_skip', '知道了，下次不用再提醒')) + '</span></label>'
+                  + '<span>' + esc(o.scope === 'session'
+                      ? t('jump_skip_session', '知道了，關掉瀏覽器前不用再提醒')
+                      : t('jump_skip', '知道了，下次不用再提醒')) + '</span></label>'
                 : '')
             + '<button class="btn btn--primary btn--block" type="button" id="jump-go">'
             + esc(o.goLabel || t('jump_go', '繼續')) + '</button>'
@@ -143,7 +168,7 @@
 
         box.querySelector('#jump-go').addEventListener('click', function () {
             var skip = box.querySelector('#jump-skip');
-            if (skip && skip.checked) remember(o.rememberKey);
+            if (skip && skip.checked) remember(o.rememberKey, o.scope);
             close();
             // ZH: 🔴 先關再跳。順序反過來的話，跳轉被瀏覽器擋下時（新分頁）
             //     遮罩會留在畫面上，看起來像整頁卡住。
