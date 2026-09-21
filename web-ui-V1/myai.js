@@ -53,7 +53,43 @@ const STATE = { provisioned: null };
 // ZH: 只有這一頁有這個動作。頂部列的「MYAI」是**連到本頁**，不自己跳轉——
 //     那樣「彈窗被擋時要說話」的處理就只需要存在於這裡（唯一有 #handoff 的地方），
 //     不必散到八個頁面。
+// ZH: v4.21 —— 離站前的確認（擁有者 2026-09-21）。
+// ZH: 判準：**有東西要給他看才擋**。
+//       還沒改過的初始密碼 → 一定顯示（force），那正是他到了對面要打的東西；
+//       只有帳號            → 顯示一次，勾了就不再出現。
+//     兩種都給「不再提醒」的話，第一種會被自己關掉 —— 而那是最需要看到的一次。
+// ZH: 🔴 密碼**不另外發請求**：renderProvision 已經拿到了（同一個端點打兩遍
+//     的話兩份回應可能不一致，而那種不一致沒有任何錯誤訊息）。
+let JUMP_INFO = { email: null, password: null };
+
 async function goMyai() {
+    if (window.Jump) {
+        const kv = [];
+        if (JUMP_INFO.email) kv.push([T('label_account', '帳號'), JUMP_INFO.email, true]);
+        if (JUMP_INFO.password) kv.push([T('prov_initial_pw', '初始密碼'), JUMP_INFO.password, true]);
+        // ZH: 兩個都沒有（還沒開通／已改過密碼且沒抓到信箱）→ 沒東西可講，不打斷。
+        if (kv.length) {
+            const lines = [T('jump_myai_l1', 'MYAI 是學校採購的廠商平台，會在新分頁開啟，需要在那邊登入一次。')];
+            if (JUMP_INFO.password) {
+                lines.push(T('jump_myai_l2', '下面是你的帳號與初始密碼 —— 先複製起來，等一下要用。'));
+            }
+            lines.push(T('jump_myai_l3', '點數是學校共用的額度，用完之後回到這一頁就看得到還剩多少。'));
+            Jump.confirm({
+                rememberKey: 'myai',
+                force: !!JUMP_INFO.password,
+                title: T('jump_myai_title', '接下來會前往 MYAI'),
+                lines: lines,
+                kv: kv,
+                goLabel: T('jump_myai_go', '前往 MYAI'),
+                onGo: doGoMyai,
+            });
+            return;
+        }
+    }
+    return doGoMyai();
+}
+
+async function doGoMyai() {
     const box = $('handoff');
     // ZH: 先抄下這一格原本的樣子，成功開啟之後還原回去。
     // ZH: v3.9 起這裡在正常情況下是空的（初始密碼提示已移除），
@@ -319,6 +355,12 @@ function renderProvision(prov) {
     //     絕大多數人本來就沒有密碼，每次進來讀一次「你沒有密碼」是噪音。
     //     ⚠ 這與 provision.html 的行為不同：那一頁是**特地**點進去的，
     //     說「這裡沒有東西」才有意義。
+    // ZH: v4.21 —— 離站彈窗要用的東西在**早退之前**先抄下來（不另外發請求，
+    //     見 goMyai 的說明）。已經改過密碼的人這一區不出現，但他的帳號仍然
+    //     值得在跳轉前給他看一次 —— 「我的 MYAI 帳號是哪個信箱」是最常被問的。
+    JUMP_INFO = { email: (d && d.email) || null,
+                  password: (d && d.initial_password) || null };
+
     if (!d || !d.provisioned || !d.initial_password) return;
 
     $('acct').textContent = d.email || '—';

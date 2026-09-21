@@ -65,8 +65,25 @@ function noSso() {
 }
 
 $('go-sso').addEventListener('click', () => {
-    // ZH: 整頁轉址交給後端處理 OIDC 交握，前端不碰任何憑證。
-    location.href = `${API}/sso/oidc/login`;
+    // ZH: v4.21 —— 離站前說一聲（擁有者 2026-09-21）。按下去之後畫面會變成
+    //     **學校的**登入頁，長得跟這裡完全不一樣；不先講的話有人會以為按錯了。
+    //     只提醒一次（勾了就記住），因為這是這一頁最常按的動作。
+    const go = () => {
+        // ZH: 整頁轉址交給後端處理 OIDC 交握，前端不碰任何憑證。
+        location.href = `${API}/sso/oidc/login`;
+    };
+    if (!window.Jump) return go();          // ZH: 檔案沒載到也要能登入
+    Jump.confirm({
+        rememberKey: 'sso',
+        title: T('jump_sso_title', '接下來會離開這個網站'),
+        lines: [
+            T('jump_sso_l1', '會跳到學校的單一登入頁面，用你平常登 Moodle 的帳號密碼。'),
+            T('jump_sso_l2', '登入完成後會自動回到這裡，不用再輸入一次。'),
+            T('jump_sso_l3', '平台看不到你的密碼 —— 密碼只會打在學校自己的頁面上。'),
+        ],
+        goLabel: T('jump_sso_go', '前往學校登入頁'),
+        onGo: go,
+    });
 });
 
 // ── 層級 3：管理者本機登入 ────────────────────────────────────────────
