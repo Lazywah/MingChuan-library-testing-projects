@@ -211,6 +211,12 @@ class AdminTempUserCreate(BaseModel):
     role: Optional[str] = "student"
     department: Optional[str] = None
     email: Optional[EmailStr] = None                 # ZH: 有就填，沒有就留空（不寄信）
+    # ZH: v4.20 —— 管理者可以自己指定密碼（與匯入那條路一致）。留空＝隨機產生。
+    #     長度限制跟著**廠商的規則**（8~20）走，因為同一組密碼要能用在 MYAI 上；
+    #     只用在平台時 8 碼下限也仍然合理。
+    password: Optional[str] = None
+    # ZH: v4.20 —— 建立的同時在廠商端開通 MYAI。需要真的信箱（合成的 .invalid 不行）。
+    provision_myai: bool = False
 
     @field_validator("purpose")
     @classmethod
@@ -231,6 +237,38 @@ class AdminTempUserCreate(BaseModel):
     def expires_on_in_range(cls, v: Optional[date]) -> Optional[date]:
         """@node job-scheduler/app/schemas.py::AdminTempUserCreate.expires_on_in_range"""
         return None if v is None else _check_expires_on(v)
+
+    @field_validator("password")
+    @classmethod
+    def password_len(cls, v: Optional[str]) -> Optional[str]:
+        """ZH: 廠商的密碼規則是 8~20 字元 —— 不合的當場擋，不要等送到廠商才失敗。
+
+        @node job-scheduler/app/schemas.py::AdminTempUserCreate.password_len
+        """
+        if v is None:
+            return None
+        v = v.strip()
+        if not v:
+            return None                       # ZH: 空字串＝沒填，走隨機
+        if not 8 <= len(v) <= 20:
+            raise ValueError("ZH: 密碼要 8~20 個字元（MYAI 廠商的規則）| "
+                             "EN: Password must be 8-20 characters (vendor rule)")
+        return v
+
+    @model_validator(mode="after")
+    def myai_needs_email(self):
+        """ZH: 要開通 MYAI 就一定要有真的信箱。
+
+        ZH: 沒填信箱時平台會合成一個 `.invalid` 的位址（RFC 2606 保留網域）——
+            那是為了滿足 NOT NULL，**永遠寄不到也註冊不了**。
+            不在這裡擋的話，會在廠商那邊建出一個收不到信、救不回密碼的垃圾帳號。
+
+        @node job-scheduler/app/schemas.py::AdminTempUserCreate.myai_needs_email
+        """
+        if self.provision_myai and not self.email:
+            raise ValueError("ZH: 要開通 MYAI 就必須填 Email（MYAI 用它當帳號，也靠它找回密碼）| "
+                             "EN: An email address is required to create a MYAI account")
+        return self
 
     @model_validator(mode="after")
     def one_of_expiry(self):

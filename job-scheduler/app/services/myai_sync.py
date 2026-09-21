@@ -1522,7 +1522,7 @@ def purge_expired_initial_passwords(db: Session, retention_days: int) -> int:
     return n
 
 
-async def provision_user(db: Session, user) -> dict:
+async def provision_user(db: Session, user, password: str | None = None) -> dict:
     """
     ZH: v3.3 自動開通主流程（首次 SSO 登入後以背景任務呼叫，**不阻塞登入**）。
         狀態機（每一步都可安全重入，重複呼叫不會重複建號）：
@@ -1541,6 +1541,11 @@ async def provision_user(db: Session, user) -> dict:
     EN: Auto-provision orchestrator; idempotent. Since v4.0 the
         `myai_autoprovision` switch gates only vendor-side account creation;
         binding to an already-existing vendor account always runs (DB-only).
+
+    ZH: v4.20 —— `password` 可以指定（管理端手動建帳時「兩平台同一組密碼」）。
+        不給就照舊隨機產生。🔴 只在**真的建號**那一步用得到：
+        走到 `linked_only`（廠商端早就有這個信箱）時不會去改人家的密碼，
+        呼叫端要據此告訴管理者「這一組密碼只對平台有效」。
 
     @node job-scheduler/app/services/myai_sync.py::provision_user
     """
@@ -1612,7 +1617,8 @@ async def provision_user(db: Session, user) -> dict:
         return {"status": "skipped", "reason": "no_email", "username": user.username}
 
     # ZH: 真正建號 —— 走廠商管理端官方批次註冊
-    password = gen_initial_password()
+    # ZH: v4.20 呼叫端指定的密碼優先（手動建帳時與平台密碼同一組）。
+    password = password or gen_initial_password()
     rows = [{"email": email, "nickname": _nickname_for(user),
              "password": password, "remark": "auto-provision"}]
     try:

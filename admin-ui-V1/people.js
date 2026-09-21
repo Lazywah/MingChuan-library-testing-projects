@@ -234,6 +234,19 @@
             +   '<span>' + esc(T('tmp_forever', '永久有效（不設到期日，與一般帳號一樣）')) + '</span>'
             + '</label>'
             + field('t-email', T('tmp_email', 'Email（可留空，平台不會寄信）'), '', 'email')
+            // ZH: v4.20 密碼可以自己指定（擁有者 2026-09-21）——「長官短暫使用」那種場合
+            //     可以口頭交代一組好記的，不必抄一串亂碼。留空就照舊隨機。
+            + field('t-pw', T('tmp_pw_set', '密碼（留空＝自動產生）'), '')
+            + '<p class="footnote">' + esc(T('tmp_pw_hint',
+                '要自己指定的話 8~20 個字元（MYAI 廠商的規則）。同一組密碼平台與 MYAI 都能用。')) + '</p>'
+            // ZH: v4.20 MYAI 開通。**預設不勾** —— 會在廠商端真的建一個帳號，
+            //     那不是可以隨手做的事（帳號刪不掉、點數也跟著走）。
+            + '<label class="adm-inline" style="margin:.25rem 0 .5rem">'
+            +   '<input type="checkbox" id="t-myai"> '
+            +   '<span>' + esc(T('tmp_myai', '同時開通 MYAI 帳號（需要填 Email；密碼與上面同一組）')) + '</span>'
+            + '</label>'
+            + '<p class="footnote">' + esc(T('tmp_myai_hint',
+                '不勾的話這個帳號進得了平台，但沒有 MYAI 額度 —— 密碼登入的帳號不會自動開通。')) + '</p>'
             + '<div class="adm-inline rmod__foot">'
             + '<button class="btn btn--primary" type="button" id="t-go">'
             + esc(T('tmp_create', '建立')) + '</button>'
@@ -268,6 +281,9 @@
         else body.expires_on = $('t-expires').value;
         var em = $('t-email').value.trim();
         if (em) body.email = em;
+        var pw = $('t-pw') ? $('t-pw').value.trim() : '';
+        if (pw) body.password = pw;
+        if ($('t-myai') && $('t-myai').checked) body.provision_myai = true;
 
         try {
             var out = await api('/admin/users/temporary', {
@@ -281,6 +297,19 @@
         } catch (e) {
             say('t-msg', T('tmp_fail', '建立失敗（{w}）').replace('{w}', e.message));
         }
+    }
+
+    // ZH: v4.20 MYAI 開通結果的一句話。狀態來自 myai_sync.provision_user。
+    function myaiText(m) {
+        var s = m && m.status;
+        if (s === 'created') return T('tmp_myai_created', '已開通（密碼與上面同一組）');
+        if (s === 'linked_only') return T('tmp_myai_linked',
+            '廠商端本來就有這個信箱的帳號，已綁定 —— ⚠ MYAI 的密碼不是上面這一組');
+        if (s === 'bound') return T('tmp_myai_bound', '這個人本來就綁好了');
+        if (s === 'disabled') return T('tmp_myai_disabled',
+            '沒有開通：平台設定的「MYAI 首次登入自動建號」是關的');
+        if (s === 'failed') return T('tmp_myai_failed', '開通失敗') + '（' + esc(m.error || '') + '）';
+        return T('tmp_myai_skipped', '沒有開通') + '（' + esc((m && m.reason) || s || '') + '）';
     }
 
     function showPassword(out) {
@@ -306,6 +335,11 @@
             + '<span class="kv__v">' + esc(out.expires_at
                 ? TW.dateTime(out.expires_at)
                 : T('tmp_forever_value', '永久有效（不會到期）')) + '</span></div>'
+            // ZH: v4.20 MYAI 開通結果 —— 成功與否都要講，而且要講**密碼是不是同一組**。
+            //     linked_only 是最容易誤會的：帳號綁上了，但那是廠商端本來就有的帳號，
+            //     密碼不是我們給的這一組，照著交出去對方會登不進 MYAI。
+            + (out.myai ? '<div class="kv"><span class="kv__k">MYAI</span>'
+                + '<span class="kv__v">' + esc(myaiText(out.myai)) + '</span></div>' : '')
             + '<div class="adm-inline rmod__foot">'
             + '<button class="btn btn--primary" type="button" id="t-copy">'
             + esc(T('tmp_copy', '複製帳號與密碼')) + '</button>'

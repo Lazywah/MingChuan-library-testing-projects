@@ -1576,7 +1576,7 @@ async def import_temp_users(
 
 
 @router.post("/users/temporary", summary="建立臨時帳號")
-def create_temp_user(
+async def create_temp_user(
     data: schemas.AdminTempUserCreate,
     request: Request,
     db: Session = Depends(get_db),
@@ -1608,7 +1608,9 @@ def create_temp_user(
 
     import secrets as _secrets
     import uuid as _uuid
-    temp_password = _secrets.token_urlsafe(9)
+    # ZH: v4.20 管理者可以自己指定（與匯入那條路一致）。留空＝隨機。
+    #     指定的好處是「長官短暫使用」這種場合可以口頭交代，不必抄一串亂碼。
+    temp_password = data.password or _secrets.token_urlsafe(9)
 
     # ZH: 見上面的說明 —— 合成位址只是為了滿足 NOT NULL + UNIQUE，
     #     `.invalid` 是 RFC 2606 保留、永遠不會存在的網域。
@@ -1652,6 +1654,30 @@ def create_temp_user(
     ))
     db.commit()
 
+    # ══════════════════════════════════════════════════════════════════
+    # ZH: v4.20 —— 順手開通 MYAI（擁有者 2026-09-21）
+    # ══════════════════════════════════════════════════════════════════
+    # ZH: 為什麼要有這個：MYAI 的開通**只有 SSO 首次登入那一條路**會觸發，
+    #     而臨時帳號是用密碼登入的 —— 不在這裡開，他這輩子都不會有 AI 額度，
+    #     而且沒有任何錯誤訊息（他只會發現自己沒有額度）。
+    #
+    # ZH: 🔴 **同步等它做完**，不像 SSO 那條走背景任務。理由：管理者現在就要
+    #     把帳密交給對方，他必須當場知道 MYAI 到底開通了沒。
+    #     失敗**不回滾平台帳號** —— 帳號已經建好了，把它一起收掉更糟
+    #     （管理者會以為什麼都沒發生，然後重按一次撞到「帳號已存在」）。
+    #
+    # ZH: 兩平台同一組密碼是刻意的（擁有者裁定）：臨時帳號本來就是短暫用途，
+    #     讓對方記兩組密碼的成本遠大於這裡的風險。
+    myai_result = None
+    if data.provision_myai:
+        from ..services import myai_sync
+        try:
+            myai_result = await myai_sync.provision_user(db, user, password=temp_password)
+        except Exception as e:      # noqa: BLE001 - 廠商掛了不該讓帳號建立失敗
+            logger.error("臨時帳號 %s 的 MYAI 開通失敗：%s", data.username, e)
+            myai_result = {"status": "failed", "error": str(e)[:200]}
+        logger.info("臨時帳號 %s 的 MYAI 開通結果：%s", data.username, myai_result)
+
     logger.info("建立臨時帳號 %s（到期 %s，用途：%s）by %s",
                 data.username,
                 data.expires_on.isoformat() if data.expires_on else "永久",
@@ -1667,6 +1693,10 @@ def create_temp_user(
         "role": user.role,
         # ZH: 讓前端知道要不要顯示信箱（合成的那個不該給人看）
         "has_email": bool(data.email),
+        # ZH: v4.20 MYAI 開通結果。None ＝ 沒要求開通。
+        #     status: created（新建，密碼與平台同一組）/ linked_only（廠商端早就有這個
+        #     信箱，只補綁定 —— **密碼不是這一組**）/ disabled / skipped / failed
+        "myai": myai_result,
     }
 
 
