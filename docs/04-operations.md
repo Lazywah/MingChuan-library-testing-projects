@@ -84,6 +84,46 @@ docker ps --filter "label=aibase.role=code-server" \
 
 每個 cs-`<user_id>` 容器對應一個 lab session；scheduler 每 60s 掃描閒置 30 分鐘的自動關閉。
 
+### 🔴 平台健檢看門狗（2026-09-23 起）
+
+**為什麼有這支**：2026-09-17 與 09-20 各發生一次 **Docker Desktop 自己退出**，
+留下死掉的 socket（`%LOCALAPPDATA%\Dockerun\dockerInference` 等），之後怎麼按都起不來。
+第二次從 09-20 掛到 09-23 才被發現 —— **三天沒有人知道平台是死的**，因為沒有任何東西會講話。
+
+```powershell
+# 先看一眼（不動任何東西）
+powershell -ExecutionPolicy Bypass -File scripts\health_watchdog.ps1 -DryRun
+# 假裝故障，確認修復那一段會走到哪
+powershell -ExecutionPolicy Bypass -File scripts\health_watchdog.ps1 -DryRun -Simulate
+```
+
+它做三件事：探活 `http://localhost:8002/health`（**刻意不經 DNS 與 TLS** —— 那兩層自己也會壞，
+用它們探活會把「憑證過期」誤判成「平台掛了」）→ 不通就修一次（daemon 死了就清孤兒 socket
+重啟 Docker Desktop，daemon 活著只是容器沒起來就 `compose up -d`）→ 不管成功失敗都寫一行
+`data/watchdog.log`。
+
+⚠️ **一次只修一次。** `data/.watchdog-state.json` 記著上次嘗試的時間，15 分鐘內不重複——
+沒有節流的話，修不好的狀況會變成每 10 分鐘殺一次 Docker，比原本的故障更糟。
+log 裡連續出現「剛修過，這次只記錄」就是**需要人工處理**的訊號。
+
+**裝法（兩種，擇一）**
+
+| | 指令 | 需要 UAC | 誰在管它 |
+|---|---|---|---|
+| **排程工作（建議）** | `... -Install` | ✅ 一次 | Windows 排程器（有執行歷程、會重試） |
+| 啟動捷徑（備案） | `... -InstallStartup` | ❌ | 沒有人。迴圈行程被關掉就沒了 |
+
+移除分別是 `-Uninstall` / `-UninstallStartup`。
+
+⚠️ **只能在使用者登入時跑**：Docker Desktop 是 GUI 程式，Windows 上沒有 session 就起不來。
+所以排程工作設成「只有登入時執行」是正確的，不是妥協。
+搭配 Docker Desktop 自己的「登入時啟動」（`%APPDATA%\Docker\settings-store.json` 的
+`AutoStart`，2026-09-23 已設為 `true`），開機後的順序是：登入 → Docker Desktop →（3 分鐘後）看門狗。
+
+⚠️ 這支是 PowerShell 腳本且**含中文**，存檔必須是 **UTF-8 with BOM**。
+沒有 BOM 時 Windows PowerShell 5.1 會用 cp950 讀，中文全毀而且 `#>` 這種結束符會被吃掉，
+症狀是一堆莫名其妙的語法錯誤（踩過）。
+
 ---
 
 ## 5. Token 管理

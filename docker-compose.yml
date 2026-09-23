@@ -190,6 +190,46 @@ services:
   #     （而且寫在註解裡也會被 setup_env 的漂移稽核當成真的 key 撈走。）
   # EN: Protection comes from the htpasswd file (the container refuses to start
   #     without it), not from a `:?` guard — that would block the whole stack.
+  # ══════════════════════════════════════════════════════════════════════
+  # ZH: v4.23 Docker Hub 的 pull-through cache（台北前哨用）
+  # ══════════════════════════════════════════════════════════════════════
+  # ZH: 與上面的 `registry` 是**兩件不同的事**，不要混用：
+  #       registry        私有映像庫，要自己 push；放 aibase/* 這種自建映像
+  #       registry-cache  透明快取，第一次有人拉就自動回源抓一份；放公開映像
+  #     一個 registry:2 容器**不能同時是兩者**（設了 PROXY_REMOTEURL 就不收 push）。
+  #
+  # ZH: 🔴 為什麼非要它不可：worker 的 DEFAULT_IMAGE 是公開的
+  #     `pytorch/pytorch:2.7.0-cuda12.8-cudnn9-runtime`（12 GB），
+  #     而 `resolve_image()` **刻意不對公開映像加前綴**（加了會去私有庫找一個
+  #     不存在的東西）。所以公開映像完全繞過私有 registry ——
+  #     台北 30 台就是 30 × 12 GB 從網際網路拉。
+  #
+  # ZH: 用法不是改程式，是改 **Docker daemon 的 registry-mirrors**
+  #     （每台 GPU 主機的 daemon.json）。那一層是透明的，
+  #     平台完全不知道有快取這件事 —— 也就不會有第二份「映像位址」的真相。
+  #
+  # ZH: ⚠ 這個快取**沒有帳密**：它只服務公開映像（任何人本來就拉得到），
+  #     加了 auth 反而會讓 daemon 的 mirror 設定變複雜。但它**只能開在校內**，
+  #     不要讓它對網際網路露出（預設綁 127.0.0.1，同 registry 的原則）。
+  registry-cache:
+    image: registry:2
+    container_name: ai-platform-registry-cache
+    profiles: ["registry-cache"]
+    environment:
+      - REGISTRY_PROXY_REMOTEURL=${REGISTRY_PROXY_REMOTEURL:-https://registry-1.docker.io}
+      # ZH: 匿名拉取有速率限制（Docker Hub 以來源 IP 計）。30 台共用一個出口 IP
+      #     時很容易撞到，填一組 Docker Hub 帳密可以提高額度。留空＝匿名。
+      - REGISTRY_PROXY_USERNAME=${DOCKERHUB_USERNAME:-}
+      - REGISTRY_PROXY_PASSWORD=${DOCKERHUB_PASSWORD:-}
+      - REGISTRY_STORAGE_DELETE_ENABLED=true
+    volumes:
+      - registry_cache_data:/var/lib/registry
+    ports:
+      - "${REGISTRY_CACHE_BIND:-127.0.0.1}:5001:5000"
+    networks:
+      - ai-platform-net
+    restart: unless-stopped
+
   registry:
     image: registry:2
     container_name: ai-platform-registry
@@ -236,6 +276,10 @@ volumes:
   # ZH: v3.6 私有 registry 的映像儲存（只有 --profile registry 時才用到）
   registry_data:
     name: ai_platform_registry_data
+
+  # ZH: v4.23 pull-through cache 的儲存（只有 --profile registry-cache 時才用到）
+  registry_cache_data:
+    name: ai_platform_registry_cache_data
 
   # ZH: 注意：per-user home volume (home_{user_id}) 由 lab_manager 在使用者首次
   #     啟動 lab session 時動態建立，不在此宣告
