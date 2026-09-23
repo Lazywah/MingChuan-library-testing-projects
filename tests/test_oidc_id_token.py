@@ -7,12 +7,18 @@ ZH: 🔴 **身分不是從 id_token 來的**（MCU 的 userinfo 才是，見 sso
       · token endpoint 回的 token 其實屬於別人（token substitution）
       · 這次的 token 是別次登入的重播（nonce 不對）
 
-ZH: 🔴 這一族最重要的兩條在 `TestAlgorithmConfusion`：
-    auth.mcu.edu.tw 的 discovery **自己宣告支援 `none` 與 HS256**。
-    照單全收的話：
-      · alg=none  → 完全不必簽章
-      · alg=HS256 → 拿**公鑰**當 HMAC 密鑰（公鑰是公開的，誰都簽得出來）
-    兩種都是經典手法，而且驗證「看起來有在跑」——所以一定要有測試釘住。
+ZH: 🔴 這一族最重要的在 `TestAlgorithmConfusion`：
+    **auth.mcu.edu.tw 實際上用 HS512 簽**（client_secret 對稱簽章，OIDC 允許），
+    同時它的 discovery 也宣告支援 `none`。所以「一律只收 RS*」是錯的
+    —— 2026-09-23 上線後第一次真人登入就被擋在門外（踩過）。
+
+ZH: 正確的規則不是「收哪些 alg」，是**金鑰來源必須跟著 alg 決定**：
+      非對稱（RS/ES/PS）→ 金鑰只能來自 jwks
+      對稱（HS）        → 金鑰只能是 client_secret，**絕不碰 jwks**
+      none              → 永遠拒絕
+    經典的 alg confusion 正是「先從 jwks 拿公鑰、再讓 header 決定怎麼用它」：
+    攻擊者把 alg 改成 HS256、拿那把公開的公鑰當 HMAC 密鑰就簽得出來。
+    分流之後那件事在程式結構上不可能發生。
 
 @node tests/test_oidc_id_token.py
 """
@@ -137,12 +143,44 @@ class TestAlgorithmConfusion:
 
     def test_hs256_signed_with_the_public_key_is_refused(self, client, keypair):
         """
-        ZH: 🔴 經典手法：公鑰是**公開**的，攻擊者拿它當 HMAC 密鑰簽一個 HS256，
-            而只看「簽章驗得過」的實作會通過。釘死 RS* 才擋得掉。
+        ZH: 🔴 經典手法：公鑰是**公開**的，攻擊者拿它當 HMAC 密鑰簽一個 HS256。
+            我們收 HS（IdP 真的用 HS512），但 HS 的金鑰**只會是 client_secret**，
+            永遠不會是 jwks 裡的公鑰 —— 所以這個簽章對不起來。
         """
         forged = _forge(keypair, "HS256", sig_key=keypair["public_pem"], sub="99999999")
         with pytest.raises(ValueError):
             client._verify_id_token(forged, None, "99999999")
+
+    def test_the_real_idp_hs512_is_accepted(self, client):
+        """
+        ZH: 🔴 **這條就是被擋在門外的那次。** auth.mcu.edu.tw 用 HS512 +
+            client_secret 簽 id_token —— 那是 OIDC 允許的對稱簽章，
+            而且那把密鑰只有我們與 IdP 知道，不是弱設定。
+        """
+        from jose import jwt as jj
+        tok = jj.encode({"iss": ISSUER, "aud": CLIENT_ID, "sub": "12345678",
+                         "iat": int(time.time()), "exp": int(time.time()) + 300},
+                        "s3cret", algorithm="HS512")
+        assert client._verify_id_token(tok, None, "12345678")["sub"] == "12345678"
+
+    def test_hs512_with_the_wrong_secret_is_refused(self, client):
+        """ZH: **陽性對照** —— 收 HS 不等於誰都簽得出來。"""
+        from jose import jwt as jj
+        tok = jj.encode({"iss": ISSUER, "aud": CLIENT_ID, "sub": "12345678",
+                         "exp": int(time.time()) + 300},
+                        "not-the-secret", algorithm="HS512")
+        with pytest.raises(ValueError):
+            client._verify_id_token(tok, None, "12345678")
+
+    def test_symmetric_without_a_client_secret_is_refused(self, client):
+        """ZH: 沒有 client_secret 就驗不了對稱簽章 —— 那時要拒絕，不是放行。"""
+        from jose import jwt as jj
+        tok = jj.encode({"iss": ISSUER, "aud": CLIENT_ID, "sub": "12345678",
+                         "exp": int(time.time()) + 300}, "s3cret", algorithm="HS512")
+        client.client_secret = ""
+        with pytest.raises(ValueError) as e:
+            client._verify_id_token(tok, None, "12345678")
+        assert "client_secret" in str(e.value)
 
 
 # ── 簽章與 claim ────────────────────────────────────────────────────────

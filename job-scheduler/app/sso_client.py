@@ -258,12 +258,27 @@ class OIDCSSOClient(BaseSSOClient):
     #       · token endpoint 回的 token 其實屬於**別人**（token substitution）
     #       · 這次的 token 是**別次登入**的重播（nonce 不對）
     #
-    # ZH: 🔴 **演算法必須釘死。** auth.mcu.edu.tw 的 discovery 自己宣告
-    #     `id_token_signing_alg_values_supported: ['none','HS256',…,'RS256',…]`——
-    #     照單全收的話，攻擊者只要把 alg 改成 `none` 就不必簽章，
-    #     或改成 HS256 拿**公鑰當 HMAC 密鑰**（公鑰是公開的）。兩種都是經典手法。
-    #     所以只收 RS*，而且明確傳 algorithms，不讓函式庫自己決定。
-    _ID_TOKEN_ALGS = ("RS256", "RS384", "RS512")
+    # ZH: 🔴 **演算法要釘死，而且「哪一把金鑰」要跟著演算法決定。**
+    #
+    # ZH: 經典的 alg confusion 是這樣成立的：實作先從 jwks 拿到**公鑰**，
+    #     再把它當成「金鑰」交給函式庫，而函式庫照 header 的 alg 決定怎麼用它。
+    #     攻擊者把 alg 改成 HS256、拿那把**公開的**公鑰當 HMAC 密鑰簽一個 token，
+    #     驗證就會通過。問題不在「收了 HS」，在**金鑰來源與演算法脫鉤**。
+    #
+    # ZH: 所以這裡分成兩族，各自綁死金鑰來源：
+    #       非對稱（RS/ES/PS）→ 金鑰只能來自 **jwks**
+    #       對稱（HS）        → 金鑰只能是 **client_secret**（絕不碰 jwks）
+    #     這樣「拿公鑰當 HMAC 密鑰」在程式結構上就不可能發生。
+    #     `none` 兩族都不在，永遠拒絕。
+    #
+    # ZH: ⚠ **為什麼一定要收 HS**：auth.mcu.edu.tw 實際上是用 **HS512** 簽的
+    #     （2026-09-23 上線後第一次真人登入才發現 —— 我原本只收 RS*，
+    #     把所有人擋在門外）。OIDC 本來就允許 confidential client 用
+    #     client_secret 做對稱簽章，那不是弱設定：那把密鑰只有我們與 IdP 知道。
+    _ID_TOKEN_ALGS_ASYM = ("RS256", "RS384", "RS512",
+                           "ES256", "ES384", "ES512",
+                           "PS256", "PS384", "PS512")
+    _ID_TOKEN_ALGS_SYM = ("HS256", "HS384", "HS512")
 
     # ZH: jwks 快取。IdP 換金鑰時 kid 會變 —— 遇到沒看過的 kid 才重抓，
     #     但**最短間隔 60 秒**：否則隨便一個帶假 kid 的請求就能讓我們去打 IdP。
@@ -316,26 +331,36 @@ class OIDCSSOClient(BaseSSOClient):
             raise ValueError(f"id_token 格式不對：{e}")
 
         alg = (header.get("alg") or "").upper()
-        if alg not in self._ID_TOKEN_ALGS:
-            # ZH: 這是**攻擊的樣子**，不是設定問題 —— 用 error 記，而且要看得到 alg。
-            logger.error("id_token 的 alg=%s 不在允許清單 %s", alg, self._ID_TOKEN_ALGS)
-            raise ValueError(f"id_token 使用了不被接受的簽章演算法：{alg or 'none'}")
-
-        kid = header.get("kid")
-        keys = self._jwks()
-        key = keys.get(kid)
-        if key is None:
-            # ZH: 沒看過的 kid = IdP 可能換了金鑰。重抓一次再說（有最短間隔保護）。
-            keys = self._jwks(force=True)
+        if alg in self._ID_TOKEN_ALGS_SYM:
+            # ZH: 對稱簽章 —— 金鑰是 client_secret，**完全不碰 jwks**（見上面的說明）。
+            if not self.client_secret:
+                raise ValueError("id_token 用對稱演算法簽章，但我們沒有 client_secret 可以驗")
+            key = self.client_secret
+            allowed = list(self._ID_TOKEN_ALGS_SYM)
+        elif alg in self._ID_TOKEN_ALGS_ASYM:
+            kid = header.get("kid")
+            keys = self._jwks()
             key = keys.get(kid)
-        if key is None:
-            raise ValueError(f"jwks 裡找不到 id_token 的 kid={kid}")
+            if key is None:
+                # ZH: 沒看過的 kid = IdP 可能換了金鑰。重抓一次再說（有最短間隔保護）。
+                keys = self._jwks(force=True)
+                key = keys.get(kid)
+            if key is None:
+                raise ValueError(f"jwks 裡找不到 id_token 的 kid={kid}")
+            allowed = list(self._ID_TOKEN_ALGS_ASYM)
+        else:
+            # ZH: 這是**攻擊的樣子**（或 IdP 換了設定）—— 用 error 記，而且要看得到 alg。
+            logger.error("id_token 的 alg=%s 兩族都不在：sym=%s asym=%s",
+                         alg, self._ID_TOKEN_ALGS_SYM, self._ID_TOKEN_ALGS_ASYM)
+            raise ValueError(f"id_token 使用了不被接受的簽章演算法：{alg or 'none'}")
 
         eps = self._endpoints()
         try:
             claims = jose_jwt.decode(
                 raw, key,
-                algorithms=list(self._ID_TOKEN_ALGS),
+                # ZH: 🔴 只允許**同一族**的演算法。傳兩族的聯集等於把上面的分流
+                #     又打開一個缺口：函式庫仍然可以照 header 把公鑰當 HMAC 密鑰用。
+                algorithms=allowed,
                 audience=self.client_id,
                 issuer=eps.get("issuer") or None,
                 # ZH: leeway 60 秒 —— 兩邊的時鐘不會完全一致，而差幾秒就把人擋在
