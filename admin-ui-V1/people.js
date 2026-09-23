@@ -1558,18 +1558,9 @@
     // ZH: 範例檔下載。端點要 Authorization，不能用 <a href>（同組織匯出的理由）。
     async function downloadTemplate(fmt) {
         try {
-            var res = await fetch(API + '/admin/users/temporary/import-template?fmt=' + fmt,
-                                  { headers: { Authorization: 'Bearer ' + token() } });
-            if (!res.ok) throw new Error('HTTP ' + res.status);
-            var blob = await res.blob();
-            var url = URL.createObjectURL(blob);
-            var a = document.createElement('a');
-            a.href = url;
-            a.download = 'temp-accounts-template.' + fmt;
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-            URL.revokeObjectURL(url);
+            // ZH: v4.24 收斂到 AdminDownload（唯一真相，見 admin-chrome.js）
+            await AdminDownload('/admin/users/temporary/import-template?fmt=' + fmt,
+                                'temp-accounts-template.' + fmt);
         } catch (e) { say('ti-msg', e.message); }
     }
 
@@ -1885,20 +1876,9 @@
         btn.disabled = true;
         btn.textContent = T('pp_exporting', '匯出中…');
         try {
-            var res = await fetch(API + '/admin/users/export?scope=all&fmt=' + fmt,
-                                  { headers: { Authorization: 'Bearer ' + token() } });
-            if (!res.ok) throw new Error('HTTP ' + res.status);
-            var cd = res.headers.get('content-disposition') || '';
-            var m = cd.match(/filename="?([^";]+)"?/);
-            var name = m ? m[1] : 'users-export.' + fmt;
-            var blob = await res.blob();
-            var url = URL.createObjectURL(blob);
-            var a = document.createElement('a');
-            a.href = url; a.download = name;
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-            URL.revokeObjectURL(url);
+            // ZH: v4.24 收斂到 AdminDownload（唯一真相，見 admin-chrome.js）
+            await AdminDownload('/admin/users/export?scope=all&fmt=' + fmt,
+                                'users-export.' + fmt);
         } catch (e) {
             alert(T('pp_export_fail', '匯出失敗（{w}）').replace('{w}', e.message));
         } finally {

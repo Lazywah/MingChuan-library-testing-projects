@@ -578,34 +578,18 @@ function setRunNote(html) {
     acts.innerHTML = `<span class="inline-error">${html}</span>`;
 }
 
-// ZH: 取回模型檔並交給瀏覽器存檔。
-// ZH: 為什麼要自己做而不是給一條連結：下載端點要 Authorization header，
-//     而純連結導覽不會帶它（token 在 sessionStorage，不是 cookie）。
+// ZH: v4.24 —— 這裡原本自己 fetch→blob→<a download> 抄了一份。
+// ZH: 🔴 同一條規則有四份實作時，補一個邊界（例如中文檔名的 `filename*`）
+//     只會補到其中一份，而另外三份**看起來仍然正常**。
+//     收斂到 chrome.js 的 `Chrome.download()`（唯一真相）。
+// ZH: ⚠ 按鈕狀態留在呼叫端 —— 那是**這一頁的事**（哪顆鈕、顯示什麼字），
+//     不是下載本身的事。共用的那支只負責「把檔案交給瀏覽器」。
 async function downloadModel(btn) {
     const original = btn.textContent;
     btn.disabled = true;
     btn.textContent = T('tr_downloading', '下載中…');
     try {
-        const r = await fetch(`${API}/jobs/${jobId}/model`, { headers: authHeaders() });
-        if (!r.ok) throw new Error(`HTTP ${r.status}`);
-
-        // ZH: 檔名從 Content-Disposition 取，優先用 filename*（那份保得住中文）。
-        const cd = r.headers.get('content-disposition') || '';
-        let name = 'model.pt';
-        const star = cd.match(/filename\*=UTF-8''([^;]+)/i);
-        const plain = cd.match(/filename="([^"]+)"/i);
-        if (star) { try { name = decodeURIComponent(star[1]); } catch { /* 壞掉就用下面那個 */ } }
-        else if (plain) { name = plain[1]; }
-
-        const url = URL.createObjectURL(await r.blob());
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = name;
-        document.body.appendChild(a);
-        a.click();
-        a.remove();
-        // ZH: 立刻 revoke 會讓某些瀏覽器來不及開始下載，隔一拍再放。
-        setTimeout(() => URL.revokeObjectURL(url), 60000);
+        await Chrome.download(`/jobs/${jobId}/model`, 'model.pt');
         btn.textContent = original;
     } catch (e) {
         btn.textContent = T('tr_download_fail', '下載失敗，請再試一次');

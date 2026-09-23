@@ -2365,24 +2365,9 @@
         btn.disabled = true;
         btn.textContent = T('pf_org_exporting', '匯出中…');
         try {
-            // ZH: 端點要 Authorization，所以不能用 <a href> 直接下載
-            //     （那樣帶不上 token，會拿到一個 401 的檔案）。與數據頁匯出同一個做法。
-            var res = await fetch(API + '/admin/org/export?fmt=' + (fmt || 'json'),
-                                  { headers: { Authorization: 'Bearer ' + token() } });
-            if (!res.ok) throw new Error('HTTP ' + res.status);
-            // ZH: 解析 Content-Disposition 取檔名（與數據頁匯出同一段做法）。
-            var cd = res.headers.get('content-disposition') || '';
-            var m = cd.match(/filename="?([^";]+)"?/);
-            var name = m ? m[1] : 'org-mapping.' + (fmt || 'json');
-            var blob = await res.blob();
-            var url = URL.createObjectURL(blob);
-            var a = document.createElement('a');
-            a.href = url;
-            a.download = name;
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-            URL.revokeObjectURL(url);
+            // ZH: v4.24 收斂到 AdminDownload（唯一真相，見 admin-chrome.js）
+            await AdminDownload('/admin/org/export?fmt=' + (fmt || 'json'),
+                                'org-mapping.' + (fmt || 'json'));
             flash('og-msg', (fmt && fmt !== 'json')
                 ? T('pf_org_exported_sheet', '已匯出 {f}。這一份是給人看的 —— 改完**不能**匯回，要匯回請用「匯出 JSON」那一份。').replace('{f}', name)
                 : T('pf_org_exported', '已匯出 org-mapping.json。可以把它放進版控，換機器時匯回來。'), 8000);

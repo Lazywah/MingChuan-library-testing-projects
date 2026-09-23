@@ -439,6 +439,47 @@
     //     而且兩次回來的時間不同 —— 頁面會依賴哪一次先到，那種 bug 很難查。
     //
     // ZH: 回 null 是正常情況（還沒載到、或那一次讀失敗），呼叫端要自己處理。
+    /* ZH: 帶 token 的檔案下載（v4.24，唯一真相）。
+     *
+     * ZH: 🔴 為什麼不能用 `<a href="/api/…">`：管理端的認證是 **Authorization 標頭**
+     *     （token 在 localStorage），不是 cookie。瀏覽器自己發的下載請求不帶那個標頭，
+     *     點下去只會拿到 401 —— 而畫面上看起來像「這個檔案壞了」。
+     *
+     * ZH: 🔴 這支的來歷：同一條規則原本在管理端有**四份**抄寫
+     *     （使用者匯出、範例檔、數據匯出、組織對照表），而它們已經漂開了：
+     *       · 四份都只認 `filename="…"`，沒有一份認 `filename*=UTF-8''…`
+     *         → **中文檔名全部退回預設名**
+     *       · 四份都**立刻** revokeObjectURL；慢一點的瀏覽器還沒開始讀就沒了，
+     *         下載會是空檔（使用者端那份早就改成延遲 60 秒，但沒有人回頭改這邊）
+     *     補邊界時只會補到其中一份，而另外三份**看起來仍然正常** —— 所以收斂。
+     *
+     * ZH: ⚠ 按鈕狀態（「匯出中…」）留在呼叫端：那是各頁自己的事，
+     *     這支只負責把檔案交給瀏覽器。
+     */
+    async function download(path, fallbackName) {
+        var r = await fetch(API + path, { headers: { Authorization: 'Bearer ' + token() } });
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+
+        var cd = r.headers.get('content-disposition') || '';
+        var name = fallbackName || 'download';
+        var star = cd.match(/filename\*=UTF-8''([^;]+)/i);
+        var plain = cd.match(/filename="?([^";]+)"?/i);
+        if (star) { try { name = decodeURIComponent(star[1]); } catch (e) { /* 用下面那個 */ } }
+        else if (plain) { name = plain[1]; }
+
+        var url = URL.createObjectURL(await r.blob());
+        var a = document.createElement('a');
+        a.href = url;
+        a.download = name;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        // ZH: 延遲 revoke —— 立刻撤銷的話慢一點的瀏覽器會拿到空檔。
+        setTimeout(function () { URL.revokeObjectURL(url); }, 60000);
+    }
+
+    window.AdminDownload = download;
+
     window.AdminMe = function () { return _me; };
 
     async function loadWho() {

@@ -1134,20 +1134,9 @@
         btn.disabled = true;
         btn.textContent = T('an_exporting', '匯出中…');
         try {
-            var res = await fetch(API + '/external-ai/admin/consumption/export?fmt=' + fmt + '&' + qs,
-                                  { headers: { Authorization: 'Bearer ' + token() } });
-            if (!res.ok) throw new Error('HTTP ' + res.status);
-            var cd = res.headers.get('content-disposition') || '';
-            var m = cd.match(/filename="?([^";]+)"?/);
-            var name = m ? m[1] : 'consumption.' + fmt;
-            var blob = await res.blob();
-            var url = URL.createObjectURL(blob);
-            var a = document.createElement('a');
-            a.href = url; a.download = name;
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-            URL.revokeObjectURL(url);
+            // ZH: v4.24 收斂到 AdminDownload（唯一真相，見 admin-chrome.js）
+            await AdminDownload('/external-ai/admin/consumption/export?fmt=' + fmt + '&' + qs,
+                                'consumption.' + fmt);
         } catch (e) {
             // ZH: 失敗要講 —— 下載沒發生時畫面上完全沒有痕跡，
             //     使用者只會以為自己沒按到。
