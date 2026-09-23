@@ -158,22 +158,40 @@ console.log('tour.js —— 進度用 id，不用索引');
         '（對照）用索引的話會指到別的步驟 —— 這就是 v4.26 的 bug');
 }
 
-// ── 進度指到「這一頁沒有的步驟」時 ──────────────────────────────────
+// ── 進度指到別頁、或指到被濾掉的步驟 ────────────────────────────────
 {
     const steps = Tour.stepsFor({ here: 'index.html', gpuOn: true, has: ALL });
-    eq(Tour.resumeIndex(steps, 'balance', 'index.html'),
-        steps.findIndex((s) => s.id === 'balance'),
-        '步驟還在清單裡就直接接回去（即使不在這一頁，由呼叫端再判斷）');
 
-    // ZH: 這一步被濾掉時（沒有公告），要往後找**排在它之後、而且在這一頁**的。
+    // ZH: 🔴 2026-09-24 擁有者回報「點下去之後轉 MYAI 分頁就沒東西了」。
+    //     成因之一：resumeIndex 原本會回傳**別頁**那一步的索引，
+    //     呼叫端一看 page 不同就什麼都不演 —— 畫面一片空白。
+    //     現在一律往後追到**這一頁**的第一步：他晃到哪，導覽就追到哪。
+    const onIndex = Tour.resumeIndex(steps, 'balance', 'index.html');
+    eq(steps[onIndex].page, 'index.html', '進度在別頁時 → 追到這一頁的步驟');
+    eq(steps[onIndex].id, 'train', '而且是排在進度**之後**的那一步，不是從頭來');
+
+    // ZH: 真的在這一頁時當然就接那一步本身。
+    const onMyai = Tour.resumeIndex(steps, 'balance', 'myai.html');
+    eq(steps[onMyai].id, 'balance', '進度就在這一頁 → 接回同一步');
+
+    // ZH: 這一步被濾掉時（沒有公告），往後找排在它之後、而且在這一頁的。
     const noNews = Tour.stepsFor({
         here: 'index.html', gpuOn: true, has: (sel) => sel !== '#news' });
     const after = Tour.resumeIndex(noNews, 'news', 'index.html');
     eq(noNews[after].id, 'lines', '被濾掉的步驟 → 接到它後面那一步');
 
+    // ZH: 這一頁完全沒有可接的步驟（例如他自己走去 jobs.html）→ 不要亂演。
+    eq(Tour.resumeIndex(steps, 'done', 'jobs.html'), -1,
+        '這一頁沒有任何步驟 → -1（什麼都不演，不是亂接一個）');
+
     eq(Tour.resumeIndex(steps, 'no-such-step', 'index.html'), -1,
         '完全不認得的 id → -1（不要亂接）');
     eq(Tour.resumeIndex(steps, null, 'index.html'), -1, '沒有進度 → -1');
+
+    // ZH: ⚠ 另一個成因是 `start()` 裡的「看過了」把**續走**也擋掉了
+    //     （按「再看一次」→ 跨頁 → 第二頁 isDismissed 直接 return）。
+    //     那一段要 sessionStorage 與 Prefs，測不到；判準寫在 start() 的註解裡，
+    //     驗收靠瀏覽器實測那一條（清單見 docs 的驗收步驟）。
 }
 
 console.log('tour.js —— 頁面判斷');

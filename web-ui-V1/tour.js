@@ -175,21 +175,28 @@
      */
     function resumeIndex(steps, savedId, here) {
         if (!savedId) return -1;
-        var i;
-        for (i = 0; i < steps.length; i++) {
-            if (steps[i].id === savedId) return i;
-        }
+        var i, j;
         var masterPos = -1;
         for (i = 0; i < STEPS.length; i++) {
             if (STEPS[i].id === savedId) { masterPos = i; break; }
         }
-        if (masterPos < 0) return -1;
+        if (masterPos < 0) return -1;      // ZH: 不認得的 id（步驟表改過）→ 不要亂接
+
+        // ZH: 🔴 一律找「**這一頁**、而且排在進度之後（含進度本身）」的第一步。
+        //
+        // ZH: 原本是「先找完全相同的 id，找不到才往後找」。那個寫法在
+        //     **進度指到別頁**時會回傳那個別頁的索引，呼叫端接著發現
+        //     `page !== here` 就什麼都不演 —— 畫面上是一片空白。
+        //     會走到那裡的情境不只一種（使用者自己打網址、上一頁、
+        //     或是點到導覽沒預期的連結），而每一種的結果都一樣難解釋。
+        //     改成「往後追到這一頁的第一步」= 使用者晃到哪裡，導覽就追到哪裡。
         for (i = 0; i < steps.length; i++) {
+            if (steps[i].page !== here) continue;
             var pos = -1;
-            for (var j = 0; j < STEPS.length; j++) {
+            for (j = 0; j < STEPS.length; j++) {
                 if (STEPS[j].id === steps[i].id) { pos = j; break; }
             }
-            if (pos >= masterPos && steps[i].page === here) return i;
+            if (pos >= masterPos) return i;
         }
         return -1;
     }
@@ -550,9 +557,20 @@
         } catch (e) { return true; }
     }
 
-    /* ZH: 開始（或續走）。`force` 是「再看一次」用的 —— 忽略「看過了」。 */
+    /* ZH: 開始（或續走）。`force` 是「再看一次」用的 —— 忽略「看過了」。
+     *
+     * ZH: 🔴 **「看過了」只擋「從頭開始」，不擋「續走」。**
+     *     這兩件事本來混在一起，造成一個很難自己撞到的 bug：
+     *       按「再看一次導覽」（force=true，過得了）→ 點卡片去 MYAI →
+     *       新頁面載入後呼叫的是 `start(false)` → 撞上 isDismissed → 直接 return
+     *       → **第二頁什麼都不畫**。
+     *     也就是「看過一次的人再看一次時，跨頁之後就斷在那裡」。
+     *     2026-09-24 擁有者回報「點下去之後轉 MYAI 分頁就沒東西了」查到的。
+     *     判準：sessionStorage 裡有進度 = 正在走，那就繼續走完。
+     */
     async function start(force) {
-        if (!force && global.Prefs && global.Prefs.isDismissed
+        var inProgress = !!readProgress();
+        if (!force && !inProgress && global.Prefs && global.Prefs.isDismissed
             && global.Prefs.isDismissed(SEEN_KEY)) return;
 
         var here = pageName(location.pathname);
@@ -579,13 +597,13 @@
         }
 
         if (steps[cur].page !== here) {
-            // ZH: 🔴 **他自己按了「再看一次導覽」**（force）：那顆鈕在每一頁的
-            //     帳號選單裡，而導覽從首頁開始。不帶他過去的話，
-            //     在別頁按下去會**完全沒反應** —— 實測踩到過。
+            // ZH: 走到這裡只剩一種情況：**他按了「再看一次導覽」但人不在首頁**
+            //     （那顆鈕在每一頁的帳號選單裡，而導覽從首頁開始）。
+            //     不帶他過去的話按下去會完全沒反應 —— 實測踩到過。
             //     ⚠ 這是唯一一次程式主動換頁，而且是他剛剛按下去要求的。
+            // ZH: 續走的情況不會落到這裡：resumeIndex 只會回傳**這一頁**的步驟，
+            //     接不上就回 -1（上面已經處理）。
             if (force) location.href = steps[cur].page;
-            // ZH: 續走（非 force）則不要把人抓回去 —— 他可能是自己走開的。
-            //     進度留著，他回到那一頁就會接上。
             return;
         }
 
