@@ -946,48 +946,52 @@ html.aibot-docked #aibot-fab { display: none; }
 
 
 /* ==========================================================================
- * ZH: 首次登入的引導導覽（v4.26，coach marks）—— 行為見 tour.js
+ * ZH: 首次登入的引導導覽（v4.27，coach marks）—— 行為見 tour.js
+ *
+ * ZH: 🔴 **遮罩是四塊，不是一整片。** 中間那個洞要讓使用者**真的點得到**
+ *     （v4.27 改成「導覽不幫忙跳頁，換頁由他自己點」）。
+ *     一整片半透明遮罩會把點擊全吃掉 —— 畫面看起來一樣，但那張卡點不動，
+ *     而「看得到、點不到」是這種引導最常見的壞掉方式。
+ *
+ * ZH: ⚠ 那也是為什麼**不用** `box-shadow: 0 0 0 9999px` 那個常見寫法：
+ *     陰影不接點擊沒錯，但那圈陰影屬於高亮框自己，
+ *     它蓋住的區域**不會**擋住點擊 —— 使用者可以點到導覽以外的任何東西，
+ *     一點就跑掉、導覽卻還停在原地。四塊遮罩兩件事一起解決：
+ *     擋住周圍、露出中間。
  *
  * ZH: 🔴 **z-index 1100。** 既有的分層是
  *       內容 → 下拉 20 → ☰ 面板 25 → topbar 30 → tip 40 → 小基 900 → 初次設定 1000。
- *     導覽要圈得住**頂部列的導覽鈕**，所以必須蓋過 30；而它與初次設定
- *     **不會同時出現**（tour.js 會等 `.onb` 消失才開始），取 1100 是為了
- *     萬一真的疊到時，逃生口（×）在上層點得到。
+ *     導覽要圈得住**頂部列的導覽鈕**（其中一步就是請他點「首頁」），
+ *     所以必須蓋過 30；與初次設定不會同時出現（tour.js 會等 `.onb` 消失）。
  *     ⚠ 這一段與 web.css 的小基、topbar 兩處註解、styles.css 的 tip 註解
  *     構成同一份分層約定 —— 之後再加層請一起更新那幾處。
  *
  * ZH: ⚠ 樣式放 web.css 不放 styles.css：後者與管理端逐位元組相同，
  *     而管理端沒有導覽功能。
  * ========================================================================== */
-/* ZH: 遮罩有兩個工作，而且要分開想：
- *   1. **擋住點擊** —— 導覽進行中點到別的東西會讓步驟與畫面對不上。
- *      所以它永遠在（即使看不見），只有說明卡上的鈕能按。
- *   2. **變暗** —— 只有在「沒有高亮框」的那一步（歡迎頁）才由它負責。
- *      有高亮框時暗的是框的外擴陰影（見 .tour__ring），
- *      兩個一起上會疊成兩倍深。切換由 tour.js 加 --dim 這個修飾字，
- *      不用 :has() —— 遮罩在 DOM 上排在框**前面**，兄弟選擇器選不到它。 */
-.tour__veil {
+.tour__panel {
     position: fixed;
-    inset: 0;
     z-index: 1100;
-    background: transparent;
+    background: rgb(31 35 40 / 55%);
+    /* ZH: 遮罩要**吃掉**點擊（這是它的第二個工作）—— 所以不要 pointer-events:none。 */
 }
-.tour__veil--dim { background: rgb(31 35 40 / 55%); }
+
+/* ZH: 高亮框只是一圈邊，不負責變暗（變暗是四塊遮罩的事）。
+ * ZH: ⚠ `pointer-events: none` 是關鍵：它畫在目標**上面**，
+ *     不放行的話使用者點到的會是這個框，那張卡就永遠點不到。 */
 .tour__ring {
     position: fixed;
     z-index: 1101;
     border: 3px solid var(--accent);
     border-radius: var(--radius-md);
-    /* ZH: 用外擴的陰影把中間挖亮 —— 比 clip-path 穩（不必算路徑，
-     *     捲動時只要改 left/top）。9999px 是要蓋滿任何螢幕。 */
-    box-shadow: 0 0 0 9999px rgb(31 35 40 / 55%);
     pointer-events: none;
     transition: all .15s ease;
 }
+
 .tour__box {
     position: fixed;
     z-index: 1102;
-    width: min(26rem, calc(100vw - var(--space-5)));
+    width: min(28rem, calc(100vw - var(--space-5)));
     padding: var(--space-4);
     border-radius: var(--radius-lg);
     background-color: var(--surface);
@@ -1006,9 +1010,9 @@ html.aibot-docked #aibot-fab { display: none; }
     color: var(--text-muted);
     cursor: pointer;
 }
-.tour__n { font-size: 0.8125rem; color: var(--text-muted); margin: 0; }
-.tour__t { margin: var(--space-1) 0 var(--space-2); font-size: 1.125rem; }
-.tour__d { margin: 0; font-size: 0.9375rem; }
+/* ZH: 標題右邊要留出 × 的位置，不然長標題會壓到那顆鈕。 */
+.tour__t { margin: 0 var(--tap-min) var(--space-2) 0; font-size: 1.125rem; }
+.tour__d { margin: 0; font-size: 0.9375rem; line-height: 1.7; }
 .tour__note {
     margin: var(--space-2) 0 0;
     font-size: 0.875rem;
@@ -1017,30 +1021,36 @@ html.aibot-docked #aibot-fab { display: none; }
 .tour__btns {
     display: flex;
     gap: var(--space-2);
-    justify-content: flex-end;
-    /* ZH: ⚠ 不加這一行的話 flex 預設 stretch —— 兩顆鈕會被拉成同一個高度，
-     *     而那個高度是**內容最高的那顆**決定的（實測「上一步」變成 60px、
-     *     主要按鈕 44px，兩顆看起來不一樣高）。.btn 自己有 min-height 44，
-     *     讓它照自己的高度就好。 */
     align-items: center;
+    justify-content: flex-end;
     margin-top: var(--space-4);
 }
 /* ZH: ⚠ `.btn--primary` 在這個專案裡**自己就是 width:100%**（styles.css:231，
  *     它預設是「單獨一顆滿版主要動作」）。照那個寬度擺進這一列的話，
  *     它會吃掉整行、把「上一步」擠到卡片**外面** —— 實測到過。
- *     所以這裡把寬度交還給 flex：主要按鈕吃剩下的空間，「上一步」照內容寬。
- * ZH: ⚠ margin-top 也要歸零（它預設帶一個，會讓兩顆鈕不等高對齊）。 */
+ *     所以這裡把寬度交還給 flex。⚠ margin-top 也要歸零。 */
 .tour__btns .btn { white-space: nowrap; }
 .tour__btns .btn--ghost { flex: 0 0 auto; }
 .tour__btns .btn--primary { flex: 1 1 auto; width: auto; margin-top: 0; }
+
+/* ZH: 「請你自己點」那一步沒有前進鈕，改放這一行提示。
+ * ZH: ⚠ 它要看起來**不像按鈕** —— 長得像按鈕的話使用者會點它，
+ *     然後發現沒反應（要點的是圈起來的那個東西）。 */
+.tour__wait {
+    flex: 1 1 auto;
+    font-size: 0.9375rem;
+    font-weight: 600;
+    color: var(--accent-hover);
+    text-align: right;
+}
+
 /* ZH: 導覽開著時鎖住整頁捲動 —— 與初次設定同一個做法（styles.css 的
- *     `html:has(.onb)`）。⚠ 但 tour.js 會主動把目標捲進畫面，
- *     所以鎖的是**使用者**的捲動，程式的 scrollIntoView 不受影響。 */
+ *     `html:has(.onb)`）。⚠ tour.js 主動的 scrollIntoView 不受影響。 */
 html.tour-open body { overflow: hidden; }
 
 @media (max-width: 640px) {
-    /* ZH: 手機把說明卡釘在底部 —— 跟著目標飄的話，
-     *     在小螢幕上很容易被推出畫面外。 */
+    /* ZH: 手機把說明卡釘在底部 —— 跟著目標飄的話，在小螢幕上很容易
+     *     被推出畫面外，而且會蓋住那個要他點的東西。 */
     .tour__box {
         left: var(--space-3) !important;
         right: var(--space-3);

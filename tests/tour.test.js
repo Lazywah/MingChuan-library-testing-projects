@@ -8,6 +8,12 @@
  * ZH: 形狀照 `tests/tz.test.js`：純 node、零相依、手寫斷言。
  *     這個 repo 沒有 JS 測試框架，那一支是既有前例。
  *
+ * ZH: 🔴 v4.27 最重要的一條在 `TestPageChangesOnlyAfterAClick`：
+ *     導覽**自己不換頁**（擁有者裁定：像遊戲引導，讓使用者自己點）。
+ *     所以步驟表若在「不是 click 的那一步」換頁，導覽會**停在上一頁不動**
+ *     —— 沒有錯誤訊息、沒有 console 紅字，只是不會前進。
+ *     那種壞法在瀏覽器裡要走到那一步才看得到，用測試釘住便宜得多。
+ *
  * ZH: ⚠ 只測 tour.js 裡**不碰 DOM** 的那一段（tour.js 在 `document` 不存在時
  *     會提早 return）。畫面的部分由瀏覽器實測負責。
  *
@@ -40,12 +46,13 @@ console.log('tour.js —— 步驟過濾');
 {
     const on = Tour.stepsFor({ here: 'index.html', gpuOn: true, has: ALL });
     const off = Tour.stepsFor({ here: 'index.html', gpuOn: false, has: ALL });
-    eq(on.length, 7, 'GPU 開著：七步');
-    eq(off.length, 5, 'GPU 暫停：五步');
+    // ZH: ⚠ 不寫死總數 —— 步驟會增減，而「剛好幾步」不是要守的性質。
+    //     要守的是**差額**與**少了哪幾步**。
+    eq(on.length - off.length, 2, 'GPU 暫停時正好少兩步');
     eq(off.some((s) => s.id === 'train' || s.id === 'lab'), false,
         'GPU 暫停時訓練與實驗室**不在**步驟裡（那兩頁會被擋成空白）');
-    eq(off.map((s) => s.id), ['hello', 'lines', 'myai', 'nav', 'bot'],
-        'GPU 暫停時剩下的順序');
+    eq(on.filter((s) => s.gpu).map((s) => s.id), ['train', 'lab'],
+        '被 GPU 閘門控制的就是那兩步');
 }
 
 // ── 目標不存在就略過（逃生設計的一半）──────────────────────────────
@@ -54,28 +61,119 @@ console.log('tour.js —— 步驟過濾');
     //     沒有它的話，某一步圈不到東西就會卡在那裡 ——
     //     而使用者只會以為平台壞了。
     const missing = Tour.stepsFor({ here: 'index.html', gpuOn: true, has: NONE });
-    eq(missing.map((s) => s.id), ['hello', 'myai', 'train', 'lab'],
-        '首頁上找不到目標的步驟被濾掉，別頁的不受影響');
+    eq(missing.every((s) => s.page !== 'index.html' || !s.target), true,
+        '首頁上找不到目標的步驟被濾掉（沒有目標的那幾步留著）');
+
+    // ZH: 🔴 v4.27：首頁的目標全不見 = 「點我去 MYAI」那座橋也沒了，
+    //     所以對岸（MYAI）那幾步**也要一起砍掉**。留著的話會在首頁
+    //     演 MYAI 的說明 —— 不報錯、不卡住，只是講錯地方。
+    eq(missing.some((s) => s.page === 'myai.html'), false,
+        '橋斷了就把對岸整段砍掉（不會在首頁演別頁的說明）');
 
     // ZH: ⚠ `has` 只能回答「**這一頁**有沒有這個元素」。別頁的元素現在當然
-    //     找不到，所以不能拿它去濾別頁的步驟 —— 否則跨頁導覽會只剩第一頁那幾步。
+    //     找不到，所以不能拿它去濾別頁的步驟。
     const onMyai = Tour.stepsFor({ here: 'myai.html', gpuOn: true, has: NONE });
     eq(onMyai.some((s) => s.id === 'lines'), true,
         '在 MYAI 頁時，首頁的步驟不會因為「這裡找不到」而被砍掉');
-    eq(onMyai.some((s) => s.id === 'myai'), false,
+    eq(onMyai.some((s) => s.id === 'balance'), false,
         '在 MYAI 頁時，這一頁自己找不到的目標才會被砍掉');
 }
 
 console.log('tour.js —— 前進與後退');
 
 {
-    const steps = Tour.stepsFor({ here: 'index.html', gpuOn: false, has: ALL }); // 5 步
+    const steps = Tour.stepsFor({ here: 'index.html', gpuOn: false, has: ALL });
+    const last = steps.length - 1;
     eq(Tour.nextIndex(steps, -1), 0, '還沒開始 → 第 0 步');
     eq(Tour.nextIndex(steps, 0), 1, '0 → 1');
-    eq(Tour.nextIndex(steps, 3), 4, '3 → 4（最後一步）');
-    eq(Tour.nextIndex(steps, 4), -1, '最後一步再按下一步 → -1（結束）');
+    eq(Tour.nextIndex(steps, last - 1), last, '倒數第二 → 最後一步');
+    eq(Tour.nextIndex(steps, last), -1, '最後一步再按下一步 → -1（結束）');
     eq(Tour.prevIndex(steps, 0), 0, '第 0 步按上一步 → 留在 0，不會變成 -1');
     eq(Tour.prevIndex(steps, 2), 1, '2 → 1');
+}
+
+console.log('tour.js —— 換頁只能由使用者點（v4.27 的不變式）');
+
+// ── TestPageChangesOnlyAfterAClick ──────────────────────────────────
+{
+    // ZH: 🔴 導覽自己不跳頁。所以每一次「這一步與下一步不同頁」，
+    //     前一步都必須是 click:true（由使用者點那個連結過去）。
+    //     不然導覽會停在上一頁不動，而且完全不報錯。
+    const both = Tour.stepsFor({ here: 'index.html', gpuOn: true, has: ALL });
+    const gpuOff = Tour.stepsFor({ here: 'index.html', gpuOn: false, has: ALL });
+    eq(Tour.badTransitions(both), [], 'GPU 開著時沒有「走不過去」的換頁');
+    eq(Tour.badTransitions(gpuOff), [], 'GPU 暫停時也沒有（少了兩步之後接縫會變）');
+
+    // ZH: ⚠ 連目標都找不到的極端情況（例如首頁大改版）也不能卡住。
+    const nothing = Tour.stepsFor({ here: 'index.html', gpuOn: false, has: NONE });
+    eq(Tour.badTransitions(nothing), [], '首頁的目標全都找不到時也不會卡住');
+
+    // ZH: **陰性對照** —— 這支要真的抓得到問題，不是永遠回空陣列。
+    const broken = [
+        { id: 'a', page: 'index.html', click: false },
+        { id: 'b', page: 'myai.html' },
+    ];
+    eq(Tour.badTransitions(broken), ['a'],
+        '不是 click 卻要換頁 → 抓得出來（陰性對照）');
+
+    const fixed = [
+        { id: 'a', page: 'index.html', click: true },
+        { id: 'b', page: 'myai.html' },
+    ];
+    eq(Tour.badTransitions(fixed), [], '改成 click 之後就通過');
+}
+
+// ── 要使用者點的那幾步，目標必須是連結 ───────────────────────────────
+{
+    // ZH: ⚠ click 步驟的目標若不是 `<a>`（例如圈到一個 div），
+    //     使用者點下去不會換頁，導覽卻已經把進度推到下一頁的步驟 ——
+    //     結果是「按了沒反應」。選擇器裡看得出來的部分先在這裡守住。
+    const clicky = Tour.STEPS.filter((s) => s.click);
+    eq(clicky.length > 0, true, '確實有「請你自己點」的步驟');
+    eq(clicky.every((s) => !!s.target), true, 'click 步驟一定要有目標');
+}
+
+console.log('tour.js —— 進度用 id，不用索引');
+
+// ── TestProgressSurvivesPageChanges ────────────────────────────────
+{
+    // ZH: 🔴 `stepsFor` 的結果**長短會變**（`has` 只檢查目前這一頁的目標），
+    //     所以「第幾個」在跨頁之後會指到別的步驟。
+    //     v4.26 存的就是索引 —— 實際的症狀是：沒有公告的人走到 MYAI 頁時，
+    //     會看到「點一下這張卡片」重播一次。
+    const onIndexNoNews = Tour.stepsFor({
+        here: 'index.html', gpuOn: true, has: (sel) => sel !== '#news' });
+    const onMyai = Tour.stepsFor({ here: 'myai.html', gpuOn: true, has: ALL });
+    eq(onIndexNoNews.length !== onMyai.length, true,
+        '前提：同一份導覽在兩頁算出來的長度真的會不一樣');
+
+    // ZH: 使用者在首頁點掉「去 MYAI」那一步之後，存的是 id 'balance'。
+    //     到了 MYAI 頁（清單多了 news 那一步）仍然要停在 balance。
+    const at = Tour.resumeIndex(onMyai, 'balance', 'myai.html');
+    eq(onMyai[at].id, 'balance', '跨頁之後接回**同一個**步驟');
+
+    // ZH: 若換成索引：在首頁那份清單裡 balance 是第幾個？
+    let idxInIndexList = onIndexNoNews.findIndex((s) => s.id === 'balance');
+    eq(onMyai[idxInIndexList].id !== 'balance', true,
+        '（對照）用索引的話會指到別的步驟 —— 這就是 v4.26 的 bug');
+}
+
+// ── 進度指到「這一頁沒有的步驟」時 ──────────────────────────────────
+{
+    const steps = Tour.stepsFor({ here: 'index.html', gpuOn: true, has: ALL });
+    eq(Tour.resumeIndex(steps, 'balance', 'index.html'),
+        steps.findIndex((s) => s.id === 'balance'),
+        '步驟還在清單裡就直接接回去（即使不在這一頁，由呼叫端再判斷）');
+
+    // ZH: 這一步被濾掉時（沒有公告），要往後找**排在它之後、而且在這一頁**的。
+    const noNews = Tour.stepsFor({
+        here: 'index.html', gpuOn: true, has: (sel) => sel !== '#news' });
+    const after = Tour.resumeIndex(noNews, 'news', 'index.html');
+    eq(noNews[after].id, 'lines', '被濾掉的步驟 → 接到它後面那一步');
+
+    eq(Tour.resumeIndex(steps, 'no-such-step', 'index.html'), -1,
+        '完全不認得的 id → -1（不要亂接）');
+    eq(Tour.resumeIndex(steps, null, 'index.html'), -1, '沒有進度 → -1');
 }
 
 console.log('tour.js —— 頁面判斷');
@@ -101,6 +199,9 @@ console.log('tour.js —— 契約');
         'key 的格式必須通得過後端驗證（否則靜默失敗，每次登入都會再導一次）');
     eq(Tour.STEPS.every((s) => s.t && s.d && s.page), true,
         '每一步都要有頁面、標題、說明');
+    // ZH: 擁有者要求「說明多一點」—— 一句話的步驟就失去意義了。
+    eq(Tour.STEPS.every((s) => s.d[1].length >= 30), true,
+        '每一步的說明都要夠長（擁有者要求說明寫詳細）');
     eq(Tour.STEPS.every((s) => /^[a-z_]+$/.test(s.t[0]) && /^[a-z_]+$/.test(s.d[0])), true,
         'i18n key 的形狀（check_i18n 只認得字面值）');
 }
