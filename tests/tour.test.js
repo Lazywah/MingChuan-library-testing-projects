@@ -38,14 +38,16 @@ function eq(actual, expected, what) {
 }
 
 const ALL = function (sel) { return true; };
+// ZH: v4.28b 起有兩道閘門：GPU 與文件庫。兩個都開＝完整的那一圈。
+const BOTH_ON = { gpuOn: true, docsOn: true };
 const NONE = function (sel) { return false; };
 
 console.log('tour.js —— 步驟過濾');
 
 // ── GPU 閘門 ────────────────────────────────────────────────────────
 {
-    const on = Tour.stepsFor({ here: 'index.html', gpuOn: true, has: ALL });
-    const off = Tour.stepsFor({ here: 'index.html', gpuOn: false, has: ALL });
+    const on = Tour.stepsFor({ here: 'index.html', ...BOTH_ON, has: ALL });
+    const off = Tour.stepsFor({ here: 'index.html', gpuOn: false, docsOn: true, has: ALL });
     // ZH: ⚠ 不寫死總數 —— 步驟會增減，而「剛好幾步」不是要守的性質。
     //     要守的是**少了哪幾步**，以及少完之後還接得起來。
     eq(off.some((s) => s.id === 'train' || s.id === 'lab'), false,
@@ -221,12 +223,37 @@ const DESKTOP = (sel) => (/topbar__burger/.test(sel) ? /topnav|navmenu/.test(sel
 // ZH: 手機：反過來 —— 只看得到 ☰，導覽列收在裡面。
 const MOBILE = (sel) => (/topbar__burger/.test(sel) ? true : !/topnav|navmenu/.test(sel));
 
-const TOUR_PAGES = ['index.html', 'myai.html', 'jobs.html', 'usage.html', 'report.html'];
+const TOUR_PAGES = ['index.html', 'myai.html', 'jobs.html', 'usage.html',
+                    'docs.html', 'report.html'];
 
 {
-    const all = Tour.stepsFor({ here: 'index.html', gpuOn: true, has: ALL });
+    const all = Tour.stepsFor({ here: 'index.html', ...BOTH_ON, has: ALL });
     const pages = [...new Set(all.map((s) => s.page))].sort();
-    eq(pages, [...TOUR_PAGES].sort(), '導覽會走過的頁面就是這五頁');
+    eq(pages, [...TOUR_PAGES].sort(), '兩道閘門都開時，導覽會走過這六頁');
+}
+
+// ── TestTheDocsStopIsItsOwnGate ────────────────────────────────────
+{
+    // ZH: 🔴 「看別人做過什麼」的入口**在有內容之前不出現**
+    //     （docs-entry.js，fail closed）。所以那一站要能整段拿掉。
+    //     ⚠ 判斷不能用「看得見嗎」—— 它躺在還沒點開的下拉裡，
+    //     那個答案永遠是否，於是不管有沒有內容都會被砍。
+    const withDocs = Tour.stepsFor({ here: 'index.html', ...BOTH_ON, has: ALL });
+    const without = Tour.stepsFor({ here: 'index.html', gpuOn: true, docsOn: false, has: ALL });
+    eq(without.some((s) => s.page === 'docs.html'), false,
+        '沒有內容時整站不出現（入口那時根本不在導覽列上）');
+    eq(withDocs.some((s) => s.page === 'docs.html'), true, '（對照）有內容時它在');
+    eq(withDocs.length - without.length, withDocs.filter((s) => s.docs).length,
+        '少掉的正好是掛了 docs 旗標的那些');
+    eq(Tour.badTransitions(without), [], '整段拿掉之後沒有走不過去的換頁');
+    eq(without.some((s) => s.page === 'report.html'), true,
+        '而且後面那一站還在（沒有被連坐砍掉）');
+
+    // ZH: 兩道閘門同時關 —— 少掉兩整段，前後還是要接得起來。
+    const none = Tour.stepsFor({ here: 'index.html', gpuOn: false, docsOn: false, has: ALL });
+    eq(Tour.badTransitions(none), [], '兩道閘門都關著時也接得起來');
+    eq(none.some((s) => s.page === 'usage.html') && none.some((s) => s.page === 'report.html'),
+        true, '而且沒被擋的那兩站都還在');
 }
 
 // ── TestTheChainSurvivesOnBothLayouts ──────────────────────────────
@@ -238,10 +265,10 @@ const TOUR_PAGES = ['index.html', 'myai.html', 'jobs.html', 'usage.html', 'repor
     //     整段選單導覽會在開場就被砍掉：導覽只走到一半就自己結束，不報錯。
     [['桌面', DESKTOP], ['手機', MOBILE]].forEach(([what, has]) => {
         TOUR_PAGES.forEach((here) => {
-            const steps = Tour.stepsFor({ here: here, gpuOn: true, has: has });
+            const steps = Tour.stepsFor({ here: here, ...BOTH_ON, has: has });
             const pages = new Set(steps.map((s) => s.page));
             eq(TOUR_PAGES.every((p) => pages.has(p)), true,
-                what + '在 ' + here + ' 重算時，五頁都還在鏈子上');
+                what + '在 ' + here + ' 重算時，六頁都還在鏈子上');
             eq(Tour.badTransitions(steps), [],
                 what + '在 ' + here + ' 重算時沒有走不過去的換頁');
         });
@@ -260,7 +287,7 @@ const TOUR_PAGES = ['index.html', 'myai.html', 'jobs.html', 'usage.html', 'repor
 
     // ZH: 陰性對照 —— probe 真的有作用：目標看不見、但 probe 看得見時要留著。
     const hidMenuItems = Tour.stepsFor({
-        here: 'index.html', gpuOn: true,
+        here: 'index.html', ...BOTH_ON,
         has: (sel) => !/navmenu__menu/.test(sel) });
     eq(hidMenuItems.some((s) => s.id === 'go_jobs'), true,
         '目標藏在還沒點開的選單裡，步驟仍然留著（這就是 probe 的用途）');
@@ -268,7 +295,7 @@ const TOUR_PAGES = ['index.html', 'myai.html', 'jobs.html', 'usage.html', 'repor
     // ZH: 反過來 —— 連 probe 都不見了（有人把整排導覽拆了）就該砍掉，
     //     而且對岸那幾頁要跟著砍（橋斷了）。
     const noNav = Tour.stepsFor({
-        here: 'index.html', gpuOn: true,
+        here: 'index.html', ...BOTH_ON,
         has: (sel) => !/topnav|navmenu|topbar__burger/.test(sel) });
     eq(noNav.some((s) => s.page === 'jobs.html'), false,
         '連 probe 都找不到時，後面那幾頁整段砍掉（不會在首頁演別頁的說明）');

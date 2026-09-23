@@ -30,6 +30,12 @@
  *       · `.topbar__burger` —— 手機才有（桌面 `display:none`，自動略過）
  *       · `.navmenu__toggle` —— 分類下拉，點開才看得到裡面的連結
  *
+ * ZH: 🔴 **文件庫那一站有自己的閘門。** 「看別人做過什麼」的入口在
+ *     **沒有內容之前不出現**（規則只寫在 docs-entry.js，fail closed）。
+ *     所以那一段掛 `docs` 旗標，判斷是「導覽列上那一項現在在不在」。
+ *     ⚠ 不能用「看得見嗎」判斷 —— 它躺在還沒點開的下拉裡，永遠是看不見的。
+ *     要看的是那個 `hidden` 屬性有沒有被 docs-entry.js 拿掉。
+ *
  * ZH: 🔴 **訓練進度那一站也吃 GPU 閘門。** 不是因為那一頁會空白，而是
  *     `chrome.js` 的 applyGpuGate 在功能暫停時會把選單裡那幾項的 `href`
  *     **整個拿掉** —— 於是「點我去訓練進度」那一步圈得到東西卻點不過去。
@@ -59,6 +65,7 @@
      *   target 圈住誰（null = 置中的卡片，不圈任何東西）
      *   click  true = **要使用者自己點那個元素**才前進（那一步不給前進鈕）
      *   gpu    true = GPU 功能暫停時整步略過（那兩頁那時會被擋成空白）
+     *   docs   true = 文件庫還沒有內容時整步略過（入口那時不存在）
      *   probe  用**這個**選擇器判斷步驟做不做得到（預設用 target）。
      *          給它的時機只有一個：目標要等前一步點開才看得見（選單裡的東西）。
      *
@@ -73,7 +80,7 @@
           t: ['tour_hello_t', '歡迎使用 AI 基地'],
           d: ['tour_hello_d',
               '這裡是銘傳大學圖書館的 AI 平台：可以直接用現成的 AI 工具，也可以自己訓練模型。'
-              + '接下來帶你把整個平台走一遍，大約三到五分鐘，每一步都是你自己點。'
+              + '接下來帶你把整個平台走一遍，大約五分鐘，每一步都是你自己點。'
               + '隨時可以按右上角的 × 離開，之後在帳號選單裡可以再看一次。'] },
 
         { id: 'news', page: 'index.html', target: '#news',
@@ -239,18 +246,94 @@
               '手機的畫面比較窄，所以上面那排選單收進了這顆按鈕。'
               + '點一下把它打開 —— 接下來每次要換頁都從這裡走。'] },
 
-        { id: 'grp_help', page: 'usage.html', click: true,
+        // ZH: 🔴 每一站都**回到首頁**再出發（v4.28b）。多兩下，但換來的是
+        //     「任何一站都可以整段拿掉」—— 文件庫沒有內容、GPU 暫停，
+        //     少掉的那一段兩端都在首頁，剩下的仍然接得起來。
+        //     從使用量直接跳到下一站的話，中間那一站一消失就斷鏈。
+        { id: 'home_usage', page: 'usage.html', click: true,
+          target: '.topnav a[href="index.html"]',
+          probe: '.topbar__burger, .topnav a[href="index.html"]',
+          t: ['tour_home_t', '左上角隨時回得去'],
+          d: ['tour_home_d',
+              '不管走到哪一頁，點頂部列的「首頁」或左上角的站名都會回到首頁。'
+              + '點一下「首頁」，我們回去看剩下的部分。'] },
+
+        // ══════════════════════════════════════════════════════════
+        // ZH: 文件庫（看別人做過什麼）—— 擁有者 2026-09-24 指出漏了這一站。
+        //     整段掛 docs 旗標：沒有內容時入口不存在，這一段就整個消失。
+        // ══════════════════════════════════════════════════════════
+        { id: 'menu_docs_idx', page: 'index.html', target: '.topbar__burger', click: true,
+          docs: true,
+          t: ['tour_burger_t', '選單收在這顆 ☰ 裡'],
+          d: ['tour_burger_d',
+              '手機的畫面比較窄，所以上面那排選單收進了這顆按鈕。'
+              + '點一下把它打開 —— 接下來每次要換頁都從這裡走。'] },
+
+        { id: 'grp_help_docs', page: 'index.html', click: true, docs: true,
           target: '.navmenu__toggle[data-i18n="grp_help_t"]',
           probe: '.topbar__burger, .navmenu__toggle[data-i18n="grp_help_t"]',
           t: ['tour_grp_help_t', '「其他範例參考」這一組'],
           d: ['tour_grp_help_d',
               '這一組放的是「看看別人怎麼做」跟「東西壞了要跟誰說」。'
-              + '點一下把它展開，最後一站在裡面。'] },
+              + '點一下把它展開。'] },
 
-        { id: 'go_report', page: 'usage.html', click: true,
+        { id: 'go_docs', page: 'index.html', click: true, docs: true,
+          target: '.navmenu__menu a[href="docs.html"]',
+          probe: '.topbar__burger, .navmenu__toggle[data-i18n="grp_help_t"]',
+          t: ['tour_docs_go_t', '第三站：看別人做過什麼'],
+          d: ['tour_docs_go_d',
+              '點「看別人做過什麼」。這一站不是功能，是別人已經做出來的東西：'
+              + '看得到人家拿這個平台做了什麼、怎麼做的。'
+              + '不知道自己想做什麼的時候，從這裡開始通常比從空白頁開始容易。'] },
+
+        { id: 'docs_lead', page: 'docs.html', target: '#lead', docs: true,
+          t: ['tour_docs_lead_t', '這一頁放的是成果，不是說明書'],
+          d: ['tour_docs_lead_d',
+              '每一則都是一個真的做出來的例子 —— 做了什麼、用了哪些步驟。'
+              + '這裡沒有內容的時候整個入口不會出現，'
+              + '所以你在選單裡看得到它，就代表裡面真的有東西。'] },
+
+        { id: 'docs_list', page: 'docs.html', target: '#list', docs: true,
+          t: ['tour_docs_list_t', '點進去看做法'],
+          d: ['tour_docs_list_d',
+              '一張卡片是一則。點進去看得到完整內容，'
+              + '想照著做的話裡面會寫到用了哪些步驟與資料。'
+              + '目前還不多，之後會持續增加。'] },
+
+        { id: 'menu_docs', page: 'docs.html', target: '.topbar__burger', click: true,
+          docs: true,
+          t: ['tour_burger_t', '選單收在這顆 ☰ 裡'],
+          d: ['tour_burger_d',
+              '手機的畫面比較窄，所以上面那排選單收進了這顆按鈕。'
+              + '點一下把它打開 —— 接下來每次要換頁都從這裡走。'] },
+
+        { id: 'home_docs', page: 'docs.html', click: true, docs: true,
+          target: '.topnav a[href="index.html"]',
+          probe: '.topbar__burger, .topnav a[href="index.html"]',
+          t: ['tour_home_t', '左上角隨時回得去'],
+          d: ['tour_home_d',
+              '不管走到哪一頁，點頂部列的「首頁」或左上角的站名都會回到首頁。'
+              + '點一下「首頁」，我們回去看剩下的部分。'] },
+
+        // ══════════════════════════════════════════════════════════
+        { id: 'menu_index3', page: 'index.html', target: '.topbar__burger', click: true,
+          t: ['tour_burger_t', '選單收在這顆 ☰ 裡'],
+          d: ['tour_burger_d',
+              '手機的畫面比較窄，所以上面那排選單收進了這顆按鈕。'
+              + '點一下把它打開 —— 接下來每次要換頁都從這裡走。'] },
+
+        { id: 'grp_help', page: 'index.html', click: true,
+          target: '.navmenu__toggle[data-i18n="grp_help_t"]',
+          probe: '.topbar__burger, .navmenu__toggle[data-i18n="grp_help_t"]',
+          t: ['tour_grp_help_t', '「其他範例參考」這一組'],
+          d: ['tour_grp_help_d',
+              '這一組放的是「看看別人怎麼做」跟「東西壞了要跟誰說」。'
+              + '點一下把它展開。'] },
+
+        { id: 'go_report', page: 'index.html', click: true,
           target: '.navmenu__menu a[href="report.html"]',
           probe: '.topbar__burger, .navmenu__toggle[data-i18n="grp_help_t"]',
-          t: ['tour_report_go_t', '第三站：問題回報'],
+          t: ['tour_report_go_t', '最後一站：問題回報'],
           d: ['tour_report_go_d',
               '點「問題回報」。平台出問題時這裡是最該來的地方，我們過去看怎麼寫。'] },
 
@@ -336,6 +419,7 @@
 
         var kept = STEPS.filter(function (s) {
             if (s.gpu && !o.gpuOn) return false;
+            if (s.docs && !o.docsOn) return false;
             var probe = s.probe || s.target;
             if (probe && s.page === here && !has(probe)) return false;
             return true;
@@ -799,6 +883,13 @@
         steps = stepsFor({
             here: here,
             gpuOn: gpuOn,
+            // ZH: 文件庫入口在有內容之前是 `hidden` 的（docs-entry.js，fail closed）。
+            //     ⚠ 用「在不在 DOM 上而且沒被 hidden」判斷，**不是**「看得見嗎」——
+            //     它躺在還沒點開的下拉裡，看得見永遠是否。
+            // ⚠ 那支是 fetch 完才解除隱藏的；還沒回來時這裡算出 false，
+            //   於是這一站被略過。與入口本身同一個 fail closed 的取捨。
+            docsOn: !!document.querySelector(
+                '.navmenu__menu a[href="docs.html"]:not([hidden])'),
             // ZH: ⚠ 要「看得見」才算有，而且**任何一個**看得見就算（見 anyVisible）。
             has: anyVisible,
         });
