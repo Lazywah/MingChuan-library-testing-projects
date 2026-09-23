@@ -52,8 +52,11 @@ console.log('tour.js —— 步驟過濾');
     //     要守的是**少了哪幾步**，以及少完之後還接得起來。
     eq(off.some((s) => s.id === 'train' || s.id === 'lab'), false,
         'GPU 暫停時訓練與實驗室**不在**步驟裡（那兩頁會被擋成空白）');
-    eq(on.length - off.length, on.filter((s) => s.gpu).length,
-        '少掉的正好是掛了 gpu 旗標的那些，沒有誤傷別的步驟');
+    // ZH: ⚠ 差額不再等於 gpu 步數 —— 關掉時會**多**出一步：
+    //     替代的那座橋（在 MYAI 頁直接點「使用量明細」）。
+    eq(on.length - off.length,
+        on.filter((s) => s.gpu).length - off.filter((s) => s.gpuOff).length,
+        '少掉的是 gpu 那些、加回來的是 gpuOff 那些，沒有誤傷別的步驟');
 
     // ZH: 🔴 v4.28 訓練進度整站也吃 GPU 閘門 —— 理由不是那一頁會空白，
     //     而是 chrome.js 的 applyGpuGate 會**把選單裡那一項的 href 拿掉**，
@@ -184,7 +187,9 @@ console.log('tour.js —— 進度用 id，不用索引');
     //     現在一律往後追到**這一頁**的第一步：他晃到哪，導覽就追到哪。
     const onIndex = Tour.resumeIndex(steps, 'balance', 'index.html');
     eq(steps[onIndex].page, 'index.html', '進度在別頁時 → 追到這一頁的步驟');
-    eq(steps[onIndex].id, 'train', '而且是排在進度**之後**的那一步，不是從頭來');
+    // ZH: ⚠ v4.28b 之後首頁只剩頭尾兩段，所以從 balance（MYAI）往後追，
+    //     在首頁接得上的第一步是收尾那兩步的第一個。
+    eq(steps[onIndex].id, 'bot', '而且是排在進度**之後**的那一步，不是從頭來');
 
     // ZH: 真的在這一頁時當然就接那一步本身。
     const onMyai = Tour.resumeIndex(steps, 'balance', 'myai.html');
@@ -208,6 +213,25 @@ console.log('tour.js —— 進度用 id，不用索引');
     //     （按「再看一次」→ 跨頁 → 第二頁 isDismissed 直接 return）。
     //     那一段要 sessionStorage 與 Prefs，測不到；判準寫在 start() 的註解裡，
     //     驗收靠瀏覽器實測那一條（清單見 docs 的驗收步驟）。
+}
+
+// ── TestExactlyOneBridgeVersionSurvives ─────────────────────────────
+{
+    // ZH: 🔴 站與站之間直接走（擁有者 2026-09-24：不要每次都回首頁），
+    //     所以「過橋」那一步有兩個版本，由閘門挑一個。
+    //     兩個都活 = 走同一座橋兩次；兩個都死 = 斷鏈。兩種都不會報錯。
+    const PAIRS = [['go_jobs', 'go_usage_myai'], ['go_docs', 'go_report_usage']];
+    [true, false].forEach((gpuOn) => [true, false].forEach((docsOn) => {
+        const st = Tour.stepsFor({ here: 'index.html', gpuOn, docsOn, has: ALL });
+        const ids = st.map((x) => x.id);
+        PAIRS.forEach(([a, b]) => {
+            eq(ids.filter((id) => id === a || id === b).length, 1,
+                'gpu=' + gpuOn + ' docs=' + docsOn + ' 時，'
+                + a + ' / ' + b + ' 正好活一個');
+        });
+        eq(Tour.badTransitions(st), [],
+            'gpu=' + gpuOn + ' docs=' + docsOn + ' 時接得起來');
+    }));
 }
 
 console.log('tour.js —— 整圈走得完（v4.28）');
@@ -243,8 +267,9 @@ const TOUR_PAGES = ['index.html', 'myai.html', 'jobs.html', 'usage.html',
     eq(without.some((s) => s.page === 'docs.html'), false,
         '沒有內容時整站不出現（入口那時根本不在導覽列上）');
     eq(withDocs.some((s) => s.page === 'docs.html'), true, '（對照）有內容時它在');
-    eq(withDocs.length - without.length, withDocs.filter((s) => s.docs).length,
-        '少掉的正好是掛了 docs 旗標的那些');
+    eq(withDocs.length - without.length,
+        withDocs.filter((s) => s.docs).length - without.filter((s) => s.docsOff).length,
+        '少掉的是 docs 那些、加回來的是 docsOff 那一座替代的橋');
     eq(Tour.badTransitions(without), [], '整段拿掉之後沒有走不過去的換頁');
     eq(without.some((s) => s.page === 'report.html'), true,
         '而且後面那一站還在（沒有被連坐砍掉）');
@@ -294,11 +319,15 @@ const TOUR_PAGES = ['index.html', 'myai.html', 'jobs.html', 'usage.html',
 
     // ZH: 反過來 —— 連 probe 都不見了（有人把整排導覽拆了）就該砍掉，
     //     而且對岸那幾頁要跟著砍（橋斷了）。
+    // ZH: ⚠ 要在**橋所在的那一頁**算：`has` 只對這一頁的步驟有意義，
+    //     而往後那幾座橋都在 MYAI 頁上（v4.28b 起不回首頁了）。
     const noNav = Tour.stepsFor({
-        here: 'index.html', ...BOTH_ON,
+        here: 'myai.html', ...BOTH_ON,
         has: (sel) => !/topnav|navmenu|topbar__burger/.test(sel) });
     eq(noNav.some((s) => s.page === 'jobs.html'), false,
-        '連 probe 都找不到時，後面那幾頁整段砍掉（不會在首頁演別頁的說明）');
+        '連 probe 都找不到時，後面那幾頁整段砍掉（不會在這一頁演別頁的說明）');
+    eq(noNav.some((s) => s.page === 'report.html'), false,
+        '最後那一站也一樣（它在同一條鏈子的更後面）');
     eq(Tour.badTransitions(noNav), [], '砍完之後也不會卡住');
 }
 

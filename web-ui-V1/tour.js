@@ -30,19 +30,28 @@
  *       · `.topbar__burger` —— 手機才有（桌面 `display:none`，自動略過）
  *       · `.navmenu__toggle` —— 分類下拉，點開才看得到裡面的連結
  *
- * ZH: 🔴 **文件庫那一站有自己的閘門。** 「看別人做過什麼」的入口在
- *     **沒有內容之前不出現**（規則只寫在 docs-entry.js，fail closed）。
- *     所以那一段掛 `docs` 旗標，判斷是「導覽列上那一項現在在不在」。
- *     ⚠ 不能用「看得見嗎」判斷 —— 它躺在還沒點開的下拉裡，永遠是看不見的。
- *     要看的是那個 `hidden` 屬性有沒有被 docs-entry.js 拿掉。
+ * ZH: 🔴 **站與站之間直接走，不回首頁**（擁有者 2026-09-24：
+ *     「可以不用每次都回到首頁再繼續走」）。整條路線是：
+ *       首頁 → MYAI → 訓練進度 → 使用量 → 看別人做過什麼 → 問題回報 → 首頁
  *
- * ZH: 🔴 **訓練進度那一站也吃 GPU 閘門。** 不是因為那一頁會空白，而是
- *     `chrome.js` 的 applyGpuGate 在功能暫停時會把選單裡那幾項的 `href`
- *     **整個拿掉** —— 於是「點我去訓練進度」那一步圈得到東西卻點不過去。
- *     2026-09-24 用一個全新的學生帳號實測時撞到的（管理者看不到，
- *     閘門不擋 admin —— 所以這種 bug 只有學生會遇到）。
- *     所以那一段做成**從首頁出發、回到首頁**的迴圈：閘門關著時整段消失，
- *     前後仍然接得起來（兩端都在首頁）。
+ * ZH: 兩道閘門會讓中間某幾站整段消失：
+ *       · `gpu`  —— GPU 功能暫停時，訓練進度那一站不能走。
+ *         不是因為那一頁會空白，而是 `chrome.js` 的 applyGpuGate 會把選單
+ *         那一項的 `href` **整個拿掉** —— 圈得到卻點不過去。
+ *         ⚠ 閘門**不擋 admin**，所以這個壞法只有學生遇得到
+ *         （2026-09-24 用一個全新的學生帳號實測才撞到）。
+ *       · `docs` —— 「看別人做過什麼」的入口在**沒有內容之前不出現**
+ *         （規則只寫在 docs-entry.js，fail closed）。
+ *         ⚠ 這一道不能用「看得見嗎」判斷：那一項躺在還沒點開的下拉裡，
+ *         答案永遠是否。要看的是 `hidden` 有沒有被 docs-entry.js 拿掉。
+ *
+ * ZH: 🔴 **所以「過橋」那一步有兩個版本**（`gpu`/`gpuOff`、`docs`/`docsOff`），
+ *     由閘門挑一個。例如在 MYAI 頁：閘門開著就點「我的訓練進度」，
+ *     關著就直接點「使用量明細」—— 兩個都在同一組下拉裡，
+ *     所以前面「開選單」那兩步是共用的，只有最後那一下不一樣。
+ *     ⚠ 這比「每一站都回首頁」多一點東西要顧，但省掉的是每一站兩下
+ *     毫無收穫的來回 —— 擁有者要的是後者。
+ *     不變式仍然由 `badTransitions()` 守著，而且四種組合都測。
  *
  * ZH: 🔴 這帶出一個新問題：**選單裡的連結在開場時是看不見的**，
  *     而 `stepsFor()` 是在開場一次算完的 —— 照舊判斷的話，
@@ -64,8 +73,9 @@
      *   page   這一步在哪一頁演
      *   target 圈住誰（null = 置中的卡片，不圈任何東西）
      *   click  true = **要使用者自己點那個元素**才前進（那一步不給前進鈕）
-     *   gpu    true = GPU 功能暫停時整步略過（那兩頁那時會被擋成空白）
-     *   docs   true = 文件庫還沒有內容時整步略過（入口那時不存在）
+     *   gpu    true = 只在 GPU 功能開著時出現； gpuOff  = 只在暫停時出現
+     *   docs   true = 只在文件庫有內容時出現；   docsOff = 只在沒有內容時出現
+     *          ⚠ 成對的那兩步是**同一座橋的兩個版本**，永遠只活一個。
      *   probe  用**這個**選擇器判斷步驟做不做得到（預設用 target）。
      *          給它的時機只有一個：目標要等前一步點開才看得見（選單裡的東西）。
      *
@@ -95,34 +105,6 @@
               '1 是直接用別人訓練好的 AI；2 是用我們準備好的範例資料跑一次完整訓練；'
               + '3 是自己寫程式。編號是建議的順序，不是限制 —— 想從哪一條開始都可以。'] },
 
-        { id: 'ai', page: 'index.html', target: '[data-tour="ai"]', click: true,
-          t: ['tour_ai_t', '先從第一條開始'],
-          d: ['tour_ai_d',
-              '這條通往 MYAI：可以聊天、改作文、整理報告，不需要任何程式基礎。'
-              + '點一下這張卡片，我們過去看看。'] },
-
-        { id: 'balance', page: 'myai.html', target: '#balance-card',
-          t: ['tour_balance_t', '這是你的額度'],
-          d: ['tour_balance_d',
-              '使用 MYAI 會消耗點數，這個數字就是你現在剩下的額度，每個月會自動補回來。'
-              + '用完了不會跟你收錢，只是要等下個月 —— 所以放心用。'] },
-
-        // ZH: ☰ 只在手機出現（web.css:863 桌面是 display:none）——
-        //     桌面上這一步會被 has() 自動濾掉，不必另外判斷螢幕寬度。
-        //     五個 ☰ 步驟共用同一組文案：動作一模一樣，翻兩份只會漂開。
-        { id: 'menu_myai', page: 'myai.html', target: '.topbar__burger', click: true,
-          t: ['tour_burger_t', '選單收在這顆 ☰ 裡'],
-          d: ['tour_burger_d',
-              '手機的畫面比較窄，所以上面那排選單收進了這顆按鈕。'
-              + '點一下把它打開 —— 接下來每次要換頁都從這裡走。'] },
-
-        { id: 'home', page: 'myai.html', target: '.topnav a[href="index.html"]', click: true,
-          probe: '.topbar__burger, .topnav a[href="index.html"]',
-          t: ['tour_home_t', '左上角隨時回得去'],
-          d: ['tour_home_d',
-              '不管走到哪一頁，點頂部列的「首頁」或左上角的站名都會回到首頁。'
-              + '點一下「首頁」，我們回去看剩下的部分。'] },
-
         { id: 'train', page: 'index.html', target: '[data-tour="train"]', gpu: true,
           t: ['tour_train_t', '第二條：跑一次真的訓練'],
           d: ['tour_train_d',
@@ -135,25 +117,37 @@
               '瀏覽器裡就有一套 VS Code，檔案會留在你自己的空間裡。'
               + '寫好的程式可以直接送去 GPU 訓練，不必自己準備環境。'] },
 
-        { id: 'nav', page: 'index.html', target: '.topnav',
+        { id: 'ai', page: 'index.html', target: '[data-tour="ai"]', click: true,
+          t: ['tour_ai_t', '先從第一條開始'],
+          d: ['tour_ai_d',
+              '這條通往 MYAI：可以聊天、改作文、整理報告，不需要任何程式基礎。'
+              + '點一下這張卡片，我們過去看看。'] },
+
+        // ══════════════════════════════════════════════════════════
+        // ZH: MYAI。從這裡開始就一路往前走，不再回首頁（擁有者 2026-09-24）。
+        // ══════════════════════════════════════════════════════════
+        { id: 'balance', page: 'myai.html', target: '#balance-card',
+          t: ['tour_balance_t', '這是你的額度'],
+          d: ['tour_balance_d',
+              '使用 MYAI 會消耗點數，這個數字就是你現在剩下的額度，每個月會自動補回來。'
+              + '用完了不會跟你收錢，只是要等下個月 —— 所以放心用。'] },
+
+        // ZH: 導覽列的介紹放在**第一次要用它之前**（下一步就是要從這裡換頁）。
+        //     手機看不到這一排（收在 ☰ 裡），那時這一步會自動略過。
+        { id: 'nav', page: 'myai.html', target: '.topnav',
           t: ['tour_nav_t', '其他東西都在這排選單'],
           d: ['tour_nav_d',
               '首頁只放三條主線，其餘都收在這裡：看訓練進度、管理資料集、查使用量、'
               + '看別人做過什麼、GPU 現在忙不忙，以及問題回報。'
-              + '接下來就帶你把其中三個最常用的走一遍。'] },
+              + '接下來就帶你把最常用的幾個走一遍，全部從這排出發。'] },
 
-        // ZH: ⚠ 這一顆掛 gpu 是因為它**只為了打開選單去訓練進度**。
-        //     不掛的話，閘門關著時會連按兩次 ☰（第二次等於把它關起來）。
-        { id: 'menu_index', page: 'index.html', target: '.topbar__burger', click: true,
-          gpu: true,
+        { id: 'menu_myai', page: 'myai.html', target: '.topbar__burger', click: true,
           t: ['tour_burger_t', '選單收在這顆 ☰ 裡'],
           d: ['tour_burger_d',
               '手機的畫面比較窄，所以上面那排選單收進了這顆按鈕。'
               + '點一下把它打開 —— 接下來每次要換頁都從這裡走。'] },
 
-        // ZH: 🔴 下拉裡的連結**現在是看不見的**（選單還沒點開），
-        //     所以這兩步要用 probe 判斷，不能用 target —— 見檔頭。
-        { id: 'grp_mine', page: 'index.html', click: true, gpu: true,
+        { id: 'grp_mine_myai', page: 'myai.html', click: true,
           target: '.navmenu__toggle[data-i18n="grp_mine_t"]',
           probe: '.topbar__burger, .navmenu__toggle[data-i18n="grp_mine_t"]',
           t: ['tour_grp_mine_t', '「個人使用紀錄」這一組'],
@@ -161,13 +155,27 @@
               '跟「你自己做過什麼」有關的都收在這一組：訓練進度、你上傳過的資料集、'
               + '使用量明細。點一下這個分類，把它展開。'] },
 
-        { id: 'go_jobs', page: 'index.html', click: true, gpu: true,
+        // ZH: 🔴 同一座橋的兩個版本（見檔頭）：閘門開著走訓練進度，
+        //     關著就直接去使用量。兩個都在上面那一組下拉裡，
+        //     所以前面「開選單」那兩步是共用的。
+        { id: 'go_jobs', page: 'myai.html', click: true, gpu: true,
           target: '.navmenu__menu a[href="jobs.html"]',
           probe: '.topbar__burger, .navmenu__toggle[data-i18n="grp_mine_t"]',
-          t: ['tour_jobs_go_t', '第一站：我的訓練進度'],
+          t: ['tour_jobs_go_t', '下一站：我的訓練進度'],
           d: ['tour_jobs_go_d',
               '點「我的訓練進度」，我們過去看那一頁長什麼樣子、平常什麼時候會用到它。'] },
 
+        { id: 'go_usage_myai', page: 'myai.html', click: true, gpuOff: true,
+          target: '.navmenu__menu a[href="usage.html"]',
+          probe: '.topbar__burger, .navmenu__toggle[data-i18n="grp_mine_t"]',
+          t: ['tour_usage_go_t', '下一站：使用量明細'],
+          d: ['tour_usage_go_d',
+              '點「使用量明細」，看看你的點數到底花在哪裡、還剩多少。'
+              + '這一頁跟額度有關的問題大多在這裡就能自己查清楚。'] },
+
+        // ══════════════════════════════════════════════════════════
+        // ZH: 我的訓練進度（GPU 暫停時整段消失，橋由上面那個版本接手）
+        // ══════════════════════════════════════════════════════════
         { id: 'jobs_hero', page: 'jobs.html', gpu: true, target: '.primary-card',
           t: ['tour_jobs_hero_t', '送出之後就不必守在畫面前'],
           d: ['tour_jobs_hero_d',
@@ -187,32 +195,13 @@
               + '還在排隊或訓練中的也可以取消。第一次來這裡通常是空的，'
               + '等你送出第一張訓練單就會出現。'] },
 
-        { id: 'menu_jobs', page: 'jobs.html', target: '.topbar__burger', click: true,
-          gpu: true,
+        { id: 'menu_jobs', page: 'jobs.html', target: '.topbar__burger', click: true, gpu: true,
           t: ['tour_burger_t', '選單收在這顆 ☰ 裡'],
           d: ['tour_burger_d',
               '手機的畫面比較窄，所以上面那排選單收進了這顆按鈕。'
               + '點一下把它打開 —— 接下來每次要換頁都從這裡走。'] },
 
-        // ZH: 🔴 這一段的出口**要回到首頁**，不是直接去下一站。
-        //     整個訓練進度的迴圈都掛著 gpu，閘門關著時會一起消失 ——
-        //     兩端都在首頁，剩下的步驟才接得起來（見檔頭）。
-        { id: 'home_jobs', page: 'jobs.html', click: true, gpu: true,
-          target: '.topnav a[href="index.html"]',
-          probe: '.topbar__burger, .topnav a[href="index.html"]',
-          t: ['tour_home_t', '左上角隨時回得去'],
-          d: ['tour_home_d',
-              '不管走到哪一頁，點頂部列的「首頁」或左上角的站名都會回到首頁。'
-              + '點一下「首頁」，我們回去看剩下的部分。'] },
-
-        // ZH: 從這裡開始不吃 GPU 閘門 —— 使用量與問題回報兩頁永遠都在。
-        { id: 'menu_index2', page: 'index.html', target: '.topbar__burger', click: true,
-          t: ['tour_burger_t', '選單收在這顆 ☰ 裡'],
-          d: ['tour_burger_d',
-              '手機的畫面比較窄，所以上面那排選單收進了這顆按鈕。'
-              + '點一下把它打開 —— 接下來每次要換頁都從這裡走。'] },
-
-        { id: 'grp_mine2', page: 'index.html', click: true,
+        { id: 'grp_mine_jobs', page: 'jobs.html', click: true, gpu: true,
           target: '.navmenu__toggle[data-i18n="grp_mine_t"]',
           probe: '.topbar__burger, .navmenu__toggle[data-i18n="grp_mine_t"]',
           t: ['tour_grp_mine_t', '「個人使用紀錄」這一組'],
@@ -220,14 +209,17 @@
               '跟「你自己做過什麼」有關的都收在這一組：訓練進度、你上傳過的資料集、'
               + '使用量明細。點一下這個分類，把它展開。'] },
 
-        { id: 'go_usage', page: 'index.html', click: true,
+        { id: 'go_usage_jobs', page: 'jobs.html', click: true, gpu: true,
           target: '.navmenu__menu a[href="usage.html"]',
           probe: '.topbar__burger, .navmenu__toggle[data-i18n="grp_mine_t"]',
-          t: ['tour_usage_go_t', '第二站：使用量明細'],
+          t: ['tour_usage_go_t', '下一站：使用量明細'],
           d: ['tour_usage_go_d',
               '點「使用量明細」，看看你的點數到底花在哪裡、還剩多少。'
               + '這一頁跟額度有關的問題大多在這裡就能自己查清楚。'] },
 
+        // ══════════════════════════════════════════════════════════
+        // ZH: 使用量明細（永遠在，兩道閘門都不影響它）
+        // ══════════════════════════════════════════════════════════
         { id: 'usage_bal', page: 'usage.html', target: '.primary-card',
           t: ['tour_usage_bal_t', '剩多少，以及什麼時候補'],
           d: ['tour_usage_bal_d',
@@ -246,30 +238,7 @@
               '手機的畫面比較窄，所以上面那排選單收進了這顆按鈕。'
               + '點一下把它打開 —— 接下來每次要換頁都從這裡走。'] },
 
-        // ZH: 🔴 每一站都**回到首頁**再出發（v4.28b）。多兩下，但換來的是
-        //     「任何一站都可以整段拿掉」—— 文件庫沒有內容、GPU 暫停，
-        //     少掉的那一段兩端都在首頁，剩下的仍然接得起來。
-        //     從使用量直接跳到下一站的話，中間那一站一消失就斷鏈。
-        { id: 'home_usage', page: 'usage.html', click: true,
-          target: '.topnav a[href="index.html"]',
-          probe: '.topbar__burger, .topnav a[href="index.html"]',
-          t: ['tour_home_t', '左上角隨時回得去'],
-          d: ['tour_home_d',
-              '不管走到哪一頁，點頂部列的「首頁」或左上角的站名都會回到首頁。'
-              + '點一下「首頁」，我們回去看剩下的部分。'] },
-
-        // ══════════════════════════════════════════════════════════
-        // ZH: 文件庫（看別人做過什麼）—— 擁有者 2026-09-24 指出漏了這一站。
-        //     整段掛 docs 旗標：沒有內容時入口不存在，這一段就整個消失。
-        // ══════════════════════════════════════════════════════════
-        { id: 'menu_docs_idx', page: 'index.html', target: '.topbar__burger', click: true,
-          docs: true,
-          t: ['tour_burger_t', '選單收在這顆 ☰ 裡'],
-          d: ['tour_burger_d',
-              '手機的畫面比較窄，所以上面那排選單收進了這顆按鈕。'
-              + '點一下把它打開 —— 接下來每次要換頁都從這裡走。'] },
-
-        { id: 'grp_help_docs', page: 'index.html', click: true, docs: true,
+        { id: 'grp_help_usage', page: 'usage.html', click: true,
           target: '.navmenu__toggle[data-i18n="grp_help_t"]',
           probe: '.topbar__burger, .navmenu__toggle[data-i18n="grp_help_t"]',
           t: ['tour_grp_help_t', '「其他範例參考」這一組'],
@@ -277,15 +246,26 @@
               '這一組放的是「看看別人怎麼做」跟「東西壞了要跟誰說」。'
               + '點一下把它展開。'] },
 
-        { id: 'go_docs', page: 'index.html', click: true, docs: true,
+        // ZH: 🔴 又一座兩個版本的橋：文件庫有內容就先過去，沒有就直接去問題回報。
+        { id: 'go_docs', page: 'usage.html', click: true, docs: true,
           target: '.navmenu__menu a[href="docs.html"]',
           probe: '.topbar__burger, .navmenu__toggle[data-i18n="grp_help_t"]',
-          t: ['tour_docs_go_t', '第三站：看別人做過什麼'],
+          t: ['tour_docs_go_t', '下一站：看別人做過什麼'],
           d: ['tour_docs_go_d',
               '點「看別人做過什麼」。這一站不是功能，是別人已經做出來的東西：'
               + '看得到人家拿這個平台做了什麼、怎麼做的。'
               + '不知道自己想做什麼的時候，從這裡開始通常比從空白頁開始容易。'] },
 
+        { id: 'go_report_usage', page: 'usage.html', click: true, docsOff: true,
+          target: '.navmenu__menu a[href="report.html"]',
+          probe: '.topbar__burger, .navmenu__toggle[data-i18n="grp_help_t"]',
+          t: ['tour_report_go_t', '最後一站：問題回報'],
+          d: ['tour_report_go_d',
+              '點「問題回報」。平台出問題時這裡是最該來的地方，我們過去看怎麼寫。'] },
+
+        // ══════════════════════════════════════════════════════════
+        // ZH: 看別人做過什麼（沒有內容時整段消失，橋由上面那個版本接手）
+        // ══════════════════════════════════════════════════════════
         { id: 'docs_lead', page: 'docs.html', target: '#lead', docs: true,
           t: ['tour_docs_lead_t', '這一頁放的是成果，不是說明書'],
           d: ['tour_docs_lead_d',
@@ -300,29 +280,13 @@
               + '想照著做的話裡面會寫到用了哪些步驟與資料。'
               + '目前還不多，之後會持續增加。'] },
 
-        { id: 'menu_docs', page: 'docs.html', target: '.topbar__burger', click: true,
-          docs: true,
+        { id: 'menu_docs', page: 'docs.html', target: '.topbar__burger', click: true, docs: true,
           t: ['tour_burger_t', '選單收在這顆 ☰ 裡'],
           d: ['tour_burger_d',
               '手機的畫面比較窄，所以上面那排選單收進了這顆按鈕。'
               + '點一下把它打開 —— 接下來每次要換頁都從這裡走。'] },
 
-        { id: 'home_docs', page: 'docs.html', click: true, docs: true,
-          target: '.topnav a[href="index.html"]',
-          probe: '.topbar__burger, .topnav a[href="index.html"]',
-          t: ['tour_home_t', '左上角隨時回得去'],
-          d: ['tour_home_d',
-              '不管走到哪一頁，點頂部列的「首頁」或左上角的站名都會回到首頁。'
-              + '點一下「首頁」，我們回去看剩下的部分。'] },
-
-        // ══════════════════════════════════════════════════════════
-        { id: 'menu_index3', page: 'index.html', target: '.topbar__burger', click: true,
-          t: ['tour_burger_t', '選單收在這顆 ☰ 裡'],
-          d: ['tour_burger_d',
-              '手機的畫面比較窄，所以上面那排選單收進了這顆按鈕。'
-              + '點一下把它打開 —— 接下來每次要換頁都從這裡走。'] },
-
-        { id: 'grp_help', page: 'index.html', click: true,
+        { id: 'grp_help_docs', page: 'docs.html', click: true, docs: true,
           target: '.navmenu__toggle[data-i18n="grp_help_t"]',
           probe: '.topbar__burger, .navmenu__toggle[data-i18n="grp_help_t"]',
           t: ['tour_grp_help_t', '「其他範例參考」這一組'],
@@ -330,13 +294,16 @@
               '這一組放的是「看看別人怎麼做」跟「東西壞了要跟誰說」。'
               + '點一下把它展開。'] },
 
-        { id: 'go_report', page: 'index.html', click: true,
+        { id: 'go_report_docs', page: 'docs.html', click: true, docs: true,
           target: '.navmenu__menu a[href="report.html"]',
           probe: '.topbar__burger, .navmenu__toggle[data-i18n="grp_help_t"]',
           t: ['tour_report_go_t', '最後一站：問題回報'],
           d: ['tour_report_go_d',
               '點「問題回報」。平台出問題時這裡是最該來的地方，我們過去看怎麼寫。'] },
 
+        // ══════════════════════════════════════════════════════════
+        // ZH: 問題回報（最後一站，走完回首頁收尾）
+        // ══════════════════════════════════════════════════════════
         { id: 'report_hero', page: 'report.html', target: '.primary-card',
           t: ['tour_report_hero_t', '壞掉了就寫在這裡'],
           d: ['tour_report_hero_d',
@@ -363,12 +330,14 @@
               '手機的畫面比較窄，所以上面那排選單收進了這顆按鈕。'
               + '點一下把它打開 —— 接下來每次要換頁都從這裡走。'] },
 
+        // ZH: 整趟唯一一次「回首頁」—— 順便把這件事講一次。
         { id: 'go_home', page: 'report.html', click: true,
           target: '.topnav a[href="index.html"]',
           probe: '.topbar__burger, .topnav a[href="index.html"]',
-          t: ['tour_backhome_t', '最後回到首頁'],
-          d: ['tour_backhome_d',
-              '三站都走完了。點頂部列的「首頁」回去，剩下兩件事講完就結束。'] },
+          t: ['tour_home_t', '左上角隨時回得去'],
+          d: ['tour_home_d',
+              '不管走到哪一頁，點頂部列的「首頁」或左上角的站名都會回到首頁。'
+              + '點一下「首頁」，我們回去把最後兩件事講完。'] },
 
         { id: 'bot', page: 'index.html', target: '#aibot-fab',
           t: ['tour_bot_t', '卡住就問小基'],
@@ -379,7 +348,7 @@
         { id: 'done', page: 'index.html', target: null,
           t: ['tour_done_t', '就這些，開始用吧'],
           d: ['tour_done_d',
-              '整圈走完了：三條主線、訓練進度、使用量、問題回報。'
+              '整圈走完了：三條主線、訓練進度、使用量、別人做過什麼、問題回報。'
               + '想再看一次，右上角帳號選單裡有「再看一次導覽」，'
               + '從頭到尾都可以再走一遍。'] },
     ];
@@ -419,7 +388,9 @@
 
         var kept = STEPS.filter(function (s) {
             if (s.gpu && !o.gpuOn) return false;
+            if (s.gpuOff && o.gpuOn) return false;
             if (s.docs && !o.docsOn) return false;
+            if (s.docsOff && o.docsOn) return false;
             var probe = s.probe || s.target;
             if (probe && s.page === here && !has(probe)) return false;
             return true;
