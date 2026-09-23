@@ -1,5 +1,5 @@
 /* ==========================================================================
- * tour.js — 首次登入的引導導覽（v4.27）
+ * tour.js — 首次登入的引導導覽（v4.28）
  *
  * ZH: 首頁改版之後六個入口從卡片移到頂部列下拉 —— 入口還在，但不再是
  *     「打開首頁就看得到」。所以新使用者需要有人帶一遍（擁有者需求 2026-09-23）。
@@ -24,6 +24,26 @@
  *     步數會因為有沒有公告、GPU 開不開而變動，寫出來只會讓人覺得
  *     「怎麼跟剛才看到的不一樣」。
  *
+ * ZH: 🔴 v4.28 **走完整一圈**（擁有者 2026-09-24：「完全帶一遍訓練進度、
+ *     使用量、問題回報」）。做法不是「講一句」而是真的帶過去那三頁，
+ *     而每一次換頁仍然由使用者自己點 —— 所以中間多了兩種「開選單」的步驟：
+ *       · `.topbar__burger` —— 手機才有（桌面 `display:none`，自動略過）
+ *       · `.navmenu__toggle` —— 分類下拉，點開才看得到裡面的連結
+ *
+ * ZH: 🔴 **訓練進度那一站也吃 GPU 閘門。** 不是因為那一頁會空白，而是
+ *     `chrome.js` 的 applyGpuGate 在功能暫停時會把選單裡那幾項的 `href`
+ *     **整個拿掉** —— 於是「點我去訓練進度」那一步圈得到東西卻點不過去。
+ *     2026-09-24 用一個全新的學生帳號實測時撞到的（管理者看不到，
+ *     閘門不擋 admin —— 所以這種 bug 只有學生會遇到）。
+ *     所以那一段做成**從首頁出發、回到首頁**的迴圈：閘門關著時整段消失，
+ *     前後仍然接得起來（兩端都在首頁）。
+ *
+ * ZH: 🔴 這帶出一個新問題：**選單裡的連結在開場時是看不見的**，
+ *     而 `stepsFor()` 是在開場一次算完的 —— 照舊判斷的話，
+ *     「點我去訓練進度」那一步會在開場就被濾掉，整段後面跟著被砍。
+ *     所以那些步驟帶一個 `probe`：**用別的選擇器判斷這一步做不做得到**
+ *     （通常是「要點開它的那顆鈕」）。判斷與目標分開，各自回答各自的問題。
+ *
  * ZH: ⚠ 沒有「跳過」鈕，但**一定有 ×，Esc 也能關**。理由是逃生：
  *     選擇器失效或座標算錯時，沒有出口等於把人鎖在畫面上。
  *     同理 `stepsFor()` 會先濾掉「目標不存在」的步驟。
@@ -39,6 +59,8 @@
      *   target 圈住誰（null = 置中的卡片，不圈任何東西）
      *   click  true = **要使用者自己點那個元素**才前進（那一步不給前進鈕）
      *   gpu    true = GPU 功能暫停時整步略過（那兩頁那時會被擋成空白）
+     *   probe  用**這個**選擇器判斷步驟做不做得到（預設用 target）。
+     *          給它的時機只有一個：目標要等前一步點開才看得見（選單裡的東西）。
      *
      * ZH: 🔴 **換頁只會發生在 `click: true` 的步驟之後** —— 這是這份表的不變式。
      *     程式自己不跳頁，所以破壞它的症狀是「導覽停在上一頁不動」，
@@ -51,7 +73,8 @@
           t: ['tour_hello_t', '歡迎使用 AI 基地'],
           d: ['tour_hello_d',
               '這裡是銘傳大學圖書館的 AI 平台：可以直接用現成的 AI 工具，也可以自己訓練模型。'
-              + '接下來帶你認一遍環境，大約一分鐘。隨時可以按右上角的 × 離開。'] },
+              + '接下來帶你把整個平台走一遍，大約三到五分鐘，每一步都是你自己點。'
+              + '隨時可以按右上角的 × 離開，之後在帳號選單裡可以再看一次。'] },
 
         { id: 'news', page: 'index.html', target: '#news',
           t: ['tour_news_t', '公告在最上面'],
@@ -77,7 +100,17 @@
               '使用 MYAI 會消耗點數，這個數字就是你現在剩下的額度，每個月會自動補回來。'
               + '用完了不會跟你收錢，只是要等下個月 —— 所以放心用。'] },
 
+        // ZH: ☰ 只在手機出現（web.css:863 桌面是 display:none）——
+        //     桌面上這一步會被 has() 自動濾掉，不必另外判斷螢幕寬度。
+        //     五個 ☰ 步驟共用同一組文案：動作一模一樣，翻兩份只會漂開。
+        { id: 'menu_myai', page: 'myai.html', target: '.topbar__burger', click: true,
+          t: ['tour_burger_t', '選單收在這顆 ☰ 裡'],
+          d: ['tour_burger_d',
+              '手機的畫面比較窄，所以上面那排選單收進了這顆按鈕。'
+              + '點一下把它打開 —— 接下來每次要換頁都從這裡走。'] },
+
         { id: 'home', page: 'myai.html', target: '.topnav a[href="index.html"]', click: true,
+          probe: '.topbar__burger, .topnav a[href="index.html"]',
           t: ['tour_home_t', '左上角隨時回得去'],
           d: ['tour_home_d',
               '不管走到哪一頁，點頂部列的「首頁」或左上角的站名都會回到首頁。'
@@ -99,7 +132,160 @@
           t: ['tour_nav_t', '其他東西都在這排選單'],
           d: ['tour_nav_d',
               '首頁只放三條主線，其餘都收在這裡：看訓練進度、管理資料集、查使用量、'
-              + '看別人做過什麼、GPU 現在忙不忙，以及問題回報。點開任一個分類都看得到。'] },
+              + '看別人做過什麼、GPU 現在忙不忙，以及問題回報。'
+              + '接下來就帶你把其中三個最常用的走一遍。'] },
+
+        // ZH: ⚠ 這一顆掛 gpu 是因為它**只為了打開選單去訓練進度**。
+        //     不掛的話，閘門關著時會連按兩次 ☰（第二次等於把它關起來）。
+        { id: 'menu_index', page: 'index.html', target: '.topbar__burger', click: true,
+          gpu: true,
+          t: ['tour_burger_t', '選單收在這顆 ☰ 裡'],
+          d: ['tour_burger_d',
+              '手機的畫面比較窄，所以上面那排選單收進了這顆按鈕。'
+              + '點一下把它打開 —— 接下來每次要換頁都從這裡走。'] },
+
+        // ZH: 🔴 下拉裡的連結**現在是看不見的**（選單還沒點開），
+        //     所以這兩步要用 probe 判斷，不能用 target —— 見檔頭。
+        { id: 'grp_mine', page: 'index.html', click: true, gpu: true,
+          target: '.navmenu__toggle[data-i18n="grp_mine_t"]',
+          probe: '.topbar__burger, .navmenu__toggle[data-i18n="grp_mine_t"]',
+          t: ['tour_grp_mine_t', '「個人使用紀錄」這一組'],
+          d: ['tour_grp_mine_d',
+              '跟「你自己做過什麼」有關的都收在這一組：訓練進度、你上傳過的資料集、'
+              + '使用量明細。點一下這個分類，把它展開。'] },
+
+        { id: 'go_jobs', page: 'index.html', click: true, gpu: true,
+          target: '.navmenu__menu a[href="jobs.html"]',
+          probe: '.topbar__burger, .navmenu__toggle[data-i18n="grp_mine_t"]',
+          t: ['tour_jobs_go_t', '第一站：我的訓練進度'],
+          d: ['tour_jobs_go_d',
+              '點「我的訓練進度」，我們過去看那一頁長什麼樣子、平常什麼時候會用到它。'] },
+
+        { id: 'jobs_hero', page: 'jobs.html', gpu: true, target: '.primary-card',
+          t: ['tour_jobs_hero_t', '送出之後就不必守在畫面前'],
+          d: ['tour_jobs_hero_d',
+              '一次訓練通常要跑十幾分鐘到幾十分鐘。送出之後你可以直接關掉分頁去做別的事，'
+              + '回到這一頁就看得到每一張單跑到哪裡了 —— 這一頁存在的理由就是這個。'] },
+
+        { id: 'jobs_seg', page: 'jobs.html', gpu: true, target: '.seg',
+          t: ['tour_jobs_seg_t', '只有兩個篩選'],
+          d: ['tour_jobs_seg_d',
+              '「訓練中」是還在跑的，「全部」連跑完的和失敗的都列出來。'
+              + '狀態其實有六種，但你真正會問的通常只有「我那張跑完了沒」，所以只留兩個。'] },
+
+        { id: 'jobs_list', page: 'jobs.html', gpu: true, target: '#list',
+          t: ['tour_jobs_list_t', '每一張訓練單都在這裡'],
+          d: ['tour_jobs_list_d',
+              '一列就是一次訓練：看得到狀態與送出時間，跑完的可以直接下載模型，'
+              + '還在排隊或訓練中的也可以取消。第一次來這裡通常是空的，'
+              + '等你送出第一張訓練單就會出現。'] },
+
+        { id: 'menu_jobs', page: 'jobs.html', target: '.topbar__burger', click: true,
+          gpu: true,
+          t: ['tour_burger_t', '選單收在這顆 ☰ 裡'],
+          d: ['tour_burger_d',
+              '手機的畫面比較窄，所以上面那排選單收進了這顆按鈕。'
+              + '點一下把它打開 —— 接下來每次要換頁都從這裡走。'] },
+
+        // ZH: 🔴 這一段的出口**要回到首頁**，不是直接去下一站。
+        //     整個訓練進度的迴圈都掛著 gpu，閘門關著時會一起消失 ——
+        //     兩端都在首頁，剩下的步驟才接得起來（見檔頭）。
+        { id: 'home_jobs', page: 'jobs.html', click: true, gpu: true,
+          target: '.topnav a[href="index.html"]',
+          probe: '.topbar__burger, .topnav a[href="index.html"]',
+          t: ['tour_home_t', '左上角隨時回得去'],
+          d: ['tour_home_d',
+              '不管走到哪一頁，點頂部列的「首頁」或左上角的站名都會回到首頁。'
+              + '點一下「首頁」，我們回去看剩下的部分。'] },
+
+        // ZH: 從這裡開始不吃 GPU 閘門 —— 使用量與問題回報兩頁永遠都在。
+        { id: 'menu_index2', page: 'index.html', target: '.topbar__burger', click: true,
+          t: ['tour_burger_t', '選單收在這顆 ☰ 裡'],
+          d: ['tour_burger_d',
+              '手機的畫面比較窄，所以上面那排選單收進了這顆按鈕。'
+              + '點一下把它打開 —— 接下來每次要換頁都從這裡走。'] },
+
+        { id: 'grp_mine2', page: 'index.html', click: true,
+          target: '.navmenu__toggle[data-i18n="grp_mine_t"]',
+          probe: '.topbar__burger, .navmenu__toggle[data-i18n="grp_mine_t"]',
+          t: ['tour_grp_mine_t', '「個人使用紀錄」這一組'],
+          d: ['tour_grp_mine_d',
+              '跟「你自己做過什麼」有關的都收在這一組：訓練進度、你上傳過的資料集、'
+              + '使用量明細。點一下這個分類，把它展開。'] },
+
+        { id: 'go_usage', page: 'index.html', click: true,
+          target: '.navmenu__menu a[href="usage.html"]',
+          probe: '.topbar__burger, .navmenu__toggle[data-i18n="grp_mine_t"]',
+          t: ['tour_usage_go_t', '第二站：使用量明細'],
+          d: ['tour_usage_go_d',
+              '點「使用量明細」，看看你的點數到底花在哪裡、還剩多少。'
+              + '這一頁跟額度有關的問題大多在這裡就能自己查清楚。'] },
+
+        { id: 'usage_bal', page: 'usage.html', target: '.primary-card',
+          t: ['tour_usage_bal_t', '剩多少，以及什麼時候補'],
+          d: ['tour_usage_bal_d',
+              '最上面是你現在剩下的點數，跟 MYAI 那一頁看到的是同一個數字。'
+              + '每個月自動補回來，用完只是要等下個月，不會跟你收錢。'] },
+
+        { id: 'usage_charts', page: 'usage.html', target: '#content',
+          t: ['tour_usage_charts_t', '花在哪裡看得到'],
+          d: ['tour_usage_charts_d',
+              '下面兩張圖：一張是每天的消耗趨勢，一張是你用了哪些模型或工具。'
+              + '還沒有任何用量時這一區不會出現 —— 用過幾次之後再回來看就有東西了。'] },
+
+        { id: 'menu_usage', page: 'usage.html', target: '.topbar__burger', click: true,
+          t: ['tour_burger_t', '選單收在這顆 ☰ 裡'],
+          d: ['tour_burger_d',
+              '手機的畫面比較窄，所以上面那排選單收進了這顆按鈕。'
+              + '點一下把它打開 —— 接下來每次要換頁都從這裡走。'] },
+
+        { id: 'grp_help', page: 'usage.html', click: true,
+          target: '.navmenu__toggle[data-i18n="grp_help_t"]',
+          probe: '.topbar__burger, .navmenu__toggle[data-i18n="grp_help_t"]',
+          t: ['tour_grp_help_t', '「其他範例參考」這一組'],
+          d: ['tour_grp_help_d',
+              '這一組放的是「看看別人怎麼做」跟「東西壞了要跟誰說」。'
+              + '點一下把它展開，最後一站在裡面。'] },
+
+        { id: 'go_report', page: 'usage.html', click: true,
+          target: '.navmenu__menu a[href="report.html"]',
+          probe: '.topbar__burger, .navmenu__toggle[data-i18n="grp_help_t"]',
+          t: ['tour_report_go_t', '第三站：問題回報'],
+          d: ['tour_report_go_d',
+              '點「問題回報」。平台出問題時這裡是最該來的地方，我們過去看怎麼寫。'] },
+
+        { id: 'report_hero', page: 'report.html', target: '.primary-card',
+          t: ['tour_report_hero_t', '壞掉了就寫在這裡'],
+          d: ['tour_report_hero_d',
+              '先選分類，再用一句話寫主旨，最後把「你做了什麼、結果發生什麼」寫清楚。'
+              + '最重要的一件事：送出之後不會另外寄信通知你，'
+              + '管理者的回覆會出現在這一頁下面 —— 記得過幾天回來看。'] },
+
+        { id: 'report_diag', page: 'report.html', target: '.fold',
+          t: ['tour_report_diag_t', '會一起送出什麼，點開就看得到'],
+          d: ['tour_report_diag_d',
+              '為了幫忙查問題，系統會附上瀏覽器版本、你當時在哪一頁這類資訊。'
+              + '點開這一欄就看得到全部內容，而列在裡面的就是全部 —— '
+              + '後端不會再補上任何沒列出來的東西。'] },
+
+        { id: 'report_mine', page: 'report.html', target: '.panel',
+          t: ['tour_report_mine_t', '回覆會出現在這一區'],
+          d: ['tour_report_mine_d',
+              '你送出過的回報和管理者的回覆都列在這裡，點進去看得到完整內容。'
+              + '所以送出之後不必等信，過幾天回到這一頁看就好。'] },
+
+        { id: 'menu_report', page: 'report.html', target: '.topbar__burger', click: true,
+          t: ['tour_burger_t', '選單收在這顆 ☰ 裡'],
+          d: ['tour_burger_d',
+              '手機的畫面比較窄，所以上面那排選單收進了這顆按鈕。'
+              + '點一下把它打開 —— 接下來每次要換頁都從這裡走。'] },
+
+        { id: 'go_home', page: 'report.html', click: true,
+          target: '.topnav a[href="index.html"]',
+          probe: '.topbar__burger, .topnav a[href="index.html"]',
+          t: ['tour_backhome_t', '最後回到首頁'],
+          d: ['tour_backhome_d',
+              '三站都走完了。點頂部列的「首頁」回去，剩下兩件事講完就結束。'] },
 
         { id: 'bot', page: 'index.html', target: '#aibot-fab',
           t: ['tour_bot_t', '卡住就問小基'],
@@ -110,8 +296,9 @@
         { id: 'done', page: 'index.html', target: null,
           t: ['tour_done_t', '就這些，開始用吧'],
           d: ['tour_done_d',
-              '想再看一次這個導覽，右上角帳號選單裡有「再看一次導覽」。'
-              + '遇到平台本身的問題，用「問題回報」告訴我們，管理者看得到。'] },
+              '整圈走完了：三條主線、訓練進度、使用量、問題回報。'
+              + '想再看一次，右上角帳號選單裡有「再看一次導覽」，'
+              + '從頭到尾都可以再走一遍。'] },
     ];
 
     // ── 純函式（tests/tour.test.js 測的就是這一段）────────────────────
@@ -125,6 +312,12 @@
      *   gpuOn=false → 濾掉 GPU 的步驟
      *   has(sel)    → 「這個選擇器現在找不找得到」，找不到的步驟也濾掉
      *   ⚠ `has` 只對**目前這一頁**的步驟有意義（別頁的元素當然找不到）。
+     *
+     * ZH: 🔴 判斷用的是 `probe || target`。兩者會不一樣，是因為有些目標
+     *     **要等前一步點開選單才看得見** —— 拿它自己去問「現在看得到嗎」，
+     *     答案在開場永遠是「看不到」，於是那一步（以及它之後整段）
+     *     會在使用者還沒開始之前就被砍掉。probe 問的是另一個問題：
+     *     「**有沒有辦法**走到這一步」，答案是「那顆能點開它的鈕還在嗎」。
      *
      * ZH: 🔴 第二段（到得了嗎）：導覽自己不換頁，**每一次換頁都靠一個
      *     click 步驟當橋**。第一段可能剛好把那座橋濾掉（例如有人改了
@@ -143,7 +336,8 @@
 
         var kept = STEPS.filter(function (s) {
             if (s.gpu && !o.gpuOn) return false;
-            if (s.target && s.page === here && !has(s.target)) return false;
+            var probe = s.probe || s.target;
+            if (probe && s.page === here && !has(probe)) return false;
             return true;
         });
 
@@ -274,6 +468,23 @@
      */
     function visible(el) {
         return !!(el && el.getClientRects && el.getClientRects().length);
+    }
+
+    /* ZH: 這個選擇器**有沒有任何一個看得見的**元素。
+     *
+     * ZH: 🔴 要看全部，不能只看 `querySelector` 的第一個。probe 用的是
+     *     選擇器清單（例如「☰ 或 這個分類鈕」—— 桌面看得到後者、
+     *     手機看得到前者），而 `querySelector` 回傳的是**文件順序**的第一個：
+     *     ☰ 排在導覽列前面，於是桌面上永遠問到那顆隱藏的 ☰，答案永遠是否。
+     *     症狀會是「桌面上導覽只走到一半就結束」，而且不報錯。
+     */
+    function anyVisible(sel) {
+        var list;
+        try { list = document.querySelectorAll(sel); } catch (e) { return false; }
+        for (var i = 0; i < list.length; i++) {
+            if (visible(list[i])) return true;
+        }
+        return false;
     }
 
     function T(key, fallback) {
@@ -469,6 +680,16 @@
         var s = steps[cur];
         if (!s) { finish(true); return; }
 
+        // ZH: 🔴 保險：**絕不在錯的頁面演**。
+        //
+        // ZH: 正常情況走不到這裡（換頁一律由 click 步驟帶，而 start() 會重算）。
+        //     走得到的只剩一種：某個 click 步驟的目標當下不見了（例如選單
+        //     沒點開），於是那一步退化成有「繼續」鈕的說明卡，按下去就會
+        //     踏進**別頁**的步驟。那時候畫面上會出現「點一下這張卡片」之類
+        //     對不上的說明 —— 不報錯、不卡住，只是講錯地方，最難查。
+        //     寧可安靜收掉：進度留著，他自己走到那一頁時會接上。
+        if (s.page !== pageName(location.pathname)) { teardown(); return; }
+
         ensureChrome();
         disarm();
 
@@ -485,7 +706,7 @@
             + '<p class="tour__d">' + esc(T(s.d[0], s.d[1])) + '</p>'
             + (last && !hasGpuSteps()
                 ? '<p class="tour__note">' + esc(T('tour_gpu_off',
-                    '（第二條與第三條目前暫停開放，開放之後再回來看那兩站。）')) + '</p>'
+                    '（第二條、第三條與「我的訓練進度」目前暫停開放，開放之後再回來看那幾站。）')) + '</p>'
                 : '')
             + '<div class="tour__btns">'
             + (canBack ? '<button class="btn btn--ghost" type="button" id="tour-prev">'
@@ -578,8 +799,8 @@
         steps = stepsFor({
             here: here,
             gpuOn: gpuOn,
-            // ZH: ⚠ 要「看得見」才算有（見 visible 的說明）。
-            has: function (sel) { return visible(document.querySelector(sel)); },
+            // ZH: ⚠ 要「看得見」才算有，而且**任何一個**看得見就算（見 anyVisible）。
+            has: anyVisible,
         });
         if (!steps.length) return;
 
@@ -587,6 +808,11 @@
         var at = resumeIndex(steps, saved, here);
         if (at >= 0) {
             cur = at;
+            // ZH: ⚠ 接回來的那一步**要寫回進度**。不寫的話，存著的 id 會停在
+            //     上一頁算出來的那一個（例如停在 nav，畫面上演的卻是 ☰）——
+            //     在這一頁重新整理時會從那個舊位置再解一次。目前解出來是
+            //     同一步，所以看不出問題；但那是巧合，不是設計。
+            saveCurrent(cur);
         } else if (saved && !force) {
             // ZH: 有進度但這一頁接不上（他自己走去別頁了）——
             //     什麼都不做，進度留著，回到對的頁面就會接上。

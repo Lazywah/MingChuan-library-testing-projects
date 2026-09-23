@@ -684,9 +684,10 @@
 
         // ZH: v3.8 初次登入設定。接在這裡是因為 `me` 已經在手上 ——
         //     另外打一次 /auth/me 只為了看一個欄位不划算。
-        //     不 await：彈窗要不要跳跟頂部列畫不畫完沒有關係,
+        //     這裡**不 await**：彈窗要不要跳跟頂部列畫不畫完沒有關係,
         //     等它會讓 topbar 在慢網路下多空白一段時間。
-        if (me) maybeShowOnboarding(me);
+        //     ⚠ 但下面發 `chrome:ready` 之前要等它 —— 見那一段的說明。
+        var onbPending = me ? maybeShowOnboarding(me) : null;
         render(toggle, menu, me);
 
         // ZH: v4.26 —— 告訴別人「頂部列建好了，而且 me 也在手上」。
@@ -701,6 +702,20 @@
         // ZH: `onboarding` 告訴收聽者「初次設定正要跳出來」，
         //     那是一個 z-index 1000 的全螢幕遮罩，誰都不該跟它同時開。
         // ZH: 既有前例：prefs.js 的 `prefs:applied` / `prefs:langchanged`。
+        //
+        // ZH: 🔴 **等「要不要跳初次設定」這個決定做完再發**（v4.28）。
+        //     `maybeShowOnboarding` 是 async：它要先去拿 `/system/org-options`
+        //     才建得出彈窗。不等它的話，事件會在那個 fetch 還在飛的時候就發出去，
+        //     此時 `.onb` 還不存在 —— 於是 `onboarding` 是 false，
+        //     導覽也就直接開始，接著彈窗才蓋上來。
+        //     兩個全螢幕遮罩疊在一起，而且 `html:has(.onb)` 還鎖住了捲動。
+        //     🔴 這正好只發生在**第一次登入的人**身上 —— 也就是導覽唯一的對象。
+        //     2026-09-24 用一個全新帳號實測時看到的。
+        // ZH: ⚠ 等的是「彈窗有沒有跳出來」，不是「使用者填完了沒」——
+        //     那一支在 showModal() 之後就 resolve。填完的等待在 tour.js
+        //     的 waitForOnboarding（MutationObserver 等 .onb 被移除）。
+        // ZH: ⚠ 頂部列不受影響：render() 在上面已經跑完了，這裡只擋事件。
+        if (onbPending) { try { await onbPending; } catch (e) { /* 跳不出來就當沒有 */ } }
         try {
             document.dispatchEvent(new CustomEvent('chrome:ready', {
                 detail: { me: me, onboarding: !!document.querySelector('.onb') },
