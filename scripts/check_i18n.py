@@ -93,6 +93,19 @@ def used_keys(ui: Path, dict_files: list) -> dict:
             found.setdefault(m.group(1), set()).add(f.name)
         for m in re.finditer(r"setAttribute\(\s*'data-i18n[a-z-]*'\s*,\s*'([a-z0-9_]+)'", s):
             found.setdefault(m.group(1), set()).add(f.name)
+        # ZH: 🔴 第四條：**資料表裡的 key**。導覽列的 GROUPS 長這樣 ——
+        #       { href: 'jobs.html', key: 'grp_jobs_t', zh: '我的訓練進度' }
+        #     而真正的呼叫是 `T(item.key, item.zh)`：那裡只有變數，沒有字面值。
+        #     上面三條都看不到它，於是這些**導覽正在用**的 key 會被報成「沒人用」。
+        # ZH: 2026-09-23 首頁改版把卡片拿掉之後就撞到了：那些 key 原本同時
+        #     出現在首頁的 data-i18n 與這張表裡，卡片一拿掉就只剩表 ——
+        #     報告會叫人刪掉**頂部列正在顯示**的翻譯。這正是本檔一再警告的
+        #     誤判方向（照著修就會刪到還在用的東西）。
+        # ZH: 判準用 `key:` 這個屬性名（全專案只有那兩張導覽表這樣寫），
+        #     不靠 fallback 的形狀 —— 中文在同一個物件的另一個屬性上，
+        #     上面那條「key 後面接中文」的規則構造上就看不到。
+        for m in re.finditer(r"\bkey:\s*'([a-z0-9_]+)'", s):
+            found.setdefault(m.group(1), set()).add(f.name)
         # ZH: JS 直接組 HTML 字串時寫的 `data-i18n="key"`。
         #     管理端的 admin-chrome.js 就是這樣產生頂部列的，
         #     漏掉這個形狀會把**實際有在用**的 key 報成「沒有人用」——

@@ -722,44 +722,102 @@ html.aibot-docked #aibot-fab { display: none; }
 }
 
 /* ==========================================================================
- * ZH: v4.7 首頁：公告與功能卡左右並排（擁有者裁定 2026-09-07）。
+ * ZH: v4.25 首頁：公告（整寬）→ 三主線（1→2→3）→ 到訪人次
+ *     （老師回饋「資訊量太多」，擁有者草稿 2026-09-23）
  *
- * ZH: 🔴 用 flex 不用 grid —— 沒有公告時 `.news` 是 `hidden`（display:none），
- *     而 grid 的固定欄位**照樣佔位**：功能卡會被擠進左邊那個窄欄，
- *     右半整片空白。flex 天然處理這件事（元素不存在，剩下的自己吃滿）。
+ * ZH: 🔴 這一段取代了 v4.7 的 `.home` 兩欄（公告｜功能卡 各 50%）。
+ *     那個版面的已知代價寫在當時的註解裡：公告佔一半，功能卡一排就只放得下
+ *     兩張（一半 ≈545px，而卡片的 minmax 是 240px）。現在功能卡只剩三條主線，
+ *     它們要的是整頁寬度，所以兩欄那層容器整個拆掉。
  *
- * ZH: 首頁因此要比其他頁寬 —— `.page` 的 720px 擺兩欄會太擠。
- *     只加在首頁（.page--home），其他頁維持原本的閱讀寬度。
+ * ZH: ⚠ **「沒有公告時不留空位」這個行為要保住** —— 那是當初選 flex 而不是 grid
+ *     的唯一理由。現在公告是普通的 block 區塊，`hidden` 時 `display:none`
+ *     自然不佔位，連規則都不需要。
+ *
+ * ZH: 首頁仍然比其他頁寬（`.page` 是 720px 的閱讀寬度）：三格並排要放得下
+ *     標題與一句說明，實測 1160px 時每格約 350px，剛好不會把
+ *     「從訓練 AI 辨識貓狗開始，約 20 分鐘」這種句子折成三行。
  * ========================================================================== */
-/* ZH: ⚠ 一半 ≈545px，功能卡因此是**一排兩張**（.group__cards 的 minmax
- *     是 240px，一排三張要 ≈740px＝公告得縮到約 32%）。
- *     擁有者選擇公告佔一半、接受兩張——已知取捨，不是漏調。 */
 .page--home { max-width: 1160px; }
 
-.home {
-    display: flex;
-    align-items: flex-start;
-    gap: var(--space-5);
-}
-/* ZH: 兩欄等寬（各 50%）。用 `flex: 1 1 0` 而不是寫死 50% ——
- *     沒有公告時 .news 是 display:none，剩下的 .groups 自然吃滿整列，
- *     不必為那個情況另寫規則。 */
-.home > .news {
-    flex: 1 1 0;
-    min-width: 0;
-    margin-bottom: 0;               /* ZH: 並排時不需要下方間距，改由 gap 負責 */
-}
-.home > .groups {
-    flex: 1 1 0;
-    min-width: 0;                   /* ZH: 沒有它，長標題會把欄撐爆而不是換行 */
-    margin-top: 0;                  /* ZH: 兩欄要對齊頂端 */
+/* ZH: 公告在首頁是整寬的一條。`.news` 本身的卡片外框在 styles.css（共用檔），
+ *     這裡只負責「在首頁要多寬」—— 不動共用檔（它與管理端逐位元組相同）。 */
+.news--wide { margin-bottom: var(--space-6); }
+
+/* ── 三主線 ───────────────────────────────────────────────────────────
+ * ZH: 三格等寬 + 格間的箭頭。用 grid 而不是 flex：箭頭那一格要能
+ *     **只吃自己的寬度**，而三個主格要嚴格等寬（flex 會讓內容多的那格長一點，
+ *     而三條主線的份量看起來就不一樣了）。
+ */
+.lines {
+    display: grid;
+    grid-template-columns: 1fr auto 1fr auto 1fr;
+    align-items: stretch;
+    gap: var(--space-2);
+    margin-top: var(--space-5);
 }
 
-/* ZH: 窄畫面疊回上下，並把上面歸零的間距還回來。 */
+/* ZH: 盒子本身照 `.gcard` 的那一套（同一個平台不要有兩種卡片長相）——
+ *     差別只在留白比較大：三條主線是這一頁的主角，它們要撐得起版面。 */
+.line {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1);
+    padding: var(--space-5) var(--space-4);
+    min-height: var(--tap-min);
+    border: 1px solid var(--hairline);
+    border-radius: var(--radius-md);
+    background-color: var(--surface);
+    text-decoration: none;
+    /* ZH: ⚠ 與 `.gcard` 同一個判斷：這是連結但**不要**用 --link 的藍字 ——
+     *     一整面藍字讀起來像清單，而這裡的層級是「編號＋標題＋說明」。 */
+    color: inherit;
+}
+.line:hover { border-color: var(--accent); box-shadow: var(--shadow-2); }
+/* ZH: focus 樣式不自己寫 —— styles.css:32 的全域 `:focus-visible` 已經給了
+ *     box-shadow 的聚焦環。自己再寫一條只會多一個會漂掉的地方。 */
+
+/* ZH: 編號是**順序的主要載體** —— 箭頭在手機會不見（見下方斷點），
+ *     編號不會。所以順序不能只靠箭頭表達。 */
+/* ZH: ⚠ 編號**不能**寫成 `color: var(--accent)` 的黃字 ——
+ *     tokens.css:41 記著那個顏色對白底只有 1.67 對比。
+ *     做成「黃底深字」的圓章才是這組 token 的正確配對（--on-accent）。 */
+.line__n {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.75rem;
+    height: 1.75rem;
+    border-radius: var(--radius-pill);
+    background-color: var(--accent);
+    color: var(--on-accent);
+    font-size: 0.875rem;
+    font-weight: 700;
+}
+.line__t { font-weight: 700; }
+.line__d { font-size: 0.9375rem; color: var(--text-muted); }
+
+.lines__arrow {
+    align-self: center;
+    /* ZH: 1.5rem 時這個字元只有 7px 寬，在兩張 355px 的卡片之間幾乎看不見
+     *     （實測）。放大並加左右留白，讓它撐得出一個看得出來的欄。 */
+    font-size: 1.75rem;
+    line-height: 1;
+    padding: 0 var(--space-1);
+    color: var(--text-muted);
+    /* ZH: 箭頭只是裝飾（HTML 那邊有 aria-hidden），不要被選取起來。 */
+    user-select: none;
+}
+
+/* ZH: 窄畫面改直排。
+ * ZH: 🔴 箭頭在這裡**藏起來**而不是轉向下：直排本身就表達得出先後，
+ *     而一個朝右的「›」在直排裡指的是錯的方向。
+ * ZH: 900px 這個斷點沿用舊的兩欄斷點 —— 三格各 350px 加間距約需 1100px，
+ *     900px 以下每格會窄到 280px 以下，標題開始折成三行。
+ */
 @media (max-width: 900px) {
-    .home { display: block; }
-    .home > .news { margin-bottom: var(--space-5); }
-    .home > .groups { margin-top: var(--space-6); }
+    .lines { grid-template-columns: 1fr; gap: var(--space-3); }
+    .lines__arrow { display: none; }
 }
 
 /* ==========================================================================
@@ -775,8 +833,11 @@ html.aibot-docked #aibot-fab { display: none; }
     pointer-events: none;
     text-decoration: line-through;
 }
-/* ZH: 卡片式入口刪節號會很醜，改成整張淡掉就好。 */
-.gcard.is-off { text-decoration: none; background-color: var(--surface-2); }
+/* ZH: 卡片式入口刪節號會很醜，改成整張淡掉就好。
+ * ZH: ⚠ v4.25 首頁的三主線（.line）也是卡片 —— 漏掉它的話，GPU 功能暫停時
+ *     那兩張卡會被畫上刪節號。新增卡片式入口時要記得加進這個選擇器。 */
+.gcard.is-off,
+.line.is-off { text-decoration: none; background-color: var(--surface-2); }
 
 /* ==========================================================================
  * ZH: 手機版把頂部列右側整塊收進 ☰（v4.13，擁有者需求 2026-09-15）
