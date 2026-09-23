@@ -337,7 +337,42 @@
     margin-top: var(--space-3);
 }
 
-.adm-inline > input { flex: 1 1 8em; min-width: 0; }
+/* ZH: 🔴 這一條是給**文字輸入框**的（讓它把剩下的寬度吃掉）。
+ *
+ * ZH: 原本寫成 `> input`，於是**勾選框也被撐開**：那個 flex item 變成
+ *     278px 寬，而看得見的方塊只有 16px 貼在最左邊 —— 標籤被推到下一行，
+ *     畫面上是「勾選框和它的字隔了半個對話框」。
+ *     擁有者 2026-09-24 回報「匯入那些勾選框也隔太遠」就是這個。
+ * ZH: ⚠ 受影響的是所有 `<label class="adm-inline"><input type=checkbox>` 的
+ *     地方（臨時帳號的「永久有效」「同時開通 MYAI」，單筆與匯入各一組），
+ *     不是只有匯入那一個。所以修在這裡，不是在各自的 HTML 上。
+ */
+.adm-inline > input:not([type="checkbox"]):not([type="radio"]) {
+    flex: 1 1 8em;
+    min-width: 0;
+}
+/* ZH: ⚠ 還要 `align-self` —— `.adm-inline` 是 align-items:center，
+ *     而這幾段說明在窄畫面會變成三行（53px 高）。置中的結果是
+ *     那個小方塊浮在三行字的正中間，看起來不像在勾第一行那句話。
+ *     對齊第一行；margin 是為了跟那一行的**文字中線**對齊，不是貼頂端。 */
+.adm-inline > input[type="checkbox"],
+.adm-inline > input[type="radio"] {
+    flex: 0 0 auto;
+    align-self: flex-start;
+    margin-top: 3px;
+}
+
+/* ZH: 勾選框後面那段說明文字要**跟著它同一行**。
+ *
+ * ZH: `.adm-inline` 是 flex-wrap，而 span 的預設基準寬度是它的 max-content
+ *     （那幾段說明都很長）——於是它整個掉到下一行，畫面上變成
+ *     「一個孤零零的勾選框，字在它下面」。窄畫面一定會踩到。
+ *     給它 `flex: 1 1 0` 就會改成在剩下的寬度裡自己折行。
+ * ZH: ⚠ 只挑「緊接在勾選框後面」的 span —— `.adm-inline` 其他地方也放 span
+ *     （例如檔名、單位文字），那些要維持原本的大小。
+ */
+.adm-inline > input[type="checkbox"] + span,
+.adm-inline > input[type="radio"] + span { flex: 1 1 0; min-width: 0; }
 
 .adm-pill--ok { background-color: var(--accent-soft); color: var(--text-strong); }
 
