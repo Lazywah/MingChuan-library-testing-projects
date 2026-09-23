@@ -688,6 +688,24 @@
         //     等它會讓 topbar 在慢網路下多空白一段時間。
         if (me) maybeShowOnboarding(me);
         render(toggle, menu, me);
+
+        // ZH: v4.26 —— 告訴別人「頂部列建好了，而且 me 也在手上」。
+        //
+        // ZH: 🔴 為什麼需要這個事件：節點本身在 DOMContentLoaded 就同步就位，
+        //     但**帳號鈕的文字、GPU 閘門的灰掉、以及 me.ui_dismissed**
+        //     都要等 /auth/me 回來（fetchMe 還有一次 600ms 重試）。
+        //     只等 DOMContentLoaded 的人會拿到「存在但還不正確」的頂部列。
+        //     引導導覽（tour.js）就是靠它決定要不要開始 ——
+        //     早跑的後果是每次登入都被導覽一次。
+        //
+        // ZH: `onboarding` 告訴收聽者「初次設定正要跳出來」，
+        //     那是一個 z-index 1000 的全螢幕遮罩，誰都不該跟它同時開。
+        // ZH: 既有前例：prefs.js 的 `prefs:applied` / `prefs:langchanged`。
+        try {
+            document.dispatchEvent(new CustomEvent('chrome:ready', {
+                detail: { me: me, onboarding: !!document.querySelector('.onb') },
+            }));
+        } catch (e) { /* ZH: 發不出去不影響頂部列本身 */ }
     }
 
     // ZH: true = 後端明確說沒登入；false = 只是這次拿不到（網路／5xx）。
@@ -782,6 +800,23 @@
         var report = document.createElement('a');
         report.href = 'report.html';
         menu.appendChild(item(report, 'acct_report', '問題回報'));
+
+        // ZH: v4.26 重看引導導覽。放在選單裡而不是首頁 ——
+        //     它是「想起來才會用」的東西，擺在首頁只會變成又一個入口
+        //     （而首頁剛剛才因為入口太多而重排過）。
+        // ZH: ⚠ 只有載了 tour.js 的頁面才有 window.Tour；沒有就不畫這一項，
+        //     免得點下去沒反應。
+        if (window.Tour && window.Tour.restart) {
+            var tour = document.createElement('a');
+            tour.href = '#';
+            tour.addEventListener('click', function (ev) {
+                ev.preventDefault();
+                menu.hidden = true;             // ZH: 選單收起來，不然會蓋住第一步
+                toggle.setAttribute('aria-expanded', 'false');
+                window.Tour.restart();
+            });
+            menu.appendChild(item(tour, 'acct_tour', '再看一次導覽'));
+        }
 
         // ZH: v3.8 看 is_admin 旗標不看 role —— 管理者的身分可能是學生。
         if (me.is_admin) {

@@ -79,6 +79,25 @@ def test_good_values_are_accepted(client, db, headers, ok):
     assert _patch(client, headers, ui_dismissed=ok).status_code == 200
 
 
+# ── 實際用到的 key ──────────────────────────────────────────────────────
+
+def test_the_tour_key_round_trips(client, db, headers):
+    """
+    ZH: v4.26 引導導覽用 `tour` 這個 key 記「看過了」。
+
+    ZH: 🔴 為什麼值得一條測試：`_sane_dismissed` 只收 [a-z0-9_,-]，而
+        `prefs.js` 的 dismiss **是靜默失敗的**（存不回去只記在本機）。
+        所以若哪天有人把 key 改成大寫或帶空白，症狀是
+        「每次登入都被導覽一次」，而且後端 log 與前端 console 都乾乾淨淨。
+    """
+    assert _patch(client, headers, ui_dismissed="tour").status_code == 200
+    assert client.get("/api/v1/auth/me", headers=headers).json()["ui_dismissed"] == "tour"
+
+    # ZH: 與別的 key 並存（導覽 + MYAI 的離站提醒）
+    assert _patch(client, headers, ui_dismissed="myai,tour").status_code == 200
+    assert client.get("/api/v1/auth/me", headers=headers).json()["ui_dismissed"] == "myai,tour"
+
+
 # ── 隔離 ────────────────────────────────────────────────────────────────
 
 def test_one_users_dismissal_does_not_affect_another(client, db):

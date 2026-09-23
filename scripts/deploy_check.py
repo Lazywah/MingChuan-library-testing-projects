@@ -376,6 +376,33 @@ def check_asset_versions():
     return WARN, "前端 ?v= 有過期 → 跑 python scripts/bump_assets.py 後再部署"
 
 
+def check_js_tests():
+    """ZH: 前端行為測試（tests/*.test.js，純 node）。
+
+    ZH: 為什麼列進部署前健檢：前端不是沒有邏輯 —— 引導導覽的跨頁狀態機
+        錯了畫面上不會報錯，只會把人帶到錯的地方或卡住。
+        而這個 repo 沒有 JS 測試框架，這些測試不接進來就不會有人跑。
+
+    ZH: ⚠ 機器沒有 node 時顯示成 **WARN 而不是 PASS**：
+        「沒檢查」與「檢查過了」必須看得出來（與 check_timezone 同一條原則）。
+
+    @node scripts/deploy_check.py::check_js_tests
+    """
+    script = SCRIPTS_DIR / "check_js_tests.py"
+    if not script.exists():
+        return WARN, "找不到 check_js_tests.py，略過前端行為測試"
+    r = subprocess.run([sys.executable, str(script)], capture_output=True,
+                       text=True, encoding="utf-8", errors="replace")
+    out = (r.stdout or "") + (r.stderr or "")
+    if r.returncode != 0:
+        first = next((l.strip() for l in out.splitlines() if "FAIL" in l), "")
+        return FAIL, f"前端行為測試沒過 → python scripts/check_js_tests.py　{first}"
+    if "[WARN]" in out:
+        return WARN, "前端行為測試**沒有執行**（機器沒有 node），不是通過"
+    ran = next((l.strip() for l in out.splitlines() if l.startswith("[OK]")), "")
+    return PASS, ran or "前端行為測試通過"
+
+
 def check_timezone():
     """ZH: 全站時間一律 Asia/Taipei —— tz.js 五份一致 + 載入順序 + 行為測試。
 
@@ -725,6 +752,7 @@ def main():
         ("共用檔載入",     check_js_globals()),
         ("共用檔一致",     check_shared_ui_files()),
         ("JS 語法",        check_js_syntax()),
+        ("前端行為測試",   check_js_tests()),
         ("nginx 路由",     check_nginx_routes()),
         ("Python 相容",    check_python_compat()),
         ("base image 釘版", check_dockerfile_pins()),

@@ -45,6 +45,9 @@ PROVIDERS = {
     "Prefs":  "prefs.js",
     # ZH: v3.9 導覽列的文件庫項目由 chrome.js 動態建，要靠這支把決定套上去。
     "DocsEntry": "docs-entry.js",
+    # ZH: v4.26 引導導覽。chrome.js 的帳號選單會問 window.Tour 在不在
+    #     （決定要不要畫「再看一次導覽」），所以這是真的跨檔相依。
+    "Tour":   "tour.js",
 }
 
 # ZH: 第二條規則：**用了某種標記就必須載對應的檔案**。
