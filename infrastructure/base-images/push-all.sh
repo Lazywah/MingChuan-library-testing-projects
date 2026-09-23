@@ -49,23 +49,35 @@ fi
 
 mapfile -t BUILT < <(sed -n '/^declare -a IMAGES=(/,/^)/p' "$BUILD_ALL"                      | grep -oE '"[a-z-]+\|' | tr -d '"|')
 
+# ZH: 🔴 build-all.sh 裡有**不在那個陣列**、直接寫死 `docker build -t` 的特例
+#     （code-server 與 code-server-gpu，它們要 repo root 當 build context）。
+#     所以再撈一次 `-t "aibase/<名字>:`，兩份聯集才是完整清單。
+# ZH: 為什麼不手寫特例：2026-09-23 發現這裡只補了 code-server，漏掉
+#     code-server-gpu —— 而 lab_manager 的 default_gpu_image 正是它。
+#     GPU 節點獨立之後，學生在實驗室勾 GPU 就會拉不到映像，
+#     症狀是「CPU 實驗室好好的，GPU 實驗室永遠起不來」。
+#     手寫清單一定會漂開，所以這裡改成從同一份來源推導。
+mapfile -t SPECIAL < <(grep -oE -- '-t "aibase/[a-z-]+:' "$BUILD_ALL"                        | sed -E 's|.*aibase/([a-z-]+):|\1|')
+
+if [ ${#BUILT[@]} -lt 2 ] || [ ${#SPECIAL[@]} -lt 1 ]; then
+  echo "✗ 從 build-all.sh 解出 ${#BUILT[@]} 個陣列映像、${#SPECIAL[@]} 個特例映像，看起來是解析失敗了" >&2
+  echo "  （build-all.sh 的 IMAGES 陣列或 docker build -t 的寫法改了嗎？）" >&2
+  exit 1
+fi
+
 IMAGES=()
-for name in "${BUILT[@]}"; do
+for name in "${BUILT[@]}" "${SPECIAL[@]}"; do
   # ZH: common-tools 只是其他映像的建構基底，不會被直接 run —— 它的層已經烤進
   #     衍生映像裡了，推它只是浪費空間。
   [ "$name" = "common-tools" ] && continue
+  # ZH: 兩份來源會重疊（陣列裡的也可能出現在 -t），去重。
+  skip=""
+  for seen in ${IMAGES[@]+"${IMAGES[@]}"}; do
+    [ "$seen" = "$name" ] && skip=1 && break
+  done
+  [ -n "$skip" ] && continue
   IMAGES+=("$name")
 done
-# ZH: code-server 在 build-all.sh 裡是特例（要 repo root 當 build context），
-#     不在那個陣列裡。它跑在服務層而不是 GPU 主機，但一起推——
-#     這樣 registry 就是一份完整的鏡像，重建服務層那台時也用得上。
-IMAGES+=("code-server")
-
-if [ ${#IMAGES[@]} -lt 2 ]; then
-  echo "✗ 從 build-all.sh 只解出 ${#IMAGES[@]} 個映像名，看起來是解析失敗了" >&2
-  echo "  （build-all.sh 的 IMAGES 陣列格式改了嗎？）" >&2
-  exit 1
-fi
 echo "要推的映像（由 build-all.sh 推導）：${IMAGES[*]}"
 
 echo "================================================================="

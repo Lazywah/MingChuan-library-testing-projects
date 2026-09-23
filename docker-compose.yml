@@ -215,6 +215,11 @@ services:
     image: registry:2
     container_name: ai-platform-registry-cache
     profiles: ["registry-cache"]
+    # ZH: ⚠ 這只快取**公開**映像（Docker Hub 那一類）。
+    #     它**代理不了我們自己的私有 registry** —— registry:2 的 proxy
+    #     只懂 token（Bearer）型的上游認證，對 htpasswd（Basic）的上游
+    #     會拿到 challenge 卻不帶認證，結果是 manifest unknown。
+    #     2026-09-23 實測，詳見 docs/14 §8.5.3。aibase/* 請用 `registry` profile。
     environment:
       - REGISTRY_PROXY_REMOTEURL=${REGISTRY_PROXY_REMOTEURL:-https://registry-1.docker.io}
       # ZH: 匿名拉取有速率限制（Docker Hub 以來源 IP 計）。30 台共用一個出口 IP
