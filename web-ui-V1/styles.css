@@ -1353,3 +1353,66 @@ h1:has(> .tip), h2:has(> .tip), h3:has(> .tip) {
 }
 /* ZH: 使用者端的大標是置中的（.primary-card 內），變成 flex 之後要補回來。 */
 .hero__title:has(> .tip) { justify-content: center; }
+
+
+/* ── 到訪人次（v4.24）──────────────────────────────────────────────────
+   ZH: 首頁最底下那一行。刻意低調：它是**背景資訊**，不是行動 ——
+       做得太顯眼會跟上面那幾張入口卡搶注意力。
+   ZH: flex + wrap：手機寬度會折行，不要讓三個數字擠成一坨或撐出橫捲軸。 */
+.visits {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    justify-content: center;
+    gap: var(--space-2) var(--space-5);
+    margin: var(--space-6) 0 var(--space-4);
+    padding-top: var(--space-4);
+    border-top: 1px solid var(--mcu-grey-200);
+    font-size: 0.875rem;
+    color: var(--text-muted);
+}
+.visits__item { display: inline-flex; align-items: baseline; gap: var(--space-2); }
+.visits__n {
+    font-weight: 600;
+    color: var(--mcu-grey-600);
+    /* ZH: 等寬數字 —— 每分鐘重畫一次時，數字不會讓整行左右跳動。 */
+    font-variant-numeric: tabular-nums;
+}
+.visits__note { flex-basis: 100%; text-align: center; font-size: 0.8125rem; }
+
+
+/* ── GPU 狀態頁（v4.24）───────────────────────────────────────────────
+   ZH: 一張卡一格。auto-fill + minmax：一張卡的時候不要撐滿整頁變成一條，
+       三十張的時候也不要擠成看不清的格子。 */
+.gpuwall {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr));
+    gap: var(--space-3);
+    margin: var(--space-3) 0 var(--space-5);
+}
+.gpucard {
+    border: 1px solid var(--mcu-grey-200);
+    border-left: 4px solid var(--mcu-grey-400);
+    border-radius: var(--radius-2);
+    padding: var(--space-3) var(--space-4);
+    background: var(--mcu-white);
+}
+/* ZH: 🔴 狀態靠**左側色條 + 文字**兩層表達，不是只有顏色 ——
+       色盲與黑白列印時只剩文字，那時它仍然要看得懂。 */
+.gpucard--idle { border-left-color: var(--mcu-slate-500); }
+.gpucard--job  { border-left-color: var(--mcu-chart-blue); }
+.gpucard--lab  { border-left-color: var(--mcu-yellow-600); }
+.gpucard--node-ok     { border-left-color: var(--mcu-slate-500); }
+.gpucard--node-closed { border-left-color: var(--mcu-warn-600); }
+.gpucard--node-off    { border-left-color: var(--mcu-grey-400); opacity: .75; }
+.gpucard__top {
+    display: flex; align-items: baseline; justify-content: space-between;
+    gap: var(--space-2); flex-wrap: wrap;
+}
+.gpucard__idx  { font-weight: 700; }
+.gpucard__badge { font-size: 0.875rem; color: var(--mcu-grey-600); }
+.gpucard__name { margin-top: var(--space-1); font-size: 0.9375rem; }
+.gpucard__meta { margin-top: var(--space-1); font-size: 0.875rem; color: var(--text-muted); }
+.gpuwall__note { font-size: 0.875rem; color: var(--text-muted); }
+.gs-mine { margin: var(--space-2) 0 var(--space-5); padding-left: 1.25rem; }
+.gs-mine li { margin: var(--space-1) 0; }

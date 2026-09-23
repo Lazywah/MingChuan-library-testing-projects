@@ -10,7 +10,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Open+Sans:wght@400;600;700&display=swap" rel="stylesheet">
 
     <link rel="stylesheet" href="tokens.css?v=ff9cecda">
-    <link rel="stylesheet" href="styles.css?v=607ca155">
+    <link rel="stylesheet" href="styles.css?v=2afb656c">
     <link rel="stylesheet" href="web.css?v=d376c851">
 </head>
 <body>
@@ -95,9 +95,30 @@
         </form>
     </details>
 
+    <!-- ZH: 到訪人次（v4.24）。🔴 **登入頁才是未登入訪客真正看到的那一頁** ——
+             首頁沒登入會被導來這裡，所以計數的門面放這邊。
+         ZH: 寫「人次」不是「人數」：同一位訪客當天只算一次，隔天再來會再算一次。
+         ZH: 預設 hidden，有數字才顯示 —— 讀不到時寧可整塊不出現，
+             也不要留三個 0（0 會被當成「真的沒有人來」）。 -->
+    <footer class="visits" data-visits hidden>
+        <span class="visits__item">
+            <span class="visits__label" data-i18n="visits_today">本日到訪</span>
+            <span class="visits__n" data-visits-today>–</span>
+        </span>
+        <span class="visits__item">
+            <span class="visits__label" data-i18n="visits_month">本月到訪</span>
+            <span class="visits__n" data-visits-month>–</span>
+        </span>
+        <span class="visits__item">
+            <span class="visits__label" data-i18n="visits_total">累計到訪</span>
+            <span class="visits__n" data-visits-total>–</span>
+        </span>
+        <span class="visits__note" data-i18n="visits_note">（人次；同一位訪客當天只算一次）</span>
+    </footer>
+
 </main>
 
-<script src="i18n.js?v=e6588f3f"></script>
+<script src="i18n.js?v=5ff31fac"></script>
 <script src="prefs.js?v=e71609e5"></script>
 <!-- ZH: 小基（浮動助手）**不放在登入頁**（擁有者 2026-09-20）：未登入就能對話等於
          匿名洗對話、燒 Ollama 算力。原本的設計是「不會登入時想直接問」——
@@ -106,5 +127,8 @@
          這裡拿掉的是入口，不是後端；要連 API 都鎖要另外改 assistant.py。 -->
 <script src="jump.js?v=05008986"></script>
 <script src="login.js?v=55f37431"></script>
+<!-- ZH: 到訪人次。每一頁都載（這是「網站」的計數，不是首頁的），一個工作階段只送一次；
+         只有放了 [data-visits] 的頁面（登入頁、首頁）會顯示數字。 -->
+<script src="visits.js"></script>
 </body>
 </html>

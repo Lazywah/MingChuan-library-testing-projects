@@ -2196,6 +2196,137 @@ def gpus_running_jobs(db: Session) -> set:
     return {int(r[0]) for r in rows if r[0] is not None}
 
 
+def gpu_status(db: Session, user_id: Optional[str] = None,
+               timeout_seconds: int = 90) -> dict:
+    """
+    ZH: v4.24 —— 「現在每張卡在做什麼」。給使用者端的 GPU 狀態頁用。
+
+    ZH: 🔴 為什麼需要它：在這之前，使用者唯一能問的是「現在能不能開」
+        （`pool_availability`）。任務排在佇列裡不動的時候，他看不到
+        **是誰佔著、還要多久**，只能來問人 —— 而那個資訊系統本來就有。
+
+    ZH: 🔴 **不透露是誰在用。** 別人的任務一律只說「訓練任務」或「程式實驗室」，
+        自己的才帶名稱。知道「有人在用、大約還要多久」就夠他決定要等還是改天；
+        知道「是誰」對那個決定沒有幫助，只會變成互相催促。
+
+    ZH: ⚠ 實驗室佔用的卡**只算在與服務層同機的節點上**（心跳的 `shares_storage=1`）——
+        實驗室容器是服務層開的，它借的卡必然在那一台。
+        不分節點的話，台北 30 台上線之後每一台都會顯示同一張卡被實驗室佔著。
+
+    ZH: ⚠ 每張卡的清單來自**心跳回報的 `gpus_detail`**，不是設定檔的數字。
+        離線節點沒有新的心跳，所以顯示的是最後一次看到的樣子 ——
+        呼叫端要一起看 `online` 才不會把舊資料講成現況。
+
+    @node job-scheduler/app/crud.py::gpu_status
+    """
+    online_ids = {n.node_id for n in get_online_worker_nodes(db, timeout_seconds=timeout_seconds)}
+    hb_map = {h.node_id: h for h in db.query(models.WorkerHeartbeat).all()}
+    cfg_map = {c.node_id: c for c in db.query(models.GpuNode).all()}
+
+    # ZH: 佔用來源一：正在跑的訓練任務（節點 + 卡號）
+    jobs_on = {}
+    for j in (db.query(models.TrainingJob)
+              .filter(models.TrainingJob.status == "running",
+                      models.TrainingJob.gpu_id.isnot(None)).all()):
+        try:
+            jobs_on[(j.gpu_server, int(j.gpu_id))] = j
+        except (TypeError, ValueError):
+            continue
+
+    # ZH: 佔用來源二：借了卡的程式實驗室（只在同機節點上）
+    labs_on = {}
+    for row in (db.query(models.LabSession)
+                .filter(models.LabSession.gpu_index.isnot(None),
+                        models.LabSession.status.in_(("starting", "running"))).all()):
+        labs_on[int(row.gpu_index)] = row
+
+    from .services import lab_manager as _lab   # ZH: 只為了 gpu_deadline，避免模組層互相 import
+
+    nodes = []
+    for node_id in sorted(set(hb_map) | set(cfg_map)):
+        hb, cfg = hb_map.get(node_id), cfg_map.get(node_id)
+        online = node_id in online_ids
+        state = node_dispatch_state(cfg)
+        co_located = bool(getattr(hb, "shares_storage", 0))
+
+        gpus = []
+        for g in json.loads((getattr(hb, "gpus_detail", None) or "[]")) or []:
+            try:
+                idx = int(g.get("gpu_id"))
+            except (TypeError, ValueError):
+                continue
+            job = jobs_on.get((node_id, idx))
+            lab = labs_on.get(idx) if co_located else None
+
+            # ZH: 兩者都有的話以**實驗室**為準 —— 互動借用是獨佔鎖，
+            #     同一張卡上還掛著 running 的任務列多半是沒收乾淨的舊資料。
+            if lab is not None:
+                deadline = _lab.gpu_deadline(db, lab)
+                gpus.append({
+                    "index": idx, "name": g.get("name"),
+                    "utilization": g.get("utilization"),
+                    "memory_used": g.get("memory_used"),
+                    "memory_total": g.get("memory_total"),
+                    "state": "lab",
+                    "mine": bool(user_id and lab.user_id == user_id),
+                    "since": lab.started_at.isoformat() if lab.started_at else None,
+                    "until": deadline.isoformat() if deadline else None,
+                    "label": None,
+                })
+            elif job is not None:
+                gpus.append({
+                    "index": idx, "name": g.get("name"),
+                    "utilization": g.get("utilization"),
+                    "memory_used": g.get("memory_used"),
+                    "memory_total": g.get("memory_total"),
+                    "state": "job",
+                    "mine": bool(user_id and job.user_id == user_id),
+                    "since": job.started_at.isoformat() if job.started_at else None,
+                    "until": None,     # ZH: 訓練沒有硬性到期時間，別編一個出來
+                    # ZH: 只有自己的任務才帶名稱（見檔頭：不透露是誰在用）
+                    "label": job.job_name if (user_id and job.user_id == user_id) else None,
+                })
+            else:
+                gpus.append({
+                    "index": idx, "name": g.get("name"),
+                    "utilization": g.get("utilization"),
+                    "memory_used": g.get("memory_used"),
+                    "memory_total": g.get("memory_total"),
+                    "state": "idle", "mine": False,
+                    "since": None, "until": None, "label": None,
+                })
+
+        nodes.append({
+            "node_id": node_id,
+            "display_name": (cfg.display_name if cfg else None) or node_id,
+            "online": online,
+            "enabled": bool(cfg.enabled) if cfg else True,
+            "pool": effective_pool(cfg, getattr(hb, "pool_type", "batch")),
+            # ZH: allowed = 現在收不收新工作（總開關 + 時段 + 停派緩衝）
+            "dispatch_allowed": bool(state["allowed"]),
+            "dispatch_reason": state.get("reason"),
+            "last_seen": hb.last_seen.isoformat() if (hb and hb.last_seen) else None,
+            "gpus": gpus,
+        })
+
+    # ZH: 佇列：只回**數量**與自己的位置。別人的任務名稱不在這裡出現。
+    pending_q = db.query(models.TrainingJob).filter(
+        models.TrainingJob.status.in_(["pending", "queued"]))
+    mine = []
+    if user_id:
+        for j in pending_q.filter(models.TrainingJob.user_id == user_id).all():
+            mine.append({"job_id": j.id, "job_name": j.job_name,
+                         "position": get_queue_position(db, j.id)})
+        mine.sort(key=lambda x: (x["position"] is None, x["position"]))
+
+    return {
+        "pools": pool_availability(db, timeout_seconds=timeout_seconds),
+        "nodes": nodes,
+        "queue": {"pending": pending_q.count(), "mine": mine},
+        "as_of": datetime.now(timezone.utc).isoformat(),
+    }
+
+
 def claim_gpu_for_lab(db: Session, total_gpus: int = 1) -> Optional[int]:
     """
     ZH: 幫實驗室借一張卡。借得到回卡號，借不到回 None。

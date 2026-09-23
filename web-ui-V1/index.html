@@ -12,7 +12,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Open+Sans:wght@400;600;700&display=swap" rel="stylesheet">
 
     <link rel="stylesheet" href="tokens.css?v=ff9cecda">
-    <link rel="stylesheet" href="styles.css?v=607ca155">
+    <link rel="stylesheet" href="styles.css?v=2afb656c">
     <link rel="stylesheet" href="web.css?v=d376c851">
     <!-- ZH: 🔴 側欄狀態必須在**首次繪製之前**套用，否則每換一頁都會看到
              內容滑出去讓位（widget 的 JS 在 body 尾端才跑，那時已經畫過一次了）。
@@ -142,6 +142,13 @@
                     <span class="gcard__t" data-i18n="entry_docs_title">看別人做過什麼</span>
                     <span class="gcard__d" data-i18n="entry_docs_desc">同學的作品與教學影片</span>
                 </a>
+                <!-- ZH: v4.24 —— 這張卡回來了，指向真的存在的 `status.html`。
+                         下面那段是它當初被拿掉的來龍去脈，留著是因為它說明了
+                         「入口必須通往真的存在的地方」這條規則怎麼來的。 -->
+                <a class="gcard" href="status.html">
+                    <span class="gcard__t" data-i18n="gs_nav">GPU 現在忙不忙</span>
+                    <span class="gcard__d" data-i18n="gs_card_d">看每張卡在做什麼、要等多久</span>
+                </a>
                 <!-- ZH: 🔴 這裡原本有一張「GPU 現在忙不忙」，指向 `gpu.html#status`。
                          **拿掉了 —— 那個錨點不存在，而且平台沒有任何 GPU 狀態頁**。
                          點下去只會跳到「做出一個能分辨貓和狗的模型」的頁首，
@@ -160,15 +167,42 @@
         </div>
     </section>
 
+    <!-- ZH: 到訪人次（v4.24，擁有者需求 2026-09-23）。登入頁也有同一塊 ——
+             未登入的人看到的是那一頁（這一頁沒登入會被導走）。
+             ZH: 🔴 寫「人次」不是「人數」—— 同一位訪客**當天**只算一次，
+                 但隔天再來會再算一次。寫成「人數」的話，一個每天來的人
+                 會讓數字每天 +1，看的人會以為那是新的人。
+             ZH: 預設 hidden，有數字才顯示（chrome.js 填）——
+                 後端讀不到時寧可整塊不出現，也不要留三個 0 在那裡
+                 （0 會被當成「真的沒有人來」）。 -->
+    <footer class="visits" data-visits hidden>
+        <span class="visits__item">
+            <span class="visits__label" data-i18n="visits_today">本日到訪</span>
+            <span class="visits__n" data-visits-today>–</span>
+        </span>
+        <span class="visits__item">
+            <span class="visits__label" data-i18n="visits_month">本月到訪</span>
+            <span class="visits__n" data-visits-month>–</span>
+        </span>
+        <span class="visits__item">
+            <span class="visits__label" data-i18n="visits_total">累計到訪</span>
+            <span class="visits__n" data-visits-total>–</span>
+        </span>
+        <span class="visits__note" data-i18n="visits_note">（人次；同一位訪客當天只算一次）</span>
+    </footer>
+
     </div><!-- /.home -->
 </main>
 
 <script src="docs-entry.js?v=131ee7af"></script>
-<script src="i18n.js?v=e6588f3f"></script>
+<script src="i18n.js?v=5ff31fac"></script>
 <script src="prefs.js?v=e71609e5"></script>
 <!-- ZH: 小基（浮動助手）。客服模式公開，登入頁也放 —— 設計文件的使用者需求是「不會用這個平台時想直接問」。 -->
 <script src="assistant-widget.js?v=74e3c4b6"></script>
-<script src="chrome.js?v=98a33e93"></script>
+<script src="chrome.js?v=fc2fcac2"></script>
 <script src="app.js?v=b73ba689"></script>
+<!-- ZH: 到訪人次。每一頁都載（這是「網站」的計數，不是首頁的），一個工作階段只送一次；
+         只有放了 [data-visits] 的頁面（登入頁、首頁）會顯示數字。 -->
+<script src="visits.js"></script>
 </body>
 </html>

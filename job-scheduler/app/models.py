@@ -992,3 +992,43 @@ class IssueReport(Base):
     replied_by  = Column(String, ForeignKey("users.id", ondelete="SET NULL"),
                          nullable=True, index=True)
     replied_at  = Column(DateTime, nullable=True)
+
+
+# ==============================================================================
+# ZH: 表 23-24: 網站到訪計數（v4.24）
+# EN: Tables 23-24: site visit counter
+# ZH: 首頁那三個數字：本日 / 當月 / 歷史。規則與去重方式見
+#     services/visit_counter.py 的檔頭（算人次、以天去重、不存 IP）。
+# ==============================================================================
+class SiteVisitDay(Base):
+    """ZH: 每天一列的到訪彙總 | EN: one row per day
+
+    ZH: 🔴 這張表是**永久**的，`site_visitors` 那張才是暫存。
+        歷史數字就是這張表的 SUM —— 刪它等於把歷史改小。
+
+    ZH: `day` 是**台北日期**（見 visit_counter.taipei_today）。
+        存 UTC 日期的話，早上 08:00 以前的到訪會被算到前一天。
+    """
+    __tablename__ = "site_visit_days"
+
+    day    = Column(Date, primary_key=True)
+    visits = Column(Integer, default=0, nullable=False)   # ZH: 當天不重複訪客數
+
+
+class SiteVisitor(Base):
+    """ZH: 「今天算過誰」的去重暫存 | EN: per-day dedup keys
+
+    ZH: 🔴 存的是 `sha256(密鑰|日期|訪客識別)` 的前 32 字元，**不是 IP**。
+        日期在雜湊裡面，所以跨天的兩筆對不起來 —— 這張表沒辦法拿來
+        追一個人的到訪軌跡，只能回答「今天算過這一位沒有」。
+
+    ZH: ⚠ 只留 45 天（visit_counter.RETAIN_DAYS），換日的第一筆順便清。
+    """
+    __tablename__ = "site_visitors"
+
+    day          = Column(Date, nullable=False)
+    visitor_hash = Column(String, nullable=False)
+
+    __table_args__ = (
+        PrimaryKeyConstraint("day", "visitor_hash"),
+    )

@@ -359,6 +359,31 @@ def get_pool_availability(
 
 
 # ==============================================================================
+# ZH: v4.24 GET /gpu-status —— 「現在每張卡在做什麼」（GPU 狀態頁用）
+#     ⚠ 與 pool-availability 同理，**必須宣告在 GET /{job_id} 之前**，
+#       否則 "gpu-status" 會被當成一個 job_id，使用者拿到 404。
+# ==============================================================================
+@router.get("/gpu-status", summary="每張卡現在在做什麼 + 佇列（使用者端狀態頁）")
+def get_gpu_status(
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    ZH: 回 {pools, nodes[{gpus[...]}], queue{pending, mine}, as_of}。
+
+    ZH: 🔴 **不透露是誰在用** —— 別人的卡只說「訓練任務／程式實驗室」，
+        自己的才帶名稱。判斷「要等還是改天」用不到對方是誰，
+        知道了只會變成互相催促（規則實作在 crud.gpu_status）。
+
+    ZH: 要求登入：它回答的是「我的任務排第幾」這類問題，而且
+        「哪一張卡在跑什麼」不必對匿名訪客公開。
+
+    @node job-scheduler/app/routers/jobs.py::get_gpu_status
+    """
+    return crud.gpu_status(db, user_id=current_user.id)
+
+
+# ==============================================================================
 # ZH: GET /{job_id} - 查詢單一任務狀態
 # EN: GET /{job_id} - Query single job status
 # ==============================================================================

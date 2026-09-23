@@ -57,6 +57,11 @@ curl http://localhost:8002/api/v1/auth/me \
 | GET | `/api/v1/jobs/{job_id}` | 任務狀態 |
 | DELETE | `/api/v1/jobs/{job_id}` | 取消（僅 pending） |
 | GET | `/api/v1/jobs/{job_id}/stream` | SSE 進度串流 |
+| GET | `/api/v1/jobs/pool-availability` | 各池「現在可否派工 / 下次開放時間」|
+| GET | `/api/v1/jobs/gpu-status` | 每張卡現在在做什麼 + 佇列（狀態頁用）|
+
+> ⚠ 這兩支在程式裡**必須宣告在 `GET /{job_id}` 之前** ——
+> 否則 "gpu-status" 會被當成一個 job_id，使用者拿到的是「找不到任務」。
 
 ```bash
 # 提交 GPU 任務（aibase-runner extension 自動會用此 endpoint）
@@ -395,6 +400,26 @@ curl -X POST http://localhost:8002/api/v1/worker/heartbeat \
 | GET | `/api/v1/system/files` | 列出系統設定檔（admin only）|
 | GET | `/api/v1/system/files/{filename}` | 讀設定檔內容 |
 | PUT | `/api/v1/system/files/{filename}` | 改設定檔內容 |
+| POST | `/api/v1/system/visit` | 記一次到訪（**公開**，同一位訪客當天只算一次）|
+| GET | `/api/v1/system/visits` | 到訪人次：本日／當月／累計（**公開**，唯讀不累加）|
+
+**到訪人次（v4.24）**
+
+```json
+// GET /api/v1/system/visits
+{"today": 37, "month": 412, "total": 5821, "as_of": "2026-09-23"}
+```
+
+- POST 的 body 可帶 `{"visitor_id": "<前端產生的隨機 id>"}`。不帶也可以 ——
+  後端會退回 `IP + User-Agent`。
+- 🔴 回傳的是**人次**：同一位訪客**當天**只算一次，隔天再來會再算一次。
+  所以「當月」是本月每天不重複訪客的**加總**，不是本月有多少個不同的人。
+- 🔴 **不存 IP**。存的是 `sha256(密鑰|日期|訪客識別)` 的前 32 字元，
+  日期在雜湊裡面 → 跨天的兩筆對不起來，這張表不能拿來追人。
+- 兩支都**不要求登入** —— 它們回答的是「有多少人來過這個網站」，
+  關在登入後面就只剩下「有多少人登入過」。
+- 明顯的機器人（curl / python-requests / 各家 crawler）不計入。
+  ⚠ 所以拿 `curl` 打 POST 驗證時數字不會動，那是正常的（踩過）。
 
 ---
 

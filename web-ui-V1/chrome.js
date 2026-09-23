@@ -229,7 +229,7 @@
                 // ZH: v3.6 曾把 train.html 跟 jobs.html 歸在一起（「送出與查看是
                 //     同一件事的兩端」）。那是導覽只有平鋪連結時的權宜；
                 //     現在的判準是**使用者帶著什麼念頭來**，送出訓練是「想做點什麼」。
-                pages: ['myai.html', 'gpu.html', 'train.html', 'lab.html'],
+                pages: ['myai.html', 'gpu.html', 'train.html', 'lab.html', 'status.html'],
                 items: [
                     // ZH: v3.9 有自己的頁了（擁有者裁定 2026-08-30）。
                     //     在那之前它連到首頁 —— 而「首頁」就在它左邊，
@@ -238,7 +238,10 @@
                     //     #handoff 的地方，那段邏輯仍然只有一份。
                     { href: 'myai.html', key: 'grp_ai_t', zh: '體驗付費版 AI 工具' },
                     { href: 'gpu.html', key: 'grp_go_t', zh: '體驗現有模型訓練' },
-                    { href: 'lab.html', key: 'nav_lab', zh: '程式實驗室' }
+                    { href: 'lab.html', key: 'nav_lab', zh: '程式實驗室' },
+                    // ZH: v4.24 GPU 狀態頁。放在這一組的最後 ——
+                    //     它回答的是「我現在能不能用」，是前面三件事的前置問題。
+                    { href: 'status.html', key: 'gs_nav', zh: 'GPU 現在忙不忙' }
                 ]
             },
             {
@@ -902,8 +905,10 @@
     //     也擋頁面本身（blockPage）。少了那一段，書籤與瀏覽紀錄就是後門，
     //     而「關閉」會變成只是視覺上的。
     // ══════════════════════════════════════════════════════════════════
+    // ZH: v4.24 status.html 也在裡面 —— GPU 功能暫停時，一個「現在很空閒」
+    //     的狀態頁只會讓人以為可以用，然後在下一步被擋下來。
     var GPU_PAGES = ['gpu.html', 'train.html', 'lab.html',
-                     'jobs.html', 'datasets.html'];
+                     'jobs.html', 'datasets.html', 'status.html'];
 
     function markOff(el) {
         // ZH: 拿掉 href 才是真的點不下去（只加 class 的話鍵盤與中鍵仍可開）。
