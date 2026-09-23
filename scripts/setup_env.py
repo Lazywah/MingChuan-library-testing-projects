@@ -379,11 +379,22 @@ _INTENTIONAL_UNDECLARED = {
     "KNOWLEDGE_DIR": "容器內計算路徑，不經 .env",
 }
 
+# ZH: 反過來的那一邊：.env.example 有宣告，但**引用它的不是 compose 也不是 Settings**，
+#     而是倉庫裡的腳本。這一類不是廢棄 key，列在這裡免得警告區永遠掛著一條假警報 ——
+#     稽核一旦習慣性地有雜訊，真正的漂移就會被跟著忽略。
+# ZH: 加進來之前先確認**真的有人讀它**（grep 得到），不然這裡就變成藏廢棄 key 的地方。
+_INTENTIONAL_ORPHANS = {
+    "WATCHDOG_ALERT_TO": "scripts/health_watchdog.ps1 讀（看門狗不經平台，直接寄信）",
+}
+
 
 def audit_drift(example_keys: set):
     """
     ZH: 交叉比對 .env.example（宣告）vs compose∪Settings（實際引用）。
     EN: Cross-check declared (.env.example) vs referenced (compose ∪ Settings).
+
+    ZH: ⚠ 回傳的 orphan **已經扣掉** `_INTENTIONAL_ORPHANS`（由腳本讀的 key）——
+        那些不是廢棄，只是引用它的人不在 compose/Settings 裡。
 
     Returns:
         (referenced, missing_from_example, orphan_in_example, intentional)
@@ -393,7 +404,7 @@ def audit_drift(example_keys: set):
     referenced = extract_compose_keys() | extract_settings_keys()
     missing_from_example = (referenced - example_keys) - set(_INTENTIONAL_UNDECLARED)
     intentional = (referenced - example_keys) & set(_INTENTIONAL_UNDECLARED)
-    orphan_in_example = example_keys - referenced
+    orphan_in_example = (example_keys - referenced) - set(_INTENTIONAL_ORPHANS)
     return referenced, missing_from_example, orphan_in_example, intentional
 
 
@@ -467,6 +478,12 @@ def print_drift_audit(example_order) -> int:
         print(f"  {dim('刻意未宣告（非漂移，供參考）：')}")
         for k in sorted(intentional):
             print(f"    {dim('• ' + k + ' — ' + _INTENTIONAL_UNDECLARED[k])}")
+    script_only = sorted(set(_INTENTIONAL_ORPHANS) & example_keys)
+    if script_only:
+        print()
+        print(f"  {dim('由腳本讀取（非漂移，供參考）：')}")
+        for k in script_only:
+            print(f"    {dim('• ' + k + ' — ' + _INTENTIONAL_ORPHANS[k])}")
 
     print()
     if not missing_from_example and not orphan_in_example:

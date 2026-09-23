@@ -97,10 +97,10 @@ powershell -ExecutionPolicy Bypass -File scripts\health_watchdog.ps1 -DryRun
 powershell -ExecutionPolicy Bypass -File scripts\health_watchdog.ps1 -DryRun -Simulate
 ```
 
-它做三件事：探活 `http://localhost:8002/health`（**刻意不經 DNS 與 TLS** —— 那兩層自己也會壞，
+它做四件事：探活 `http://localhost:8002/health`（**刻意不經 DNS 與 TLS** —— 那兩層自己也會壞，
 用它們探活會把「憑證過期」誤判成「平台掛了」）→ 不通就修一次（daemon 死了就清孤兒 socket
 重啟 Docker Desktop，daemon 活著只是容器沒起來就 `compose up -d`）→ 不管成功失敗都寫一行
-`data/watchdog.log`。
+`data/watchdog.log` → **寄信**（見下）。
 
 ⚠️ **一次只修一次。** `data/.watchdog-state.json` 記著上次嘗試的時間，15 分鐘內不重複——
 沒有節流的話，修不好的狀況會變成每 10 分鐘殺一次 Docker，比原本的故障更糟。
@@ -119,6 +119,32 @@ log 裡連續出現「剛修過，這次只記錄」就是**需要人工處理**
 所以排程工作設成「只有登入時執行」是正確的，不是妥協。
 搭配 Docker Desktop 自己的「登入時啟動」（`%APPDATA%\Docker\settings-store.json` 的
 `AutoStart`，2026-09-23 已設為 `true`），開機後的順序是：登入 → Docker Desktop →（3 分鐘後）看門狗。
+
+**它什麼時候會寄信（2026-09-23 起）**
+
+| 情況 | 主旨 | 節流用的 kind |
+|---|---|---|
+| 修完仍然不通 | 平台掛了，自動修復失敗 | `down` |
+| 冷卻中又偵測到掛著（＝剛修過還是不行） | 平台掛了，而且自動修復沒有用 | `down` |
+| 修好了 | 平台曾經掛掉，已自動修復 | `recovered` |
+
+收件人是 `.env` 的 `WATCHDOG_ALERT_TO`（沒填就退回 `SMTP_USERNAME`）。
+它**刻意與平台的 `admin_alert_emails` 分開**：那一份是平台自己寄的，
+平台死透的時候那條路也是死的，而看門狗要講的正是「平台死透了」。
+
+同一個 kind 6 小時內只寄一次（`$AlertMinHours`，與平台的 `admin_alert_min_hours` 取同一個數字）。
+節流時間記在 `data/.watchdog-state.json` 的 `lastAlert_*`，
+⚠️ 改那個檔的程式碼要**先讀再合併**，整份覆寫會把節流洗掉，變成每修一次就寄一次信。
+
+```powershell
+# 裝設時先確認寄得出去（繞過節流）
+powershell -ExecutionPolicy Bypass -File scripts\health_watchdog.ps1 -TestMail
+```
+
+⚠️ 寄信走 `curl.exe smtps://`，不是 `Send-MailMessage`。
+`SMTP_PORT=465` 是**隱含 TLS**（校園網掐 587 的 STARTTLS，2026-08-30 查出來的），
+而 `Send-MailMessage` 與 System.Net.Mail 都只會 STARTTLS，對 465 連不上。
+PowerShell 裡的 `curl` 是 `Invoke-WebRequest` 的別名，所以一定要寫 `curl.exe`。
 
 ⚠️ 這支是 PowerShell 腳本且**含中文**，存檔必須是 **UTF-8 with BOM**。
 沒有 BOM 時 Windows PowerShell 5.1 會用 cp950 讀，中文全毀而且 `#>` 這種結束符會被吃掉，
