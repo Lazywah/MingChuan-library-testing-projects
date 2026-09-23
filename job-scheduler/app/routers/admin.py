@@ -1435,7 +1435,11 @@ async def import_temp_users(
     request: Request,
     file: UploadFile = File(...),
     purpose: str = Form(...),
-    expires_on: str = Form(...),
+    # ZH: v4.28 —— 與單筆建立同契約：到期日與「永久」**二選一，而且一定要選一個**
+    #     （擁有者 2026-09-24）。所以 expires_on 從必填改成可空，
+    #     但「兩個都不給」仍然是錯 —— 理由見下面的驗證。
+    expires_on: str = Form(""),
+    never_expires: bool = Form(False),
     dry_run: bool = Form(False),
     # ZH: v4.20 —— 整批順手開通 MYAI（與單筆那支同一個契約：兩平台同一組密碼）。
     provision_myai: bool = Form(False),
@@ -1446,6 +1450,12 @@ async def import_temp_users(
     ZH: 批次建立臨時帳號（擁有者需求 2026-09-02，改檔案匯入 2026-09-03）。
         上傳 CSV 或 XLSX：每列 名稱/信箱/密碼/身分；用途與到期日整批共用。
         `dry_run=true` 只驗證回報、不寫入。範例檔見 import-template 端點。
+
+    ZH: v4.28 `never_expires=true` 時整批都不設到期日（與一般帳號同形）。
+        用途（purpose）**仍然必填** —— 永久的臨時帳號如果連理由都沒有，
+        半年後就沒有人敢刪它，那正是這個欄位當初存在的原因。
+        🔴 到期日是「整批共用」的欄位，所以永久也是整批的決定：
+        同一個檔案裡不能有些永久有些不永久。要混的話分兩次匯入。
 
     ZH: 🔴 **全有或全無**：任何一列驗不過就整批不建（400 帶逐列錯誤）。
         建到一半停下來的話，管理者得自己對「哪幾個建了」——那正是
@@ -1472,12 +1482,25 @@ async def import_temp_users(
     purpose = (purpose or "").strip()
     if not purpose:
         raise HTTPException(status_code=400, detail="請說明這批臨時帳號的用途")
-    try:
-        exp_date = _date.fromisoformat((expires_on or "").strip())
-        schemas._check_expires_on(exp_date)
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e) or "到期日格式不對（YYYY-MM-DD）")
-    expires_at = schemas.expires_on_to_utc(exp_date)
+    # ZH: 🔴 到期日與「永久」二選一 —— 與 schemas.AdminTempUserCreate.one_of_expiry
+    #     同一條規則，同一個理由：兩個都不給時**不要默默當成永久**。
+    #     那會讓「忘記填日期」變成「一口氣開了 50 個永遠不會消失的帳號」，
+    #     而且沒有任何人會發現（批次比單筆更慘，正因為是一口氣）。
+    #     ⚠ 這裡不能重用 pydantic —— multipart 拿不到 body model，只能手動對齊。
+    expires_on = (expires_on or "").strip()
+    if never_expires and expires_on:
+        raise HTTPException(status_code=400, detail="勾了「永久有效」就不要再填到期日")
+    if not never_expires and not expires_on:
+        raise HTTPException(status_code=400, detail="請填到期日，或勾選「永久有效」")
+    exp_date = None
+    if not never_expires:
+        try:
+            exp_date = _date.fromisoformat(expires_on)
+            schemas._check_expires_on(exp_date)
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e) or "到期日格式不對（YYYY-MM-DD）")
+    # ZH: 永久 = None，與一般帳號同形（不是一個很遠的日期）。
+    expires_at = None if exp_date is None else schemas.expires_on_to_utc(exp_date)
 
     blob = await file.read()
     try:
@@ -1569,7 +1592,10 @@ async def import_temp_users(
             action="create_temp_account",
             payload=json.dumps({
                 "username": uname, "purpose": purpose,
-                "expires_on": exp_date.isoformat(),
+                # ZH: 永久帳號寫 null + never_expires 旗標 —— 日後追「這個永久
+                #     帳號是誰開的」時，光看 null 分不出是永久還是漏寫。
+                "expires_on": (exp_date.isoformat() if exp_date else None),
+                "never_expires": exp_date is None,
                 "role": role, "batch_import": True,
             }, ensure_ascii=False),
             timestamp=datetime.now(timezone.utc),
@@ -1607,10 +1633,13 @@ async def import_temp_users(
         row.pop("_pw", None)
 
     logger.info("批次匯入臨時帳號 %d 個（到期 %s，用途：%s，檔案 %s）by %s",
-                len(created), exp_date.isoformat(), purpose,
+                len(created), exp_date.isoformat() if exp_date else "永久", purpose,
                 file.filename, admin.username)
     return {"ok": True, "total": len(created),
-            "expires_at": expires_at.isoformat(), "created": created}
+            # ZH: 永久時回 None（前端據此顯示「永久有效」，不要印一個空字串）。
+            "expires_at": expires_at.isoformat() if expires_at else None,
+            "never_expires": expires_at is None,
+            "created": created}
 
 
 @router.post("/users/temporary", summary="建立臨時帳號")

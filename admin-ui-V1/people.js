@@ -1548,7 +1548,10 @@
         var fd = new FormData();
         fd.append('file', TI_FILE);
         fd.append('purpose', $('ti-why').value.trim());
-        fd.append('expires_on', $('ti-expires').value);
+        // ZH: v4.28 永久就**完全不送** expires_on（送空字串後端會當成填了但格式錯，
+        //     與單筆那條路同一個理由）。兩個都送 = 矛盾輸入，後端擋。
+        if ($('ti-forever') && $('ti-forever').checked) fd.append('never_expires', 'true');
+        else fd.append('expires_on', $('ti-expires').value);
         fd.append('dry_run', dryRun ? 'true' : 'false');
         // ZH: v4.20 整批開通 MYAI（與單筆同契約：兩平台同一組密碼）。
         if ($('ti-myai') && $('ti-myai').checked) fd.append('provision_myai', 'true');
@@ -1584,6 +1587,14 @@
             + '</label>'
             + field('ti-expires', T('tmp_expires_on', '到期日'), twDay(1), 'date',
                     ' min="' + twDay(0) + '" max="' + twDay(TEMP_MAX_DAYS) + '"')
+            // ZH: v4.28 永久有效（擁有者 2026-09-24）—— 與單筆那個勾同一個契約。
+            //     ⚠ 這是**整批**的決定：同一個檔案裡不能有些永久有些不永久
+            //     （到期日本來就是整批共用的欄位）。要混就分兩次匯入。
+            + '<label class="adm-inline" style="margin:.25rem 0 .5rem">'
+            +   '<input type="checkbox" id="ti-forever"> '
+            +   '<span>' + esc(T('tmpi_forever',
+                '整批永久有效（不設到期日，與一般帳號一樣）')) + '</span>'
+            + '</label>'
             + '<div class="adm-inline">'
             + '<button class="btn btn--minor" type="button" id="ti-tpl-csv">'
             + esc(T('tmpi_tpl_csv', '下載範例 CSV')) + '</button>'
@@ -1624,7 +1635,13 @@
         // ZH: 內容一改，上一份預覽就不算數（同手動補齊：看 A 的預覽送出 B 很危險）。
         // ZH: 🔴 勾選也要作廢預覽 —— 預覽過的是「不開通」那一版，
         //     勾完直接按建立的話，看到的與送出的是兩件事（後端的驗證規則也不同）。
-        ['ti-why', 'ti-expires', 'ti-myai'].forEach(function (id) {
+        // ZH: 勾了永久就把日期欄灰掉（同單筆）—— 後端會擋，但按不到更好。
+        $('ti-forever').addEventListener('change', function () {
+            var d = $('ti-expires');
+            d.disabled = this.checked;
+            d.style.opacity = this.checked ? '.5' : '';
+        });
+        ['ti-why', 'ti-expires', 'ti-myai', 'ti-forever'].forEach(function (id) {
             if (!$(id)) return;
             $(id).addEventListener($(id).type === 'checkbox' ? 'change' : 'input', function () {
                 $('ti-apply').hidden = true;
@@ -1708,7 +1725,12 @@
             +   esc(T('pf_close', '關閉')) + '">✕</button></form>'
             + '<h2 class="rmod__title">' + esc(T('tmpi_done', '匯入完成')) + '</h2>'
             + '<p class="footnote">' + esc(T('tmpi_done_sum', '共建立 {n} 個臨時帳號。')
-                .replace('{n}', num(r.total))) + '</p>'
+                .replace('{n}', num(r.total))
+                // ZH: 🔴 把「建到什麼時候」寫出來 —— 永久是不可逆的決定
+                //     （到期日可以延，永久卻要一個一個手動改回去）。
+                + ' ' + (r.expires_at
+                    ? T('tmpi_done_until', '到期：{d}').replace('{d}', TW.dateTime(r.expires_at))
+                    : T('tmpi_done_forever', '永久有效（不會到期）'))) + '</p>'
             + (gen.length
                 ? '<div class="adm-alert adm-alert--error"><span>'
                   + esc(T('tmpi_pw_once',
