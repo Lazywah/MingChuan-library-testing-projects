@@ -235,6 +235,24 @@ docker system prune -f         # 移除 unused 容器 / 網路 / image
 docker volume prune -f         # 移除 dangling volume
 ```
 
+### 程式實驗室的 per-user 網路（v4.24，預設關）
+
+開關：管理端 →「平台設定」→ `lab_network_isolation`。細節與實測記錄見
+[`08-status-and-roadmap.md`](08-status-and-roadmap.md) 的「Lab 容器網路隔離」。
+
+```bash
+# 現在有哪些 lab 網路（開著實驗室的人各一個）
+docker network ls --filter name=aibase-lab
+# 某個網路上有誰（應該只有 cs-<uid> + nginx + scheduler）
+docker network inspect aibase-lab-<uid 前12碼> --format '{{range .Containers}}{{.Name}} {{end}}'
+```
+
+⚠ 網路是在**關掉實驗室**時收的。平台重啟過而留下孤兒網路時可以手動收：
+`docker network rm $(docker network ls -q --filter name=aibase-lab --filter dangling=true)`
+（`dangling=true` 只會挑沒有任何容器的，開著的實驗室不會被動到。）
+
+---
+
 ### v2.0 Storage 生命週期（per-user volume）
 
 四階段：`active` / `frozen` / `archived` / `pending_delete`。透過 admin UI 或 API 操作：

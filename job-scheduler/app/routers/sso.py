@@ -350,7 +350,13 @@ def oidc_callback(
         raise HTTPException(status_code=400, detail="ZH: 登入驗證碼不正確或已過期，請重新登入一次 | EN: Invalid or expired state")
 
     try:
-        user_info = oidc_client.validate_ticket(code)
+        # ZH: v4.24 —— 把 state 傳下去才驗得了 nonce（nonce 由 state 推導）。
+        # ZH: `sso_verify_id_token` 是**可以關的閘門**：IdP 改了東西而我們還沒跟上時，
+        #     要有辦法在不改程式的情況下讓學生登得進來。預設是開的。
+        _verify = str(crud.get_setting(db, "sso_verify_id_token")) != "0"
+        if not _verify:
+            logger.warning("sso_verify_id_token=0 —— 這次登入略過 id_token 簽章驗證")
+        user_info = oidc_client.validate_ticket(code, state=state, verify_id_token=_verify)
         resp = _finalize_sso_login(db, user_info, request=request)
         # ZH: v3.3 MYAI 自動開通 —— 以背景任務執行，**不讓登入等待廠商回應**
         #     （建號需往返廠商數秒；失敗也不影響登入，狀態由學生端端點查詢）

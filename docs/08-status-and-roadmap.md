@@ -162,28 +162,48 @@
 
 | 事 | 為什麼 |
 |---|---|
-| **Lab 容器網路隔離** | 見下方。威脅低但真實 |
 | Alembic | 手動 `ALTER TABLE` 已經踩過一次「漏了就炸」 |
 | 收斂「帶 token 下載」 | 同一條規則四份實作 |
 
-### Lab 容器網路隔離（原 v2.2 主項目，仍未做）
+### Lab 容器網路隔離（v4.24 做好了，**預設關著**）
 
-**問題**：所有 lab 容器掛同一個 `ai-platform-net`，學生 A 可從自己容器內連到
-學生 B 的 code-server。
+**原本的問題**：所有 lab 容器掛同一個 `ai-platform-net`，學生 A 可從自己容器內
+連到學生 B 的 code-server（`curl http://cs-<對方 uuid>:8080`）。
+威脅模型是教學平台、低威脅 —— 要求攻擊者知道對方 UUID 且刻意為之，但它是真的。
 
-**威脅模型**：教學平台、低威脅 —— 要求攻擊者知道對方 UUID 且刻意為之。
+**做法**：每人一個 bridge 網路 `aibase-lab-<uid 前 12 碼>`
+（`services/network_manager.py`，`lab_manager` 啟停時建立／清理）。
+nginx 與服務層會被連進每個網路，所以：
 
-**建議解法**：per-user docker network（新檔 `services/network_manager.py`，
-`lab_manager` 啟停時建立／清理）。
+| 從學生 A 的實驗室 | 結果 |
+|---|---|
+| `http://job-scheduler:8000/health` | ✅ 通（送訓練、心跳靠它） |
+| nginx → `/code/<A>/` | ✅ 通 |
+| `http://ai-platform-ollama:11434` | ❌ 不通（共用網路上的其他容器看不到了） |
+| `http://cs-<學生 B 的 uuid>:8080` | ❌ 不通（**這就是重點**） |
 
-> ⚠ Docker bridge driver 預設限 30 個網路 —— 同時開超過 30 個實驗室需要
-> swarm overlay。以目前一台 5090 的規模不會遇到，台北接上之後要重新評估。
+> 🔴 連服務層時一定要帶 alias `job-scheduler` —— compose 的服務名只在 compose
+> 自己建的網路上有效。少了它的症狀是「實驗室開得起來，但 Run on GPU 與心跳
+> 全部失敗」，而且只在隔離開啟後發生。
+
+**怎麼開**：管理端 →「平台設定」→ `lab_network_isolation` 設成 1。
+⚠ 只影響**之後**啟動的實驗室；已經開著的維持原樣（要全部生效得請大家關掉重開）。
+⚠ 建網路失敗時會**退回共用網路照常開**（少一層隔離 < 今天不能寫程式），log 留 error。
+
+> ⚠ Docker 預設位址池大約只切得出 31 個 /16 網路 —— 同時開著的實驗室超過這個數字
+> 就會建不出來（程式會講人話，不會丟 Docker 原文）。以目前一台 5090 的規模不會遇到；
+> 台北接上、或要同時開 30 個以上實驗室時，要改 daemon 的 `default-address-pools`
+> 或改用 overlay。
+
+**2026-09-23 實測過**：開關打開 → 開實驗室 → 容器只掛在 `aibase-lab-<uid>` 上、
+網路上只有它與 nginx／服務層；容器內打 `job-scheduler:8000/health` 回 200、
+打 `ai-platform-ollama` 逾時；nginx 的 `/code/<uid>/` 回 302（code-server 自己的轉址，
+不是 502）；關掉實驗室後網路自動收掉。驗完把開關**轉回 0**。
 
 ### 其他候選
 
 - **Lab secrets 注入稽核** —— 誰何時讀取了 secrets（目前注入後即明文）
 - **SSO 身分 → role 自動對應** —— 由 IdP 提供教職員身分欄位
-- **id_token jwks 簽章驗證** —— 目前未驗 RSA 簽章（信任 token endpoint 走 HTTPS）
 
 ---
 

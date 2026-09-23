@@ -1636,7 +1636,8 @@ _GROUP_KEYS = {g["key"] for g in SETTING_GROUPS}
 # ZH: 沒列到的 key 排在該組最後（照 registry 順序）—— 新增旋鈕忘了列，
 #     只是排尾不會消失；列了不存在的 key 則在載入時就炸（見下方自檢）。
 SETTING_ORDER = {
-    "platform": ["sso_autocreate", "gpu_features_enabled",
+    "platform": ["sso_autocreate", "sso_verify_id_token", "gpu_features_enabled",
+                 "lab_network_isolation",
                  "job_timeout_minutes", "max_jobs_per_user", "lab_gpu_max_minutes", "lab_archive_days",
                  "announcement_file_max_mb", "announcement_total_gb"],
     "myai":     ["myai_autoprovision", "myai_initial_credit", "myai_init_pwd_days",
@@ -1678,6 +1679,22 @@ SYSTEM_SETTINGS = {
                                  "default": lambda: 1, "min": 0, "max": 1,
                                  "label": "SSO 首次登入自動建立帳號(1=開, 0=關；關閉時只有管理端建立的帳號登得進來)",
                                  "label_en": "Create an account on first SSO login (1 = on, 0 = off; when off only admin-created accounts can sign in)"},
+    # ZH: v4.24 —— id_token 簽章驗證的閘門。**預設開**，關掉只是為了
+    #     「IdP 改了東西、我們還沒跟上」時不要把所有人擋在門外。
+    #     ⚠ 關著的期間每一次 SSO 登入都會在 log 留一行 warning ——
+    #     臨時措施必須看得見，否則會變成永久措施。
+    # ZH: v4.24 程式實驗室的 per-user 網路。**預設關**：它會改變容器的網路拓撲，
+    #     而開著的實驗室不受影響（只影響之後啟動的），所以要能分批驗證。
+    #     ⚠ 開啟前先看 docs/08 的「Lab 容器網路隔離」：Docker 預設位址池
+    #     大約只切得出 31 個網路，同時開著的實驗室超過就建不出來。
+    "lab_network_isolation":    {"group": "platform", "type": "int",
+                                 "default": lambda: 0, "min": 0, "max": 1,
+                                 "label": "程式實驗室每人獨立網路(1=開, 0=關；只影響之後啟動的實驗室)",
+                                 "label_en": "Give each code lab its own network (1 = on, 0 = off; affects labs started afterwards)"},
+    "sso_verify_id_token":      {"group": "platform", "type": "int",
+                                 "default": lambda: 1, "min": 0, "max": 1,
+                                 "label": "驗證 SSO 的 id_token 簽章(1=開, 0=暫時關閉；關閉時每次登入都會在 log 留紀錄)",
+                                 "label_en": "Verify the SSO id_token signature (1 = on, 0 = temporarily off; every login is logged while off)"},
     "gpu_features_enabled":     {"starred": True, "public": True, "group": "platform", "type": "int",
                                  "default": lambda: 1, "min": 0, "max": 1,
                                  "label": "GPU 相關功能對一般使用者開放(1=開, 0=暫停；管理員不受限)",

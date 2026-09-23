@@ -23,9 +23,11 @@ import logging
 from abc import ABC, abstractmethod
 
 import httpx
-# ZH: v3.1 起身分改由 userinfo endpoint 取得，不再解析 id_token（jose 匯入已移除；
-#     日後 v2.2 若加 jwks 簽章驗證再引回 python-jose）
-# EN: Since v3.1 identity comes from the userinfo endpoint; id_token parsing (jose) removed.
+# ZH: v3.1 起身分改由 userinfo endpoint 取得（不從 id_token 解析身分）。
+# ZH: v4.24 補上 **id_token 的簽章驗證**（jwks + nonce + sub 對帳）——
+#     身分仍然來自 userinfo，這一層是縱深防禦，見 OIDCSSOClient._verify_id_token。
+# EN: Identity still comes from userinfo; v4.24 adds id_token signature verification
+#     (jwks + nonce + sub cross-check) as defence in depth.
 
 logger = logging.getLogger(__name__)
 
@@ -198,6 +200,9 @@ class OIDCSSOClient(BaseSSOClient):
         # ZH: v3.4 依 sub 型態選網域（學生 @me / 教職員 @mail）；見 sso_policy.yaml 說明
         self.email_rules    = email_rules or []
         self._doc: dict | None = None   # discovery 文件快取
+        # ZH: v4.24 jwks 快取（kid → key）。0 代表還沒抓過。
+        self._jwks_keys: dict = {}
+        self._jwks_at: float = 0.0
 
         # ZH: 啟動先試抓 discovery；失敗不擋啟動（第一次登入時 lazy 重試）
         # EN: Try discovery at startup; failure doesn't block boot (lazy retry on first login)
@@ -239,15 +244,143 @@ class OIDCSSOClient(BaseSSOClient):
             "redirect_uri":  self.redirect_uri,
             "scope":         " ".join(self.scopes),
             "state":         state,
+            # ZH: v4.24 nonce 由 state 推導（見 nonce_for_state）——
+            #     callback 時才有辦法在沒有 session 儲存區的情況下比對。
+            "nonce":         self.nonce_for_state(state),
         }
         return f"{eps['authorization_endpoint']}?{urllib.parse.urlencode(params)}"
 
-    def validate_ticket(self, code: str) -> dict:
+    # ── id_token 驗證（v4.24）──────────────────────────────────────────
+    #
+    # ZH: 🔴 **這一層是縱深防禦，不是身分來源。** 身分仍然來自 userinfo
+    #     （直接以 TLS 連到 IdP、帶 access_token）。那條路本來就不經過瀏覽器，
+    #     所以偽造的 id_token 影響不到它。這裡要擋的是另一件事：
+    #       · token endpoint 回的 token 其實屬於**別人**（token substitution）
+    #       · 這次的 token 是**別次登入**的重播（nonce 不對）
+    #
+    # ZH: 🔴 **演算法必須釘死。** auth.mcu.edu.tw 的 discovery 自己宣告
+    #     `id_token_signing_alg_values_supported: ['none','HS256',…,'RS256',…]`——
+    #     照單全收的話，攻擊者只要把 alg 改成 `none` 就不必簽章，
+    #     或改成 HS256 拿**公鑰當 HMAC 密鑰**（公鑰是公開的）。兩種都是經典手法。
+    #     所以只收 RS*，而且明確傳 algorithms，不讓函式庫自己決定。
+    _ID_TOKEN_ALGS = ("RS256", "RS384", "RS512")
+
+    # ZH: jwks 快取。IdP 換金鑰時 kid 會變 —— 遇到沒看過的 kid 才重抓，
+    #     但**最短間隔 60 秒**：否則隨便一個帶假 kid 的請求就能讓我們去打 IdP。
+    _JWKS_MIN_REFETCH_SECONDS = 60
+
+    def _jwks(self, force: bool = False) -> dict:
+        """ZH: 取得 jwks（kid → key dict）。有快取，force 才重抓。
+
+        @node job-scheduler/app/sso_client.py::OIDCSSOClient._jwks
+        """
+        now = time.time()
+        if (not force and self._jwks_keys
+                and (now - self._jwks_at) < 3600):
+            return self._jwks_keys
+        if force and (now - self._jwks_at) < self._JWKS_MIN_REFETCH_SECONDS:
+            return self._jwks_keys
+        uri = self._endpoints().get("jwks_uri")
+        if not uri:
+            raise ValueError("OIDC discovery 沒有 jwks_uri，無法驗證 id_token 簽章")
+        resp = httpx.get(uri, timeout=10.0)
+        resp.raise_for_status()
+        keys = {}
+        for k in (resp.json().get("keys") or []):
+            if k.get("kid"):
+                keys[k["kid"]] = k
+        if not keys:
+            raise ValueError(f"jwks 沒有任何帶 kid 的金鑰（{uri}）")
+        self._jwks_keys, self._jwks_at = keys, now
+        logger.info("OIDC jwks 已更新（%d 把金鑰）", len(keys))
+        return keys
+
+    def _verify_id_token(self, raw: str, expected_nonce: str | None,
+                         expected_sub: str | None) -> dict:
+        """
+        ZH: 驗 id_token 的簽章、簽發者、對象、時效、nonce 與 sub。驗不過就丟 ValueError。
+
+        ZH: ⚠ `at_hash` 不驗 —— 那要 access_token 的雜湊，而部分 IdP 不放這個 claim；
+            它保護的是「id_token 與 access_token 配對」，而我們已經用
+            **sub 對帳**達成同一件事（而且更直接）。
+
+        @node job-scheduler/app/sso_client.py::OIDCSSOClient._verify_id_token
+        """
+        from jose import jwt as jose_jwt, jwk as jose_jwk  # noqa: F401  (延遲 import)
+        from jose.utils import base64url_decode            # noqa: F401
+        from jose.exceptions import JWTError
+
+        try:
+            header = jose_jwt.get_unverified_header(raw)
+        except Exception as e:
+            raise ValueError(f"id_token 格式不對：{e}")
+
+        alg = (header.get("alg") or "").upper()
+        if alg not in self._ID_TOKEN_ALGS:
+            # ZH: 這是**攻擊的樣子**，不是設定問題 —— 用 error 記，而且要看得到 alg。
+            logger.error("id_token 的 alg=%s 不在允許清單 %s", alg, self._ID_TOKEN_ALGS)
+            raise ValueError(f"id_token 使用了不被接受的簽章演算法：{alg or 'none'}")
+
+        kid = header.get("kid")
+        keys = self._jwks()
+        key = keys.get(kid)
+        if key is None:
+            # ZH: 沒看過的 kid = IdP 可能換了金鑰。重抓一次再說（有最短間隔保護）。
+            keys = self._jwks(force=True)
+            key = keys.get(kid)
+        if key is None:
+            raise ValueError(f"jwks 裡找不到 id_token 的 kid={kid}")
+
+        eps = self._endpoints()
+        try:
+            claims = jose_jwt.decode(
+                raw, key,
+                algorithms=list(self._ID_TOKEN_ALGS),
+                audience=self.client_id,
+                issuer=eps.get("issuer") or None,
+                # ZH: leeway 60 秒 —— 兩邊的時鐘不會完全一致，而差幾秒就把人擋在
+                #     門外的話，症狀是「有時候登得進去有時候不行」，最難查。
+                options={"verify_at_hash": False, "leeway": 60},
+            )
+        except JWTError as e:
+            raise ValueError(f"id_token 驗證失敗：{e}")
+
+        # ZH: 🔴 nonce 綁定「這次的登入請求」。沒有它的話，攻擊者可以把
+        #     另一次（合法的）登入結果重播進來。
+        if expected_nonce:
+            got = str(claims.get("nonce") or "")
+            if not hmac.compare_digest(got, expected_nonce):
+                raise ValueError("id_token 的 nonce 與本次登入請求不符")
+
+        # ZH: 🔴 sub 對帳：id_token 說的人，必須就是 userinfo 回的那個人。
+        #     不一致＝拿到的是**別人的** token，這是最該擋下來的情況。
+        if expected_sub:
+            if str(claims.get("sub") or "") != str(expected_sub):
+                logger.error("id_token.sub 與 userinfo.sub 不一致 —— 拒絕登入")
+                raise ValueError("id_token 與 userinfo 指向不同的使用者")
+        return claims
+
+    def validate_ticket(self, code: str, state: str | None = None,
+                        verify_id_token: bool = True) -> dict:
         """
         OIDC 的 'ticket' 是 authorization code。流程（v3.1）：
           1. POST token endpoint（client_secret_post）→ access_token
           2. GET userinfo endpoint（Bearer access_token）→ 學號/員編等身分欄位
         state 驗證由 router 在進入此方法前完成（verify_state）。
+
+        ZH: v4.24 多了第 3 步：**驗 id_token**（簽章 / iss / aud / exp / nonce / sub）。
+            身分仍然來自 userinfo —— 這一層是縱深防禦，見 _verify_id_token。
+
+        ZH: `state` 給了才驗得了 nonce（nonce 由 state 推導）。
+            不給仍然會驗簽章與 sub —— 少驗一項比整個不驗好。
+
+        ZH: 🔴 **沒有 id_token 時不擋。** 身分本來就不從它來，而且
+            「IdP 這次沒給」與「有人偽造」是兩件事。記一行 warning，繼續。
+            ⚠ 反過來，**有 id_token 但驗不過就一定要擋** —— 那才是異常。
+
+        ZH: `verify_id_token=False` 是給管理端的閘門用的（system setting
+            `sso_verify_id_token`）。IdP 改東西而我們還沒跟上時，
+            要有辦法在不改程式的情況下讓學生登得進來。
 
         @node job-scheduler/app/sso_client.py::OIDCSSOClient.validate_ticket
         """
@@ -269,10 +402,12 @@ class OIDCSSOClient(BaseSSOClient):
             logger.error(f"OIDC token exchange failed: {e}")
             raise ValueError(f"OIDC token 交換失敗: {e}")
 
-        access_token = token_resp.json().get("access_token")
+        token_json = token_resp.json()
+        access_token = token_json.get("access_token")
         if not access_token:
             logger.error("OIDC token response missing access_token")
             raise ValueError("OIDC response missing access_token")
+        raw_id_token = token_json.get("id_token")
 
         try:
             ui_resp = httpx.get(
@@ -290,6 +425,19 @@ class OIDCSSOClient(BaseSSOClient):
         #     釘死為 sub（sso_policy.yaml）。完整 payload 降為 debug（內含個資）。
         # EN: Verified: MCU userinfo returns only {'sub': '<student-id>'}; claim pinned.
         logger.debug(f"OIDC userinfo keys={sorted(info.keys())} payload={info}")
+
+        # ZH: v4.24 驗 id_token（見 _verify_id_token 的檔頭說明）。
+        if verify_id_token:
+            if not raw_id_token:
+                # ZH: 身分不從 id_token 來，所以這不是致命的 —— 但要看得見，
+                #     因為一個 OIDC 伺服器不回 id_token 本身就不尋常。
+                logger.warning("OIDC token 回應沒有 id_token —— 略過簽章驗證（身分仍由 userinfo 決定）")
+            else:
+                self._verify_id_token(
+                    raw_id_token,
+                    expected_nonce=(self.nonce_for_state(state) if state else None),
+                    expected_sub=info.get("sub"))
+                logger.info("id_token 簽章與 sub 對帳通過")
 
         username = self._extract_username(info)
         # ZH: v3.4 email 推導 —— IdP 有給就用（最可信）；否則依 email_rules 依 sub 型態
@@ -376,6 +524,34 @@ class OIDCSSOClient(BaseSSOClient):
             hashlib.sha256,
         ).hexdigest()[:16]
         return base64.urlsafe_b64encode(f"{payload}|{sig}".encode()).decode()
+
+    def nonce_for_state(self, state: str) -> str:
+        """
+        ZH: 這個 state 對應的 OIDC nonce。
+
+        ZH: 🔴 **由 state 推導而不是另外存一份** —— 平台沒有 session 儲存區，
+            state 本來就是 stateless HMAC。nonce = HMAC(密鑰, state 裡的亂數)，
+            所以登入時與 callback 時算得出同一個值，而攻擊者算不出來
+            （他沒有 JWT_SECRET_KEY）。
+
+        ZH: ⚠ 直接把 state 當 nonce 是不行的：state 會出現在**瀏覽器網址列與
+            Referer**，等於把 nonce 一起洩漏出去。推導一層之後，
+            看得到 state 的人仍然算不出 nonce。
+
+        ZH: 算不出來（state 壞掉）就回空字串 —— 呼叫端會當成「這次不驗 nonce」，
+            而 state 本身已經先被 verify_state 擋掉了。
+
+        @node job-scheduler/app/sso_client.py::OIDCSSOClient.nonce_for_state
+        """
+        from .config import settings
+        try:
+            decoded = base64.urlsafe_b64decode(state.encode()).decode()
+            ts, rand, _sig = decoded.split("|")
+        except Exception:
+            return ""
+        return hmac.new(settings.JWT_SECRET_KEY.encode(),
+                        f"oidc-nonce|{ts}|{rand}".encode(),
+                        hashlib.sha256).hexdigest()[:32]
 
     def verify_state(self, state: str, max_age_seconds: int = 600) -> bool:
         """@node job-scheduler/app/sso_client.py::OIDCSSOClient.verify_state"""

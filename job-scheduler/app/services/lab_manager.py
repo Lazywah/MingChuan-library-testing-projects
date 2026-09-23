@@ -65,7 +65,7 @@ from ..config import SCHEDULER_POLICY, settings
 # ZH: `storage_lifecycle` 不 import 回 `lab_manager`（查過），所以這裡可以放模組層。
 #     ⚠ `refresh_storage_usage` 裡那個是**函式內** import —— 當時還沒確認方向，
 #     現在確認了，但保留原樣：那一支只在排程與這裡被呼叫，改不改都一樣。
-from . import secrets_service, quota_service, storage_lifecycle
+from . import secrets_service, quota_service, storage_lifecycle, network_manager
 
 logger = logging.getLogger(__name__)
 
@@ -344,7 +344,10 @@ class CodeServerLifecycle:
                     volume_name:      {"bind": "/home/coder",  "mode": "rw"},
                     "aibase_shared_models": {"bind": "/opt/models", "mode": "ro"},
                 },
-                network="ai-platform-net",
+                # ZH: v4.24 —— 隔離開啟時這裡是**那個人自己的**網路
+                #     （呼叫端決定，見 start_session 與 network_manager 的檔頭）。
+                #     關閉時維持 ai-platform-net，行為與 v4.23 逐字相同。
+                network=config.get("network") or "ai-platform-net",
                 cpu_period=100000,
                 cpu_quota=int(config.get("cpu_quota", 0.5) * 100000),
                 mem_limit=f"{config.get('mem_quota_mb', 2048)}m",
@@ -869,6 +872,25 @@ def start_session(db: Session, user_id: str, base_image: Optional[str] = None,
                  else "aibase/code-server:2026-spring"
         )
 
+    # ZH: v4.24 程式實驗室的網路隔離。
+    #
+    # ZH: 🔴 在這之前所有 lab 容器共用 `ai-platform-net` —— 學生 A 可以從自己的
+    #     容器連到學生 B 的 code-server（`curl http://cs-<對方 uuid>:8080`）。
+    #     威脅不高（要知道對方的 uuid 且刻意為之），但它是真的。
+    #
+    # ZH: ⚠ 預設**關閉**（`lab_network_isolation`）。開啟只影響**之後**啟動的
+    #     實驗室；已經開著的維持原樣。要全部生效得請大家關掉重開。
+    #
+    # ZH: ⚠ 建網路失敗時**照舊用共用網路開下去**，不要讓實驗室開不起來 ——
+    #     「少一層隔離」比「學生今天不能寫程式」輕。但要留 error。
+    lab_network = None
+    if str(crud.get_setting(db, "lab_network_isolation")) == "1":
+        try:
+            lab_network = network_manager.ensure_network(lc.client, user_id)
+        except Exception as e:                           # noqa: BLE001
+            logger.error("ZH: 建立 per-user 網路失敗，這次改用共用網路：%s", e)
+            lab_network = None
+
     # ZH: 注入該 user 的所有 secrets
     # EN: Inject all user secrets as docker env
     secret_env = secrets_service.build_docker_env(db, user_id)
@@ -927,6 +949,8 @@ def start_session(db: Session, user_id: str, base_image: Optional[str] = None,
             "gpu_index":    gpu_index,
             # ZH: v4.19 「學習程式碼」選的範例（cats_dogs / tabular / text；None ＝ 不放）
             "sample":       sample,
+            # ZH: v4.24 隔離開啟時＝這個人自己的網路；關閉時 None ＝ 共用網路
+            "network":      lab_network,
         })
     except Exception as e:
         row.status = "stopped"
@@ -1013,6 +1037,15 @@ def stop_session(db: Session, user_id: str, reason: str = "user_requested",
 
     logger.info("Session stopped for user %s (reason=%s, elapsed=%ds)",
                 user_id[:8], reason, elapsed)
+
+    # ZH: v4.24 這個人的實驗室都關了就把 per-user 網路收掉。
+    # ZH: ⚠ 收不掉不要讓「關實驗室」失敗 —— 網路留著只佔一個位址段，
+    #     下次開同一個人的實驗室會重用它（見 network_manager.remove_network）。
+    # ZH: ⚠ 多份存檔的人可能還開著另一份，所以那支會先看網路上還有沒有容器。
+    try:
+        network_manager.remove_network(get_lifecycle().client, user_id)
+    except Exception:                                    # pragma: no cover
+        logger.debug("ZH: 收 per-user 網路時出錯（不影響停止）", exc_info=True)
 
     # ZH: v4.23 關掉實驗室之後重新量一次，順便試自動解凍。
     #
