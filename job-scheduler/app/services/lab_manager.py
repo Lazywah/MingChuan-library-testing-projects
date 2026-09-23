@@ -39,22 +39,11 @@ from sqlalchemy.orm import Session
 from .. import crud, models
 
 
-class StorageFrozenError(RuntimeError):
-    """
-    ZH: 儲存被凍結（超配額或管理員處置），不給開實驗室。
-
-    ZH: 用專屬例外而不是 PermissionError：呼叫端要能回一個**帶數字**的訊息
-        （用了多少／配額多少／要刪多少），而不是一句「沒有權限」。
-        只說「被凍結」的話，使用者不知道要刪到多少才夠。
-
-    ZH: `used_gb` / `quota_gb` / `reason` 供呼叫端組訊息用。
-    """
-
-    def __init__(self, used_gb: float, quota_gb: int, reason: Optional[str] = None):
-        super().__init__(f"storage frozen: {used_gb} GB / {quota_gb} GB ({reason})")
-        self.used_gb = used_gb
-        self.quota_gb = quota_gb
-        self.reason = reason
+# ZH: v4.23 定義搬到 storage_lifecycle —— 擋住的地方已經不只有實驗室
+#     （還有上傳資料集、送訓練任務），那兩條路不該為了一個例外型別
+#     去 import 整個 docker 模組。這裡留別名，既有的
+#     `except lab_manager.StorageFrozenError` 與測試都不會壞。
+from .storage_lifecycle import StorageFrozenError  # noqa: F401,E402  (見上)
 
 
 class GpuBusyError(RuntimeError):
@@ -799,7 +788,10 @@ def start_session(db: Session, user_id: str, base_image: Optional[str] = None,
         #     一筆卡住的紀錄會讓這裡回傳一個已死容器的網址 ——
         #     使用者點下去是一片空白，而畫面上一切看起來都正常。
         if not reconcile_session(db, existing):
-            return _build_url(user_id, existing)
+            # ZH: 已經開著的那一份直接回網址。這條路在凍結判斷之前，
+            #     所以不會是清理模式 —— 欄位仍然帶著，讓回應的形狀一致
+            #     （前端少一個欄位就得寫 undefined 判斷）。
+            return {**_build_url(user_id, existing), "storage_cleanup_mode": False}
 
     lc = get_lifecycle()
 
@@ -808,7 +800,7 @@ def start_session(db: Session, user_id: str, base_image: Optional[str] = None,
     #     所以「一次只開一份」實際上沒有生效。
     _stop_other_running(db, user_id, keep=session)
 
-    # ZH: v3.9 儲存被凍結就不給開。
+    # ZH: v3.9 儲存被凍結的處置。
     #
     # ZH: 🔴 **這是「凍結」第一次真的擋住人。** 在此之前 `state` 除了管理端的
     #     列表之外沒有任何地方在讀 —— 管理者按下「凍結」以為擋住了對方，
@@ -819,16 +811,43 @@ def start_session(db: Session, user_id: str, base_image: Optional[str] = None,
     #
     # ZH: ⚠ **在這裡先試一次自動解凍**，不要只靠每日排程：
     #     學生刪完檔案會**馬上**想重開，等到隔天 03:00 那個體驗說不過去。
+    #
+    # ZH: 🔴 v4.23 改掉一條死路：**超配額的人要放他進來。**
+    #     v3.9 是一律擋掉，包含超配額 —— 但 home volume 裡的檔案
+    #     **只能從程式實驗室裡刪**（平台沒有別的檔案管理介面）。
+    #     於是那條路是：超配額 → 進不去 → 刪不掉 → 永遠出不來，
+    #     而凍結滿 30 天會自動往 archived 掉。訊息還寫著「刪完再按一次即可」，
+    #     那句話在當時是做不到的事。
+    #     所以超配額改成**清理模式**：進得去，但不給 GPU、不給開新存檔
+    #     （那兩件事都會讓佔用再長大）。管理員手動凍結／90 天未登入
+    #     仍然整個擋住 —— 那是處置，不是配額，出路是找管理員。
     st = storage_lifecycle.get_or_create_state(db, user_id)
+    cleanup_mode = False
     if st.state == "frozen":
         # ZH: 先量一次最新用量再判 —— 他可能剛剛才刪完檔案。
         refresh_storage_usage(db, user_id=user_id)
         db.refresh(st)
         if not storage_lifecycle.auto_unfreeze(db, user_id):
-            raise StorageFrozenError(
-                used_gb=st.current_size_gb,
-                quota_gb=quota_service.get_effective_quota_gb(db, user_id),
-                reason=st.frozen_reason)
+            _quota_gb = quota_service.get_effective_quota_gb(db, user_id)
+
+            def _frozen(blocked):
+                """@node job-scheduler/app/services/lab_manager.py::start_session.<nested>._frozen"""
+                return StorageFrozenError(used_gb=st.current_size_gb,
+                                          quota_gb=_quota_gb,
+                                          reason=st.frozen_reason,
+                                          blocked=blocked)
+
+            if st.frozen_reason != "quota_exceeded":
+                raise _frozen("lab")
+            # ZH: 以下兩個仍然擋 —— 它們不是清理，是再長大。
+            if want_gpu:
+                raise _frozen("lab_gpu")
+            # ZH: ⚠ 預設那一份**不算新存檔** —— 它是每個人的主要工作區，
+            #     DB 列可能因為各種原因不在（`list_sessions` 也有同樣的假設）。
+            #     把它當成新存檔擋掉的話，剛好沒有那一列的人連清理都做不到。
+            if existing is None and session != DEFAULT_SESSION:
+                raise _frozen("lab_new_session")
+            cleanup_mode = True
 
     # ZH: v3.9 要 GPU 的話先借一張卡。**借不到就明確拒絕**，不排隊 ——
     #     排隊要有「輪到你了」的通知，那是另一個功能；
@@ -929,9 +948,13 @@ def start_session(db: Session, user_id: str, base_image: Optional[str] = None,
     db.commit()
     db.refresh(row)
 
+    # ZH: 🔴 清理模式要**講出來**。使用者是被放進來整理檔案的，
+    #     畫面上如果什麼都沒說，他只會覺得「怎麼 GPU 勾不了」。
+    #     前端靠這個欄位顯示說明（沒有它就只是一個安靜的降級）。
     return {
         **_build_url(user_id, row),
         "password": password,
+        "storage_cleanup_mode": cleanup_mode,
     }
 
 
@@ -990,6 +1013,24 @@ def stop_session(db: Session, user_id: str, reason: str = "user_requested",
 
     logger.info("Session stopped for user %s (reason=%s, elapsed=%ds)",
                 user_id[:8], reason, elapsed)
+
+    # ZH: v4.23 關掉實驗室之後重新量一次，順便試自動解凍。
+    #
+    # ZH: 🔴 為什麼是這個時機：超配額的人是被放進來**刪檔案**的
+    #     （清理模式，見 start_session）。他刪完會做的事就是關掉實驗室 ——
+    #     在這一刻重量，他下一次按開啟就是好的。
+    #     不做的話他得等到隔天 03:00，而中間他完全不知道自己解開了沒有。
+    #
+    # ZH: ⚠ 整段包在 try 裡，而且放在 `db.commit()` **之後** ——
+    #     量測要跑 docker exec du，會失敗也會慢；
+    #     不能讓「量不到」變成「關不掉實驗室」。
+    try:
+        refresh_storage_usage(db, user_id=user_id)
+        if storage_lifecycle.auto_unfreeze(db, user_id):
+            logger.info("User %s auto-unfrozen after stopping the lab", user_id[:8])
+    except Exception:                                    # pragma: no cover
+        logger.warning("ZH: 關閉實驗室後的用量重量失敗（不影響停止）", exc_info=True)
+
     return True
 
 

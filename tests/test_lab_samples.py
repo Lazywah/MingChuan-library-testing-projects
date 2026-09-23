@@ -28,10 +28,26 @@ REPO = pathlib.Path(__file__).resolve().parent.parent
 
 @pytest.fixture
 def samples_dir(monkeypatch):
-    """ZH: 指到 repo 裡的正本（容器裡跑時 /app/lab_samples 也在，但這樣兩邊都能測）。"""
-    d = REPO / "job-scheduler" / "lab_samples"
-    monkeypatch.setattr(lm, "LAB_SAMPLES_DIR", d)
-    return d
+    """ZH: 指到範例的正本。
+
+    ZH: 🔴 兩個環境的路徑不一樣，所以要挑：
+          · 主機上跑 → repo 裡的 `job-scheduler/lab_samples/`
+          · 容器裡跑 → 映像把它放在 `/app/lab_samples/`（`lm.LAB_SAMPLES_DIR` 的預設值），
+            而 repo 的 `job-scheduler/` 那一層**不存在**
+        原本寫死 repo 路徑，於是在容器裡（＝平常跑測試的地方）五條全紅，
+        錯誤訊息還是 `tarfile.ReadError: empty file` —— 看起來像範例壞了，
+        實際上是測試自己指錯地方（2026-09-23 抓到）。
+
+    ZH: ⚠ 兩邊都找不到就**當場失敗**，不要 skip ——
+        「範例檔不見了」正是這一族測試要抓的事，skip 掉等於沒測。
+    """
+    for d in (REPO / "job-scheduler" / "lab_samples", lm.LAB_SAMPLES_DIR):
+        if d.is_dir() and any(d.iterdir()):
+            monkeypatch.setattr(lm, "LAB_SAMPLES_DIR", d)
+            return d
+    raise AssertionError(
+        "找不到 lab_samples 正本：repo 的 job-scheduler/lab_samples 與 "
+        f"{lm.LAB_SAMPLES_DIR} 都沒有檔案")
 
 
 def _members(data: bytes):

@@ -238,6 +238,8 @@
             ws_switch_confirm: '要切換到這一份嗎？「{n}」會關閉，但它的檔案都會保留。',
             ws_delete_confirm: '要刪掉「{n}」嗎？裡面的檔案會一起消失，沒辦法復原。',
             ws_switched: '已切換存檔（原本那一份已關閉，檔案都保留）',
+            // ZH: v4.23 超配額但被放進來清理的情況。
+            lab_cleanup_mode: '你的檔案超過配額，目前是「整理模式」：可以開一般實驗室刪檔案，但暫時不能用 GPU、也不能開新存檔。刪完關掉實驗室就會自動解開。',
 
             // ── 我的訓練（jobs.html）──────────────────────────────
             jl_title: '我的訓練 · MCU AI Base',
@@ -776,6 +778,7 @@
             ws_switch_confirm: 'Switch to this workspace? "{n}" will be closed, but all its files are kept.',
             ws_delete_confirm: 'Delete "{n}"? Everything inside goes with it and cannot be recovered.',
             ws_switched: 'Switched workspace (the previous one is closed; all files are kept)',
+            lab_cleanup_mode: 'You are over your storage quota, so this lab is in cleanup mode: delete files here, but GPU and new workspaces are unavailable for now. Stop the lab when you are done and it unlocks automatically.',
 
             // ── My training runs (jobs.html) ─────────────────────
             jl_title: 'My training runs · MCU AI Base',

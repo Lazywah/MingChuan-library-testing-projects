@@ -36,6 +36,7 @@ from .. import crud, schemas, models
 from ..auth import get_current_user
 from ..database import get_db
 from ..config import SCHEDULER_POLICY, settings
+from ..services import storage_lifecycle
 
 import json
 import logging
@@ -97,6 +98,19 @@ def submit_job(
     @node job-scheduler/app/routers/jobs.py::submit_job
     """
     policy = SCHEDULER_POLICY.get("scheduling", {})
+
+    # ------------------------------------------------------------------
+    # ZH: 政策檢查 0 — 儲存被凍結（v4.23）
+    # ------------------------------------------------------------------
+    # ZH: 訓練會把 checkpoint 與輸出寫回這個人的空間，所以超配額時不給送。
+    #     ⚠ 擋在**送單**這一刻，不是派工那一刻 —— 排到一半才因為配額被丟掉的話，
+    #     使用者只會看到任務莫名其妙失敗。
+    try:
+        storage_lifecycle.check_write_allowed(db, current_user.id, "job_submit")
+    except storage_lifecycle.StorageFrozenError as e:
+        raise HTTPException(
+            status_code=409,
+            detail=storage_lifecycle.frozen_detail(e, "送出訓練任務", "submit a training job"))
 
     # ------------------------------------------------------------------
     # ZH: 政策檢查 a — 學生申請開關

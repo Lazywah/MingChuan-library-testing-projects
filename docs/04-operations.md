@@ -238,7 +238,12 @@ docker volume prune -f         # 移除 dangling volume
 ### v2.0 Storage 生命週期（per-user volume）
 
 四階段：`active` / `frozen` / `archived` / `pending_delete`。透過 admin UI 或 API 操作：
-- **凍結**：停 lab session 但保留檔案
+- **凍結**：擋住「會讓佔用再長大」的動作 —— 上傳資料集、送訓練任務，
+  以及 GPU 實驗室與開新存檔。檔案全部保留。
+  ⚠ **不會停掉已經開著的容器，也不會把掛載改成唯讀**（那要重建容器，
+  會把人正在做的事打斷）。語意是「不能再長大」，不是「立刻凍住」。
+  ⚠ **超配額的人仍然開得了一般實驗室** —— 那是他唯一能刪檔案的地方，
+  擋掉的話他永遠出不來。管理員手動凍結／90 天未登入則整個擋住。
 - **歸檔**：移到 HDD 區
 - **還原**：從 frozen / archived 帶回 active
 - **永久刪**：需 admin 密碼二次驗證、寫 audit log

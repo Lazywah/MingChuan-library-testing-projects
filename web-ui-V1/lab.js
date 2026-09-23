@@ -265,6 +265,14 @@ $('go').addEventListener('click', async () => {
         if (started.switched_from) {
             note(T('ws_switched', '已切換存檔（原本那一份已關閉，檔案都保留）'));
         }
+        // ZH: v4.23 超配額的人是被**放進來整理檔案**的（後端的清理模式）。
+        //     不講的話他只會覺得「怎麼 GPU 勾不了」，而那正是他現在該做的事沒被說出來。
+        //     ⚠ 這一句蓋掉上面那句切換提示是可以接受的 —— 這個狀態比較重要。
+        if (started.storage_cleanup_mode) {
+            note(T('lab_cleanup_mode',
+                   '你的檔案超過配額，目前是「整理模式」：可以開一般實驗室刪檔案，'
+                   + '但暫時不能用 GPU、也不能開新存檔。刪完關掉實驗室就會自動解開。'));
+        }
         // ZH: /lab/start 回的 url 已經是 /code/<uid>/?folder=...，直接用。
         //     但**不要立刻開** —— 先輪詢到 running 再開，否則新分頁是空白。
         await waitReady(started.url);

@@ -110,6 +110,99 @@ def list_states(db: Session, filter_state: Optional[str] = None) -> list[dict]:
 
 
 # ==============================================================================
+# ZH: 凍結的強制力 | Enforcement
+# ==============================================================================
+
+class StorageFrozenError(RuntimeError):
+    """
+    ZH: 儲存被凍結（超配額或管理員處置），這個動作不給做。
+
+    ZH: 用專屬例外而不是 PermissionError：呼叫端要能回一個**帶數字**的訊息
+        （用了多少／配額多少／要刪多少），而不是一句「沒有權限」。
+        只說「被凍結」的話，使用者不知道要刪到多少才夠。
+
+    ZH: ⚠ 這個類別 v4.23 之前定義在 `lab_manager`。搬過來的原因：
+        擋住的地方已經不只有實驗室（還有上傳資料集、送訓練任務），
+        而那兩條路不該為了一個例外型別去 import 整個 docker 模組。
+        `lab_manager.StorageFrozenError` 仍然指向這裡（別名），既有的
+        `except lab_manager.StorageFrozenError` 不會壞。
+
+    ZH: `blocked` 說的是**被擋掉的是哪一件事**，呼叫端用它挑訊息：
+        'lab'（整個實驗室）/ 'lab_gpu' / 'lab_new_session' / 'dataset_upload' / 'job_submit'。
+    """
+
+    def __init__(self, used_gb: float, quota_gb: int, reason: Optional[str] = None,
+                 blocked: str = "lab"):
+        super().__init__(f"storage frozen: {used_gb} GB / {quota_gb} GB ({reason})")
+        self.used_gb = used_gb
+        self.quota_gb = quota_gb
+        self.reason = reason
+        self.blocked = blocked
+
+
+def check_write_allowed(db: Session, user_id: str, blocked: str) -> None:
+    """
+    ZH: 這個人現在可以做「會讓儲存長大」的事嗎？不行就丟 StorageFrozenError。
+
+    ZH: 🔴 判準是**會不會讓佔用變多**，不是「是不是寫入」：
+          · 上傳資料集、送訓練任務（會產出 outputs）→ 擋
+          · 開實驗室刪檔案 → **不擋**（那是他唯一的清理工具，見 lab_manager）
+        擋掉清理工具的話，超配額的人就永遠出不來 —— 那比不擋更糟。
+
+    ZH: ⚠ 這裡**不重新量測**（量一次要 docker exec du，動輒數秒，
+        掛在上傳端點上會讓每一次上傳都變慢）。只用現有數字試一次自動解凍：
+        他若在 03:00 的量測之後已經刪過檔案，那個數字就已經是新的。
+        還沒重量到的情況由實驗室那條路負責（開／關實驗室都會重量）。
+
+    @node job-scheduler/app/services/storage_lifecycle.py::check_write_allowed
+    """
+    state = get_or_create_state(db, user_id)
+    if state.state != "frozen":
+        return
+    if auto_unfreeze(db, user_id):
+        return
+    logger.info("User %s blocked (%s): storage frozen (reason=%s)",
+                user_id[:8], blocked, state.frozen_reason)
+    raise StorageFrozenError(
+        used_gb=state.current_size_gb,
+        quota_gb=quota_service.get_effective_quota_gb(db, user_id),
+        reason=state.frozen_reason,
+        blocked=blocked)
+
+
+def frozen_detail(e: StorageFrozenError, what_zh: str, what_en: str) -> str:
+    """
+    ZH: 把 StorageFrozenError 組成給使用者看的中英訊息。
+
+    ZH: 🔴 **訊息一定要帶數字。** 只說「你的儲存被凍結」的話，使用者不知道
+        要刪到多少才夠，只能來問管理員。用了多少、上限多少、還差多少 ——
+        三個數字他就能自己處理。
+
+    ZH: 🔴 兩種凍結的**出路不一樣**，所以訊息不能共用：
+          · quota_exceeded → 他自己刪檔案就會自動解開（叫他去刪）
+          · manual / inactive_90d → 不會自動解開（叫他找管理員）
+        叫一個被管理員凍結的人「去刪檔案」，他會刪光了還是進不來。
+
+    ZH: ⚠ 三條路（實驗室、上傳、送單）共用這一支，就是為了不讓措辭各自漂開。
+
+    @node job-scheduler/app/services/storage_lifecycle.py::frozen_detail
+    """
+    if e.reason == "quota_exceeded":
+        need = max(0, round(e.used_gb - e.quota_gb, 2))
+        return (f"ZH: 你的檔案超過配額，暫時不能{what_zh}。"
+                f"目前已用 {e.used_gb} GB，上限 {e.quota_gb} GB —— "
+                f"至少要再刪掉 {need} GB。"
+                f"開「程式實驗室」把檔案刪掉，關掉實驗室時會重新量，就會自動解開。 | "
+                f"EN: Over storage quota ({e.used_gb} GB of {e.quota_gb} GB), "
+                f"so you cannot {what_en} right now. Free up at least {need} GB "
+                f"in the code lab; it is re-measured when you stop the lab.")
+    return (f"ZH: 你的儲存目前被管理員凍結，暫時不能{what_zh}。"
+            f"請用「問題回報」聯絡管理員。 | "
+            f"EN: Your storage has been frozen by an administrator, "
+            f"so you cannot {what_en} right now. Please contact them via 問題回報.")
+
+
+# ==============================================================================
 # ZH: 狀態轉換 | State transitions
 # ==============================================================================
 
@@ -118,27 +211,24 @@ def freeze(db: Session, user_id: str, admin_id: Optional[str] = None,
     """
     ZH: 把使用者的儲存狀態**標記**為 frozen。
 
-    ZH: 🔴 **它不會讓儲存真的變成唯讀。** 這一版做的事情只有三件：
-          1. `user_storage_state.state` 改成 `frozen`
-          2. 寫一筆管理稽核（有 admin_id 時）
-          3. 記一行 log
-        使用者**照樣讀寫**，容器不會被暫停，掛載也不會變唯讀。
+    ZH: 這一支只做三件事：改 `user_storage_state.state`、寫管理稽核、記一行 log。
+        **真正的「擋住」在別處**（見下），所以回傳 True 的意思是「狀態已改」。
 
-    ZH: ⚠️ 這個 docstring 原本寫的是「切到 frozen 狀態（**唯讀模式**）」——
-        那句話會讓管理者以為按下「凍結」就擋住了對方。實際上
-        `user_storage_state.state` 除了管理端的列表之外**沒有任何地方在讀**，
-        所以這個狀態目前是純粹的帳面紀錄。
-        （2026-08-27 稽核查證；擁有者尚未決定要不要真的實作。）
+    ZH: 這個狀態現在有人在讀了（v3.9 + v4.23）：
+          · `lab_manager.start_session` —— 被管理員凍結／90 天未登入的不給開；
+            超配額的**放行**（那是他唯一的清理工具），但不給 GPU、不給開新存檔
+          · `routers/datasets.upload_dataset` —— 不給上傳
+          · `routers/jobs.submit_job` —— 不給送訓練任務
+        守衛都走 `check_write_allowed()`，措辭都走 `frozen_detail()`。
 
-    ZH: ⚠️ **2026-08-28 更新，但只更新了一半：**
-        `daily_scan` 的「超配額 → 凍結」那條分支在此之前**一次都沒有執行過** ——
-        它看的 `current_size_gb` 沒有任何地方更新它，永遠是 0.0。
-        v3.9 加了 `lab_manager.refresh_storage_usage`（每日 03:00 先量再判），
-        所以**現在超配額真的會把人凍結**。
-        但 `state` 依然沒有人在讀 —— 也就是說：**被凍結的人照樣讀寫，
-        只是管理端會看到他是 frozen。** 「擋住」那一半仍然沒有做。
+    ZH: ⚠️ **仍然沒有做的：讓已經開著的容器變成唯讀。**
+        掛載要改唯讀得重建容器，會把人正在做的事打斷。所以凍結的語意是
+        「**不能再長大**」，不是「立刻凍住」—— 他手上那個實驗室關掉之前
+        還是寫得進去。這是刻意的取捨，不是漏做。
 
-    ZH: 回傳 True 代表「狀態已改」，**不代表「已經擋住了」**。
+    ZH: ⚠️ 這裡的歷史值得留著：這條「超配額 → 凍結」的分支在 v3.9 之前
+        **一次都沒有執行過** —— 它看的 `current_size_gb` 沒有任何地方更新它，
+        永遠是 0.0。數字是假的，流程看起來卻很完整。
 
     觸發場景：超過配額 / 90 天未登入 / admin 手動。
     ⚠ 前兩者由每日排程自動呼叫,所以這支不能改成拋錯 —— 會把整個迴圈打斷。
@@ -174,6 +264,10 @@ def freeze(db: Session, user_id: str, admin_id: Optional[str] = None,
 def auto_unfreeze(db: Session, user_id: str) -> bool:
     """
     ZH: 因為超配額而被凍結的人，用量降回配額內就自動解凍。有解才回 True。
+
+    ZH: v4.23 起有三個觸發點：每日排程、開實驗室之前、**關實驗室之後**。
+        最後一個是新加的 —— 使用者刪完檔案會馬上把實驗室關掉，
+        那一刻重量最準，也最省事（他不必為了解凍再開一次）。
 
     ZH: 🔴 **這支必須跟「擋住」一起上線，不能只做擋住。**
         唯一的解凍路徑本來是 `restore()`，而它要管理員手動操作。

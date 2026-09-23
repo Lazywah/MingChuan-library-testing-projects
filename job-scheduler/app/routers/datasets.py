@@ -11,6 +11,7 @@ import re
 from .. import models, crud
 from ..auth import get_current_user
 from ..database import get_db
+from ..services import storage_lifecycle
 from ..rate_limit import limiter
 from fastapi import Request
 
@@ -44,6 +45,16 @@ async def upload_dataset(
 
     @node job-scheduler/app/routers/datasets.py::upload_dataset
     """
+    # ZH: v4.23 儲存被凍結就不給上傳 —— 上傳正是「讓佔用再長大」。
+    #     ⚠ 放在最前面（比副檔名檢查還早）：被凍結的人應該收到
+    #     「你被凍結了、怎麼解開」，而不是先被告知副檔名不對。
+    try:
+        storage_lifecycle.check_write_allowed(db, current_user.id, "dataset_upload")
+    except storage_lifecycle.StorageFrozenError as e:
+        raise HTTPException(
+            status_code=409,
+            detail=storage_lifecycle.frozen_detail(e, "上傳資料集", "upload a dataset"))
+
     if not file.filename:
         raise HTTPException(status_code=400, detail="ZH: 沒有收到檔名 | EN: No filename provided")
 
