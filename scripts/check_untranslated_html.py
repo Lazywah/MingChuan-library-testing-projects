@@ -40,16 +40,33 @@ except (AttributeError, ValueError):
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 CJK = re.compile(r"[一-鿿]")
 
-# ZH: 只管 v2 世代。v1 / v1.5 是既有版本，它們沒有這套 i18n 機制，
+# ZH: 只管現行世代（`-V1`）。V0 / V0.5 是既有版本，它們沒有這套 i18n 機制，
 #     掃它們只會產生一堆改不動的警告。
+#
+# ZH: 🔴 這裡原本寫的是 `-v2`，而目錄在改名成 `-V1` 之後**沒有人回來改這一行** ——
+#     於是這支掃 0 個目錄、印 `[OK] 0 段中文都掛了 data-i18n`、回傳 0，
+#     `deploy_check` 也跟著顯示綠勾。**守衛看起來在站崗，實際上沒有。**
+#     2026-09-23 首頁改版前查到（改版正是最需要它的時候）。
+#     同一個坑 check_shared_ui_files.py 踩過一次，它的解法抄在下面的 main()。
 def _dirs():
-    return sorted(d for d in ROOT.iterdir() if d.is_dir() and d.name.endswith("-v2"))
+    return sorted(d for d in ROOT.iterdir() if d.is_dir() and d.name.endswith("-V1"))
 
 
 def main() -> int:
     problems, checked = [], 0
 
-    for d in _dirs():
+    # ZH: 🔴 探不到任何目錄 = 探索規則已經跟不上目錄命名，**不是「沒有問題」**。
+    #     這兩件事在畫面上長得一模一樣（都是一行 OK），而實際上一個是保護、
+    #     一個是裸奔。這支就這樣裸奔過一段時間（見上方 _dirs()）。
+    dirs = _dirs()
+    if not dirs:
+        print("[FAIL] 找不到任何要檢查的 UI 目錄 —— 探索規則失效了，不是「沒有問題」。")
+        print("       目錄可能又改名了。請看本檔的 _dirs()。")
+        print("       現有目錄：%s"
+              % "、".join(sorted(d.name for d in ROOT.iterdir() if d.is_dir())))
+        return 1
+
+    for d in dirs:
         for f in sorted(d.glob("*.html")):
             html = io.open(f, encoding="utf-8").read()
             # ZH: 註解裡的中文是寫給維護者看的，不會出現在畫面上。
