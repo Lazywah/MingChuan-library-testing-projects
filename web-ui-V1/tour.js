@@ -250,6 +250,25 @@
     var panels = [];         // 目標四周的遮罩（上右下左）—— 中間留給使用者點
     var armed = null;        // 這一步掛在目標上的點擊監聽（要記得拆）
 
+    /* ZH: 🔴 **「找得到」不等於「看得見」。**
+     *
+     * ZH: `document.querySelector()` 對 `display:none` 的元素照樣回傳節點，
+     *     所以只判斷 null 的話，這三個目標會在看不見的時候被當成還在：
+     *       · `#news` —— 沒有公告時整塊帶著 `hidden` 留在 DOM 裡
+     *       · `.topnav` —— 手機版收進 ☰，面板展開前是隱藏的
+     *       · `#aibot-fab` —— 小基側欄展開時 FAB 是 `display:none`
+     *     症狀不是「略過那一步」，是**把高亮框畫成左上角一個 12×12 的小方塊**
+     *     （隱藏元素的 getBoundingClientRect 全是 0），說明卡飄在旁邊。
+     *     不報錯、不卡住，看起來就像導覽壞了。2026-09-23 擁有者回報後查到。
+     *
+     * ZH: 判準用 `getClientRects().length` —— 它同時涵蓋 `display:none`、
+     *     祖先被隱藏、以及尺寸為 0 三種情況。`offsetParent` 對 `position:fixed`
+     *     會誤判（那正好是頂部列與 FAB 的定位方式）。
+     */
+    function visible(el) {
+        return !!(el && el.getClientRects && el.getClientRects().length);
+    }
+
     function T(key, fallback) {
         try { return (global.T ? global.T(key, fallback) : fallback); }
         catch (e) { return fallback; }
@@ -380,6 +399,9 @@
         if (!box) return;
         var s = steps[cur];
         var el = s && s.target ? document.querySelector(s.target) : null;
+        // ZH: ⚠ 演到一半才不見的情況（例如他中途把小基側欄打開，FAB 就沒了）：
+        //     當成「這一步沒有目標」＝置中顯示說明，不要畫一個 0×0 的框。
+        if (!visible(el)) el = null;
 
         if (!el) {
             ring.hidden = true;
@@ -444,6 +466,7 @@
         disarm();
 
         var el = s.target ? document.querySelector(s.target) : null;
+        if (!visible(el)) el = null;      // ZH: 同上 —— 看不見就當成沒有
         var last = cur === steps.length - 1;
         // ZH: 上一步只在**同一頁**才給 —— 導覽自己不換頁，往回也一樣。
         var canBack = cur > 0 && steps[cur - 1].page === s.page;
@@ -537,7 +560,8 @@
         steps = stepsFor({
             here: here,
             gpuOn: gpuOn,
-            has: function (sel) { return !!document.querySelector(sel); },
+            // ZH: ⚠ 要「看得見」才算有（見 visible 的說明）。
+            has: function (sel) { return visible(document.querySelector(sel)); },
         });
         if (!steps.length) return;
 
