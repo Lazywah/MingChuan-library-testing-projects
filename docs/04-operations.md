@@ -87,7 +87,7 @@ docker ps --filter "label=aibase.role=code-server" \
 ### 🔴 平台健檢看門狗（2026-09-23 起）
 
 **為什麼有這支**：2026-09-17 與 09-20 各發生一次 **Docker Desktop 自己退出**，
-留下死掉的 socket（`%LOCALAPPDATA%\Dockerun\dockerInference` 等），之後怎麼按都起不來。
+留下死掉的 socket（`%LOCALAPPDATA%\Docker\run\dockerInference` 等），之後怎麼按都起不來。
 第二次從 09-20 掛到 09-23 才被發現 —— **三天沒有人知道平台是死的**，因為沒有任何東西會講話。
 
 ```powershell
