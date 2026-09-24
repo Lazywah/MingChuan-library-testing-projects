@@ -536,7 +536,18 @@ document.addEventListener('prefs:applied', fitEpochBox);
 // ZH: 後端的 metrics 是一個陣列，每筆有 kind：dataset（開頭一次）、
 //     epoch（每輪）、summary（結尾）。畫面只讀，不做計算以外的假設——
 //     多出不認得的 kind 就忽略，不要壞掉。
+// ZH: 🔴 這幾張卡是 JS 組出來的字串，**沒有 data-i18n** —— 切語言時
+//     字典掃描換不掉它們，畫面會停在舊語言。跑到一半的單下一次輪詢會
+//     自己重畫，但**跑完的單不會再輪詢**，於是那一頁就一直是舊語言。
+// ZH: 既有前例：同一個檔案的 renderTimeoutNote 已經這樣處理了
+//     （那段註解把理由寫得很清楚），這裡補上同一條。
+let LAST_METRICS = null;
+document.addEventListener('prefs:langchanged', () => {
+    if (LAST_METRICS) renderMetrics(LAST_METRICS);
+});
+
 function renderMetrics(metrics) {
+    LAST_METRICS = metrics;
     const ds = metrics.filter((m) => m.kind === 'dataset').pop();
     const sum = metrics.filter((m) => m.kind === 'summary').pop();
     const eps = metrics.filter((m) => m.kind === 'epoch');
@@ -557,9 +568,15 @@ function renderMetrics(metrics) {
                      : (eps.length ? Math.max(...eps.map((e) => e.val_accuracy)) : null);
     if (best != null) {
         const onImages = !ds || ds.images != null;
-        cards.push([T('tr_m_acc', '正確率'), (best * 100).toFixed(1) + '%',
-                    onImages ? T('tr_m_acc_sub', '在沒看過的圖片上')
-                             : T('tr_m_acc_sub_rows', '在沒看過的資料上')]);
+        // ZH: 🔴 這個數字是**最佳的那一輪**，不是最後一輪 —— 標題要講出來。
+        //     內建腳本只在正確率變好時才覆寫 model.pt（三支都是
+        //     `if acc >= best_acc: torch.save(...)`），所以「最佳」與
+        //     「你下載到的那個模型」指的是同一件事。不寫「最佳」的話，
+        //     看到清單裡最後一輪比較低的人會以為數字灌水了
+        //     （擁有者 2026-09-24 就是這樣問的）。
+        cards.push([T('tr_m_acc', '最佳正確率'), (best * 100).toFixed(1) + '%',
+                    onImages ? T('tr_m_acc_sub', '在沒看過的圖片上；下載的模型就是這一輪的')
+                             : T('tr_m_acc_sub_rows', '在沒看過的資料上；下載的模型就是這一輪的')]);
     }
     if (sum) {
         cards.push([T('tr_m_time', '花費時間'),
