@@ -23,7 +23,16 @@ scheduling:
   max_concurrent_jobs: 4              # ZH: （已無作用）整個叢集最多同時運行的任務數
   job_check_interval_seconds: 10      # ZH: 背景排程輪詢間隔 (秒)
   allow_students: true                # ZH: 學生是否開放申請排程
-  max_epochs_per_job: 1000            # ZH: 每筆任務最高迭代次數
+  # ZH: 🔴 **要與畫面上的 max 相同**（web-ui-V1/train.html 的
+  #     `<input id="epochs" max="50">`，train.js 送單前也夾一次）。
+  #     在此之前這裡是 1000 —— 畫面擋 50、API 放到 1000，
+  #     直接打 `/jobs` 就繞得過去（擁有者 2026-09-24 問到才發現）。
+  # ZH: ⚠ 這一條只管 `config.epochs`，也就是**三種內建訓練**。
+  #     自己帶 .py 的單，圈數寫在使用者的程式裡，這裡看不到也擋不了 ——
+  #     那條路真正的保險是 `job_timeout_minutes`（逾時就停容器）。
+  # ZH: 50 輪 × 範例資料 ≈ 100 分鐘，已經逼近預設的 120 分鐘逾時；
+  #     要再放寬的話請連逾時一起看。
+  max_epochs_per_job: 50              # ZH: 每筆任務最高迭代次數（內建訓練）
   max_batch_size: 512                 # ZH: 最高批次大小限制
 
 # ZH: 本地開發與除錯模式開關 | EN: Local mock mode toggle

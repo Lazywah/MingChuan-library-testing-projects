@@ -677,7 +677,8 @@ function renderTimeoutNote(s) {
     if (!el) return;
     const v = s && s['job_timeout_minutes'];
     if (v == null) { el.hidden = true; return; }
-    el.textContent = T('tr_timeout_note', '單一任務最長跑 {n} 分鐘，超過會自動停止。').replace('{n}', v);
+    el.textContent = T('tr_timeout_note',
+        '單一任務最長跑 {n} 分鐘，超過會自動停止（那時也拿不到模型）。').replace('{n}', v);
     el.hidden = false;
 }
 
