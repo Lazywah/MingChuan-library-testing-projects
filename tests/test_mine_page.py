@@ -162,38 +162,44 @@ def test_dataset_download_filename_is_sanitised(client, db, user_headers):
 
 
 # ══════════════════════════════════════════════════════════════════════
-# ZH: 二、我的模型 —— 規則要回、清掉的要講得出來
+# ZH: 二、模型跟著訓練單走 —— 規則要回、清掉的要講得出來、到期日要事先講
 # ══════════════════════════════════════════════════════════════════════
+# ZH: v4.30 兩頁合一之後沒有獨立的「模型清單」了：模型就是訓練單的一部分。
+#     所以規則（retention）跟著 /jobs 列表回，每一列帶 model_expires_at。
 
-def test_models_lists_kept_models_with_the_rules(client, db, user_headers):
-    """ZH: 規則（每人幾個、幾天、單檔上限）跟著資料一起回 —— 前端不寫死。"""
+def _jobs(client, headers):
+    return client.get("/api/v1/jobs?limit=50", headers=headers).json()
+
+
+def test_list_carries_the_retention_rules(client, db, user_headers):
+    """ZH: 規則（每人幾個、幾天、單檔上限）跟著列表回 —— 前端不寫死。"""
+    body = _jobs(client, user_headers)
+    r = body["retention"]
+    assert isinstance(r["keep"], int) and r["keep"] > 0
+    assert isinstance(r["ttl_days"], int) and r["ttl_days"] > 0
+    assert isinstance(r["max_bytes"], int)
+
+
+def test_kept_model_says_when_it_expires(client, db, user_headers):
     _heartbeat(client)
-    a, b = _submit(client, user_headers, "a"), _submit(client, user_headers, "b")
-    _upload_model(client, a)
-    _upload_model(client, b, b"x" * 2048)
-
-    body = client.get("/api/v1/jobs/models", headers=user_headers).json()
-    assert isinstance(body["keep"], int) and body["keep"] > 0
-    assert isinstance(body["ttl_days"], int) and body["ttl_days"] > 0
-    assert isinstance(body["max_bytes"], int)
-    rows = {m["job_id"]: m for m in body["models"]}
-    assert set(rows) == {a, b}
-    assert rows[b]["has_model"] is True and rows[b]["model_bytes"] == 2048
-    assert rows[b]["expires_at"] is not None, "要事先講得出哪一天會被清"
-    assert rows[b]["purged_at"] is None
+    job_id = _submit(client, user_headers, "a")
+    _upload_model(client, job_id, b"x" * 2048)
+    row = {j["job_id"]: j for j in _jobs(client, user_headers)["jobs"]}[job_id]
+    assert row["has_model"] is True and row["model_bytes"] == 2048
+    assert row["model_expires_at"] is not None, "要事先講得出哪一天會被清"
+    assert row["model_purged_at"] is None
 
 
-def test_never_had_a_model_is_not_listed(client, db, user_headers):
-    """ZH: 沒產出過模型的單（失敗、還在跑、自帶程式沒存檔）不算「我的模型」。"""
+def test_never_had_a_model_has_neither_date(client, db, user_headers):
     _heartbeat(client)
-    _submit(client, user_headers, "no-model")
-    assert client.get("/api/v1/jobs/models", headers=user_headers).json()["models"] == []
+    job_id = _submit(client, user_headers, "no-model")
+    row = {j["job_id"]: j for j in _jobs(client, user_headers)["jobs"]}[job_id]
+    assert row["has_model"] is False
+    assert row["model_expires_at"] is None and row["model_purged_at"] is None
 
 
-def test_purged_model_is_listed_as_gone(client, db, user_headers, artifact_dir):
-    """ZH: 🔴 清掉之後**還要列出來**，而且要說「清掉了」——
-       只回還在的，過期的那幾張就從畫面上消失，跟「平台弄丟了」分不出來。
-    """
+def test_purged_model_is_marked_gone(client, db, user_headers, artifact_dir):
+    """ZH: 🔴 清掉之後要說「清掉了」—— 不然下載鈕安靜消失，跟「平台弄丟了」分不出來。"""
     from app import crud
     from app.routers import worker as wr
     _heartbeat(client)
@@ -201,18 +207,10 @@ def test_purged_model_is_listed_as_gone(client, db, user_headers, artifact_dir):
     _upload_model(client, job_id)
     _age(db, job_id, 99)
     assert crud.purge_expired_artifacts(db, 30, wr.remove_artifact_file)["removed"] == 1
-
-    rows = {m["job_id"]: m for m in
-            client.get("/api/v1/jobs/models", headers=user_headers).json()["models"]}
-    assert job_id in rows, "清掉的那張單要還在清單裡"
-    assert rows[job_id]["has_model"] is False
-    assert rows[job_id]["purged_at"] is not None
-    assert rows[job_id]["expires_at"] is None
-
-    # ZH: 「我的訓練進度」那一頁也要分得出來（下載鈕消失時要有一句話）。
-    listed = {j["job_id"]: j for j in
-              client.get("/api/v1/jobs?limit=50", headers=user_headers).json()["jobs"]}
-    assert listed[job_id]["model_purged_at"] is not None
+    row = {j["job_id"]: j for j in _jobs(client, user_headers)["jobs"]}[job_id]
+    assert row["has_model"] is False
+    assert row["model_purged_at"] is not None
+    assert row["model_expires_at"] is None
 
 
 def test_evicted_by_the_keep_limit_is_also_marked(client, db, user_headers, monkeypatch):
@@ -223,10 +221,9 @@ def test_evicted_by_the_keep_limit_is_also_marked(client, db, user_headers, monk
     first, second = _submit(client, user_headers, "1"), _submit(client, user_headers, "2")
     _upload_model(client, first)
     _upload_model(client, second)
-    rows = {m["job_id"]: m for m in
-            client.get("/api/v1/jobs/models", headers=user_headers).json()["models"]}
-    assert rows[first]["has_model"] is False and rows[first]["purged_at"] is not None
-    assert rows[second]["has_model"] is True and rows[second]["purged_at"] is None
+    rows = {j["job_id"]: j for j in _jobs(client, user_headers)["jobs"]}
+    assert rows[first]["has_model"] is False and rows[first]["model_purged_at"] is not None
+    assert rows[second]["has_model"] is True and rows[second]["model_purged_at"] is None
 
 
 def test_reupload_clears_the_purged_marker(client, db, user_headers):
@@ -239,26 +236,5 @@ def test_reupload_clears_the_purged_marker(client, db, user_headers):
     _age(db, job_id, 99)
     crud.purge_expired_artifacts(db, 30, wr.remove_artifact_file)
     _upload_model(client, job_id, b"again")
-    row = [m for m in client.get("/api/v1/jobs/models",
-                                 headers=user_headers).json()["models"]
-           if m["job_id"] == job_id][0]
-    assert row["has_model"] is True and row["purged_at"] is None
-
-
-def test_models_are_per_user(client, db):
-    make_user(db, username="alice", email="a@example.com")
-    make_user(db, username="bob", email="b@example.com")
-    alice, bob = auth_headers(client, "alice"), auth_headers(client, "bob")
-    _heartbeat(client)
-    _upload_model(client, _submit(client, alice, "alice-model"))
-    assert client.get("/api/v1/jobs/models", headers=bob).json()["models"] == []
-    assert len(client.get("/api/v1/jobs/models", headers=alice).json()["models"]) == 1
-
-
-def test_models_route_is_not_swallowed_by_job_id(client, db, user_headers):
-    """ZH: ⚠ `/jobs/models` 宣告在 `/jobs/{job_id}` 之前 —— 順序反了會變成
-       「找不到 id 叫 models 的任務」（pool-availability 踩過同一個坑）。
-    """
-    r = client.get("/api/v1/jobs/models", headers=user_headers)
-    assert r.status_code == 200, r.text
-    assert "models" in r.json()
+    row = {j["job_id"]: j for j in _jobs(client, user_headers)["jobs"]}[job_id]
+    assert row["has_model"] is True and row["model_purged_at"] is None

@@ -303,9 +303,18 @@ def list_jobs(
     #     而且每一筆都會重新查一次節點與 Lab 佔用。
     qinfo = crud.queue_info(db)
 
+    # ZH: v4.30 模型的保留規則跟著列表一起回（合頁之後模型就是訓練單的一部分）。
+    #     數字是環境變數，前端不寫死 —— 改了之後畫面上的數字才不會說謊。
+    from datetime import timedelta as _td
+    ttl_days = worker_router.ARTIFACT_TTL_DAYS
+
     job_list = []
     for job in jobs:
         q = qinfo.get(job.id) or {}
+        # ZH: 檔還在的才有「保留到哪一天」；算法與 crud.purge_expired_artifacts 同一個
+        #     （completed_at，沒有就 created_at）—— 兩邊算不一樣就會事前說一天、事後另一天。
+        basis = job.completed_at or job.created_at
+        expires = (basis + _td(days=ttl_days)) if (job.artifact_bytes and basis) else None
         # ZH: 列表不回傳 logs（可能很大）；詳細日誌請用 GET /{job_id}
         # EN: List excludes logs (potentially huge); use GET /{job_id} for full logs
         job_list.append({
@@ -330,62 +339,17 @@ def list_jobs(
             # ZH: v4.29 —— 模型被清掉的時間。有值＝曾經有過、現在沒了；
             #     列表據此寫「模型已過保留期」，不要讓下載鈕安靜消失。
             "model_purged_at": job.artifact_purged_at,
+            "model_expires_at": expires,
             # ZH: ⚠ 這是手工組的 dict —— 只在 schema 加欄位不會自動帶上（檔案上方踩過兩次的那個）。
             "queue_position": q.get("position"),
             "queue_total": q.get("total"),
             "wait_reason": q.get("reason"),
         })
 
-    return {"total": total, "jobs": job_list}
-
-
-# ==============================================================================
-# ZH: v4.29 — GET /models：我留下過的模型（檔還在的，以及已經被清掉的）
-#     ⚠ 同樣必須宣告在 GET /{job_id} 之前，否則 "models" 會被當成 job_id。
-# ==============================================================================
-@router.get("/models", summary="我的模型檔（含已過保留期的）")
-def list_my_models(
-    limit: int = Query(30, ge=1, le=100),
-    current_user: models.User = Depends(get_current_user),
-    db: Session = Depends(get_db),
-) -> Dict[str, Any]:
-    """
-    ZH: 給「我的資料與模型」那一頁的模型區用（擁有者 2026-09-24）。
-
-    ZH: 回的東西刻意包含**三條保留規則本身**（keep / ttl_days / 單檔上限），
-        不要讓前端寫死 —— 那幾個值是環境變數，改了之後畫面上的數字就會說謊，
-        而且沒有任何守衛抓得到。
-
-    ZH: 🔴 已經被清掉的也回（purged_at 有值），畫面才講得出「已過保留期」。
-        只回還在的，過期的那幾張就從畫面上消失，跟「平台弄丟了」分不出來。
-
-    ZH: `expires_at` = completed_at + ttl（與 crud.purge_expired_artifacts 同一個算法），
-        讓使用者事先知道哪一天會被清，而不是事後才發現。
-
-    @node job-scheduler/app/routers/jobs.py::list_my_models
-    """
-    from datetime import timedelta
-    rows = crud.list_user_models(db, current_user.id, limit=limit)
-    ttl = worker_router.ARTIFACT_TTL_DAYS
-    out = []
-    for job in rows:
-        basis = job.completed_at or job.created_at
-        out.append({
-            "job_id": job.id,
-            "job_name": job.job_name,
-            "task": crud.builtin_task_for(job),
-            "has_model": bool(job.artifact_bytes),
-            "model_bytes": job.artifact_bytes,
-            "completed_at": job.completed_at,
-            "expires_at": (basis + timedelta(days=ttl)) if (basis and job.artifact_bytes) else None,
-            "purged_at": job.artifact_purged_at,
-        })
-    return {
-        "keep": worker_router.ARTIFACT_KEEP_PER_USER,
-        "ttl_days": ttl,
-        "max_bytes": worker_router.MAX_ARTIFACT_BYTES,
-        "models": out,
-    }
+    return {"total": total, "jobs": job_list,
+            "retention": {"keep": worker_router.ARTIFACT_KEEP_PER_USER,
+                          "ttl_days": ttl_days,
+                          "max_bytes": worker_router.MAX_ARTIFACT_BYTES}}
 
 
 # ==============================================================================

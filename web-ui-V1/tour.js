@@ -46,7 +46,7 @@
  *         答案永遠是否。要看的是 `hidden` 有沒有被 docs-entry.js 拿掉。
  *
  * ZH: 🔴 **所以「過橋」那一步有兩個版本**（`gpu`/`gpuOff`、`docs`/`docsOff`），
- *     由閘門挑一個。例如在 MYAI 頁：閘門開著就點「我的訓練進度」，
+ *     由閘門挑一個。例如在 MYAI 頁：閘門開著就點「我的訓練與資料」，
  *     關著就直接點「使用量明細」—— 兩個都在同一組下拉裡，
  *     所以前面「開選單」那兩步是共用的，只有最後那一下不一樣。
  *     ⚠ 這比「每一站都回首頁」多一點東西要顧，但省掉的是每一站兩下
@@ -137,7 +137,7 @@
         { id: 'nav', page: 'myai.html', target: '.topnav',
           t: ['tour_nav_t', '其他東西都在這排選單'],
           d: ['tour_nav_d',
-              '首頁只放三條主線，其餘都收在這裡：看訓練進度、管你的資料與模型、查使用量、'
+              '首頁只放三條主線，其餘都收在這裡：看訓練進度與上傳的資料、查使用量、'
               + '看別人做過什麼、GPU 現在忙不忙，以及問題回報。'
               + '接下來就帶你把最常用的幾個走一遍，全部從這排出發。'] },
 
@@ -152,7 +152,7 @@
           probe: '.topbar__burger, .navmenu__toggle[data-i18n="grp_mine_t"]',
           t: ['tour_grp_mine_t', '「個人使用紀錄」這一組'],
           d: ['tour_grp_mine_d',
-              '跟「你自己做過什麼」有關的都收在這一組：訓練進度、你的資料與模型、'
+              '跟「你自己做過什麼」有關的都收在這一組：你的訓練、模型與上傳的資料、'
               + '使用量明細。點一下這個分類，把它展開。'] },
 
         // ZH: 🔴 同一座橋的兩個版本（見檔頭）：閘門開著走訓練進度，
@@ -161,9 +161,9 @@
         { id: 'go_jobs', page: 'myai.html', click: true, gpu: true,
           target: '.navmenu__menu a[href="jobs.html"]',
           probe: '.topbar__burger, .navmenu__toggle[data-i18n="grp_mine_t"]',
-          t: ['tour_jobs_go_t', '下一站：我的訓練進度'],
+          t: ['tour_jobs_go_t', '下一站：我的訓練與資料'],
           d: ['tour_jobs_go_d',
-              '點「我的訓練進度」，我們過去看那一頁長什麼樣子、平常什麼時候會用到它。'] },
+              '點「我的訓練與資料」，我們過去看那一頁長什麼樣子、平常什麼時候會用到它。'] },
 
         { id: 'go_usage_myai', page: 'myai.html', click: true, gpuOff: true,
           target: '.navmenu__menu a[href="usage.html"]',
@@ -174,7 +174,7 @@
               + '這一頁跟額度有關的問題大多在這裡就能自己查清楚。'] },
 
         // ══════════════════════════════════════════════════════════
-        // ZH: 我的訓練進度（GPU 暫停時整段消失，橋由上面那個版本接手）
+        // ZH: 我的訓練與資料（GPU 暫停時整段消失，橋由上面那個版本接手）
         // ══════════════════════════════════════════════════════════
         { id: 'jobs_hero', page: 'jobs.html', gpu: true, target: '.primary-card',
           t: ['tour_jobs_hero_t', '送出之後就不必守在畫面前'],
@@ -183,10 +183,11 @@
               + '回到這一頁就看得到每一張單跑到哪裡了 —— 這一頁存在的理由就是這個。'] },
 
         { id: 'jobs_seg', page: 'jobs.html', gpu: true, target: '.seg',
-          t: ['tour_jobs_seg_t', '只有兩個篩選'],
+          t: ['tour_jobs_seg_t', '兩個分頁：訓練，和上傳的資料'],
           d: ['tour_jobs_seg_d',
-              '「訓練中」是還在跑的，「全部」連跑完的和失敗的都列出來。'
-              + '狀態其實有六種，但你真正會問的通常只有「我那張跑完了沒」，所以只留兩個。'] },
+              '第一個分頁是你送出過的每一次訓練（進度、結果、下載模型）；'
+              + '第二個是你上傳過的資料包（可以拿回來、再訓練一次，或刪掉騰出空間）。'
+              + '同一次訓練用的資料和跑出來的模型，就在這兩個分頁裡。'] },
 
         { id: 'jobs_list', page: 'jobs.html', gpu: true, target: '#list',
           t: ['tour_jobs_list_t', '每一張訓練單都在這裡'],
@@ -206,7 +207,7 @@
           probe: '.topbar__burger, .navmenu__toggle[data-i18n="grp_mine_t"]',
           t: ['tour_grp_mine_t', '「個人使用紀錄」這一組'],
           d: ['tour_grp_mine_d',
-              '跟「你自己做過什麼」有關的都收在這一組：訓練進度、你的資料與模型、'
+              '跟「你自己做過什麼」有關的都收在這一組：你的訓練、模型與上傳的資料、'
               + '使用量明細。點一下這個分類，把它展開。'] },
 
         { id: 'go_usage_jobs', page: 'jobs.html', click: true, gpu: true,
@@ -761,7 +762,7 @@
             + '<p class="tour__d">' + esc(T(s.d[0], s.d[1])) + '</p>'
             + (last && !hasGpuSteps()
                 ? '<p class="tour__note">' + esc(T('tour_gpu_off',
-                    '（第二條、第三條與「我的訓練進度」目前暫停開放，開放之後再回來看那幾站。）')) + '</p>'
+                    '（第二條、第三條與「我的訓練與資料」目前暫停開放，開放之後再回來看那幾站。）')) + '</p>'
                 : '')
             + '<div class="tour__btns">'
             + (canBack ? '<button class="btn btn--ghost" type="button" id="tour-prev">'

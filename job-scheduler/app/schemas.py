@@ -616,6 +616,8 @@ class JobListItem(BaseModel):
     #     ⚠ response_model 會把沒宣告的欄位**默默丟掉** —— 端點的 dict 加了、
     #       這裡沒加，前端拿到的就是沒有這個 key（實測就是這樣紅的）。
     model_purged_at: Optional[datetime] = None
+    # ZH: v4.30 檔還在的模型會保留到哪一天（合頁之後這一列就是「我的模型」）。
+    model_expires_at: Optional[datetime] = None
     # ZH: v3.9 排隊位置（只有 pending 的任務會有值）。
     #   position/total —— 同池內的第幾個 / 共幾個
     #   wait_reason    —— 只給排第一個的：lab（別人的實驗室佔著卡）/
@@ -630,6 +632,8 @@ class JobListResponse(BaseModel):
     """ZH: 任務列表回應 (含分頁) | EN: Job list response (with pagination)"""
     total: int                                       # ZH: 總筆數 | EN: Total count
     jobs: List[JobListItem]                          # ZH: 任務清單 (不含 logs) | EN: Job list (no logs)
+    # ZH: v4.30 模型的保留規則（keep / ttl_days / max_bytes）。前端拿它畫那一句說明。
+    retention: Optional[Dict[str, int]] = None
 
 
 class JobCancelResponse(BaseModel):

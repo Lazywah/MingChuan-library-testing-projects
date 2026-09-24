@@ -1,5 +1,14 @@
 /* ==========================================================================
- * [畫面: 我的訓練] — 使用者在這裡要完成：找回自己送出過的那張單
+ * [畫面: 我的訓練與資料] — 使用者在這裡要完成：找回自己送出過的那張單、拿到模型、
+ *                          拿回／重用／刪掉上傳過的資料
+ *
+ * ZH: v4.30 兩頁合一（擁有者 2026-09-24：「這兩頁沒有區別，請整合，做 Tab 也行」）。
+ *     原本「我的訓練進度」與「我的資料與模型」是兩個選單項、兩頁；
+ *     同一次訓練的兩端（送出時用的資料、跑完留下的模型）被拆在兩邊。
+ *     現在一頁兩個分頁：
+ *       · 訓練與模型 —— 每一張單：進度、結果、下載模型（帶保留到哪一天）、取消
+ *       · 上傳的資料 —— 每一包：再訓練一次、下載、刪除；配額條在最上面
+ *     ⚠ 資料那一頁原本的三顆鈕**一顆都沒少**（擁有者特別交代「刪除之類的也要加回去」）。
  *
  * ZH: 這一頁存在的理由：**送出之後關掉分頁就再也找不回來。**
  *     訓練通常要幾分鐘到幾十分鐘，沒有人會一直開著那一頁等——
@@ -8,11 +17,17 @@
  * ZH: 刻意**不在列表裡顯示正確率**：那要對每一列各打一次 `/jobs/{id}`
  *     （列表端點不含 metrics）。十列就是十個請求，只為了一個數字。
  *     點進去看詳細比較誠實，也比較快。
+ *
+ * ZH: 🔴 資料那一區**不是方便功能**。每人 2 GB 配額，而在這之前沒有任何刪除的方法——
+ *     傳滿之後上傳一律 413，而使用者什麼都做不了。刪除不可逆，所以先 confirm、
+ *     還有任務在用時鈕直接停用並說明原因（不要等他按下去才回 409）。
  * ========================================================================== */
 const API = '/api/v1';
 
 const $ = (id) => document.getElementById(id);
 
+// ZH: ⚠ 鍵名必須與其他頁一致。用錯不會報錯，只會讓每個請求都 401，
+//     而畫面看起來像「後端壞了」。
 function authHeaders() {
     const t = sessionStorage.getItem('ai_hud_token') || localStorage.getItem('ai_hud_token');
     return t ? { Authorization: 'Bearer ' + t } : {};
@@ -32,10 +47,87 @@ function human(bytes) {
     return Math.max(1, Math.round(bytes / 1024)) + ' KB';
 }
 
+// ZH: 名稱來自使用者自己的檔名／任務名，一律逸出。
 function esc(s) {
     return String(s).replace(/[&<>"']/g, (c) =>
         ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 }
+
+// ZH: 後端的雙語 detail 只留使用者當下的語言，不要兩句黏在一起。
+function clean(msg) {
+    const s = String(msg || '');
+    const m = s.match(/ZH:\s*(.*?)\s*\|\s*EN:\s*(.*)$/s);
+    if (!m) return s;
+    return currentLang() === 'en' ? m[2] : m[1];
+}
+
+// ZH: 後端的錯誤有兩種形狀：422 的 detail 是陣列，其餘是雙語字串。
+//     直接 String() 陣列會得到 `[object Object]` —— 實測踩過。
+function detailText(detail) {
+    if (detail == null) return '';
+    if (typeof detail === 'string') return detail;
+    if (Array.isArray(detail)) {
+        return detail.map((x) => x.msg || JSON.stringify(x)).join('；');
+    }
+    return JSON.stringify(detail);
+}
+
+function signedOutInto(id) {
+    $(id).innerHTML =
+        `<p class="inline-error">${esc(T('tr_signed_out', '你的登入已經過期，請重新登入後再試一次。'))}` +
+        ` <a class="btn btn--minor" href="login.html">${esc(T('btn_login', '登入'))}</a></p>`;
+}
+
+// ZH: 下載一律走 chrome.js 的 Chrome.download（唯一真相，v4.24 收斂的那一份）。
+//     這裡只管按鈕的狀態 —— 那是這一頁的事。
+async function downloadFile(path, fallbackName, btn) {
+    const original = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = T('tr_downloading', '下載中…');
+    try {
+        await Chrome.download(path, fallbackName);
+        btn.textContent = original;
+    } catch {
+        btn.textContent = T('tr_download_fail', '下載失敗，請再試一次');
+    } finally {
+        btn.disabled = false;
+    }
+}
+
+// ══════════════════════════════════════════════════════════════════════
+// ZH: 分頁（v4.30）
+// ══════════════════════════════════════════════════════════════════════
+// ZH: 網址帶 `?tab=data` 就直接開資料那一頁 —— 「傳不上去了」的人是從
+//     上傳頁被帶過來的，不該再多按一下。其餘情況預設訓練。
+const TABS = ['train', 'data'];
+let currentTab = 'train';
+
+function showTab(name, pushUrl) {
+    if (!TABS.includes(name)) name = 'train';
+    currentTab = name;
+    document.querySelectorAll('#tabs [data-tab]').forEach((b) => {
+        const on = b.dataset.tab === name;
+        b.setAttribute('aria-pressed', String(on));
+        b.setAttribute('aria-selected', String(on));
+    });
+    $('tab-train').hidden = name !== 'train';
+    $('tab-data').hidden = name !== 'data';
+    if (pushUrl) {
+        const u = new URL(location.href);
+        if (name === 'train') u.searchParams.delete('tab'); else u.searchParams.set('tab', name);
+        history.replaceState(null, '', u);
+    }
+    // ZH: 資料那一頁第一次打開才去讀（多數人只看訓練）；之後每次切過去都重讀，
+    //     因為配額可能在別的分頁（上傳頁）變了。
+    if (name === 'data') loadDatasets();
+}
+
+document.querySelectorAll('#tabs [data-tab]').forEach((b) =>
+    b.addEventListener('click', () => showTab(b.dataset.tab, true)));
+
+// ══════════════════════════════════════════════════════════════════════
+// ZH: 分頁一 · 訓練與模型
+// ══════════════════════════════════════════════════════════════════════
 
 // ZH: 還在跑的狀態。**這份清單是判準**——別處要用同一組值請引用這裡，
 //     不要各自寫一份（那會出現「列表說跑完了、詳細頁說還在跑」）。
@@ -85,13 +177,14 @@ function queueNote(j) {
 let filter = '';
 let polling = null;
 
-// ── 載入 ─────────────────────────────────────────────────────────────
 async function load() {
     try {
         const r = await fetch(`${API}/jobs?limit=50`, { headers: authHeaders() });
-        if (r.status === 401 || r.status === 403) return signedOut();
+        if (r.status === 401 || r.status === 403) { signedOutInto('list'); stopPolling(); return; }
         if (!r.ok) throw new Error(`HTTP ${r.status}`);
-        render(((await r.json()).jobs) || []);
+        const body = await r.json();
+        renderRule(body.retention);
+        render(body.jobs || []);
     } catch {
         // ZH: 讀不到就說讀不到。**不要顯示空列表**——那看起來像「你沒有送過任何訓練」，
         //     而使用者會以為他的東西不見了。
@@ -101,11 +194,19 @@ async function load() {
     }
 }
 
-function signedOut() {
-    $('list').innerHTML =
-        `<p class="inline-error">${esc(T('tr_signed_out', '你的登入已經過期，請重新登入後再試一次。'))}` +
-        ` <a class="btn btn--minor" href="login.html">${esc(T('btn_login', '登入'))}</a></p>`;
-    stopPolling();
+// ZH: 🔴 模型的保留規則（每人幾個、幾天後清）**跟著列表從後端來**，不寫死在文案裡。
+//     那幾個值是環境變數，改了之後寫死的數字就會說謊，而且沒有守衛抓得到。
+//     在此之前這三條規則畫面上一條都沒講，過期時下載鈕只是安靜消失。
+function renderRule(ret) {
+    const el = $('models-rule');
+    if (ret && ret.keep && ret.ttl_days) {
+        el.textContent = T('ds_models_rule',
+            '每人保留最近 {k} 個，跑完 {d} 天後自動清掉；不佔「上傳的資料」那邊的配額。')
+            .replace('{k}', ret.keep).replace('{d}', ret.ttl_days);
+        el.hidden = false;
+    } else {
+        el.hidden = true;
+    }
 }
 
 function render(all) {
@@ -118,7 +219,8 @@ function render(all) {
     } else {
         $('list').innerHTML = jobs.map(row).join('');
         $('list').querySelectorAll('[data-dl]').forEach((b) =>
-            b.addEventListener('click', () => downloadModel(b.dataset.dl, b)));
+            b.addEventListener('click', () =>
+                downloadFile(`/jobs/${encodeURIComponent(b.dataset.dl)}/model`, 'model.pt', b)));
         $('list').querySelectorAll('[data-cancel]').forEach((b) =>
             b.addEventListener('click', () => cancelJob(b.dataset.cancel, b)));
     }
@@ -132,6 +234,14 @@ function render(all) {
 function row(j) {
     const active = ACTIVE.includes(j.status);
     const when = TW.when(j.completed_at || j.started_at || j.created_at) || '';
+    // ZH: 模型三種狀態各講各的：還在（保留到哪一天）／清掉了（哪一天清的）／從來沒有（不講）。
+    //     「清掉了」與「從來沒有」靠 model_purged_at 分——沒有它兩者在資料上長得一樣。
+    let keep = '';
+    if (j.has_model && j.model_expires_at) {
+        keep = T('ds_model_until', '保留到 {d}').replace('{d}', TW.date(j.model_expires_at) || '—');
+    } else if (!j.has_model && j.model_purged_at) {
+        keep = T('jl_model_gone', '模型已過保留期（{d} 清掉）').replace('{d}', TW.date(j.model_purged_at) || '—');
+    }
     return `
     <div class="entry">
         <div class="entry__title">${esc(j.job_name || '—')}</div>
@@ -140,6 +250,7 @@ function row(j) {
             ${esc(queueNote(j))}
             ${active && j.progress ? `　${Math.round(j.progress)}%` : ''}
             ${when ? `　${esc(when)}` : ''}
+            ${keep ? `　${esc(keep)}` : ''}
             ${j.status === 'failed' && j.error_message
                 ? `<br><span class="inline-error">${esc(clean(j.error_message))}</span>` : ''}
         </div>
@@ -149,8 +260,6 @@ function row(j) {
             ${j.has_model ? `<button class="btn btn--minor" type="button" data-dl="${esc(j.job_id)}">
                 ${esc(T('tr_download', '下載模型檔'))}${j.model_bytes ? '（' + human(j.model_bytes) + '）' : ''}
             </button>` : ''}
-            ${!j.has_model && j.model_purged_at ? `<span class="footnote">${esc(
-                T('jl_model_gone', '模型已過保留期（{d} 清掉）').replace('{d}', TW.date(j.model_purged_at) || '—'))}</span>` : ''}
             ${active ? `<button class="btn btn--minor" type="button" data-cancel="${esc(j.job_id)}">
                 ${esc(T('jl_cancel', '取消這個訓練'))}</button>` : ''}
         </div>
@@ -171,7 +280,7 @@ async function cancelJob(jobId, btn) {
     try {
         const r = await fetch(`${API}/jobs/${encodeURIComponent(jobId)}`,
                               { method: 'DELETE', headers: authHeaders() });
-        if (r.status === 401 || r.status === 403) return signedOut();
+        if (r.status === 401 || r.status === 403) { signedOutInto('list'); stopPolling(); return; }
         const body = await r.json().catch(() => ({}));
         if (!r.ok) throw new Error(clean(body.detail) || `HTTP ${r.status}`);
         load();
@@ -196,34 +305,6 @@ document.addEventListener('visibilitychange', () => {
     else load();
 });
 
-// ZH: v4.24 —— 這裡原本自己 fetch→blob→<a download> 抄了一份。
-// ZH: 🔴 同一條規則有四份實作時，補一個邊界（例如中文檔名的 `filename*`）
-//     只會補到其中一份，而另外三份**看起來仍然正常**。
-//     收斂到 chrome.js 的 `Chrome.download()`（唯一真相）。
-// ZH: ⚠ 按鈕狀態留在呼叫端 —— 那是**這一頁的事**（哪顆鈕、顯示什麼字），
-//     不是下載本身的事。共用的那支只負責「把檔案交給瀏覽器」。
-async function downloadModel(jobId, btn) {
-    const original = btn.textContent;
-    btn.disabled = true;
-    btn.textContent = T('tr_downloading', '下載中…');
-    try {
-        await Chrome.download(`/jobs/${encodeURIComponent(jobId)}/model`, 'model.pt');
-        btn.textContent = original;
-    } catch {
-        btn.textContent = T('tr_download_fail', '下載失敗，請再試一次');
-    } finally {
-        btn.disabled = false;
-    }
-}
-
-// ZH: 後端的雙語 detail 只留使用者當下的語言。
-function clean(msg) {
-    const s = String(msg || '');
-    const m = s.match(/ZH:\s*(.*?)\s*\|\s*EN:\s*(.*)$/s);
-    if (!m) return s;
-    return currentLang() === 'en' ? m[2] : m[1];
-}
-
 // ── 篩選 ─────────────────────────────────────────────────────────────
 document.querySelectorAll('[data-filter]').forEach((b) =>
     b.addEventListener('click', () => {
@@ -233,7 +314,104 @@ document.querySelectorAll('[data-filter]').forEach((b) =>
         load();
     }));
 
+// ══════════════════════════════════════════════════════════════════════
+// ZH: 分頁二 · 上傳的資料（原 datasets.js，v4.30 併進來；行為一個都沒少）
+// ══════════════════════════════════════════════════════════════════════
+let datasets = [];
+
+async function loadDatasets() {
+    try {
+        const r = await fetch(`${API}/datasets`, { headers: authHeaders() });
+        if (r.status === 401 || r.status === 403) { signedOutInto('ds-list'); $('quota').textContent = ''; return; }
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        const body = await r.json();
+        datasets = body.datasets || [];
+        renderQuota(body.used_bytes, body.quota_bytes);
+        renderDatasets();
+    } catch (e) {
+        // ZH: 取不到就說取不到。**不要顯示一個空列表**——那看起來像「你沒有資料集」，
+        //     而使用者會因此以為他的東西不見了。
+        $('ds-list').innerHTML =
+            `<p class="inline-error">${esc(T('ds_load_fail', '暫時讀不到你的資料集。這不代表它們不見了，稍後重新整理即可。'))}</p>`;
+        $('quota').textContent = T('ds_quota_unknown', '用量：暫時讀不到');
+    }
+}
+
+function renderQuota(used, quota) {
+    const pct = quota ? Math.min(100, (used / quota) * 100) : 0;
+    $('quota-bar').style.width = `${pct}%`;
+    $('quota-wrap').setAttribute('aria-valuenow', String(Math.round(pct)));
+    $('quota').textContent =
+        T('ds_quota', '已用 {u} / 上限 {q}').replace('{u}', human(used)).replace('{q}', human(quota));
+    // ZH: 快滿了要看得出來——會來這一區的人多半就是為了這件事。
+    $('quota-wrap').classList.toggle('bar--warn', pct >= 85);
+}
+
+function renderDatasets() {
+    if (!datasets.length) {
+        $('ds-list').innerHTML =
+            `<p class="footnote">${esc(T('ds_empty', '還沒有上傳過任何資料集。'))}</p>`;
+        return;
+    }
+    $('ds-list').innerHTML = datasets.map((d) => {
+        const busy = d.in_use_by_jobs > 0;
+        return `
+        <div class="entry">
+            <div class="entry__title">${esc(d.name)}</div>
+            <div class="entry__desc">${esc(human(d.size_bytes))}　${esc(TW.when(d.created_at) || '')}</div>
+            <div class="ds__actions">
+                <a class="btn btn--minor" href="train.html?dataset=${encodeURIComponent(d.id)}">
+                    ${esc(T('ds_reuse', '再訓練一次'))}</a>
+                <button class="btn btn--minor" type="button" data-dlds="${esc(d.id)}">
+                    ${esc(T('ds_download', '下載'))}</button>
+                <button class="btn btn--minor" type="button" data-del="${esc(d.id)}"
+                        ${busy ? 'disabled' : ''}>
+                    ${esc(T('ds_delete', '刪除'))}</button>
+                ${busy ? `<span class="footnote">${esc(
+                    T('ds_in_use', '有 {n} 個任務正在用，跑完才能刪').replace('{n}', d.in_use_by_jobs))}</span>` : ''}
+            </div>
+        </div>`;
+    }).join('');
+
+    $('ds-list').querySelectorAll('[data-del]').forEach((b) =>
+        b.addEventListener('click', () => removeDataset(b.dataset.del, b)));
+    // ZH: 拿回自己上傳的那一包。檔名用當初的原名（後端的 Content-Disposition 帶著），這裡只是後備。
+    $('ds-list').querySelectorAll('[data-dlds]').forEach((b) =>
+        b.addEventListener('click', () => {
+            const d = datasets.find((x) => x.id === b.dataset.dlds);
+            downloadFile(`/datasets/${encodeURIComponent(b.dataset.dlds)}/download`,
+                         (d && d.name) || 'dataset.zip', b);
+        }));
+}
+
+async function removeDataset(id, btn) {
+    const d = datasets.find((x) => x.id === id);
+    // ZH: 刪除不可逆，先問一次。訊息裡帶上名字——「你確定嗎」問的是哪一個很重要。
+    if (!confirm(T('ds_confirm', '要刪掉「{n}」嗎？這個動作沒辦法復原。')
+        .replace('{n}', d ? d.name : ''))) return;
+
+    btn.disabled = true;
+    const original = btn.textContent;
+    btn.textContent = T('ds_deleting', '刪除中…');
+    try {
+        const r = await fetch(`${API}/datasets/${encodeURIComponent(id)}`,
+                              { method: 'DELETE', headers: authHeaders() });
+        if (r.status === 401 || r.status === 403) { signedOutInto('ds-list'); return; }
+        if (!r.ok) {
+            const body = await r.json().catch(() => ({}));
+            throw new Error(detailText(body.detail) || `HTTP ${r.status}`);
+        }
+        await loadDatasets();          // ZH: 重新讀 —— 用量要跟著更新，不要自己在前端減
+    } catch (e) {
+        btn.disabled = false;
+        btn.textContent = original;
+        alert(T('ds_delete_fail', '刪不掉') + `（${clean(e.message)}）`);
+    }
+}
+
 // ── 啟動 ─────────────────────────────────────────────────────────────
+showTab(new URLSearchParams(location.search).get('tab') || 'train', false);
 load();
 
-document.addEventListener('prefs:langchanged', () => load());
+// ZH: prefs.js 的字典掃描只換得掉 `data-i18n` 元素；本頁 JS 產生的內容要自己重跑。
+document.addEventListener('prefs:langchanged', () => { load(); if (currentTab === 'data') loadDatasets(); });

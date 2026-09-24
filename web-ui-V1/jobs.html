@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title data-i18n="jl_title">我的訓練 · MCU AI Base</title>
+    <title data-i18n="jl_title">我的訓練與資料 · MCU AI Base</title>
 
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -31,48 +31,88 @@
 <main class="page page--narrow">
 
     <!-- ==================================================================
+         ZH: v4.30 兩頁合一（擁有者 2026-09-24：「這兩頁沒有區別，請整合，做 Tab 也行」）。
+             原本「我的訓練進度」（這一頁）與「我的資料與模型」（datasets.html）是兩個
+             選單項；同一次訓練的兩端（送出時用的資料、跑完留下的模型）被拆在兩邊。
+             現在一頁兩個分頁，datasets.html 只剩一個轉址。
+         ZH: 🔴 資料那一頁原本的三顆鈕（再訓練一次／下載／刪除）**一顆都沒少**，
+             在第二個分頁 —— 擁有者特別交代「刪除之類的也要加回去」。
          ZH: 這一頁存在的理由：**送出之後關掉分頁就再也找不回那張單。**
              看不到進度、拿不到模型、也不知道到底跑完了沒有——
              而訓練通常要好幾分鐘到幾十分鐘，沒有人會一直開著那一頁等。
          ================================================================== -->
     <section class="primary-card" aria-labelledby="jl-title">
-        <h1 class="hero__title" id="jl-title" data-i18n="jl_h1">我的訓練</h1>
-        <p class="hero__sub" data-i18n="jl_sub">你送出過的訓練都在這裡。點進去看進度與結果，跑完的可以下載模型。</p>
+        <h1 class="hero__title" id="jl-title" data-i18n="jl_h1">我的訓練與資料</h1>
+        <p class="hero__sub" data-i18n="jl_sub">你送出過的訓練、訓練出來的模型，和上傳過的資料，都在這一頁。</p>
     </section>
 
-    <!-- ZH: 只有「訓練中」與「全部」兩個選項。狀態有六種，但使用者實際會問的
-             只有「我那張跑完了沒」——多給四個篩選鈕只是讓他多想一次。 -->
-    <div class="seg" role="group" aria-label="篩選" data-i18n-aria="jl_filter_aria">
-        <button type="button" data-filter="" aria-pressed="true" data-i18n="jl_all">全部</button>
-        <button type="button" data-filter="active" aria-pressed="false" data-i18n="jl_active">訓練中</button>
+    <!-- ZH: 分頁。借用 .seg（篩選鈕那一款），aria-pressed 是它的樣式鉤子；
+             role=tab / aria-selected 才是語意。網址 ?tab=data 直接開第二頁。 -->
+    <div class="seg" role="tablist" aria-label="分頁" data-i18n-aria="jl_tabs_aria" id="tabs">
+        <button type="button" role="tab" data-tab="train" aria-pressed="true" aria-selected="true"
+                data-i18n="jl_tab_train">訓練與模型</button>
+        <button type="button" role="tab" data-tab="data" aria-pressed="false" aria-selected="false"
+                data-i18n="jl_tab_data">上傳的資料</button>
     </div>
 
-    <div id="list" aria-live="polite">
-        <span class="skeleton skeleton--line"></span>
-        <span class="skeleton skeleton--line"></span>
-    </div>
+    <!-- ── 分頁一 · 訓練與模型 ────────────────────────────────────── -->
+    <section id="tab-train" role="tabpanel">
+        <!-- ZH: 模型的保留規則由 jobs.js 從 /jobs 的 retention 填（每人幾個、幾天）。
+                 數字是環境變數，寫死在文案裡改了就說謊；讀不到就整句不出現。 -->
+        <p class="footnote" id="models-rule" hidden></p>
 
-    <nav class="minor">
-        <a href="train.html" data-i18n="jl_new">開始一個新的訓練</a>
-        <a href="datasets.html" data-i18n="nav_datasets">我的資料與模型</a>
-    </nav>
+        <!-- ZH: 只有「訓練中」與「全部」兩個選項。狀態有六種，但使用者實際會問的
+                 只有「我那張跑完了沒」——多給四個篩選鈕只是讓他多想一次。 -->
+        <div class="seg" role="group" aria-label="篩選" data-i18n-aria="jl_filter_aria">
+            <button type="button" data-filter="" aria-pressed="true" data-i18n="jl_all">全部</button>
+            <button type="button" data-filter="active" aria-pressed="false" data-i18n="jl_active">訓練中</button>
+        </div>
+
+        <div id="list" aria-live="polite">
+            <span class="skeleton skeleton--line"></span>
+            <span class="skeleton skeleton--line"></span>
+        </div>
+
+        <nav class="minor">
+            <a href="train.html" data-i18n="jl_new">開始一個新的訓練</a>
+        </nav>
+    </section>
+
+    <!-- ── 分頁二 · 上傳的資料（原 datasets.html）───────────────────── -->
+    <section id="tab-data" role="tabpanel" hidden>
+        <p class="footnote" data-i18n="ds_data_rule">滿了就傳不上去；刪掉用不到的會立刻釋放。每一包都可以拿回來、再訓練一次，或刪掉。</p>
+        <!-- ZH: 用量講在最前面。會來這一區的人，多半就是因為傳不上去了。 -->
+        <div class="bar" role="progressbar" aria-valuemin="0" aria-valuemax="100"
+             aria-valuenow="0" id="quota-wrap">
+            <div class="bar__fill" id="quota-bar"></div>
+        </div>
+        <p class="footnote" id="quota" data-i18n="ds_loading">讀取中…</p>
+        <div id="ds-list" aria-live="polite">
+            <span class="skeleton skeleton--line"></span>
+            <span class="skeleton skeleton--line"></span>
+        </div>
+
+        <nav class="minor">
+            <a href="train.html" data-i18n="ds_to_train">上傳新的一包，開始訓練</a>
+        </nav>
+    </section>
 
 </main>
 
 <script src="tz.js?v=2e214a8b"></script>
 <script src="docs-entry.js?v=131ee7af"></script>
-<script src="i18n.js?v=d9992e35"></script>
+<script src="i18n.js?v=58b2252d"></script>
 <script src="prefs.js?v=e71609e5"></script>
 <!-- ZH: 小基（浮動助手）。客服模式公開，登入頁也放 —— 設計文件的使用者需求是「不會用這個平台時想直接問」。 -->
 <script src="assistant-widget.js?v=74e3c4b6"></script>
-<script src="chrome.js?v=6e69412e"></script>
-<script src="jobs.js?v=cb802506"></script>
+<script src="chrome.js?v=6d01fac1"></script>
+<script src="jobs.js?v=d11bd77f"></script>
 <!-- ZH: 到訪人次。每一頁都載（這是「網站」的計數，不是首頁的），一個工作階段只送一次；
          只有放了 [data-visits] 的頁面（登入頁、首頁）會顯示數字。 -->
 <script src="visits.js"></script>
 <!-- ZH: 引導導覽。每一頁都載是因為它**跨頁**（首頁→MYAI→訓練進度→使用量→問題回報），
          換頁之後要接著演。它自己會等 chrome.js 的 `chrome:ready`，
          沒登入就什麼都不做。 -->
-<script src="tour.js?v=69784f95"></script>
+<script src="tour.js?v=7738e280"></script>
 </body>
 </html>

@@ -1,98 +1,14 @@
 <!DOCTYPE html>
-<html lang="zh-Hant" data-theme="yellow">
+<html lang="zh-Hant">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title data-i18n="ds_title">我的資料與模型 · MCU AI Base</title>
-
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Open+Sans:wght@400;600;700&display=swap" rel="stylesheet">
-
-    <link rel="stylesheet" href="tokens.css?v=ff9cecda">
-    <link rel="stylesheet" href="styles.css?v=d4d21ce8">
-    <link rel="stylesheet" href="web.css?v=bd588ac0">
-    <!-- ZH: 🔴 側欄狀態必須在**首次繪製之前**套用，否則每換一頁都會看到
-             內容滑出去讓位（widget 的 JS 在 body 尾端才跑，那時已經畫過一次了）。
-             這一段刻意內嵌而不是外部檔案 —— 外部檔案要等網路往返，
-             那段時間頁面就是沒有 padding 的樣子，位移照樣看得到。
-         ZH: 與 CSS 的對應：`html.aibot-docked body { padding-right: … }`。
-             key 與 assistant-widget.js 的 DOCK_KEY 相同，改一邊要改兩邊。 -->
-    <script>try{if(localStorage.getItem('ai_hud_bot_open')==='1')document.documentElement.classList.add('aibot-docked')}catch(e){}</script>
+    <!-- ZH: v4.30 這一頁併進 jobs.html 的第二個分頁（擁有者 2026-09-24：兩頁沒有區別）。
+             留下這個檔只為了**舊連結不要 404**：上傳頁、知識庫、書籤、以及使用者
+             自己記得的網址都可能還指著它。內容一律在 jobs.html?tab=data。
+         ZH: 兩段轉址：JS 先走（保留 query/hash），沒有 JS 就靠 meta refresh。 -->
+    <meta http-equiv="refresh" content="0; url=jobs.html?tab=data">
+    <script>location.replace('jobs.html?tab=data' + location.hash);</script>
+    <title>MCU AI Base</title>
 </head>
-<body>
-
-<header class="topbar">
-    <span class="topbar__brand">MCU AI Base</span>
-    <span class="topbar__spacer"></span>
-    <!-- ZH: 導覽與帳號選單由 chrome.js 產生（唯一真相來源）。 -->
-</header>
-
-<main class="page page--narrow">
-
-    <!-- ==================================================================
-         ZH: v4.29 這一頁從「我的資料集」變成「我的資料與模型」（擁有者 2026-09-24）。
-             原本資料在這一頁、模型在「我的訓練進度」—— 同一次訓練的兩端被拆在
-             兩個選單項裡，而那兩項的名字又像到擁有者問「是不是重複的」。
-             現在按**使用者想做什麼**分（留下了什麼），不按檔案種類分；
-             「現在在跑什麼」仍然留在 jobs.html。
-         ZH: 🔴 網址刻意不改：導覽、jobs.html、知識庫、文件都連到 datasets.html，
-             改網址等於多一個轉址加一堆要改的連結，換不到任何東西。
-         ZH: 兩種東西各有自己的規則，**分開寫在各區最上面**：
-               · 資料：每人有配額，自己刪（傳滿會 413，這一頁是唯一的刪除入口）
-               · 模型：每人留最近 N 個、跑完 D 天清掉 —— 數字由後端回，不寫死
-             在此之前模型那幾條規則畫面上一條都沒講，過期時下載鈕只是安靜消失。
-         ================================================================== -->
-    <section class="primary-card" aria-labelledby="ds-title">
-        <h1 class="hero__title" id="ds-title" data-i18n="ds_h1">我的資料與模型</h1>
-        <p class="hero__sub" data-i18n="ds_sub">你上傳過的資料，和訓練出來的模型，都在這裡。兩種東西各有自己的規則，寫在各區最上面。</p>
-    </section>
-
-    <!-- ── 區 1 · 資料 ─────────────────────────────────────────────── -->
-    <h2 class="chart__title" id="data-h" data-i18n="ds_data_h">我上傳的資料</h2>
-    <p class="footnote" data-i18n="ds_data_rule">滿了就傳不上去；刪掉用不到的會立刻釋放。每一包都可以拿回來、再訓練一次，或刪掉。</p>
-    <!-- ZH: 用量講在最前面。會來這一區的人，多半就是因為傳不上去了。 -->
-    <div class="bar" role="progressbar" aria-valuemin="0" aria-valuemax="100"
-         aria-valuenow="0" id="quota-wrap">
-        <div class="bar__fill" id="quota-bar"></div>
-    </div>
-    <p class="footnote" id="quota" data-i18n="ds_loading">讀取中…</p>
-    <div id="list" aria-live="polite">
-        <span class="skeleton skeleton--line"></span>
-        <span class="skeleton skeleton--line"></span>
-    </div>
-
-    <!-- ── 區 2 · 模型 ─────────────────────────────────────────────── -->
-    <h2 class="chart__title" id="models-h" data-i18n="ds_models_h">我訓練出來的模型</h2>
-    <!-- ZH: 規則那一句由 datasets.js 從 /jobs/models 的回應填（每人幾個、幾天）。
-             數字是環境變數，寫死在文案裡改了就說謊；讀不到就整句不出現。 -->
-    <p class="footnote" id="models-rule" hidden></p>
-    <div id="models" aria-live="polite">
-        <span class="skeleton skeleton--line"></span>
-        <span class="skeleton skeleton--line"></span>
-    </div>
-
-    <nav class="minor">
-        <a href="train.html" data-i18n="ds_to_train">上傳新的一包，開始訓練</a>
-        <a href="jobs.html" data-i18n="jl_back">回到我的訓練</a>
-    </nav>
-
-</main>
-
-<script src="docs-entry.js?v=131ee7af"></script>
-<script src="tz.js?v=2e214a8b"></script>
-<script src="i18n.js?v=d9992e35"></script>
-<script src="prefs.js?v=e71609e5"></script>
-<!-- ZH: 小基（浮動助手）。客服模式公開，登入頁也放 —— 設計文件的使用者需求是「不會用這個平台時想直接問」。 -->
-<script src="assistant-widget.js?v=74e3c4b6"></script>
-<script src="chrome.js?v=6e69412e"></script>
-<script src="datasets.js?v=398b74a2"></script>
-<!-- ZH: 到訪人次。每一頁都載（這是「網站」的計數，不是首頁的），一個工作階段只送一次；
-         只有放了 [data-visits] 的頁面（登入頁、首頁）會顯示數字。 -->
-<script src="visits.js"></script>
-<!-- ZH: 引導導覽。每一頁都載是因為它**跨頁**（首頁→MYAI→訓練進度→使用量→問題回報），
-         換頁之後要接著演。它自己會等 chrome.js 的 `chrome:ready`，
-         沒登入就什麼都不做。 -->
-<script src="tour.js?v=69784f95"></script>
-</body>
+<body></body>
 </html>

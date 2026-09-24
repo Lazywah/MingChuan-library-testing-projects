@@ -259,10 +259,11 @@
                 key: 'grp_mine_t', zh: '個人使用紀錄',
                 pages: ['jobs.html', 'datasets.html', 'usage.html'],
                 items: [
-                    { href: 'jobs.html', key: 'grp_jobs_t', zh: '我的訓練進度' },
-                    // ZH: v4.29 原本叫「我的歷史資料訓練」—— 跟隔壁的「我的訓練進度」
-                    //     只差兩個字，而點進去的頁面標題又是另一個名字。
-                    { href: 'datasets.html', key: 'grp_ds_t', zh: '我的資料與模型' },
+                    // ZH: v4.30 訓練與資料合成一頁（jobs.html 兩個分頁）。原本這裡有兩項：
+                    //     「我的訓練進度」與「我的歷史資料訓練」—— 名字只差兩個字，
+                    //     擁有者問了兩次「是不是重複的」之後裁定合併。
+                    //     `pages` 仍列 datasets.html：舊網址會轉址過來，停在那一瞬間也算這一組。
+                    { href: 'jobs.html', key: 'grp_jobs_t', zh: '我的訓練與資料' },
                     { href: 'usage.html', key: 'acct_usage', zh: '使用量明細' }
                 ]
             },

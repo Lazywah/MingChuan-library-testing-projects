@@ -1062,30 +1062,6 @@ def set_job_artifact(db: Session, job_id: str, size_bytes: int) -> Optional[mode
     return job
 
 
-def list_user_models(db: Session, user_id: str, limit: int = 30) -> List[models.TrainingJob]:
-    """ZH: 某人「留下過模型」的訓練單：檔還在的，**以及已經被清掉的**。
-
-    ZH: 為什麼連清掉的也回：這一頁要回答「我的模型去哪了」。只回還在的，
-        過期的那幾張就從畫面上消失，跟「平台弄丟了」分不出來。
-        清掉的靠 artifact_purged_at 認（v4.29 才有；更早清掉的認不出來，
-        那些就真的只能當成沒有 —— 這是誠實的界限，不是 bug）。
-
-    ZH: 新的在前，依 completed_at；沒跑完的單不會有模型，所以 None 排最後
-        只是保險。上限 `limit` 是為了清掉的那些不會無限長。
-
-    @node job-scheduler/app/crud.py::list_user_models
-    """
-    from sqlalchemy import or_
-    return (db.query(models.TrainingJob)
-            .filter(models.TrainingJob.user_id == user_id,
-                    or_(models.TrainingJob.artifact_bytes.isnot(None),
-                        models.TrainingJob.artifact_purged_at.isnot(None)))
-            .order_by(desc(models.TrainingJob.completed_at),
-                      desc(models.TrainingJob.created_at))
-            .limit(limit)
-            .all())
-
-
 def append_job_metric(db: Session, job_id: str, metric: dict) -> Optional[models.TrainingJob]:
     """ZH: 附加指標資料 (存為 JSON array) | EN: Append metric data (stored as JSON array)
 
