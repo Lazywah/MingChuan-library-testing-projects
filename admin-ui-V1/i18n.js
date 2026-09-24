@@ -470,7 +470,7 @@
             tr_th_loss: '誤差',
             tr_back: '回到上一頁',
             tr_to_lab: '改用程式實驗室自己寫',
-            gpu_own_zip: '用自己的資料訓練',
+            gpu_own_zip: '不想看程式，直接用資料集訓練',
 
             // ── GPU 引導 ─────────────────────────────────────────
             gpu_title: '訓練你的第一個模型 · MCU AI Base',
@@ -1107,7 +1107,7 @@
             tr_th_loss: 'Loss',
             tr_back: 'Back',
             tr_to_lab: 'Write it myself in the Code Lab instead',
-            gpu_own_zip: 'Train with your own data',
+            gpu_own_zip: 'No code needed — train from a dataset',
 
             // ── GPU walkthrough ──────────────────────────────────
             gpu_title: 'Train your first model · MCU AI Base',

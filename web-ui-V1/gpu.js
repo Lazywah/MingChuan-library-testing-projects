@@ -82,7 +82,7 @@ function poolDown(nextOpen, why) {
 // ── 主要動作：用範例開始 ──────────────────────────────────────────────
 // ── 範例種類（v4.19）─────────────────────────────────────────────────
 // ZH: 三種範例。選哪一種決定畫面上五段文案、開實驗室時放進工作區的範例
-//     （後端 lab_manager.LAB_SAMPLE_KINDS 認得的名字）、以及「用自己的資料訓練」
+//     （後端 lab_manager.LAB_SAMPLE_KINDS 認得的名字）、以及「不想看程式，直接用資料集訓練」
 //     預選的內建任務。用 T() 一個個寫是為了 check_i18n 抓得到 key。
 const KINDS = {
     cats_dogs: {
@@ -129,7 +129,7 @@ function setKind(k) {
             el.setAttribute('data-i18n', c.keys[key]);
             el.textContent = c[key]();
         });
-    // ZH: 「用自己的資料訓練」預選同一種 —— 他在這裡選了表格，過去不該又是圖片。
+    // ZH: 「不想看程式，直接用資料集訓練」預選同一種 —— 他在這裡選了表格，過去不該又是圖片。
     const own = $('go-own-zip');
     if (own) own.href = `train.html?task=${encodeURIComponent(c.task)}`;
 }

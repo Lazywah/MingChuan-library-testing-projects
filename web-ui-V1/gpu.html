@@ -34,7 +34,7 @@
     <!-- 層級 1 · 做完會得到什麼 + 需要準備什麼。這兩句是這個畫面存在的理由。 -->
     <section class="primary-card" aria-labelledby="gpu-title">
         <!-- ZH: v4.19 三選一範例（擁有者 2026-09-20）。選哪一種決定：標題、說明、第 1／3 步的文案、
-                 「範例在哪」、開實驗室時放進工作區的範例、以及「用自己的資料訓練」預選的種類。
+                 「範例在哪」、開實驗室時放進工作區的範例、以及「不想看程式，直接用資料集訓練」預選的種類。
                  清單的真相在 gpu.js 的 KINDS。 -->
         <div class="seg" role="group" aria-label="範例種類" data-i18n-aria="gpu_kind_aria" id="kind-seg">
             <button type="button" data-kind="cats_dogs" aria-pressed="true" data-i18n="gpu_kind_cats">貓狗圖片</button>
@@ -55,7 +55,7 @@
         <!-- ZH: 第二顆按鈕（擁有者裁定 2026-08-20）。給「已經有資料、而且不想寫程式」的人。
                  用 btn--ghost 而不是第二顆 primary：兩顆同權重會讓第一次來的人不知道該按哪個。
                  位階仍高於底下的文字連結——不會寫程式的學生不該靠一條小連結才找得到。 -->
-        <a class="btn btn--ghost btn--block" href="train.html" id="go-own-zip" data-i18n="gpu_own_zip">用自己的資料訓練</a>
+        <a class="btn btn--ghost btn--block" href="train.html" id="go-own-zip" data-i18n="gpu_own_zip">不想看程式，直接用資料集訓練</a>
         <div class="handoff" id="pool-note" hidden></div>
         <!-- ZH: 「範例在哪」（擁有者 2026-09-20）。實驗室不需要先上傳資料集就能訓練，
                  因為貓狗圖片與範例程式**已經烤在實驗室映像裡**（/opt/aibase/samples）；
@@ -98,12 +98,12 @@
 
 <script src="docs-entry.js?v=131ee7af"></script>
 <script src="tz.js?v=2e214a8b"></script>
-<script src="i18n.js?v=e7002740"></script>
+<script src="i18n.js?v=34d502b2"></script>
 <script src="prefs.js?v=e71609e5"></script>
 <!-- ZH: 小基（浮動助手）。客服模式公開，登入頁也放 —— 設計文件的使用者需求是「不會用這個平台時想直接問」。 -->
 <script src="assistant-widget.js?v=74e3c4b6"></script>
 <script src="chrome.js?v=47c80038"></script>
-<script src="gpu.js?v=18579933"></script>
+<script src="gpu.js?v=a2019f74"></script>
 <!-- ZH: 到訪人次。每一頁都載（這是「網站」的計數，不是首頁的），一個工作階段只送一次；
          只有放了 [data-visits] 的頁面（登入頁、首頁）會顯示數字。 -->
 <script src="visits.js"></script>
