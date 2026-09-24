@@ -1126,6 +1126,40 @@ textarea.field__input { resize: vertical; min-height: 6rem; }
 .bar--warn .bar__fill { background-color: var(--warn); }
 
 /* ZH: 每輪結果的表格。窄畫面時讓它自己橫向捲，不要把整頁撐寬。 */
+
+/* ── 每輪結果：一次十列，其餘捲動（擁有者 2026-09-24）──────────────
+ * ZH: 訓練最多 50 輪（train.js 的上限），整份攤開會把「下載模型」
+ *     和訓練紀錄推到很下面 —— 而那兩個才是跑完之後真正要按的東西。
+ *
+ * ZH: 🔴 這裡的高度只是**保底**（JS 還沒跑、或它壞掉時用的）。
+ *     精確的「剛好十列」由 train.js 的 fitEpochBox() 量完再設 ——
+ *     因為列高不會跟著字級等比例變：字是 rem，而上下 padding
+ *     （--space-2）是固定的 px。實測放大到 130% 時用 rem 算會變成
+ *     看得到 11 列，而說明文字還寫著「一次顯示 10 輪」。
+ * ZH: 保底值＝預設字級下量到的：一列 42px、表頭 39px → 28.6875rem。
+ *
+ * ZH: 表頭要 sticky —— 捲到第 30 列時還看得出哪一欄是正確率。
+ *     ⚠ 它需要一個**不透明的背景**，否則捲上來的列會透出來疊在字上面。
+ * ─────────────────────────────────────────────────────────────── */
+#epochs-table {
+    max-height: 28.6875rem;   /* ZH: 表頭 + 10 列（見上面的量測）*/
+    overflow-y: auto;
+    /* ZH: 捲動框要有邊界感，不然看起來像頁面被裁掉。 */
+    /* ZH: ⚠ 底色要跟 sticky 表頭同一個 —— 表格的列本身是透明的，
+     *     不給底色的話會變成「灰色的表配一條白色的表頭」。 */
+    background-color: var(--surface);
+    border: 1px solid var(--hairline);
+    border-radius: var(--radius-sm);
+    margin-bottom: var(--space-5);
+}
+/* ZH: 外框已經有下邊界了，表格自己那段外距要拿掉（不然框底多一塊空白）。 */
+#epochs-table .tbl { margin-bottom: 0; }
+#epochs-table .tbl thead th {
+    position: sticky;
+    top: 0;
+    background-color: var(--surface);
+}
+
 .tbl {
     width: 100%;
     border-collapse: collapse;
@@ -1147,7 +1181,8 @@ textarea.field__input { resize: vertical; min-height: 6rem; }
     .balance__value { font-size: 2rem; }
     .hero__title { font-size: 1.3rem; }
     .chart__box { height: 12rem; }
-    /* ZH: 每輪結果在窄畫面自己捲，不要把頁面撐寬（頁面橫捲是版面壞掉的訊號）。 */
+    /* ZH: 每輪結果在窄畫面自己捲，不要把頁面撐寬（頁面橫捲是版面壞掉的訊號）。
+     *     ⚠ 直向的 max-height 與 sticky 表頭在上面已經設好，這裡只加橫向。 */
     #epochs-table { overflow-x: auto; }
 }
 

@@ -10,7 +10,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Open+Sans:wght@400;600;700&display=swap" rel="stylesheet">
 
     <link rel="stylesheet" href="tokens.css?v=ff9cecda">
-    <link rel="stylesheet" href="styles.css?v=2afb656c">
+    <link rel="stylesheet" href="styles.css?v=d4d21ce8">
     <link rel="stylesheet" href="web.css?v=bd588ac0">
     <!-- ZH: 🔴 側欄狀態必須在**首次繪製之前**套用，否則每換一頁都會看到
              內容滑出去讓位（widget 的 JS 在 body 尾端才跑，那時已經畫過一次了）。
@@ -151,6 +151,9 @@
                  「第 3 輪之後就沒再進步」用數字看得比曲線清楚，而且不必額外相依。 -->
         <h2 class="chart__title" id="epochs-title" hidden data-i18n="tr_epochs_title">每一輪的結果</h2>
         <div id="epochs-table" hidden></div>
+        <!-- ZH: 只有「不只十輪」時才出現。捲動框最容易出的問題是
+                 「看不出下面還有東西」，所以把總數講出來。文案由 train.js 填。 -->
+        <p class="footnote" id="epochs-note" hidden></p>
 
         <details class="fold" id="log-fold" hidden>
             <summary class="fold__summary" data-i18n="tr_log">訓練紀錄（出問題時貼這個給管理者）</summary>
@@ -167,12 +170,12 @@
 
 <script src="tz.js?v=2e214a8b"></script>
 <script src="docs-entry.js?v=131ee7af"></script>
-<script src="i18n.js?v=34d502b2"></script>
+<script src="i18n.js?v=66c3d3af"></script>
 <script src="prefs.js?v=e71609e5"></script>
 <!-- ZH: 小基（浮動助手）。客服模式公開，登入頁也放 —— 設計文件的使用者需求是「不會用這個平台時想直接問」。 -->
 <script src="assistant-widget.js?v=74e3c4b6"></script>
 <script src="chrome.js?v=47c80038"></script>
-<script src="train.js?v=502cfd62"></script>
+<script src="train.js?v=4f16f0a2"></script>
 <!-- ZH: 到訪人次。每一頁都載（這是「網站」的計數，不是首頁的），一個工作階段只送一次；
          只有放了 [data-visits] 的頁面（登入頁、首頁）會顯示數字。 -->
 <script src="visits.js"></script>

@@ -507,6 +507,32 @@ function finish(j) {
 }
 
 // ── 指標 ─────────────────────────────────────────────────────────────
+// ZH: 每輪結果一次顯示幾列（擁有者 2026-09-24）。
+//     🔴 **這是唯一的真相**：高度由 fitEpochBox() 依實際列高算出來，
+//     文案裡的數字也用它。styles.css 的 max-height 只是 JS 還沒跑之前的保底。
+const EPOCH_ROWS = 10;
+
+/* ZH: 把捲動框調成「剛好十列 + 表頭」。
+ *
+ * ZH: 為什麼要用量的，不能在 CSS 裡寫死：列高不會跟著字級等比例變 ——
+ *     字是 rem，但上下 padding（--space-2）是固定的 px。
+ *     實測把字級放大到 130%，用 rem 算出來的框會露出 11 列，
+ *     而下面的說明還寫著「一次顯示 10 輪」。
+ * ZH: ⚠ 一列都沒有時什麼都不做（量不到列高，算出來會是表頭的高度）。
+ */
+function fitEpochBox() {
+    const box = $('epochs-table');
+    const head = box.querySelector('thead');
+    const row = box.querySelector('tbody tr');
+    if (!head || !row) return;
+    box.style.maxHeight = (head.getBoundingClientRect().height
+        + row.getBoundingClientRect().height * EPOCH_ROWS) + 'px';
+}
+
+// ZH: 字級是隨時可以改的（帳號選單裡的滑條）。改完不重算的話，
+//     已經畫好的那張表會停在舊高度 —— 跑完的單不會再重畫，就一直錯著。
+// ZH: 既有前例：prefs.js 在套用之後會發 `prefs:applied`。
+document.addEventListener('prefs:applied', fitEpochBox);
 // ZH: 後端的 metrics 是一個陣列，每筆有 kind：dataset（開頭一次）、
 //     epoch（每輪）、summary（結尾）。畫面只讀，不做計算以外的假設——
 //     多出不認得的 kind 就忽略，不要壞掉。
@@ -553,7 +579,23 @@ function renderMetrics(metrics) {
 
     $('epochs-title').hidden = eps.length === 0;
     $('epochs-table').hidden = eps.length === 0;
+    // ZH: 超過十輪才提示總數 —— 十輪以內整份都看得到，寫了只是雜訊。
+    const note = $('epochs-note');
+    note.hidden = eps.length <= EPOCH_ROWS;
+    if (!note.hidden) {
+        note.textContent = T('tr_epochs_more',
+            '共 {n} 輪。這裡一次顯示 {k} 輪，其餘往下捲。')
+            .replace('{n}', eps.length).replace('{k}', EPOCH_ROWS);
+    }
     if (eps.length) {
+        // ZH: 🔴 訓練中每次輪詢都會重畫這張表，而**新的一列加在最下面**。
+        //     有了捲動框之後，正在跑的時候最該看的那一列會落在框外 ——
+        //     所以重畫前先記住「剛剛是不是貼著底」，重畫後再貼回去。
+        // ZH: ⚠ 只有原本就在底部時才捲（差 4px 內算貼著）。
+        //     無條件捲的話，使用者往上翻看第 3 輪時會被硬拉回來，
+        //     而那是每 3 秒一次 —— 等於根本翻不了。
+        const box = $('epochs-table');
+        const stuck = box.scrollHeight - box.scrollTop - box.clientHeight < 4;
         $('epochs-table').innerHTML = `
             <table class="tbl">
               <thead><tr>
@@ -568,6 +610,10 @@ function renderMetrics(metrics) {
                   <td>${e.train_loss}</td>
                 </tr>`).join('')}</tbody>
             </table>`;
+        // ZH: ⚠ 順序：先量高度再還原捲動位置 —— 反過來的話
+        //     scrollTop 會被還沒定案的高度夾掉。
+        fitEpochBox();
+        if (stuck) box.scrollTop = box.scrollHeight;
     }
 }
 
