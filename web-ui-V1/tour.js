@@ -32,7 +32,7 @@
  *
  * ZH: 🔴 **站與站之間直接走，不回首頁**（擁有者 2026-09-24：
  *     「可以不用每次都回到首頁再繼續走」）。整條路線是：
- *       首頁 → MYAI → 訓練進度 → 使用量 → 看別人做過什麼 → 問題回報 → 首頁
+ *       首頁 → MYAI → 訓練進度 → 使用量 → 教學與範例 → 問題回報 → 首頁
  *
  * ZH: 兩道閘門會讓中間某幾站整段消失：
  *       · `gpu`  —— GPU 功能暫停時，訓練進度那一站不能走。
@@ -40,7 +40,7 @@
  *         那一項的 `href` **整個拿掉** —— 圈得到卻點不過去。
  *         ⚠ 閘門**不擋 admin**，所以這個壞法只有學生遇得到
  *         （2026-09-24 用一個全新的學生帳號實測才撞到）。
- *       · `docs` —— 「看別人做過什麼」的入口在**沒有內容之前不出現**
+ *       · `docs` —— 「教學與範例」的入口在**沒有內容之前不出現**
  *         （規則只寫在 docs-entry.js，fail closed）。
  *         ⚠ 這一道不能用「看得見嗎」判斷：那一項躺在還沒點開的下拉裡，
  *         答案永遠是否。要看的是 `hidden` 有沒有被 docs-entry.js 拿掉。
@@ -138,7 +138,7 @@
           t: ['tour_nav_t', '其他東西都在這排選單'],
           d: ['tour_nav_d',
               '首頁只放三條主線，其餘都收在這裡：看訓練進度與上傳的資料、查使用量、'
-              + '看別人做過什麼、GPU 現在忙不忙，以及問題回報。'
+              + '教學與範例、GPU 現在忙不忙，以及問題回報。'
               + '接下來就帶你把最常用的幾個走一遍，全部從這排出發。'] },
 
         { id: 'menu_myai', page: 'myai.html', target: '.topbar__burger', click: true,
@@ -242,20 +242,19 @@
         { id: 'grp_help_usage', page: 'usage.html', click: true,
           target: '.navmenu__toggle[data-i18n="grp_help_t"]',
           probe: '.topbar__burger, .navmenu__toggle[data-i18n="grp_help_t"]',
-          t: ['tour_grp_help_t', '「其他範例參考」這一組'],
+          t: ['tour_grp_help_t', '「資源與回報」這一組'],
           d: ['tour_grp_help_d',
-              '這一組放的是「看看別人怎麼做」跟「東西壞了要跟誰說」。'
-              + '點一下把它展開。'] },
+              '這一組放的是「教學與範例」跟「問題回報」：想學、想看別人怎麼做，'
+              + '或東西壞了要跟誰說，都在這裡。點一下把它展開。'] },
 
         // ZH: 🔴 又一座兩個版本的橋：文件庫有內容就先過去，沒有就直接去問題回報。
         { id: 'go_docs', page: 'usage.html', click: true, docs: true,
           target: '.navmenu__menu a[href="docs.html"]',
           probe: '.topbar__burger, .navmenu__toggle[data-i18n="grp_help_t"]',
-          t: ['tour_docs_go_t', '下一站：看別人做過什麼'],
+          t: ['tour_docs_go_t', '下一站：教學與範例'],
           d: ['tour_docs_go_d',
-              '點「看別人做過什麼」。這一站不是功能，是別人已經做出來的東西：'
-              + '看得到人家拿這個平台做了什麼、怎麼做的。'
-              + '不知道自己想做什麼的時候，從這裡開始通常比從空白頁開始容易。'] },
+              '點「教學與範例」。這一站放的是教學影片、學長姐做過的成品，和大家問過的問題 —— '
+              + '不知道從哪裡開始的時候，先來這裡看一圈通常比從空白頁開始容易。'] },
 
         { id: 'go_report_usage', page: 'usage.html', click: true, docsOff: true,
           target: '.navmenu__menu a[href="report.html"]',
@@ -265,20 +264,20 @@
               '點「問題回報」。平台出問題時這裡是最該來的地方，我們過去看怎麼寫。'] },
 
         // ══════════════════════════════════════════════════════════
-        // ZH: 看別人做過什麼（沒有內容時整段消失，橋由上面那個版本接手）
+        // ZH: 教學與範例（沒有內容時整段消失，橋由上面那個版本接手）
         // ══════════════════════════════════════════════════════════
         { id: 'docs_lead', page: 'docs.html', target: '#lead', docs: true,
-          t: ['tour_docs_lead_t', '這一頁放的是成果，不是說明書'],
+          t: ['tour_docs_lead_t', '三種東西：教學、成品、問題交流'],
           d: ['tour_docs_lead_d',
-              '每一則都是一個真的做出來的例子 —— 做了什麼、用了哪些步驟。'
+              '教學是影片或講義；成品是學長姐用這個平台做出來的東西；問題交流是大家踩過的坑。'
               + '這裡沒有內容的時候整個入口不會出現，'
               + '所以你在選單裡看得到它，就代表裡面真的有東西。'] },
 
         { id: 'docs_list', page: 'docs.html', target: '#list', docs: true,
-          t: ['tour_docs_list_t', '點進去看做法'],
+          t: ['tour_docs_list_t', '點進去看內容'],
           d: ['tour_docs_list_d',
-              '一張卡片是一則。點進去看得到完整內容，'
-              + '想照著做的話裡面會寫到用了哪些步驟與資料。'
+              '一張卡片是一則，標籤寫著它是哪一種。點進去看得到完整內容；'
+              + '內容多起來之後，上方會出現分類鈕，可以只看其中一種。'
               + '目前還不多，之後會持續增加。'] },
 
         { id: 'menu_docs', page: 'docs.html', target: '.topbar__burger', click: true, docs: true,
@@ -290,10 +289,10 @@
         { id: 'grp_help_docs', page: 'docs.html', click: true, docs: true,
           target: '.navmenu__toggle[data-i18n="grp_help_t"]',
           probe: '.topbar__burger, .navmenu__toggle[data-i18n="grp_help_t"]',
-          t: ['tour_grp_help_t', '「其他範例參考」這一組'],
+          t: ['tour_grp_help_t', '「資源與回報」這一組'],
           d: ['tour_grp_help_d',
-              '這一組放的是「看看別人怎麼做」跟「東西壞了要跟誰說」。'
-              + '點一下把它展開。'] },
+              '這一組放的是「教學與範例」跟「問題回報」：想學、想看別人怎麼做，'
+              + '或東西壞了要跟誰說，都在這裡。點一下把它展開。'] },
 
         { id: 'go_report_docs', page: 'docs.html', click: true, docs: true,
           target: '.navmenu__menu a[href="report.html"]',

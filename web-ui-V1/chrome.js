@@ -268,12 +268,16 @@
                 ]
             },
             {
-                key: 'grp_help_t', zh: '其他範例參考',
+                // ZH: v4.31 原本叫「其他範例參考」；裡面是「教學與範例」跟「問題回報」，
+                //     擁有者裁定改成「資源與回報」（2026-09-24）。
+                key: 'grp_help_t', zh: '資源與回報',
                 pages: ['docs.html', 'report.html'],
                 items: [
                     // ZH: 文件庫入口在沒有內容前不出現。規則只寫在 docs-entry.js，
                     //     這裡只放一個槽位（hidden + data-docs-entry）交給它決定。
-                    { href: 'docs.html', key: 'entry_docs_title', zh: '看別人做過什麼', docs: true },
+                    // ZH: v4.31 原本叫「看別人做過什麼」—— 那一頁有教學、學長姐成品、問題交流三種，
+                    //     舊名只講到成品。
+                    { href: 'docs.html', key: 'entry_docs_title', zh: '教學與範例', docs: true },
                     { href: 'report.html', key: 'acct_report', zh: '問題回報' }
                 ]
             }
