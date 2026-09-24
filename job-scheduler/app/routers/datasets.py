@@ -7,6 +7,7 @@ import hashlib
 import shutil
 import pathlib
 import re
+import logging
 
 from .. import models, crud
 from ..auth import get_current_user
@@ -14,6 +15,8 @@ from ..database import get_db
 from ..services import storage_lifecycle
 from ..rate_limit import limiter
 from fastapi import Request
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["Datasets"])
 
@@ -219,6 +222,49 @@ def list_my_datasets(
         "used_bytes": used,
         "quota_bytes": MAX_USER_STORAGE_BYTES,
     }
+
+
+@router.get("/{dataset_id}/download", summary="下載自己上傳過的資料集")
+def download_my_dataset(
+    dataset_id: str,
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    ZH: 把自己上傳過的那一包拿回來（擁有者 2026-09-24：「我的資料集也不能下載」）。
+
+    ZH: 在此之前這一頁只能刪、只能再訓練 —— 本機檔案弄丟的人，
+        東西明明在伺服器上卻拿不回來。
+
+    ZH: 找不到與不是自己的**回同一個 404**（與刪除同一個理由：403 等於告訴對方
+        「這個 id 存在」）。紀錄在、檔案不在 → 410，與模型下載同一個分法。
+
+    ZH: 檔名用當初上傳的原名（可能是中文），清理與編碼走 services/download_names
+        —— 與模型下載**同一份實作**。副檔名取自磁碟上的存檔名（上傳時已過白名單），
+        不從原名猜。
+
+    @node job-scheduler/app/routers/datasets.py::download_my_dataset
+    """
+    from fastapi.responses import FileResponse
+    from ..services.download_names import content_disposition
+
+    ds = crud.get_dataset(db, dataset_id)
+    if not ds or ds.user_id != current_user.id:
+        raise HTTPException(status_code=404,
+                            detail="ZH: 找不到這份資料集 | EN: Dataset not found")
+
+    path = crud.dataset_file_path(DATASET_DIR, ds)
+    if not os.path.isfile(path):
+        logger.error("Dataset %s has a record but %s is missing", dataset_id[:8], path)
+        raise HTTPException(
+            status_code=410,
+            detail="ZH: 這份資料集的檔案已不在伺服器上 | EN: The dataset file is no longer on the server")
+
+    ext = pathlib.Path(ds.stored_name).suffix or ".zip"
+    stem = pathlib.Path(ds.original_name or "dataset").stem
+    return FileResponse(
+        path, media_type="application/octet-stream",
+        headers={"Content-Disposition": content_disposition(stem, ext, "dataset")})
 
 
 @router.delete("/{dataset_id}")

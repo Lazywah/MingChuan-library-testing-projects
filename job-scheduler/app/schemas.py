@@ -567,6 +567,10 @@ class JobStatusResponse(BaseModel):
     #     前端靠這個決定要不要顯示下載鈕；不要讓它自己去猜。
     has_model: bool = False
     model_bytes: Optional[int] = None
+    # ZH: v4.29 模型被清掉的時間（有值＝曾經有過、現在沒了）。
+    #     ⚠ response_model 會把沒宣告的欄位**默默丟掉** —— 端點的 dict 加了、
+    #       這裡沒加，前端拿到的就是沒有這個 key（實測就是這樣紅的）。
+    model_purged_at: Optional[datetime] = None
 
     @field_validator("metrics", mode="before")
     @classmethod
@@ -608,6 +612,10 @@ class JobListItem(BaseModel):
     # ZH: v3.6 有沒有可下載的模型（列表直接給下載鈕用）
     has_model: bool = False
     model_bytes: Optional[int] = None
+    # ZH: v4.29 模型被清掉的時間（有值＝曾經有過、現在沒了）。
+    #     ⚠ response_model 會把沒宣告的欄位**默默丟掉** —— 端點的 dict 加了、
+    #       這裡沒加，前端拿到的就是沒有這個 key（實測就是這樣紅的）。
+    model_purged_at: Optional[datetime] = None
     # ZH: v3.9 排隊位置（只有 pending 的任務會有值）。
     #   position/total —— 同池內的第幾個 / 共幾個
     #   wait_reason    —— 只給排第一個的：lab（別人的實驗室佔著卡）/

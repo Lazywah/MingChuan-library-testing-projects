@@ -149,6 +149,8 @@ function row(j) {
             ${j.has_model ? `<button class="btn btn--minor" type="button" data-dl="${esc(j.job_id)}">
                 ${esc(T('tr_download', '下載模型檔'))}${j.model_bytes ? '（' + human(j.model_bytes) + '）' : ''}
             </button>` : ''}
+            ${!j.has_model && j.model_purged_at ? `<span class="footnote">${esc(
+                T('jl_model_gone', '模型已過保留期（{d} 清掉）').replace('{d}', TW.date(j.model_purged_at) || '—'))}</span>` : ''}
             ${active ? `<button class="btn btn--minor" type="button" data-cancel="${esc(j.job_id)}">
                 ${esc(T('jl_cancel', '取消這個訓練'))}</button>` : ''}
         </div>

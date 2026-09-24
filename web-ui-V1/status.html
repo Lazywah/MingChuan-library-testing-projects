@@ -66,7 +66,7 @@
 
 <!-- ZH: chrome.js 的導覽會問 DocsEntry 要不要顯示文件庫入口，所以要先載它。 -->
 <script src="docs-entry.js?v=131ee7af"></script>
-<script src="i18n.js?v=8f9803cd"></script>
+<script src="i18n.js?v=d9992e35"></script>
 <script src="prefs.js?v=e71609e5"></script>
 <script src="tip.js?v=0699f4a2"></script>
 <script src="assistant-widget.js?v=74e3c4b6"></script>
@@ -74,7 +74,7 @@
          瀏覽器的 new Date() 會把它當本地時間，於是 +08:00 的人看到的時間早了 8 小時。
          少載這一支的症狀是「最後心跳」與「更新於」差整整 8 小時（實際踩到過）。 -->
 <script src="tz.js?v=2e214a8b"></script>
-<script src="chrome.js?v=47c80038"></script>
+<script src="chrome.js?v=6e69412e"></script>
 <script src="status.js?v=6eedccd1"></script>
 <!-- ZH: 到訪人次。每一頁都載（這是「網站」的計數，不是首頁的），
          一個工作階段只送一次；只有放了 [data-visits] 的頁面會顯示數字。 -->
@@ -82,6 +82,6 @@
 <!-- ZH: 引導導覽。每一頁都載是因為它**跨頁**（首頁→MYAI→訓練進度→使用量→問題回報），
          換頁之後要接著演。它自己會等 chrome.js 的 `chrome:ready`，
          沒登入就什麼都不做。 -->
-<script src="tour.js?v=066221a7"></script>
+<script src="tour.js?v=69784f95"></script>
 </body>
 </html>

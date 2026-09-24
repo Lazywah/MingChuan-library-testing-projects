@@ -388,6 +388,9 @@ def init_db():
             # --- v3.6 訓練產出（模型檔）回傳到服務層 ---
             try: conn.execute(text("ALTER TABLE training_jobs ADD COLUMN artifact_bytes INTEGER"))
             except Exception: pass
+            # --- v4.29 模型檔被清掉的時間（分得開「過了保留期」與「本來就沒有」）---
+            try: conn.execute(text("ALTER TABLE training_jobs ADD COLUMN artifact_purged_at DATETIME"))
+            except Exception: pass
             # --- v3.6 任務指向的資料集（取代由客戶端傳路徑）---
             try: conn.execute(text("ALTER TABLE training_jobs ADD COLUMN dataset_id VARCHAR"))
             except Exception: pass

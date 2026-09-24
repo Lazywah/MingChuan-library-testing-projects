@@ -29,7 +29,7 @@ from fastapi.responses import StreamingResponse, FileResponse
 from fastapi.concurrency import run_in_threadpool
 from sqlalchemy import func
 from sqlalchemy.orm import Session
-from typing import Optional
+from typing import Optional, Dict, Any
 import asyncio
 
 from .. import crud, schemas, models
@@ -41,8 +41,6 @@ from ..services import storage_lifecycle
 import json
 import logging
 import os
-import re
-import urllib.parse
 
 # ZH: v3.6 —— 模型檔的實際位置由 worker router 那邊定義（唯一定義），
 #     這裡引用而不是再抄一份路徑規則。
@@ -329,6 +327,9 @@ def list_jobs(
             #     ⚠ 這是**手工組的 dict**，只在 schema 加欄位不會自動帶上（踩過兩次）。
             "has_model": bool(job.artifact_bytes),
             "model_bytes": job.artifact_bytes,
+            # ZH: v4.29 —— 模型被清掉的時間。有值＝曾經有過、現在沒了；
+            #     列表據此寫「模型已過保留期」，不要讓下載鈕安靜消失。
+            "model_purged_at": job.artifact_purged_at,
             # ZH: ⚠ 這是手工組的 dict —— 只在 schema 加欄位不會自動帶上（檔案上方踩過兩次的那個）。
             "queue_position": q.get("position"),
             "queue_total": q.get("total"),
@@ -336,6 +337,55 @@ def list_jobs(
         })
 
     return {"total": total, "jobs": job_list}
+
+
+# ==============================================================================
+# ZH: v4.29 — GET /models：我留下過的模型（檔還在的，以及已經被清掉的）
+#     ⚠ 同樣必須宣告在 GET /{job_id} 之前，否則 "models" 會被當成 job_id。
+# ==============================================================================
+@router.get("/models", summary="我的模型檔（含已過保留期的）")
+def list_my_models(
+    limit: int = Query(30, ge=1, le=100),
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> Dict[str, Any]:
+    """
+    ZH: 給「我的資料與模型」那一頁的模型區用（擁有者 2026-09-24）。
+
+    ZH: 回的東西刻意包含**三條保留規則本身**（keep / ttl_days / 單檔上限），
+        不要讓前端寫死 —— 那幾個值是環境變數，改了之後畫面上的數字就會說謊，
+        而且沒有任何守衛抓得到。
+
+    ZH: 🔴 已經被清掉的也回（purged_at 有值），畫面才講得出「已過保留期」。
+        只回還在的，過期的那幾張就從畫面上消失，跟「平台弄丟了」分不出來。
+
+    ZH: `expires_at` = completed_at + ttl（與 crud.purge_expired_artifacts 同一個算法），
+        讓使用者事先知道哪一天會被清，而不是事後才發現。
+
+    @node job-scheduler/app/routers/jobs.py::list_my_models
+    """
+    from datetime import timedelta
+    rows = crud.list_user_models(db, current_user.id, limit=limit)
+    ttl = worker_router.ARTIFACT_TTL_DAYS
+    out = []
+    for job in rows:
+        basis = job.completed_at or job.created_at
+        out.append({
+            "job_id": job.id,
+            "job_name": job.job_name,
+            "task": crud.builtin_task_for(job),
+            "has_model": bool(job.artifact_bytes),
+            "model_bytes": job.artifact_bytes,
+            "completed_at": job.completed_at,
+            "expires_at": (basis + timedelta(days=ttl)) if (basis and job.artifact_bytes) else None,
+            "purged_at": job.artifact_purged_at,
+        })
+    return {
+        "keep": worker_router.ARTIFACT_KEEP_PER_USER,
+        "ttl_days": ttl,
+        "max_bytes": worker_router.MAX_ARTIFACT_BYTES,
+        "models": out,
+    }
 
 
 # ==============================================================================
@@ -435,6 +485,7 @@ def get_job_status(
         # ZH: v3.6 —— 手工組的 dict，欄位要自己加（只加 schema 不會自動帶上，踩過）
         "has_model": bool(job.artifact_bytes),
         "model_bytes": job.artifact_bytes,
+        "model_purged_at": job.artifact_purged_at,
     }
 
 
@@ -666,12 +717,9 @@ def download_job_model(
     #     ⚠ UTF-8 那一段**也要清**：保留中文，但路徑分隔符、`..`、控制字元一律拿掉。
     #       百分比編碼不算清理（`../..` 只是變成 `..%2F..`），而「反正瀏覽器會處理」
     #       是把安全外包給別人的程式。
-    raw = (job.job_name or "model").strip()
-    raw = re.sub(r'[\x00-\x1f\x7f/\\:*?"<>|]', "_", raw)   # 路徑與控制字元
-    raw = re.sub(r"\.{2,}", "_", raw).strip("._ ") or "model"
-    ascii_safe = re.sub(r"[^A-Za-z0-9._-]", "_", raw).strip("._-") or "model"
-    encoded = urllib.parse.quote(f"{raw}.pt", safe="")
+    # ZH: v4.29 檔名的清理搬到 services/download_names（資料集下載也要同一份）。
+    #     規則逐字相同，上面那段說明留著是因為它講的是**為什麼**。
+    from ..services.download_names import content_disposition
     return FileResponse(
         path, media_type="application/octet-stream",
-        headers={"Content-Disposition":
-                 f"attachment; filename=\"{ascii_safe}.pt\"; filename*=UTF-8''{encoded}"})
+        headers={"Content-Disposition": content_disposition(job.job_name or "model", ".pt", "model")})

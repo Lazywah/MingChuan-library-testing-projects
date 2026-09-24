@@ -220,6 +220,13 @@ class TrainingJob(Base):
     #     刻意不存路徑：路徑由 job_id 推導（/data/artifacts/<job_id>/model.pt），
     #     少一個會跟實體檔案漂開的字串。
     artifact_bytes = Column(Integer)                                          # ZH: 模型檔大小，None=沒有 | EN: Artifact size, None = not present
+    # ZH: v4.29 —— 模型檔**被清掉的時間**（保留期到、或被「每人 N 個」擠掉）。
+    #     None = 從來沒被清過（可能還在，也可能根本沒產出過）。
+    # ZH: 🔴 為什麼要這一欄：清掉之後 artifact_bytes 變成 None，與「這張單本來就
+    #     沒有模型」**長得一模一樣**。畫面只能讓下載鈕安靜消失 —— 一個月後回來
+    #     想拿模型的人，只會以為平台把他的東西弄丟了（擁有者 2026-09-24 問到）。
+    #     有了這一欄才講得出「已過保留期」這句真話。
+    artifact_purged_at = Column(DateTime)                                     # ZH: 模型檔被清掉的時間 | EN: When the artifact was purged
 
     # ZH: 時間戳記 | EN: Timestamps
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
