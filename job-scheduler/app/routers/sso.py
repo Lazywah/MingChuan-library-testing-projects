@@ -157,6 +157,19 @@ def _finalize_sso_login(db: Session, user_info: dict, request: Request = None) -
             f" 既有 hashed_password 保留但無法再變更（update_user 會拒絕）。"
         )
         upgrade_to_sso(db, user, auth_source=auth_source, external_id=external_id)
+        # ZH: v4.32 —— 手動開通的帳號**第一次走 SSO 也問一次 Alma**（擁有者 2026-09-25）。
+        #     在此之前只有「建新帳號」那條路會問；手動開通（sso_autocreate=0 時
+        #     新學生都是這樣進來的）再用 SSO 登入的人，校區／學系要等隔天的
+        #     排程回填才有 —— 第一天的初次設定彈窗是空的。
+        # ZH: 這裡查 Alma 是合理的：username 就是 SSO 的 sub（學號），
+        #     不是管理者隨手取的名字 —— 跟 backfill 跳過 local 帳號的理由剛好相反。
+        # ZH: 🔴 **只補空的**（only_blank）：管理者建號時填的校區／學系不能被蓋掉。
+        #     角色也**完全不碰**：手動開通的角色是管理者的決定，不是信箱猜的。
+        alma = alma_service.lookup_identity(username)
+        if alma:
+            applied = crud.apply_alma_profile(db, user, alma, only_blank=True)
+            if applied:
+                logger.info("Alma 預填（local→SSO 升級）%s：%s", username, "、".join(applied))
 
     # ==========================================================================
     # ZH: v3.3 停權檢查 —— 在「登入階段」就擋下被停用的帳號。

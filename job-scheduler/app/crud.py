@@ -2509,11 +2509,18 @@ def match_org_unit(db: Session, segs: list) -> Optional[str]:
     return None
 
 
-def apply_alma_profile(db: Session, user: models.User, alma: dict) -> list:
+def apply_alma_profile(db: Session, user: models.User, alma: dict,
+                       only_blank: bool = False) -> list:
     """
     ZH: v4.2 —— 把 Alma 查到的 校區/學系/單位 **預填**到使用者身上
         （擁有者裁定 2026-09-02）。初次設定彈窗照樣出現，但欄位已選好，
         本人看一眼按確認即可；所以這裡**不設** onboarded_at。
+
+    ZH: v4.32 `only_blank=True`：**空的才補，已經有值的一律不動**。
+        給「手動開通的 local 帳號第一次走 SSO」那條路用 —— 那些帳號的
+        校區／學系可能是管理者建號時填的，Alma 不該把人手設的蓋掉
+        （與排程回填 backfill_users 同一個原則）。建新帳號那條路仍然是預設值
+        （帳號剛建，本來就全空）。
 
     ZH: 🔴 對不上平台組織表的值**不寫**（記 log 就好）：Alma 的名稱與
         我們的 org_departments / org_units 是兩套人維護的，硬塞會讓
@@ -2529,7 +2536,9 @@ def apply_alma_profile(db: Session, user: models.User, alma: dict) -> list:
     """
     applied = []
     campus = alma.get("campus")
-    if campus:
+    has_campus = (db.query(models.UserCampus)
+                    .filter(models.UserCampus.user_id == user.id).count() > 0)
+    if campus and not (only_blank and has_campus):
         try:
             set_user_campuses(db, user, [campus])
             applied.append("campus=%s" % campus)
@@ -2537,7 +2546,7 @@ def apply_alma_profile(db: Session, user: models.User, alma: dict) -> list:
             logger.info("Alma 校區預填略過（%s）：%s", user.username, e)
 
     field = ONBOARDING_FIELDS.get(user.role, "department")
-    if field == "department" and alma.get("department"):
+    if field == "department" and alma.get("department") and not (only_blank and user.department):
         v = alma["department"]
         if db.query(models.OrgDepartment).filter(
                 models.OrgDepartment.name == v).first():
@@ -2545,7 +2554,7 @@ def apply_alma_profile(db: Session, user: models.User, alma: dict) -> list:
             applied.append("department=%s" % v)
         else:
             logger.info("Alma 學系「%s」不在組織表，略過預填（%s）", v, user.username)
-    elif field == "unit" and alma.get("unit_segments"):
+    elif field == "unit" and alma.get("unit_segments") and not (only_blank and user.unit):
         segs = alma["unit_segments"]
         hit = match_org_unit(db, segs)
         if hit:
