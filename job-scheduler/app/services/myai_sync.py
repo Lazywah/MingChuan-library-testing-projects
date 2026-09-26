@@ -27,6 +27,7 @@ import os
 import re
 from datetime import datetime, timedelta, timezone
 
+import asyncio
 import httpx
 from sqlalchemy.orm import Session
 
@@ -129,6 +130,61 @@ def _login_ctx():
     return base, login_page, headers
 
 
+# ZH: 傳輸層錯誤（連不上、被切斷、逾時）重試幾次、間隔幾秒。
+#     🔴 只重試**一次**：觀察到的壞法是「冷連線第一下斷掉、第二下就好」，
+#     一次剛好夠；真的斷網時多試只是把告警延後幾秒，不會救回來。
+_TRANSPORT_RETRIES = 1
+_RETRY_PAUSE_SECONDS = 2.0
+
+
+def _describe(e: Exception) -> str:
+    """ZH: 把例外寫成**一定有內容**的一句話。
+
+    ZH: httpx 的 ConnectError / ReadError / 各種 Timeout 的 str() 經常是空字串
+        （底層 httpcore 只給一個空的 EndOfStream），直接 f"…：{e}" 會寄出一封
+        「登入請求失敗：」後面什麼都沒有的信 —— 2026-09-26 就是這樣。
+        所以一律帶上例外的型別，再盡量補上 cause 與網址。
+
+    @node job-scheduler/app/services/myai_sync.py::_describe
+    """
+    parts = [type(e).__name__]
+    msg = str(e).strip()
+    if msg:
+        parts.append(msg)
+    elif e.__cause__ is not None:
+        parts.append(repr(e.__cause__))
+    # ZH: ⚠ httpx 的 `.request` 是**會 raise 的 property**（沒設就 RuntimeError），
+    #     不是 None —— getattr(..., None) 接不到，實測就是這樣炸的。
+    try:
+        req = e.request  # type: ignore[attr-defined]
+    except (AttributeError, RuntimeError):
+        req = None
+    if req is not None and getattr(req, "url", None):
+        parts.append("(%s)" % req.url)
+    return " ".join(parts) if len(parts) > 1 else parts[0] + "（無詳細訊息）"
+
+
+async def _with_retry(attempt, what: str):
+    """ZH: 跑 `attempt()`（一個回傳 coroutine 的函式）；傳輸層錯誤就等一下再試一次。
+
+    ZH: 只接 httpx.TransportError（連線／讀寫／逾時／協定），**不接** HTTP 狀態錯誤
+        —— 4xx/5xx 是廠商真的這樣回，重送同一個請求不會變。
+    ZH: 第一次失敗記 WARNING：就算重試救回來了，日誌也要看得出「今天又閃了一下」，
+        不然這個問題會一直存在而沒有人知道它多常發生。
+
+    @node job-scheduler/app/services/myai_sync.py::_with_retry
+    """
+    for i in range(_TRANSPORT_RETRIES + 1):
+        try:
+            return await attempt()
+        except httpx.TransportError as e:
+            if i >= _TRANSPORT_RETRIES:
+                raise
+            logger.warning("MYAI %s 第 %d 次失敗（%s），%.0f 秒後重試",
+                           what, i + 1, _describe(e), _RETRY_PAUSE_SECONDS)
+            await asyncio.sleep(_RETRY_PAUSE_SECONDS)
+
+
 async def _session_request(do_fetch, is_valid):
     """ZH: 帶快取 cookie 送出請求；若被導回登入頁(is_valid=False) 才登入一次再抓。
            do_fetch(client)->Response、is_valid(Response)->bool。回最終 Response。
@@ -147,26 +203,30 @@ async def _session_request(do_fetch, is_valid):
         # (1) 先用快取 cookie 直接抓（多數同步不需登入）
         if _MYAI_COOKIES is not None:
             try:
-                resp = await do_fetch(client)
+                resp = await _with_retry(lambda: do_fetch(client), "快取 session 抓取")
                 if is_valid(resp):
                     _MYAI_COOKIES = client.cookies
                     _save_cookies(client.cookies)
                     return resp
-            except httpx.HTTPError:
-                pass  # 落到重新登入
+            except httpx.HTTPError as e:
+                # ZH: 落到重新登入 —— 但要留下痕跡：以前這裡靜靜 pass，
+                #     於是「cookie 還好好的、只是連線閃了一下」跟「cookie 過期」在日誌裡分不出來。
+                logger.info("MYAI 快取 session 抓取失敗（%s），改走登入", _describe(e))
         # (2) 沒 cookie 或已失效 → 登入一次再抓
-        try:
+        async def _login():
             await client.get(login_page)  # 讓伺服器發初始 cookie（無則略過）
-            await client.post(
+            return await client.post(
                 settings.MYAI_LOGIN_PATH,
                 data={"email": settings.MYAI_ADMIN_EMAIL, "password": settings.MYAI_ADMIN_PASSWORD},
             )
-        except httpx.HTTPError as e:
-            raise MyaiSyncError(f"登入請求失敗：{e}")
         try:
-            resp = await do_fetch(client)
+            await _with_retry(_login, "登入")
         except httpx.HTTPError as e:
-            raise MyaiSyncError(f"資料請求失敗：{e}")
+            raise MyaiSyncError(f"登入請求失敗：{_describe(e)}")
+        try:
+            resp = await _with_retry(lambda: do_fetch(client), "登入後抓取")
+        except httpx.HTTPError as e:
+            raise MyaiSyncError(f"資料請求失敗：{_describe(e)}")
         _MYAI_COOKIES = client.cookies
         _save_cookies(client.cookies)
         return resp
