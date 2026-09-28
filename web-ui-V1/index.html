@@ -13,7 +13,7 @@
 
     <link rel="stylesheet" href="tokens.css?v=ff9cecda">
     <link rel="stylesheet" href="styles.css?v=d4d21ce8">
-    <link rel="stylesheet" href="web.css?v=bd588ac0">
+    <link rel="stylesheet" href="web.css?v=42167837">
     <!-- ZH: 🔴 側欄狀態必須在**首次繪製之前**套用，否則每換一頁都會看到
              內容滑出去讓位（widget 的 JS 在 body 尾端才跑，那時已經畫過一次了）。
              這一段刻意內嵌而不是外部檔案 —— 外部檔案要等網路往返，
@@ -66,6 +66,12 @@
              第一次來的人得自己從 8 個選項裡挑一個 —— 那不是選擇，是負擔。
              現在只留三條主線，而且**講出先後**：1 → 2 → 3 由淺入深。
 
+         ZH: ⚠ v4.33 編號換成圖示（擁有者 2026-09-28）。順序改由**閱讀順序**
+             （桌面左→右、手機上→下）與桌面的箭頭表達 —— 原本的 1/2/3 是
+             順序最直接的載體，拿掉之後就只剩這兩個。
+             這在這裡可以接受：下面那段已經寫明，編號表達的是「建議從哪裡開始」，
+             不是「必須照順序做完」。
+
          ZH: 🔴 這等於把 v3.9 拿掉的「流程條」請回來一半 ——
              當初拿掉的理由是「流程條只講得出一條路，而平台有好幾條」
              （原文留在 git history）。這次不同的地方是：
@@ -82,19 +88,19 @@
         <h2 class="sr-only" id="lines-h" data-i18n="idx_lines_h">從哪裡開始</h2>
 
         <a class="line" href="myai.html" data-tour="ai">
-            <span class="line__n" aria-hidden="true">1</span>
+            <span class="line__n" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></span>
             <span class="line__t" data-i18n="grp_ai_t">體驗付費版 AI 工具</span>
             <span class="line__d" data-i18n="grp_ai_d">MYAI 平台，聊天與文書</span>
         </a>
         <span class="lines__arrow" aria-hidden="true">›</span>
         <a class="line" href="gpu.html" data-tour="train">
-            <span class="line__n" aria-hidden="true">2</span>
+            <span class="line__n" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="6" width="12" height="12" rx="2.5"/><path d="M10 3v3M14 3v3M10 18v3M14 18v3M3 10h3M3 14h3M18 10h3M18 14h3"/></svg></span>
             <span class="line__t" data-i18n="grp_go_t">體驗現有模型訓練</span>
             <span class="line__d" data-i18n="grp_go_d">從訓練 AI 辨識貓狗開始，約 20 分鐘</span>
         </a>
         <span class="lines__arrow" aria-hidden="true">›</span>
         <a class="line" href="lab.html" data-tour="lab">
-            <span class="line__n" aria-hidden="true">3</span>
+            <span class="line__n" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg></span>
             <span class="line__t" data-i18n="nav_lab">程式實驗室</span>
             <span class="line__d" data-i18n="step_lab_d">動手寫程式，建立並訓練自己的 AI 模型</span>
         </a>

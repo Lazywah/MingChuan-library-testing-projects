@@ -777,23 +777,28 @@ html.aibot-docked #aibot-fab { display: none; }
 /* ZH: focus 樣式不自己寫 —— styles.css:32 的全域 `:focus-visible` 已經給了
  *     box-shadow 的聚焦環。自己再寫一條只會多一個會漂掉的地方。 */
 
-/* ZH: 編號是**順序的主要載體** —— 箭頭在手機會不見（見下方斷點），
- *     編號不會。所以順序不能只靠箭頭表達。 */
-/* ZH: ⚠ 編號**不能**寫成 `color: var(--accent)` 的黃字 ——
+/* ZH: 圓章（v4.33 之前裡面是 1/2/3，現在是圖示）。
+ * ZH: ⚠ 內容**不能**寫成 `color: var(--accent)` 的黃字 ——
  *     tokens.css:41 記著那個顏色對白底只有 1.67 對比。
- *     做成「黃底深字」的圓章才是這組 token 的正確配對（--on-accent）。 */
+ *     做成「黃底深色內容」的圓章才是這組 token 的正確配對（--on-accent）。
+ * ZH: ⚠ 圖示比數字吃空間：28px 的章塞 16px 圖示只剩 6px 邊，線條會貼到圓邊。
+ *     所以章放大到 32px、圖示 20px（實測 375px 與字級 150% 都還在一行內）。
+ * ZH: ⚠ `flex: 0 0 auto` 是必要的 —— `.line` 是直排 flex，
+ *     沒有它的話這一格會被 `align-items: stretch` 拉成整列寬，
+ *     圓章變成一條黃色長條（寬度雖然寫死，高度仍會被壓）。 */
 .line__n {
     display: inline-flex;
+    flex: 0 0 auto;
     align-items: center;
     justify-content: center;
-    width: 1.75rem;
-    height: 1.75rem;
+    width: 2rem;
+    height: 2rem;
     border-radius: var(--radius-pill);
     background-color: var(--accent);
     color: var(--on-accent);
-    font-size: 0.875rem;
-    font-weight: 700;
 }
+/* ZH: 圖示用 currentColor，所以上面那個 `color` 同時決定圖示顏色。 */
+.line__n svg { width: 1.25rem; height: 1.25rem; display: block; }
 .line__t { font-weight: 700; }
 .line__d { font-size: 0.9375rem; color: var(--text-muted); }
 
