@@ -142,6 +142,12 @@
             a.className = 'topbar__brand';
             a.href = 'index.html';
             a.textContent = brand.textContent;
+            // ZH: 🔴 `data-i18n` 要一起搬。prefs.js 的換語言是掃 `[data-i18n]`
+            //     重寫 textContent —— 不搬的話，招牌會停在**開頁當下那個語言**，
+            //     按中／英切換整頁都變了就這一塊不動。
+            if (brand.hasAttribute('data-i18n')) {
+                a.setAttribute('data-i18n', brand.getAttribute('data-i18n'));
+            }
             brand.replaceWith(a);
         }
         var back = bar.querySelector('.topbar__back');

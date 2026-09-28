@@ -24,6 +24,10 @@
     global.I18N = {
         zh: {
             // ── 共用 ─────────────────────────────────────────────
+            // ZH: 左上角的招牌。中英文是**兩個正式名稱**，不是互相翻譯
+            //     （擁有者 2026-09-28）—— 所以不要自作主張把其中一邊改成
+            //     另一邊的直譯。
+            brand: '銘傳圖書館 AI 學習基地',
             nav_home: '首頁',
             nav_menu: '選單',
             myai_title: '體驗付費版 AI 工具 · MCU AI Base',
@@ -676,6 +680,7 @@
 
         en: {
             // ── Shared ───────────────────────────────────────────
+            brand: 'AI Learning Hub@MCU Lib',
             nav_home: 'Home',
             nav_menu: 'Menu',
             myai_title: 'Try the paid AI tools · MCU AI Base',
