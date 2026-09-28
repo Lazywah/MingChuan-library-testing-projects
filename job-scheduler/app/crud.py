@@ -22,7 +22,7 @@ EN: Modular design:
 """
 
 from sqlalchemy.orm import Session
-from sqlalchemy import desc, func
+from sqlalchemy import desc, func, or_
 from passlib.context import CryptContext
 from datetime import datetime, timedelta, timezone
 from typing import Optional, List
@@ -1634,6 +1634,18 @@ _VIEW_KEYS = {"platform", "myai"}
 #     反過來漏標一個該標的只是少一個提醒 —— 比亂標好。
 _GROUP_KEYS = {g["key"] for g in SETTING_GROUPS}
 
+# ZH: v4.34 MYAI 點數要分級的身分（擁有者 2026-09-28：學生 10000、老師/職員 20000）。
+# ZH: 🔴 **五個角色一個都不能少。** 漏掉一個的話那個身分會落到「找不到 key」，
+#     而找不到的處理是退回學生 —— 一個安靜的錯誤分級。
+#     所以這份清單與 ONBOARDING_FIELDS 的角色集合要一致（下方有自檢）。
+MYAI_CREDIT_ROLES = (
+    ("student", "學生",   "students"),
+    ("teacher", "老師",   "teachers"),
+    ("staff",   "職員",   "staff"),
+    ("guest",   "訪客",   "guests"),
+    ("admin",   "管理員", "admins"),
+)
+
 # ZH: v4.2 組內顯示順序（擁有者裁定 2026-09-02）：**上游在前、父子相鄰**。
 #     一個設定決定另一個「有沒有意義」時排前面（開關是最常見的上游）；
 #     節流/微調參數緊跟它隸屬的開關（例：登入通知信 → 其最短間隔）。
@@ -1641,12 +1653,12 @@ _GROUP_KEYS = {g["key"] for g in SETTING_GROUPS}
 # ZH: 沒列到的 key 排在該組最後（照 registry 順序）—— 新增旋鈕忘了列，
 #     只是排尾不會消失；列了不存在的 key 則在載入時就炸（見下方自檢）。
 SETTING_ORDER = {
-    "platform": ["sso_autocreate", "sso_verify_id_token", "gpu_features_enabled",
+    "platform": ["sso_autocreate", "max_accounts", "sso_verify_id_token", "gpu_features_enabled",
                  "lab_network_isolation",
                  "job_timeout_minutes", "max_jobs_per_user", "lab_gpu_max_minutes", "lab_archive_days",
                  "announcement_file_max_mb", "announcement_total_gb"],
-    "myai":     ["myai_autoprovision", "myai_initial_credit", "myai_init_pwd_days",
-                 "myai_monthly_topup_to", "myai_monthly_topup_day",
+    "myai":     ["myai_autoprovision", "myai_initial_credit", "myai_initial_credit_student", "myai_initial_credit_teacher", "myai_initial_credit_staff", "myai_initial_credit_guest", "myai_initial_credit_admin", "myai_init_pwd_days",
+                 "myai_monthly_topup_to", "myai_monthly_topup_student", "myai_monthly_topup_teacher", "myai_monthly_topup_staff", "myai_monthly_topup_guest", "myai_monthly_topup_admin", "myai_monthly_topup_day",
                  "myai_sync_interval_hours", "myai_active_poll_minutes",
                  "myai_usage_window_min"],
     "assistant": ["rag_chat_model", "rag_top_k", "rag_min_score", "rag_history_turns"],
@@ -1696,6 +1708,26 @@ SYSTEM_SETTINGS = {
                                  "default": lambda: 0, "min": 0, "max": 1,
                                  "label": "程式實驗室每人獨立網路(1=開, 0=關；只影響之後啟動的實驗室)",
                                  "label_en": "Give each code lab its own network (1 = on, 0 = off; affects labs started afterwards)"},
+    # ZH: v4.34 帳號總數上限（擁有者 2026-09-28，測試期間限制人數）。
+    #
+    # ZH: 🔴 **只擋自動建號，管理端建號永遠不受限**（擁有者裁定）。
+    #     也就是說它是一道防爆閘門，不是配額 —— 管理者自己把人數加到超過上限
+    #     是允許的，而超過之後自助那條路就一直關著（滿了就是滿了）。
+    #
+    # ZH: 算的是**啟用中且未到期**的帳號，所有身分都算（含管理員與臨時帳號）。
+    #     停用與已到期的不算 —— 它們不會用掉 MYAI 點數，也登不進來，
+    #     把它們算進去只會讓管理者為了建一個新帳號而去刪舊資料。
+    #
+    # ZH: ⚠ 與 sso_autocreate 是**兩道不同的閘門**，不要合併：
+    #     那個是「開不開放自助建號」，這個是「開放但有名額」。
+    #     兩個都會把人擋在登入頁，但訊息不一樣（一個是「請找管理員」，
+    #     一個是「名額滿了」）—— 使用者要知道他該不該再試。
+    "max_accounts":             {"zero_means": "off", "starred": True, "group": "platform", "type": "int",
+                                 "default": lambda: 0, "min": 0, "max": None,
+                                 "note": lambda db: "目前 %d 個啟用中的帳號" % active_account_count(db),
+                                 "note_en": lambda db: "%d accounts active right now" % active_account_count(db),
+                                 "label": "帳號總數上限(0=不限；只擋自動建號，管理端建號不受限)",
+                                 "label_en": "Total account cap (0 = unlimited; blocks self-service sign-ups only, never admin-created accounts)"},
     "sso_verify_id_token":      {"group": "platform", "type": "int",
                                  "default": lambda: 1, "min": 0, "max": 1,
                                  "label": "驗證 SSO 的 id_token 簽章(1=開, 0=暫時關閉；關閉時每次登入都會在 log 留紀錄)",
@@ -1816,6 +1848,53 @@ SYSTEM_SETTINGS = {
     "rag_chat_model":           {"starred": True, "group": "assistant", "type": "choice", "default": lambda: settings.RAG_CHAT_MODEL,             "min": None, "max": None, "label": "小基回應用的模型", "label_en": "Model the assistant replies with"},
 }
 
+# ==============================================================================
+# ZH: v4.34 MYAI 點數分級 —— 兩個總旋鈕各長出五格（擁有者 2026-09-28）
+# ==============================================================================
+# ZH: 為什麼用迴圈長而不是手寫十行：兩族的欄位必須一模一樣（型別、範圍、依賴、
+#     預設來源）。手寫的話改了其中一族而忘了另一族，症狀是「初始發得對、
+#     每月補的不對」—— 而那要等到下個月 1 號才看得出來。
+#
+# ZH: 🔴 **`default_from` 讓沒設過的角色跟著總旋鈕走。**
+#     所以既有部署完全不受影響（全部沿用現在那一個值），
+#     而且「這個角色沒特別設定」與「這個角色設成 0」是**分得開的兩件事**——
+#     前者是空值（畫面顯示預設），後者是明確覆寫成 0（這個身分不發）。
+#     用「0 = 沿用預設」就分不開了，於是「老師不發點」這個要求表達不出來。
+#
+# ZH: ⚠ 總旋鈕仍然是總開關：設成 0 就**整個功能關閉**，不看分級。
+#     （見 myai_credit_for。）不然「先全部關掉」要清五格。
+for _role, _zh, _en in MYAI_CREDIT_ROLES:
+    SYSTEM_SETTINGS["myai_initial_credit_%s" % _role] = {
+        "depends_on": "myai_initial_credit", "default_from": "myai_initial_credit",
+        "group": "myai", "type": "int", "default": lambda: 0, "min": 0, "max": None,
+        "label": "新帳號初始點數－%s" % _zh,
+        "label_en": "Initial credit - %s" % _en,
+    }
+    SYSTEM_SETTINGS["myai_monthly_topup_%s" % _role] = {
+        "depends_on": "myai_monthly_topup_to", "default_from": "myai_monthly_topup_to",
+        "group": "myai", "type": "int", "default": lambda: 0, "min": 0, "max": None,
+        "label": "每月補到的點數－%s" % _zh,
+        "label_en": "Monthly top-up target - %s" % _en,
+    }
+
+
+def _setting_default(db: Session, spec: dict):
+    """ZH: 一個旋鈕的預設值。`default_from` 的話跟著另一個旋鈕的**生效值**走。
+
+    ZH: 這是分級旋鈕能「沒設過就照總旋鈕」的關鍵。`spec["default"]()` 拿不到 db，
+        所以另開一個入口，而不是把 db 灌進每一個 lambda（那要改四十幾行，
+        而且絕大多數旋鈕根本不需要）。
+
+    ZH: 🔴 **不接受鏈狀**（A 的預設來自 B、B 的預設又來自 C）——
+        下方有自檢擋住。允許鏈狀就要處理循環，而這裡沒有一個用得到它的情境。
+
+    @node job-scheduler/app/crud.py::_setting_default
+    """
+    src = spec.get("default_from")
+    if src:
+        return get_setting(db, src)
+    return spec["default"]()
+
 
 _RE_SETTING_EMAIL = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 
@@ -1917,7 +1996,7 @@ def get_setting(db: Session, key: str):
     @node job-scheduler/app/crud.py::get_setting
     """
     spec = SYSTEM_SETTINGS[key]
-    default = spec["default"]()
+    default = _setting_default(db, spec)
     raw = get_system_config(db, key, "")
     if raw is None or raw == "":
         return default
@@ -1938,6 +2017,76 @@ def get_setting(db: Session, key: str):
     except (ValueError, TypeError):
         return default
     return _clamp_setting(v, spec["min"], spec["max"])
+
+
+# ==============================================================================
+# ZH: v4.34 帳號總數上限（擁有者 2026-09-28）
+# ==============================================================================
+
+def active_account_count(db: Session) -> int:
+    """ZH: 現在**真的算數**的帳號數：啟用中、而且沒過期。所有身分都算。
+
+    ZH: 為什麼不是 `count(User)`：停用與已到期的帳號登不進來、也不會用掉
+        MYAI 點數。把它們算進上限的話，管理者為了開一個新帳號得先去刪舊資料 ——
+        而那些資料正是稽核要用的東西。
+
+    @node job-scheduler/app/crud.py::active_account_count
+    """
+    now = datetime.now(timezone.utc)
+    return (db.query(models.User)
+              .filter(models.User.is_active == 1)
+              .filter(or_(models.User.expires_at.is_(None),
+                          models.User.expires_at > now))
+              .count())
+
+
+def account_cap_state(db: Session) -> dict:
+    """ZH: 帳號名額的現況 —— {"cap", "used", "full"}。`cap` 0 = 不限。
+
+    ZH: 🔴 `full` 用 `>=` 不是 `>`：上限 50 的意思是「第 51 個不准進來」，
+        而不是「第 52 個」。差一個聽起來沒差，但這種旋鈕設出來就是要卡在
+        整數邊界上的，off-by-one 會在正好滿額的那一天才被發現。
+
+    ZH: ⚠ 這支**只回報**，不決定誰被擋 —— 擋不擋是呼叫端的政策
+        （擁有者裁定：只擋自助建號，管理端永遠放行）。
+
+    @node job-scheduler/app/crud.py::account_cap_state
+    """
+    cap = int(get_setting(db, "max_accounts") or 0)
+    used = active_account_count(db)
+    return {"cap": cap, "used": used, "full": cap > 0 and used >= cap}
+
+
+def myai_credit_for(db: Session, role: str, kind: str = "initial") -> int:
+    """ZH: 這個身分實際會拿到的 MYAI 點數。`kind`: "initial"（新帳號）/ "topup"（每月）。
+
+    ZH: 兩層：
+          1. **總旋鈕 <= 0 就是整個功能關閉**，不看分級 ——
+             「先全部停掉」是一個動作，不是清五格。
+          2. 否則看這個身分自己那一格（沒設過的話 default_from 會讓它
+             等於總旋鈕的值，所以既有部署的行為完全不變）。
+
+    ZH: 🔴 認不得的身分**退回學生**（往低的方向猜）。不 raise 是刻意的：
+        這支在發點數的路徑上，丟例外會讓「帳號已經建好」看起來像失敗。
+
+    @node job-scheduler/app/crud.py::myai_credit_for
+    """
+    master = "myai_initial_credit" if kind == "initial" else "myai_monthly_topup_to"
+    try:
+        if int(get_setting(db, master) or 0) <= 0:
+            return 0
+    except (TypeError, ValueError):
+        return 0
+    known = {r for r, _z, _e in MYAI_CREDIT_ROLES}
+    r = (role or "").strip().lower()
+    if r not in known:
+        logger.info("MYAI 點數分級：不認得的身分 %r，照學生算", role)
+        r = "student"
+    key = ("myai_initial_credit_%s" if kind == "initial" else "myai_monthly_topup_%s") % r
+    try:
+        return max(0, int(get_setting(db, key) or 0))
+    except (TypeError, ValueError):
+        return 0
 
 
 def rag_model_choices(db: Session) -> list:
@@ -2045,6 +2194,16 @@ _bad_dep = [k for k, v in SYSTEM_SETTINGS.items()
 if _bad_dep:
     raise RuntimeError("這些旋鈕的 depends_on 指到不存在的 key：%s" % _bad_dep)
 
+# ZH: v4.34 —— default_from 也要指得到，而且**不准鏈狀**（見 _setting_default）。
+_bad_from = [k for k, v in SYSTEM_SETTINGS.items()
+             if v.get("default_from") and v["default_from"] not in SYSTEM_SETTINGS]
+if _bad_from:
+    raise RuntimeError("這些旋鈕的 default_from 指到不存在的 key：%s" % _bad_from)
+_chained = [k for k, v in SYSTEM_SETTINGS.items()
+            if v.get("default_from") and SYSTEM_SETTINGS[v["default_from"]].get("default_from")]
+if _chained:
+    raise RuntimeError("default_from 不可以鏈狀（%s 的來源自己也有 default_from）" % _chained)
+
 _bad_view = [g["key"] for g in SETTING_GROUPS if g.get("view") not in _VIEW_KEYS]
 if _bad_view:
     raise RuntimeError(
@@ -2073,7 +2232,7 @@ def get_all_settings(db: Session) -> list:
             "label_en": spec["label_en"],
             "type": spec["type"],
             "value": get_setting(db, key),
-            "default": spec["default"](),
+            "default": _setting_default(db, spec),
             "min": spec["min"],
             "max": spec["max"],
             "overridden": raw not in (None, ""),
@@ -2086,6 +2245,12 @@ def get_all_settings(db: Session) -> list:
             #     由後端給是刻意的 —— 前端自己維護一份「哪些 key 是信箱清單」的話，
             #     新增旋鈕時一定會忘記更新，而那個欄位只會安靜地退回普通文字框。
             "text_kind": spec.get("text_kind"),
+            # ZH: v4.34 —— 一行動態說明（例：帳號上限旁邊的「目前幾個帳號」）。
+            #     🔴 上限這種旋鈕**看不到現況就沒辦法設**：管理者要嘛設得太低
+            #     （設完當場就滿了、自助登入全部被擋，而他不會馬上發現），
+            #     要嘛設得太高（等於沒設）。
+            "note": spec["note"](db) if spec.get("note") else None,
+            "note_en": spec["note_en"](db) if spec.get("note_en") else None,
         }
         # ZH: 下拉型的旋鈕要把選項一起送 —— 前端不該自己去猜有哪些值。
         if spec["type"] == "choice":
@@ -2659,6 +2824,14 @@ ONBOARDING_FIELDS = {
     "admin":   "unit",
     "guest":   None,
 }
+
+# ZH: v4.34 —— 分級清單漏一個角色 = 那個身分安靜地拿到學生的點數。
+_missing_role = [r for r in ONBOARDING_FIELDS
+                 if r not in {x for x, _z, _e in MYAI_CREDIT_ROLES}]
+if _missing_role:
+    raise RuntimeError(
+        "MYAI_CREDIT_ROLES 漏了這些角色：%s"
+        "（漏掉的話那個身分會安靜地落到學生的點數）" % _missing_role)
 
 
 # ZH: v3.8 可以被一次性解鎖的欄位。

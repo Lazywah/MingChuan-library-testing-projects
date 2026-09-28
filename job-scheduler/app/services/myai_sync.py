@@ -1240,9 +1240,31 @@ def _taipei_day(now=None) -> int:
     return (now or datetime.now(timezone.utc)).astimezone(TZ_TAIPEI).day
 
 
-def topup_targets(db: Session, target: int) -> list[dict]:
+def _role_of(db: Session, acc) -> str:
+    """ZH: 這筆綁定背後那位平台使用者的身分。查不到就回 "student"（往低的猜）。
+
+    ZH: 🔴 **查詢失敗也回 student，不往上丟。** 這支在發點數的路徑上：
+        丟例外的話呼叫端只會看到「沒有發放」，而回報的理由是 disabled ——
+        看起來像「管理者把點數設成 0」，實際上是查不到人。
+        退回學生等於退回 v4.34 以前的行為（大家同一個值），是最保守的降級。
+
+    @node job-scheduler/app/services/myai_sync.py::_role_of
+    """
+    try:
+        u = db.query(models.User).filter(models.User.id == acc.user_id).first()
+    except Exception as e:  # noqa: BLE001
+        logger.warning("MYAI 點數分級：查不到綁定對應的使用者（%s），照學生算", e)
+        return "student"
+    return (u.role if u and u.role else "student")
+
+
+def topup_targets(db: Session, target: int = None) -> list[dict]:
     """
     ZH: 算出這次要補誰、各補多少。回 [{"email", "points", "remark"}]。
+
+    ZH: v4.34 `target=None`（每月補點走這條）＝ **每個人補到他身分該有的水位**
+        （crud.myai_credit_for）。給了 `target` 就是所有人補到同一個值 ——
+        那是管理者手動補齊時明確打出來的數字，不該被分級改寫。
 
     ZH: 只收**已綁定平台帳號**的人 —— 廠商後台還有我們的管理帳號與其他來源的
         帳號，補到那些身上是把點數送給不相干的人。綁定是「這是我們的學生」
@@ -1278,11 +1300,18 @@ def topup_targets(db: Session, target: int) -> list[dict]:
         if source and email.lower() == source:
             logger.info("MYAI 每月補點跳過轉出帳號本身（%s）", email)
             continue
+        # ZH: v4.34 分級：手動補齊給的 target 蓋過一切；每月補點則看身分。
+        want = target if target is not None else crud.myai_credit_for(
+            db, _role_of(db, acc), "topup")
+        if want <= 0:
+            # ZH: 這個身分設成不補 —— 不是錯誤，安靜跳過（log 留一行免得有人以為漏了）。
+            logger.info("MYAI 每月補點跳過 %s：這個身分的水位設成 0", email)
+            continue
         have = int(row.points or 0)
-        if have >= target:
+        if have >= want:
             continue
         rows.append({"email": email,
-                     "points": target - have,
+                     "points": want - have,
                      "remark": "monthly-topup"})
     return rows
 
@@ -1326,15 +1355,17 @@ async def monthly_topup(db: Session, force: bool = False) -> dict:
         logger.error("MYAI 每月補點中止：同步失敗，不拿舊點數算差額（%s）", e)
         return {"status": "sync_failed", "error": str(e)[:200]}
 
-    rows = topup_targets(db, target)
+    # ZH: v4.34 —— **不傳 target**：每個人補到他身分該有的水位（分級）。
+    #     上面那個 target 仍然是總開關（<=0 就整個關閉），但不再是大家的水位。
+    rows = topup_targets(db)
     if not rows:
         crud.set_system_config(db, TOPUP_MONTH_KEY, month)
-        logger.info("MYAI 每月補點：沒有人低於 %d 點，本月完成", target)
+        logger.info("MYAI 每月補點：沒有人低於自己身分的水位，本月完成")
         return {"status": "nobody_below", "month": month, "target": target}
 
     total = sum(r["points"] for r in rows)
-    logger.warning("MYAI 每月補點 %s：%d 人、合計 %d 點（補到 %d）",
-                   month, len(rows), total, target)
+    logger.warning("MYAI 每月補點 %s：%d 人、合計 %d 點（依身分分級）",
+                   month, len(rows), total)
 
     # ZH: 先標月份再送出。順序是刻意的 —— 標記失敗了就別送（還沒動到點數），
     #     但送出後才標記的話，中間掛掉就會重送。兩種錯法裡這一種安全得多：
@@ -1756,8 +1787,10 @@ async def grant_initial_credit(db: Session, acc, email: str) -> dict:
     if acc.credit_granted_at is not None:
         return {"granted": False, "reason": "already_granted",
                 "points": acc.credit_granted_pts}
+    # ZH: v4.34 依身分分級（擁有者 2026-09-28）。查不到人就照學生算 ——
+    #     見 crud.myai_credit_for，這條路上不丟例外。
     try:
-        points = int(crud.get_setting(db, "myai_initial_credit") or 0)
+        points = crud.myai_credit_for(db, _role_of(db, acc), "initial")
     except Exception:  # noqa: BLE001
         points = 0
     if points <= 0:

@@ -145,17 +145,36 @@ $('forgot').addEventListener('click', (ev) => {
 //     🔴 要說得出**是什麼情況**與**下一步找誰** —— 只寫「登入失敗」的話，
 //     人會一直重按那顆按鈕，然後來問管理員為什麼平台壞了。
 // ZH: 訊息顯示完就把參數從網址拿掉，重新整理不會再跳一次。
-(function ssoError() {
-    const code = new URLSearchParams(location.search).get('sso_error');
-    if (!code) return;
+// ZH: 🔴 記在變數裡而不是每次重讀網址 —— 顯示完就把參數拿掉了（見下方），
+//     不記的話語言一切換這段訊息就消失。
+let SSO_ERROR = new URLSearchParams(location.search).get('sso_error');
+
+function ssoErrorText(code) {
+    // ZH: v4.34 —— 名額滿了與「還沒開通」是**兩件不同的事**，訊息要分開。
+    //     講成同一句的話，名額滿的人會去找管理員說「幫我開通」，
+    //     而管理員手動建號不受上限限制 —— 他一建就成功，
+    //     於是那道上限在沒有人注意到的情況下失效。
+    if (code === 'no_account') {
+        return T('login_no_account', '這個帳號還沒有被建立。目前是測試階段，暫不開放自行建立帳號 —— 請聯絡圖書館 AI 基地管理者為你開通。');
+    }
+    if (code === 'account_full') {
+        return T('login_account_full', '目前的帳號名額已經滿了，暫時無法自動開通。請聯絡圖書館 AI 基地管理者。');
+    }
+    return T('login_failed', '登入失敗');
+}
+
+function renderSsoError() {
+    if (!SSO_ERROR) return;
     // ZH: 用自己的元素，不要借 #sso-note —— loadProviders() 回來會把它覆蓋掉。
     const box = $('sso-error');
-    if (box) {
-        box.textContent = code === 'no_account'
-            ? T('login_no_account', '這個帳號還沒有被建立。目前是測試階段，暫不開放自行建立帳號 —— 請聯絡圖書館 AI 基地管理者為你開通。')
-            : T('login_failed', '登入失敗');
-        box.hidden = false;
-    }
+    if (!box) return;
+    box.textContent = ssoErrorText(SSO_ERROR);
+    box.hidden = false;
+}
+
+(function ssoError() {
+    if (!SSO_ERROR) return;
+    renderSsoError();
     const url = new URL(location.href);
     url.searchParams.delete('sso_error');
     history.replaceState({}, '', url.toString());
@@ -168,4 +187,7 @@ loadProviders();
 // ── 語言切換時重繪 ───────────────────────────────────────────────────
 // ZH: prefs.js 的字典掃描只換得掉 `data-i18n` 元素；本頁 JS 產生的內容要自己重跑。
 //     只在語言**改變**時觸發（不是每次套用），所以不會在載入時多跑一次。
-document.addEventListener('prefs:langchanged', () => { loadProviders(); });
+// ZH: 🔴 被回絕的訊息也要重繪。這段文字是**給看不懂中文的人**看的最後一道說明 ——
+//     它偏偏是整頁唯一不跟著語言切換的東西（v4.34 加名額訊息時才發現，
+//     既有的 login_no_account 也一樣）。
+document.addEventListener('prefs:langchanged', () => { loadProviders(); renderSsoError(); });

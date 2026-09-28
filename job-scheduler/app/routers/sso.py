@@ -95,6 +95,19 @@ def _finalize_sso_login(db: Session, user_info: dict, request: Request = None) -
             logger.warning("SSO 登入被回絕（自動建號已關閉）：username=%s email=%s",
                            username, user_info.get("email"))
             return RedirectResponse(url="/V1/login.html?sso_error=no_account")
+        # ══════════════════════════════════════════════════════════════
+        # ZH: v4.34 —— 帳號總數上限（擁有者 2026-09-28，測試期間限制人數）
+        # ══════════════════════════════════════════════════════════════
+        # ZH: 🔴 與上面那道**分開回絕、訊息不一樣**：自動建號關閉是「請找管理員
+        #     開通」，名額滿了是「現在沒有名額」。合成一句的話，名額滿的人會跑去
+        #     找管理員，而管理員手動建號**不受這道閘門限制** —— 他一建就成功，
+        #     於是沒有人知道上限已經滿了。
+        # ZH: ⚠ 管理端建號刻意不檢查（擁有者裁定）。這是防爆閘門不是配額。
+        _cap = crud.account_cap_state(db)
+        if _cap["full"]:
+            logger.warning("SSO 登入被回絕（帳號已達上限 %d/%d）：username=%s",
+                           _cap["used"], _cap["cap"], username)
+            return RedirectResponse(url="/V1/login.html?sso_error=account_full")
         # 首次登入：建新 SSO 帳號
         # ZH: v4.2 身分優先問 **Alma**（圖書館 API，擁有者裁定 2026-09-02 保守版）：
         #       user_group 在已知對照表上 → 直接定角色（老師/職員/學生分得出來），

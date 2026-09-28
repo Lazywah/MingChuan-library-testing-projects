@@ -644,9 +644,15 @@
                     + '" aria-label="' + esc(T('pf_star_why',
                     '這個值使用者看得到，或者改之前應該先公告。')) + '">\u2605</span> '
                 : '';
+            // ZH: v4.34 —— 後端給的一行動態說明（例：帳號上限旁邊的「目前幾個帳號」）。
+            //     🔴 上限這種旋鈕**看不到現況就沒辦法設**。字串整句由後端產生
+            //     （中英兩份），前端不拼接 —— 拼接的話數字與量詞的語序一改就錯。
+            var note = s2.note
+                ? '<div class="footnote">' + esc(labelOf({ label: s2.note, label_en: s2.note_en })) + '</div>'
+                : '';
             var name = '<td>' + star + esc(labelOf(s2))
                 + (s2.overridden ? ' <span class="adm-pill adm-pill--temp">'
-                    + esc(T('pf_overridden', '已覆寫')) + '</span>' : '') + '</td>';
+                    + esc(T('pf_overridden', '已覆寫')) + '</span>' : '') + note + '</td>';
 
             var defTxt = isToggle(s2) ? swLabel(String(s2.default) === '1')
                 : (isHalf(s2) && Number(s2.default) === 0) ? swLabel(false)

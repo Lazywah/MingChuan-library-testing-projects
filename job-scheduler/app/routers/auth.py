@@ -82,6 +82,20 @@ async def register(request: Request, user: schemas.UserCreate, db: Session = Dep
             detail="ZH: 電子郵件已被註冊 | EN: Email already registered"
         )
 
+    # ZH: v4.34 —— 帳號總數上限。這一支是**自助**註冊，所以受限
+    #     （管理端建號走 /admin/users，那條路不受限，是擁有者的裁定）。
+    # ZH: 回 403 不是 400：這不是「你填錯了」，是「現在不開放」——
+    #     換個帳號名重試不會成功，訊息要講得出這件事。
+    cap = crud.account_cap_state(db)
+    if cap["full"]:
+        logger.warning("註冊被回絕（帳號已達上限 %d/%d）：%s",
+                       cap["used"], cap["cap"], user.username)
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="ZH: 帳號數量已達上限，暫時不開放註冊，請聯絡管理者 | "
+                   "EN: The account limit has been reached; registration is closed for now"
+        )
+
     db_user = crud.create_user(db=db, user=user)
     logger.info(f"ZH: 新使用者註冊成功: {user.username} | EN: New user registered: {user.username}")
     return db_user
@@ -139,6 +153,11 @@ async def login(
                     #     而這裡是側門：把 mock_mode 打開（除錯時很常做）就繞過去了。
                     #     擋下來時什麼都不做，落到下面那個 401（與密碼打錯同一句話）。
                     logger.warning("mock 登入被回絕（自動建號已關閉）：%s", form_data.username)
+                    break
+                if not user and crud.account_cap_state(db)["full"]:
+                    # ZH: v4.34 —— 側門也要看名額。理由與上面的自動建號閘門相同：
+                    #     mock_mode 打開（除錯時很常做）就繞過去的話，上限等於沒設。
+                    logger.warning("mock 登入被回絕（帳號已達上限）：%s", form_data.username)
                     break
                 if not user:
                     user = crud.create_sso_user(
