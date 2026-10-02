@@ -5,6 +5,8 @@
  * ZH: 這一頁只問三件事（哪一種、資料、幾輪），其餘由平台決定。會調 batch_size 的人
  *     本來就該去程式實驗室；不會調的人看到那些欄位只會卡住。
  * ZH: v4.19 —— 「哪一種」有三個：圖片分類、表格資料分類、文字分類（見 TASKS）。
+ * ZH: v4.36 —— 「怎麼開始」也有三種：先體驗看看／用自己的資料／用自己的程式（見 MODE_SHOWS）。
+ *     同一張表單，差別只在哪些欄位給人看、哪些已經替他決定好。
  *
  * ZH: 失敗要說得出「為什麼」。這條路上有四個地方會失敗，症狀完全不同：
  *       上傳（檔案太大／型別不對）、送單（沒算力／配額不足）、
@@ -32,6 +34,12 @@ const viewJobId = QS.get('job');
 let reuseId = QS.get('dataset');
 let reuseName = null;
 let picked = null;        // ZH: 使用者選的檔案（尚未上傳）
+// ZH: v4.36 現在選的檔案是不是「這一種任務的範例」。體驗模式靠它判斷要不要重抓範例
+//     （換了種類、或從別的方式切過來而手上是他自己的檔）。null＝不是範例。
+let pickedIsSampleFor = null;
+let mode = 'normal';      // ZH: v4.36 easy / normal / hard
+let taskSegOpen = false;  // ZH: 體驗模式下按了「換一種範例」才把種類分頁打開
+let LAST_JOB = null;      // ZH: 語言切換時重畫結果下方的說明用
 // ZH: v3.6 使用者自帶的訓練程式（原始碼字串，不是檔案 —— 隨送單一起走）
 let scriptSource = null;
 let jobId = null;
@@ -55,6 +63,13 @@ const TASKS = {
         sampleName: () => T('tr_sample_name_image', '範例_貓狗圖片.zip'),
         keys: { sub1: 'tr_sub1', fmtP: 'tr_fmt_p', tree: 'tr_tree', fmtNote: 'tr_fmt_note' },
         epochs: 10,
+        // ZH: v4.36 體驗模式的三行。時間是實測（2026-10-02 正式環境的完成紀錄：
+        //     送出到完成中位數 30 秒、最長 46 秒），不是估計。
+        easyWhat: () => T('tr_easy_what_image', '分辨照片裡是貓還是狗'),
+        easyData: () => T('tr_easy_data_image', '平台準備好的範例：500 張貓、500 張狗'),
+        easyTime: () => T('tr_easy_time_image', '練 10 輪，通常不到一分鐘'),
+        // ZH: 程式實驗室裡做同樣事情的範例（檔名不翻譯）。
+        learnFile: 'sample_cats_dogs.py', learnData: 'cat_dog_data/',
     },
     tabular_classification: {
         sub1:     () => T('tr_sub1_tabular', '上傳一份表格（CSV），其中一欄是答案，平台幫你訓練一個會預測那一欄的模型。'),
@@ -66,6 +81,10 @@ const TASKS = {
         keys: { sub1: 'tr_sub1_tabular', fmtP: 'tr_fmt_p_tabular', tree: 'tr_tree_tabular', fmtNote: 'tr_fmt_note_tabular' },
         // ZH: 表格小、每輪只有幾十步，10 輪常常還沒收斂；30 輪也只要幾秒。
         epochs: 30,
+        easyWhat: () => T('tr_easy_what_tabular', '預測學生會不會及格'),
+        easyData: () => T('tr_easy_data_tabular', '平台準備好的範例：320 位學生的讀書時數、出席率與成績'),
+        easyTime: () => T('tr_easy_time_tabular', '練 30 輪，大約十幾秒'),
+        learnFile: 'sample_tabular.py', learnData: 'students.csv',
     },
     text_classification: {
         sub1:     () => T('tr_sub1_text', '上傳一份句子與答案的表格（CSV），平台幫你訓練一個會分類句子的模型。'),
@@ -76,6 +95,10 @@ const TASKS = {
         sampleName: () => T('tr_sample_name_text', '範例_餐廳評論情緒.zip'),
         keys: { sub1: 'tr_sub1_text', fmtP: 'tr_fmt_p_text', tree: 'tr_tree_text', fmtNote: 'tr_fmt_note_text' },
         epochs: 20,
+        easyWhat: () => T('tr_easy_what_text', '判斷餐廳評論是正面還是負面'),
+        easyData: () => T('tr_easy_data_text', '平台準備好的範例：240 則餐廳評論'),
+        easyTime: () => T('tr_easy_time_text', '練 20 輪，大約十幾秒'),
+        learnFile: 'sample_text.py', learnData: 'reviews.csv',
     },
 };
 let task = 'image_classification';
@@ -96,6 +119,11 @@ function setTask(t) {
         $(id).textContent = c[key]();
     });
     $('epochs').value = c.epochs;
+    // ZH: v4.36 副標題依方式而定（體驗／自己的程式各有一句），蓋掉上面那一行。
+    renderSub();
+    // ZH: 體驗模式換了種類 → 範例也要換成那一種的。
+    if (mode === 'easy') { renderEasy(); loadSample(); }
+    syncUrl();
 }
 $('task-seg').addEventListener('click', (e) => {
     const b = e.target.closest('button[data-task]');
@@ -107,22 +135,140 @@ if (TASKS[QS.get('task')]) setTask(QS.get('task'));
 
 // ZH: 範例資料：抓靜態 zip 回來當成使用者選的檔案，之後走**同一條**上傳路。
 //     檔名用翻譯過的名字（會變成任務名與「我的資料集」裡的名字）。
-$('sample').addEventListener('click', async () => {
+// ZH: v4.36 抽成 loadSample()：體驗模式一進來就自動抓（接管者：「用平台準備好的範例」
+//     那顆鈕不夠明顯 —— 對初學者來說那正是主要動作，所以乾脆替他按）。
+async function loadSample() {
+    const want = task;
+    if (pickedIsSampleFor === want && picked) return;      // ZH: 手上已經是這一種的範例
     const btn = $('sample');
-    const original = btn.textContent;
     btn.disabled = true;
     btn.textContent = T('tr_sample_loading', '正在取得範例…');
+    if (mode === 'easy') setGo({ label: T('tr_sample_loading', '正在取得範例…'), enabled: false });
     try {
-        const r = await fetch(`samples/${task}.zip`, { cache: 'force-cache' });
+        const r = await fetch(`samples/${want}.zip`, { cache: 'force-cache' });
         if (!r.ok) throw new Error(`HTTP ${r.status}`);
         const blob = await r.blob();
-        choose(new File([blob], TASKS[task].sampleName(), { type: 'application/zip' }));
+        // ZH: 抓的時候他又換了一種 —— 丟掉這份；新的那一次會自己抓。
+        if (want !== task) return;
+        choose(new File([blob], TASKS[want].sampleName(), { type: 'application/zip' }), want);
     } catch {
         setNote(T('tr_sample_fail', '範例暫時拿不到，請稍後再試，或上傳自己的資料。'));
+        refreshGo();
     } finally {
         btn.disabled = false;
-        btn.textContent = original;
+        // ZH: 不用「抓之前的文字」還原 —— 兩次抓取重疊時那個值會是「正在取得範例…」。
+        btn.textContent = T('tr_sample', '用平台準備好的範例');
     }
+}
+$('sample').addEventListener('click', () => { pickedIsSampleFor = null; loadSample(); });
+
+// ══════════════════════════════════════════════════════════════════════
+// ZH: v4.36 三種方式（擁有者 2026-10-02，接管者回饋 2026-09-30）
+// ══════════════════════════════════════════════════════════════════════
+// ZH: 每個區塊在哪幾種方式出現。**這張表是唯一的真相**——不要在別處另外 hidden 這些元素，
+//     不然切換方式時兩邊的規則會打架（某一塊切過去就再也出不來）。
+//       easy   —— 只剩「要訓練什麼／資料／要多久」三行和開始鈕；範例自動載入
+//       normal —— 原本的完整表單，少了自帶程式
+//       hard   —— 不分種類（跑的是他自己的程式），自帶程式一進來就展開
+const MODES = ['easy', 'normal', 'hard'];
+const MODE_SHOWS = {
+    'mode-seg':      ['normal', 'hard'],
+    'task-seg':      ['normal'],          // ZH: 體驗模式按了「換一種範例」才打開（見 setMode）
+    'easy-box':      ['easy'],
+    'fmt-fold':      ['normal'],
+    'drop':          ['normal', 'hard'],
+    'sample-row':    ['normal', 'hard'],
+    'epochs-field':  ['normal', 'hard'],
+    'own-fold':      ['hard'],
+    'to-normal-row': ['easy'],
+};
+
+function setMode(m) {
+    if (!MODES.includes(m)) m = 'normal';
+    mode = m;
+    $('mode-seg').querySelectorAll('button').forEach((b) =>
+        b.setAttribute('aria-pressed', String(b.dataset.mode === m)));
+    Object.entries(MODE_SHOWS).forEach(([id, modes]) => {
+        const el = $(id);
+        if (el) el.hidden = !modes.includes(m);
+    });
+    if (m === 'easy' && taskSegOpen) $('task-seg').hidden = false;
+    if (m === 'hard') $('own-code').open = true;
+    renderSub();
+    // ZH: 先算開始鈕，再抓範例 —— 反過來的話「正在取得範例…」會馬上被蓋回「開始訓練」。
+    refreshGo();
+    if (m === 'easy') { renderEasy(); loadSample(); }
+    syncUrl();
+}
+
+// ZH: 網址跟著換（replaceState，不多一筆歷史）—— 重新整理時停在同一種方式與種類。
+//     **方式與種類兩邊都要呼叫**：只在換方式時寫的話，體驗模式按「換一種範例」換成表格，
+//     網址還停在圖片，一重新整理就跳回貓狗（2026-10-02 實測抓到）。
+//     看結果（?job=）與重用資料集（?dataset=）兩條路不動網址：那裡的 id 才是重點。
+function syncUrl() {
+    if (viewJobId || reuseId) return;
+    try {
+        const u = new URL(location.href);
+        u.searchParams.set('task', task);
+        u.searchParams.set('mode', mode);
+        history.replaceState(null, '', u.toString());
+    } catch { /* ZH: 改不了網址不影響這一頁 */ }
+}
+
+// ZH: 副標題。體驗與自己的程式各有一句；用自己的資料沿用種類那一句。
+//     同時改 data-i18n：prefs.js 換語言時是重掃 data-i18n。
+function renderSub() {
+    const el = $('tr-sub1');
+    if (mode === 'easy') {
+        el.setAttribute('data-i18n', 'tr_sub1_easy');
+        el.textContent = T('tr_sub1_easy', '用平台準備好的範例，按一下「開始訓練」就好。');
+    } else if (mode === 'hard') {
+        el.setAttribute('data-i18n', 'tr_sub1_hard');
+        el.textContent = T('tr_sub1_hard', '上傳你的訓練程式和一份資料，平台用學校的 GPU 幫你跑。');
+    } else {
+        const c = TASKS[task];
+        el.setAttribute('data-i18n', c.keys.sub1);
+        el.textContent = c.sub1();
+    }
+}
+
+function renderEasy() {
+    const c = TASKS[task];
+    $('easy-what').textContent = c.easyWhat();
+    $('easy-data').textContent = c.easyData();
+    $('easy-time').textContent = c.easyTime() + T('tr_easy_queue', '（GPU 忙的時候要先排隊）');
+}
+
+// ZH: 開始鈕能不能按，**只在這裡算**。訓練進行中不碰（那時的字是「訓練中…」）。
+function refreshGo() {
+    if (jobId && !finished) return;
+    const ready = !!(picked || reuseId) && (mode !== 'hard' || !!scriptSource);
+    setGo({ label: T('tr_go', '開始訓練'), enabled: ready });
+}
+
+// ZH: 結果下方「想看看剛才那支程式？」—— 只有內建程式訓練、而且完成的單才出現。
+//     純說明，不放連結（擁有者 2026-10-02）。檔名不翻譯。
+function renderLearnCode(j) {
+    LAST_JOB = j;
+    const box = $('learn-code');
+    const c = j && TASKS[j.task];
+    if (!c || j.status !== 'completed') { box.hidden = true; return; }
+    $('learn-d').textContent = T('tr_learn_d',
+        '剛才幫你訓練的是平台內建的程式。程式實驗室裡有一份做同樣事情的範例：到首頁的「程式實驗室」，按「啟動並開啟實驗室」，左邊 projects 資料夾裡的 {f} 就是（資料是旁邊的 {d}）。在檔案上按右鍵 →「Run on GPU」就會在 GPU 上跑一次；可以改裡面的數字（例如 EPOCHS），再跑看看結果有什麼不同。')
+        .replace('{f}', c.learnFile).replace('{d}', c.learnData);
+    box.hidden = false;
+}
+
+$('mode-seg').addEventListener('click', (e) => {
+    const b = e.target.closest('button[data-mode]');
+    if (b) setMode(b.dataset.mode);
+});
+$('to-normal').addEventListener('click', () => setMode('normal'));
+$('easy-change').addEventListener('click', () => {
+    taskSegOpen = true;
+    $('task-seg').hidden = false;
+    const first = $('task-seg').querySelector('button[aria-pressed="true"]');
+    if (first) first.focus();
 });
 
 // ── 主要動作的樣貌 ───────────────────────────────────────────────────
@@ -146,21 +292,23 @@ function human(bytes) {
 }
 
 // ── 選檔 ─────────────────────────────────────────────────────────────
-function choose(file) {
+function choose(file, sampleTask = null) {
     if (!file) return;
     if (!/\.zip$/i.test(file.name)) {
         // ZH: 在**選檔當下**就講，不要等按了開始訓練、上傳完才退回來。
         setNote(T('tr_not_zip', '這不是 zip 檔。請把整個資料夾壓成 .zip 再上傳。'));
         picked = null;
-        setGo({ label: T('tr_go', '開始訓練'), enabled: false });
+        pickedIsSampleFor = null;
+        refreshGo();
         return;
     }
     picked = file;
+    pickedIsSampleFor = sampleTask;
     setNote('');
     $('drop-main').textContent = file.name;
     $('drop-hint').textContent = human(file.size);
     $('drop').classList.add('drop--has');
-    setGo({ label: T('tr_go', '開始訓練'), enabled: true });
+    refreshGo();
 }
 
 // ── 自帶程式 ─────────────────────────────────────────────────────────
@@ -188,6 +336,7 @@ $('codefile').addEventListener('change', async (e) => {
     $('code-main').textContent = f.name;
     $('code-sub').textContent = `${Math.max(1, Math.round(scriptSource.length / 1024))} KB`;
     $('code-drop').classList.add('drop--has');
+    refreshGo();
 });
 
 $('drop').addEventListener('click', () => $('file').click());
@@ -213,6 +362,7 @@ $('drop').addEventListener('drop', (e) => choose(e.dataTransfer.files[0]));
 // ── 送出 ─────────────────────────────────────────────────────────────
 $('go').addEventListener('click', async () => {
     if (!picked && !reuseId) return;
+    if (mode === 'hard' && !scriptSource) return;
     setNote('');
 
     // ZH: 重用既有資料集 —— 檔案已經在伺服器上，這裡什麼都不用傳。
@@ -261,7 +411,9 @@ async function submitJob(datasetRef, jobName) {
                 job_name: jobName,
                 model_name: 'resnet18',
                 // ZH: 有自帶程式就送出去；後端據此**不會**套用內建腳本。
-                ...(scriptSource ? { script_source: scriptSource } : {}),
+                // ZH: v4.36 只有「用自己的程式」才送 —— 他在那邊選了 .py 又切回別的方式的話，
+                //     不能默默跑他的程式而不是他現在選的那一種。
+                ...(mode === 'hard' && scriptSource ? { script_source: scriptSource } : {}),
                 // ZH: 種類寫明。不寫也會落到預設，但寫出來的話**日後多一種任務時
                 //     這張舊單仍然指向同一支腳本**，不會跟著預設值漂走。
                 config: { epochs: epochs, task: task },
@@ -286,6 +438,7 @@ async function submitJob(datasetRef, jobName) {
         //     不然新的一輪還在排隊，畫面上卻掛著上一輪的模型。
         $('run-actions').hidden = true;
         $('model-help').hidden = true;
+        $('learn-code').hidden = true;
     } catch (e) {
         setNote(T('tr_submit_fail', '送不出去') + `（${clean(e.message)}）`);
         setGo({ label: T('tr_go', '開始訓練'), enabled: true });
@@ -336,7 +489,12 @@ async function initReuse() {
 //     ?dataset=<id> 用既有資料集訓練（從「我的資料集」進來）
 //     什麼都沒帶     一般的上傳流程
 if (viewJobId) initViewMode();
-else initReuse();
+else {
+    initReuse();
+    // ZH: v4.36 方式：入口頁帶 ?mode= 過來；重用資料集一律「用自己的資料」（資料已經有了）；
+    //     其餘（「我的訓練」的「開始一個新的訓練」等）沒帶＝用自己的資料。
+    setMode(reuseId ? 'normal' : (QS.get('mode') || 'normal'));
+}
 
 
 // ── 只看既有任務 ─────────────────────────────────────────────────────
@@ -525,12 +683,20 @@ function renderModelHelp(j) {
 function finish(j) {
     if (j.status === 'completed') {
         setBar(100);
-        // ZH: 只看模式下那張卡是收起來的，不要去動裡面的按鈕。
-        if (!viewJobId) setGo({ label: T('tr_again', '再訓練一次'), enabled: true });
         picked = null;
+        pickedIsSampleFor = null;
         $('drop').classList.remove('drop--has');
         $('drop-main').textContent = T('tr_drop', '把 zip 拖到這裡，或點一下選檔案');
         $('drop-hint').textContent = T('tr_drop_sub', '只收 .zip，每人上限 2 GB');
+        // ZH: 只看模式下那張卡是收起來的，不要去動裡面的按鈕。
+        // ZH: 🔴 v4.36 修：原本這裡一律 enabled:true，但上面剛把 picked 清掉 ——
+        //     「再訓練一次」按下去在 click 第一行就 return，**什麼都不會發生**。
+        //     現在：體驗模式自動把範例抓回來；其他方式要等他重新選檔（重用資料集的不受影響）。
+        if (!viewJobId) {
+            setGo({ label: T('tr_again', '再訓練一次'), enabled: !!reuseId });
+            if (mode === 'easy') loadSample();
+        }
+        renderLearnCode(j);
         // ZH: v3.6 —— 模型檔已經由 worker 傳回服務層，可以下載了。
         //     `has_model` 由後端說了算，前端**不要自己猜**（訓練成功 ≠ 檔案送到了：
         //     傳輸可能失敗，那時模型還在運算主機上）。
@@ -736,6 +902,8 @@ document.addEventListener('prefs:langchanged', () => {
     }
     setGo({ label: $('go').disabled && jobId ? T('tr_running', '訓練中…') : T('tr_go', '開始訓練'),
             enabled: !$('go').disabled });
+    if (mode === 'easy') renderEasy();
+    if (LAST_JOB) renderLearnCode(LAST_JOB);
     if (jobId) poll();
 });
 

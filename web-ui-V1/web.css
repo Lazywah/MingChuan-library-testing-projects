@@ -740,6 +740,28 @@ html.aibot-docked #aibot-fab { display: none; }
  * ========================================================================== */
 .page--home { max-width: 1160px; }
 
+/* ZH: v4.36 入口頁的三種方式（gpu.html）。沿用 .gcard 的卡片長相，由淺到深**往下排**：
+ *     順序本身就是分級，不靠顏色分主次（接管者回饋：誰是主要取決於你是誰）。
+ *     主卡是置中排版，卡片內文改回靠左 —— 兩行說明置中讀起來像標語。 */
+.modes { display: grid; gap: var(--space-2); margin-top: var(--space-4); text-align: left; }
+
+/* ZH: v4.36 訓練頁的體驗模式：三行「已經替你決定好的事」。 */
+.easy {
+    margin: var(--space-4) auto 0;
+    max-width: 30rem;
+    padding: var(--space-3) var(--space-4);
+    border: 1px solid var(--hairline);
+    border-radius: var(--radius-md);
+    background-color: var(--surface-2);
+    text-align: left;
+}
+.easy__row { display: flex; gap: var(--space-3); margin: var(--space-1) 0; }
+.easy__k { flex: 0 0 6.5em; color: var(--text-muted); font-size: 0.875rem; }
+.easy__v { flex: 1 1 auto; min-width: 0; font-weight: 600; color: var(--text-strong); }
+.easy__row:last-child { margin-top: var(--space-2); }
+.to-normal { margin-top: var(--space-3); }
+.learn { margin-top: var(--space-4); text-align: left; }
+
 /* ZH: v4.36 訓練結果卡裡的模型檔說明（下載鈕下面）。程式碼區沿用 .diag，只限制寬度不溢出。 */
 .model-help { margin-top: var(--space-3); text-align: left; }
 .model-help .diag { overflow-x: auto; white-space: pre; }

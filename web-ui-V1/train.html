@@ -11,7 +11,7 @@
 
     <link rel="stylesheet" href="tokens.css?v=ff9cecda">
     <link rel="stylesheet" href="styles.css?v=d4d21ce8">
-    <link rel="stylesheet" href="web.css?v=862d2942">
+    <link rel="stylesheet" href="web.css?v=46fe8ca6">
     <!-- ZH: 🔴 側欄狀態必須在**首次繪製之前**套用，否則每換一頁都會看到
              內容滑出去讓位（widget 的 JS 在 body 尾端才跑，那時已經畫過一次了）。
              這一段刻意內嵌而不是外部檔案 —— 外部檔案要等網路往返，
@@ -43,6 +43,20 @@
             <span data-i18n="tr_sub2">結果會顯示在這一頁。</span>
         </p>
 
+        <!-- ZH: v4.36 三種方式（擁有者 2026-10-02，接管者回饋 2026-09-30）。
+                 先體驗看看（easy）／用自己的資料（normal）／用自己的程式（hard），
+                 從入口頁帶 ?mode= 過來；沒帶＝normal（「我的訓練」那幾顆按鈕的意思就是這個）。
+                 ZH: 🔴 **不分流程，分預設值**：三種方式是同一張表單，差別只在哪些欄位
+                 要給人看、哪些已經替他決定好。這樣有興趣的人可以就地切換、不必重來，
+                 也不會長出第二套要一起維護的畫面。哪個欄位在哪種方式出現，見 train.js 的 MODE_SHOWS。
+                 ZH: 體驗模式不畫這一排 —— 那群人看到「方式」兩個字就會開始猶豫；
+                 他們要換的話，底下有一行「我想自己調」。 -->
+        <div class="seg" role="group" aria-label="開始的方式" data-i18n-aria="tr_mode_aria" id="mode-seg" hidden>
+            <button type="button" data-mode="easy" aria-pressed="false" data-i18n="tr_mode_easy">先體驗看看</button>
+            <button type="button" data-mode="normal" aria-pressed="true" data-i18n="tr_mode_normal">用自己的資料</button>
+            <button type="button" data-mode="hard" aria-pressed="false" data-i18n="tr_mode_hard">用自己的程式</button>
+        </div>
+
         <!-- ZH: v4.19 —— 三種內建任務。放在最上面，因為它決定下面每一段文案
                  （壓縮檔長什麼樣、失敗的常見原因、範例是哪一包）。
                  選項的順序是「最直覺 → 最不直覺」：圖片一看就懂，文字要先想一下
@@ -53,10 +67,21 @@
             <button type="button" data-task="text_classification" aria-pressed="false" data-i18n="tr_task_text">文字分類</button>
         </div>
 
+        <!-- ZH: v4.36 體驗模式：把「要決定的事」換成「已經替你決定好的事」。
+                 接管者原話：對什麼都不懂的使用者來說，壓縮檔格式、要練幾輪、
+                 自己的訓練程式「這些選項他都無法理解，他只是想要體驗看看」。
+                 三行的值由 train.js 的 renderEasy 依種類填。 -->
+        <div class="easy" id="easy-box" hidden>
+            <p class="easy__row"><span class="easy__k" data-i18n="tr_easy_what_k">要訓練的模型</span><span class="easy__v" id="easy-what"></span></p>
+            <p class="easy__row"><span class="easy__k" data-i18n="tr_easy_data_k">資料</span><span class="easy__v" id="easy-data"></span></p>
+            <p class="easy__row"><span class="easy__k" data-i18n="tr_easy_time_k">要多久</span><span class="easy__v" id="easy-time"></span></p>
+            <p class="easy__row"><button class="btn btn--minor" type="button" id="easy-change" data-i18n="tr_easy_change">換一種範例</button></p>
+        </div>
+
         <!-- ZH: 版面要求講在「選檔案之前」。等他選完才說格式不對，
                  是把可以避免的失敗留到最後一刻。
                  ⚠ 這一段的文案跟著上面的種類換（train.js setTask），HTML 裡是圖片那一版。 -->
-        <div class="fold">
+        <div class="fold" id="fmt-fold">
             <details>
                 <summary class="fold__summary" data-i18n="tr_fmt_title">壓縮檔要長什麼樣子？</summary>
                 <div class="fold__body">
@@ -96,16 +121,16 @@
             <span class="field__label" for="epochs" data-i18n="tr_epochs">要練幾輪</span>
             <input class="field__input" id="epochs" type="number" min="1" max="50" value="10"
                    inputmode="numeric">
-            <span class="field__label" data-i18n="tr_epochs_hint">練越多輪越久，也不一定越準（範例資料 10 輪大約 20 分鐘）。不確定就用預設值。</span>
+            <span class="field__label" data-i18n="tr_epochs_hint">練越多輪越久，也不一定越準（範例資料 10 輪通常不到一分鐘，GPU 忙的時候要先排隊）。不確定就用預設值。</span>
             <!-- ZH: 逾時那一句由 train.js 的 renderTimeoutNote 填（分鐘數是
                      管理端可即時改的設定，寫死會過時）。⚠ 只有這一份，
                      2026-09-24 曾經差點又加一個同樣的 span。 -->
             <span class="field__label" id="timeout-note" hidden></span>
         </label>
 
-        <!-- ZH: 自帶程式。摺疊起來——這一頁是給不會寫程式的人看的，
-                 會寫的人點一下就找得到，不會寫的人完全不受打擾。 -->
-        <div class="fold">
+        <!-- ZH: 自帶程式。v4.36 起只在「用自己的程式」這種方式出現，而且一進來就展開 ——
+                 選了這種方式的人就是要它，再讓他點一次摺疊是多餘的。 -->
+        <div class="fold" id="own-fold">
             <details id="own-code">
                 <summary class="fold__summary" data-i18n="tr_own_title">我要用自己的訓練程式</summary>
                 <div class="fold__body">
@@ -129,6 +154,11 @@
         </div>
 
         <button class="btn btn--primary" id="go" type="button" disabled data-i18n="tr_go">開始訓練</button>
+        <!-- ZH: v4.36 體驗模式的出口：**就地**展開成完整表單（不換頁、已選的種類保留）。
+                 接管者擔心的是「選項太多看不懂」，不是「不准看」—— 想動手的人一次點擊就到。 -->
+        <p class="to-normal" id="to-normal-row" hidden>
+            <button class="btn btn--minor" type="button" id="to-normal" data-i18n="tr_to_normal">我想自己調（用自己的資料、改輪數、用自己的程式）</button>
+        </p>
         <div class="handoff" id="note" hidden></div>
     </section>
 
@@ -161,6 +191,17 @@
                  「看不出下面還有東西」，所以把總數講出來。文案由 train.js 填。 -->
         <p class="footnote" id="epochs-note" hidden></p>
 
+        <!-- ZH: v4.36 原本入口頁的「學習程式碼」按鈕，改成這一段**純說明**（擁有者 2026-10-02：
+                 不要連結，讓有興趣的人知道怎麼自己開）。放在結果下面是刻意的：
+                 剛跑完、正想知道「剛才發生了什麼」的時候最有用 —— 接管者原話是
+                 「我訓練完了…我不知道剛才做了什麼以及接下來能做什麼」。
+                 只有內建程式訓練的單才出現（自帶程式的人看的就是他自己的程式）。 -->
+        <section class="panel learn" id="learn-code" hidden aria-labelledby="learn-t">
+            <h2 class="chart__title" id="learn-t" data-i18n="tr_learn_t">想看看剛才那支程式？</h2>
+            <p id="learn-d"></p>
+            <p class="footnote" data-i18n="tr_learn_note">直接按右上角的 ▶ 會失敗 —— 實驗室本身沒有裝訓練用的套件，要用「Run on GPU」送到 GPU 上跑。</p>
+        </section>
+
         <details class="fold" id="log-fold" hidden>
             <summary class="fold__summary" data-i18n="tr_log">訓練紀錄（出問題時貼這個給管理者）</summary>
             <pre class="diag" id="log"></pre>
@@ -169,25 +210,24 @@
 
     <nav class="minor">
         <a href="gpu.html" data-i18n="tr_back">回到上一頁</a>
-        <a href="lab.html" data-i18n="tr_to_lab">改用程式實驗室自己寫</a>
     </nav>
 
 </main>
 
 <script src="tz.js?v=2e214a8b"></script>
 <script src="docs-entry.js?v=131ee7af"></script>
-<script src="i18n.js?v=8e4aa033"></script>
+<script src="i18n.js?v=e353b326"></script>
 <script src="prefs.js?v=e71609e5"></script>
 <!-- ZH: 小基（浮動助手）。客服模式公開，登入頁也放 —— 設計文件的使用者需求是「不會用這個平台時想直接問」。 -->
 <script src="assistant-widget.js?v=74e3c4b6"></script>
 <script src="chrome.js?v=9368462b"></script>
-<script src="train.js?v=68429a13"></script>
+<script src="train.js?v=cd6c8899"></script>
 <!-- ZH: 到訪人次。每一頁都載（這是「網站」的計數，不是首頁的），一個工作階段只送一次；
          只有放了 [data-visits] 的頁面（登入頁、首頁）會顯示數字。 -->
 <script src="visits.js"></script>
 <!-- ZH: 引導導覽。每一頁都載是因為它**跨頁**（首頁→MYAI→訓練進度→使用量→問題回報），
          換頁之後要接著演。它自己會等 chrome.js 的 `chrome:ready`，
          沒登入就什麼都不做。 -->
-<script src="tour.js?v=8bbcc246"></script>
+<script src="tour.js?v=56225431"></script>
 </body>
 </html>

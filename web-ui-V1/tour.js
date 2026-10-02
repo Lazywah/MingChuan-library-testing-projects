@@ -108,14 +108,14 @@
         { id: 'train', page: 'index.html', target: '[data-tour="train"]', gpu: true,
           t: ['tour_train_t', '第二條：跑一次真的訓練'],
           d: ['tour_train_d',
-              '不用準備自己的資料，也不用寫程式：選一個現成的範例（例如分辨貓和狗），'
-              + '按下去就會排進 GPU 佇列，大約 20 分鐘跑完，過程中看得到進度。'] },
+              '分三種方式開始：「先體驗看看」用我們準備好的範例，按一下就開始，通常一分鐘內跑完；也'
+              + '可以用自己的資料，或用自己寫的程式。訓練完，結果下面會告訴你怎麼到程式實驗室看看剛才那支程式。'] },
 
         { id: 'lab', page: 'index.html', target: '[data-tour="lab"]', gpu: true,
           t: ['tour_lab_t', '第三條：自己寫程式'],
           d: ['tour_lab_d',
-              '瀏覽器裡就有一套 VS Code，檔案會留在你自己的空間裡。'
-              + '寫好的程式可以直接送去 GPU 訓練，不必自己準備環境。'] },
+              '瀏覽器裡就有一套 VS Code，檔案會留在你自己的'
+              + '空間裡。裡面已經放好三種範例程式（貓狗、表格、文字），在檔案上按右鍵「Run on GPU」就能送去 GPU 跑。'] },
 
         { id: 'ai', page: 'index.html', target: '[data-tour="ai"]', click: true,
           t: ['tour_ai_t', '先從第一條開始'],
