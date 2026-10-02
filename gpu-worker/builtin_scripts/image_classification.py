@@ -53,6 +53,20 @@ def metric(**kv) -> None:
     print(METRIC_PREFIX + json.dumps(kv, ensure_ascii=False), flush=True)
 
 
+# ZH: v4.36 —— 「模型判斷錯的那幾張」（接管者回饋 2026-09-30 ①）。
+# ZH: 最多列幾張：這一行會走 log 回到服務層，結果頁也只畫得下這麼多縮圖。
+MISTAKES_MAX = 10
+
+
+def clip(s, n: int = 160) -> str:
+    """ZH: 壓成一行並截斷（換行與連續空白收成一個空白）。
+
+    @node gpu-worker/builtin_scripts/image_classification.py::clip
+    """
+    s = " ".join(str(s).split())
+    return s if len(s) <= n else s[: n - 1] + "…"
+
+
 def fail(msg: str, hint: str = "") -> None:
     """ZH: 明確失敗。訊息是給**使用者**看的（會出現在任務日誌裡），所以講人話。
 
@@ -185,6 +199,7 @@ def main() -> int:
 
     os.makedirs(OUTPUT_DIR, exist_ok=True)
     best_acc = 0.0
+    best_state = None      # ZH: 最佳那一輪的權重（＝下載到的那個），列「判斷錯的」要用它
     history = []
     t0 = time.time()
 
@@ -218,6 +233,7 @@ def main() -> int:
 
         if acc >= best_acc:
             best_acc = acc
+            best_state = {k: v.detach().clone() for k, v in model.state_dict().items()}
             torch.save({"state_dict": model.state_dict(),
                         "classes": classes,
                         "img_size": IMG_SIZE,
@@ -238,6 +254,30 @@ def main() -> int:
     }
     with open(os.path.join(OUTPUT_DIR, "result.json"), "w", encoding="utf-8") as f:
         json.dump(result, f, ensure_ascii=False, indent=2)
+
+    # ZH: v4.36 判斷錯的那幾張圖（接管者回饋 2026-09-30 ①）。用**最佳那一輪**算（＝下載到的模型）。
+    # ZH: 路徑寫成「相對於 DATASET_DIR」——worker 是把 zip **原樣**解壓進去的，
+    #     所以這就是 zip 裡的成員名；服務層的 /jobs/{id}/val-image 靠它從原本的 zip 把圖拿出來。
+    #     （相對於 root 不行：外面多包一層資料夾時 root 會往下找，路徑就對不上 zip 了。）
+    # ZH: val_loader 是 shuffle=False，順序與 val_set.indices 一致。
+    if best_state is not None:
+        model.load_state_dict(best_state)
+    model.eval()
+    preds = []
+    with torch.no_grad():
+        for x, _y in val_loader:
+            preds += model(x.to(device)).argmax(1).tolist()
+    items, n_wrong = [], 0
+    for k, idx in enumerate(val_set.indices):
+        img_path, truth = full.samples[idx]
+        if preds[k] == truth:
+            continue
+        n_wrong += 1
+        if len(items) < MISTAKES_MAX:
+            rel = os.path.relpath(img_path, DATASET_DIR).replace(os.sep, "/")
+            items.append({"path": rel, "text": clip(os.path.basename(img_path)),
+                          "truth": classes[truth], "pred": classes[preds[k]]})
+    metric(kind="mistakes", checked=n_val, wrong=n_wrong, items=items)
 
     # ZH: 不到一分鐘就寫秒——「花了 0.0 分鐘」看起來像壞掉了。
     took = f"{elapsed:.0f} 秒" if elapsed < 60 else f"{elapsed / 60:.1f} 分鐘"

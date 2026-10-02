@@ -761,6 +761,37 @@ html.aibot-docked #aibot-fab { display: none; }
 .easy__row:last-child { margin-top: var(--space-2); }
 .to-normal { margin-top: var(--space-3); }
 .learn { margin-top: var(--space-4); text-align: left; }
+/* ZH: v4.36 模型判斷錯的。資料欄可能很長（一整列表格或一整句），要能折行；
+ *     外層可以橫向捲，免得手機上把整頁撐寬。 */
+.mis-wrap { overflow-x: auto; }
+.mis td:first-child { word-break: break-word; min-width: 12em; }
+/* ZH: v4.36 上傳一張圖片試試看。預覽圖在左、判斷結果在右；手機上照樣左右排（圖只有 120px）。 */
+.try { margin-top: var(--space-4); text-align: left; }
+.try__out { display: flex; gap: var(--space-4); align-items: flex-start; margin-top: var(--space-3); }
+.try__img {
+    flex: 0 0 auto;
+    width: 120px;
+    height: 120px;
+    object-fit: cover;
+    border-radius: var(--radius-md);
+    background-color: var(--surface-2);
+}
+.try__res { flex: 1 1 auto; min-width: 0; }
+.try__label { font-weight: 700; color: var(--text-strong); margin: 0 0 var(--space-2); }
+.try__row { display: flex; align-items: center; gap: var(--space-2); margin: var(--space-1) 0; }
+.try__k { flex: 0 0 6em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.try__bar { flex: 1 1 auto; height: 10px; border-radius: var(--radius-pill); background-color: var(--surface-2); overflow: hidden; }
+.try__bar > span { display: block; height: 100%; background-color: var(--accent); }
+.try__v { flex: 0 0 3em; text-align: right; font-variant-numeric: tabular-nums; }
+.mis__img {
+    display: block;
+    width: 72px;
+    height: 72px;
+    object-fit: cover;
+    border-radius: var(--radius-sm);
+    margin-bottom: var(--space-1);
+    background-color: var(--surface-2);
+}
 
 /* ZH: v4.36 訓練結果卡裡的模型檔說明（下載鈕下面）。程式碼區沿用 .diag，只限制寬度不溢出。 */
 .model-help { margin-top: var(--space-3); text-align: left; }

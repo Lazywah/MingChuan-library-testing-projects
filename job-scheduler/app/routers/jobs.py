@@ -24,8 +24,8 @@ EN: Modular design:
 ==============================================================================
 """
 
-from fastapi import APIRouter, Depends, HTTPException, status, Query
-from fastapi.responses import StreamingResponse, FileResponse
+from fastapi import APIRouter, Depends, HTTPException, status, Query, UploadFile, File
+from fastapi.responses import StreamingResponse, FileResponse, Response
 from fastapi.concurrency import run_in_threadpool
 from sqlalchemy import func
 from sqlalchemy.orm import Session
@@ -632,6 +632,175 @@ async def stream_job_logs(
 # ZH: GET /{job_id}/model - 下載訓練出來的模型檔
 # EN: GET /{job_id}/model - Download the trained model file
 # ==============================================================================
+
+# ==============================================================================
+# ZH: v4.36 「模型判斷錯的」那幾張圖（接管者回饋 2026-09-30 ①）
+# ==============================================================================
+# ZH: 圖片分類的內建腳本訓練完會回報驗證資料裡判錯的圖（kind="mistakes"，
+#     items[].path 是相對於資料集根目錄的路徑 ＝ zip 裡的成員名，因為 worker 是原樣解壓）。
+#     結果頁要把那幾張圖畫出來，圖在使用者上傳的那個 zip 裡 —— 這支負責拿出來。
+# ZH: 🔴 **只給這張單自己回報過的那幾個路徑**。不檢查的話這支就變成
+#     「讀任意 zip 成員」的入口；雖然 zip 是使用者自己的，但端點的能力不該比用途大。
+# ZH: 權限沿用本檔既有的規則（學生只能碰自己的單，教師／管理員可看全部）。
+_VAL_IMAGE_TYPES = {".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".png": "image/png",
+                    ".gif": "image/gif", ".bmp": "image/bmp", ".webp": "image/webp"}
+# ZH: 一張圖的上限。訓練資料裡偶爾會有好幾 MB 的原圖；結果頁只畫 96px，
+#     超過就不給（前端退回只顯示檔名），不要為了縮圖把 8 MB 傳到手機上。
+_VAL_IMAGE_MAX_BYTES = 8 * 1024 * 1024
+
+
+def reported_mistake_paths(job) -> set:
+    """ZH: 這張單自己回報過的「判斷錯的圖」路徑集合。指標壞掉就回空集合（＝全部拒絕）。
+
+    @node job-scheduler/app/routers/jobs.py::reported_mistake_paths
+    """
+    raw = getattr(job, "metrics", None)
+    try:
+        ms = json.loads(raw) if isinstance(raw, str) else (raw or [])
+    except (ValueError, TypeError):
+        return set()
+    out = set()
+    for m in ms if isinstance(ms, list) else []:
+        if isinstance(m, dict) and m.get("kind") == "mistakes":
+            for it in m.get("items") or []:
+                if isinstance(it, dict) and isinstance(it.get("path"), str):
+                    out.add(it["path"])
+    return out
+
+
+@router.get("/{job_id}/val-image")
+def get_validation_image(
+    job_id: str,
+    path: str = Query(..., max_length=512),
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    ZH: 取這張單「模型判斷錯的」其中一張圖（從使用者上傳的資料集 zip 裡拿）。
+
+    ZH: 回應碼分得開，前端據此決定要不要退回只顯示檔名：
+          404 —— 不是這張單回報過的路徑／zip 裡沒有這個檔
+          410 —— 資料集已經被刪掉了（正常會發生：使用者自己刪、或逾保留期）
+          413 / 415 —— 太大、或不是瀏覽器畫得出來的格式
+
+    @node job-scheduler/app/routers/jobs.py::get_validation_image
+    """
+    import zipfile
+    job = crud.get_job(db, job_id=job_id)
+    if not job:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,
+                            detail="ZH: 找不到任務 | EN: Job not found")
+    if current_user.role == "student" and job.user_id != current_user.id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,
+                            detail="ZH: 無權限查看此任務 | EN: Not authorized to view this job")
+    if path not in reported_mistake_paths(job):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,
+                            detail="ZH: 這張圖不在這次訓練回報的清單裡 | EN: Not a reported image")
+    ctype = _VAL_IMAGE_TYPES.get(os.path.splitext(path)[1].lower())
+    if not ctype:
+        raise HTTPException(status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
+                            detail="ZH: 這種圖片格式瀏覽器畫不出來 | EN: Unsupported image type")
+    zp = job.dataset_path
+    if not zp or not os.path.isfile(zp):
+        raise HTTPException(status_code=status.HTTP_410_GONE,
+                            detail="ZH: 這次訓練用的資料集已經被刪掉了 | EN: The dataset is gone")
+    try:
+        with zipfile.ZipFile(zp) as zf:
+            try:
+                info = zf.getinfo(path)
+            except KeyError:
+                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,
+                                    detail="ZH: 資料集裡找不到這張圖 | EN: Image not in dataset")
+            if info.file_size > _VAL_IMAGE_MAX_BYTES:
+                raise HTTPException(status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+                                    detail="ZH: 這張圖太大，不顯示縮圖 | EN: Image too large")
+            data = zf.read(info)
+    except zipfile.BadZipFile:
+        raise HTTPException(status_code=status.HTTP_410_GONE,
+                            detail="ZH: 資料集檔案壞了 | EN: The dataset file is damaged")
+    # ZH: nosniff —— 內容是使用者上傳的，不要讓瀏覽器自己猜成 HTML。
+    return Response(content=data, media_type=ctype,
+                    headers={"Cache-Control": "private, max-age=3600",
+                             "X-Content-Type-Options": "nosniff"})
+
+
+# ==============================================================================
+# ZH: v4.36 「上傳一張圖片試試看」（接管者回饋 2026-09-30 ①；擁有者選 (a)：服務層 CPU 推論）
+# ==============================================================================
+# ZH: 頻率限制**依使用者**，不依 IP —— 平台在 Docker 後面，所有人的來源 IP 都是同一個閘道
+#     （nginx.conf 的說明），用 slowapi 的 IP 限制等於全站共用一個額度。
+#     放在記憶體裡就好：重啟會歸零，但這只是防止有人連按，不是計費。
+_TRY_WINDOW_SECONDS = 600
+_TRY_MAX_PER_WINDOW = 30
+_try_hits: Dict[str, list] = {}
+
+
+def _try_rate_ok(user_id: str) -> bool:
+    """ZH: 這個人十分鐘內還能不能再試一次。能的話順便記一筆。
+
+    @node job-scheduler/app/routers/jobs.py::_try_rate_ok
+    """
+    import time
+    now = time.monotonic()
+    hits = [t for t in _try_hits.get(user_id, []) if now - t < _TRY_WINDOW_SECONDS]
+    if len(hits) >= _TRY_MAX_PER_WINDOW:
+        _try_hits[user_id] = hits
+        return False
+    hits.append(now)
+    _try_hits[user_id] = hits
+    return True
+
+
+@router.post("/{job_id}/try")
+def try_job_model(
+    job_id: str,
+    file: UploadFile = File(...),
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    ZH: 上傳一張圖，用這張單訓練出來的模型判斷它是哪一類。
+
+    ZH: 🔴 只開放**內建程式訓練的圖片模型**（見 services/inference.py 檔頭）：
+        自帶程式的單（builtin_task_for 回 None）一律 409，不去載入他的模型檔。
+
+    @node job-scheduler/app/routers/jobs.py::try_job_model
+    """
+    from ..services import inference
+    job = crud.get_job(db, job_id=job_id)
+    if not job:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,
+                            detail="ZH: 找不到任務 | EN: Job not found")
+    if current_user.role == "student" and job.user_id != current_user.id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,
+                            detail="ZH: 無權限查看此任務 | EN: Not authorized to view this job")
+    if crud.builtin_task_for(job) != "image_classification":
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="ZH: 只有平台內建程式訓練的圖片分類模型可以這樣試 | "
+                   "EN: Only image models trained by the built-in program can be tried here")
+    if job.status != "completed" or not job.artifact_bytes:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,
+                            detail="ZH: 這張任務沒有可用的模型 | EN: This job has no model to try")
+    path = worker_router.artifact_path(job_id)
+    if not os.path.isfile(path):
+        raise HTTPException(status_code=status.HTTP_410_GONE,
+                            detail="ZH: 模型檔已不在伺服器上（可能已逾保留期）| "
+                                   "EN: The model file is no longer on the server")
+    if not _try_rate_ok(current_user.id):
+        raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                            detail="ZH: 試太多次了，休息幾分鐘再試 | EN: Too many tries - wait a few minutes")
+
+    # ZH: 多讀 1 byte 判斷是不是超過上限，不把整個超大檔讀進記憶體。
+    data = file.file.read(inference.MAX_IMAGE_BYTES + 1)
+    try:
+        return inference.predict_image(path, data)
+    except inference.InferenceBusy:
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                            detail="ZH: 現在有其他人在試，等幾秒再按一次 | EN: Busy - try again in a few seconds")
+    except inference.InferenceRejected as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
 
 @router.get("/{job_id}/model")
 def download_job_model(

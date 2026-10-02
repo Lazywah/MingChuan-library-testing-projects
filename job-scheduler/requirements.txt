@@ -47,3 +47,11 @@ openpyxl==3.1.5
 #     Pillow is python-pptx's image backend (reserved for cover/icon use)
 python-pptx==1.0.2
 Pillow>=10.4.0
+
+# ZH: v4.36 「上傳一張圖片試試看」—— 服務層用 CPU 推論（services/inference.py）。
+#     版本與訓練映像 aibase/pytorch 相同（2.7.0）：不同版的 torch 讀別版存的權重
+#     通常也行，但這裡不要賭 —— 判斷結果靜靜變差是查不出來的那種錯。
+#     只裝 CPU 版（約 200 MB；CUDA 版要好幾 GB，服務層用不到 GPU）。
+--extra-index-url https://download.pytorch.org/whl/cpu
+torch==2.7.0+cpu
+torchvision==0.22.0+cpu

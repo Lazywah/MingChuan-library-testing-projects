@@ -51,6 +51,22 @@ def metric(**kv) -> None:
     print(METRIC_PREFIX + json.dumps(kv, ensure_ascii=False), flush=True)
 
 
+# ZH: v4.36 —— 「模型判斷錯的那幾筆」（接管者回饋 2026-09-30 ①：「我訓練完了…
+#     我不知道剛才做了什麼」）。實驗室的範例本來就會印出猜錯的，「交給平台訓練」
+#     這條路卻沒有 —— 入口頁的流程預覽還對所有人承諾了這件事。
+# ZH: 最多列幾筆、每筆最多幾個字：這一行會走 log 回到服務層，太長會把訓練紀錄撐爆。
+MISTAKES_MAX = 10
+
+
+def clip(s, n: int = 160) -> str:
+    """ZH: 壓成一行並截斷（換行與連續空白收成一個空白）。
+
+    @node gpu-worker/builtin_scripts/tabular_classification.py::clip
+    """
+    s = " ".join(str(s).split())
+    return s if len(s) <= n else s[: n - 1] + "…"
+
+
 def fail(msg: str, hint: str = "") -> None:
     """@node gpu-worker/builtin_scripts/tabular_classification.py::fail"""
     print(f"\n[錯誤] {msg}", flush=True)
@@ -274,6 +290,7 @@ def main() -> int:
 
     os.makedirs(OUTPUT_DIR, exist_ok=True)
     best_acc = 0.0
+    best_state = None      # ZH: 最佳那一輪的權重（＝下載到的那個），列「判斷錯的」要用它
     history = []
     t0 = time.time()
     g = torch.Generator(device="cpu").manual_seed(SEED)
@@ -303,6 +320,7 @@ def main() -> int:
 
         if acc >= best_acc:
             best_acc = acc
+            best_state = {k: v.detach().clone() for k, v in model.state_dict().items()}
             torch.save({"state_dict": model.state_dict(),
                         "classes": classes,
                         "features": names,
@@ -320,6 +338,26 @@ def main() -> int:
     }
     with open(os.path.join(OUTPUT_DIR, "result.json"), "w", encoding="utf-8") as f:
         json.dump(result, f, ensure_ascii=False, indent=2)
+
+    # ZH: v4.36 判斷錯的那幾筆。用**最佳那一輪**（＝下載到的模型）算，不是最後一輪 ——
+    #     不然結果頁上的正確率與這份清單會對不起來。
+    # ZH: 只列模型**實際用到**的欄位：被略過的欄（id、姓名這種每列都不同的）不顯示。
+    # ZH: X 跳過了答案空白的列（build_features），所以用同一個條件重建原始列才對得上 va_i。
+    if best_state is not None:
+        model.load_state_dict(best_state)
+    model.eval()
+    with torch.no_grad():
+        pred = model(Xva).argmax(1).tolist()
+    truth = yva.tolist()
+    kept = [r for r in body if r[label_idx].strip() != ""]
+    show_cols = [i for i, h in enumerate(header) if i != label_idx and h not in skipped]
+    wrong = [k for k in range(len(va_i)) if pred[k] != truth[k]]
+    items = []
+    for k in wrong[:MISTAKES_MAX]:
+        r = kept[va_i[k]]
+        items.append({"text": clip(", ".join(f"{header[i]}={r[i].strip()}" for i in show_cols)),
+                      "truth": classes[truth[k]], "pred": classes[pred[k]]})
+    metric(kind="mistakes", checked=len(va_i), wrong=len(wrong), items=items)
 
     took = f"{elapsed:.0f} 秒" if elapsed < 60 else f"{elapsed / 60:.1f} 分鐘"
     metric(kind="summary", best_val_accuracy=round(best_acc, 4),

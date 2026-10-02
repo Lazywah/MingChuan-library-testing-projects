@@ -271,6 +271,69 @@ $('easy-change').addEventListener('click', () => {
     if (first) first.focus();
 });
 
+// ══════════════════════════════════════════════════════════════════════
+// ZH: v4.36 上傳一張圖片試試看（接管者回饋 2026-09-30 ①；後端 /jobs/{id}/try，服務層 CPU 推論）
+// ══════════════════════════════════════════════════════════════════════
+// ZH: 只有內建程式訓練、而且有模型檔的圖片任務才出現 —— 後端也會擋（409），
+//     這裡不畫是為了不讓人按了才知道不能用。
+let tryUrl = null;          // ZH: 預覽圖的 object URL（換下一張時要放掉，不然一直漏記憶體）
+
+function renderTry(j) {
+    const ok = j && j.status === 'completed' && j.task === 'image_classification' && j.has_model;
+    $('try-box').hidden = !ok;
+}
+
+async function tryImage(file) {
+    if (!file || !jobId) return;
+    $('try-err').hidden = true;
+    if (!/^image\//.test(file.type || '')) {
+        $('try-err').textContent = T('tr_try_not_image', '這不是圖片檔，請選 JPG 或 PNG。');
+        $('try-err').hidden = false;
+        return;
+    }
+    if (tryUrl) URL.revokeObjectURL(tryUrl);
+    tryUrl = URL.createObjectURL(file);
+    $('try-img').src = tryUrl;
+    $('try-out').hidden = false;
+    $('try-label').textContent = T('tr_try_busy', '判斷中…');
+    $('try-bars').innerHTML = '';
+    try {
+        const fd = new FormData();
+        fd.append('file', file, file.name);
+        const r = await fetch(`${API}/jobs/${encodeURIComponent(jobId)}/try`,
+                              { method: 'POST', headers: authHeaders(), body: fd });
+        const body = await r.json().catch(() => ({}));
+        if (!r.ok) throw new Error(clean(detailText(body.detail)) || `HTTP ${r.status}`);
+        $('try-label').textContent = T('tr_try_result', '模型判斷：{c}（{p}% 有把握）')
+            .replace('{c}', body.label).replace('{p}', Math.round(body.confidence * 100));
+        // ZH: 每一類都畫一條 —— 只給最高的那一個，會讓人以為模型「確定」；
+        //     看到 55% 對 45%，才知道它其實很猶豫。
+        $('try-bars').innerHTML = (body.scores || []).map((s) => `
+            <div class="try__row">
+                <span class="try__k">${esc(s.label)}</span>
+                <span class="try__bar"><span style="width:${Math.round(s.p * 100)}%"></span></span>
+                <span class="try__v">${Math.round(s.p * 100)}%</span>
+            </div>`).join('');
+    } catch (e) {
+        $('try-label').textContent = '';
+        $('try-err').textContent = T('tr_try_fail', '這次沒判斷成功') + `（${e.message}）`;
+        $('try-err').hidden = false;
+    }
+}
+
+$('try-drop').addEventListener('click', () => $('try-file').click());
+$('try-drop').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); $('try-file').click(); }
+});
+$('try-file').addEventListener('change', (e) => { tryImage(e.target.files[0]); e.target.value = ''; });
+['dragenter', 'dragover'].forEach((ev) => $('try-drop').addEventListener(ev, (e) => {
+    e.preventDefault(); $('try-drop').classList.add('drop--over');
+}));
+['dragleave', 'drop'].forEach((ev) => $('try-drop').addEventListener(ev, (e) => {
+    e.preventDefault(); $('try-drop').classList.remove('drop--over');
+}));
+$('try-drop').addEventListener('drop', (e) => tryImage(e.dataTransfer.files[0]));
+
 // ── 主要動作的樣貌 ───────────────────────────────────────────────────
 function setNote(html) {
     const n = $('note');
@@ -439,6 +502,8 @@ async function submitJob(datasetRef, jobName) {
         $('run-actions').hidden = true;
         $('model-help').hidden = true;
         $('learn-code').hidden = true;
+        $('try-box').hidden = true;
+        $('try-out').hidden = true;
     } catch (e) {
         setNote(T('tr_submit_fail', '送不出去') + `（${clean(e.message)}）`);
         setGo({ label: T('tr_go', '開始訓練'), enabled: true });
@@ -697,6 +762,7 @@ function finish(j) {
             if (mode === 'easy') loadSample();
         }
         renderLearnCode(j);
+        renderTry(j);
         // ZH: v3.6 —— 模型檔已經由 worker 傳回服務層，可以下載了。
         //     `has_model` 由後端說了算，前端**不要自己猜**（訓練成功 ≠ 檔案送到了：
         //     傳輸可能失敗，那時模型還在運算主機上）。
@@ -777,6 +843,8 @@ function renderMetrics(metrics) {
     const ds = metrics.filter((m) => m.kind === 'dataset').pop();
     const sum = metrics.filter((m) => m.kind === 'summary').pop();
     const eps = metrics.filter((m) => m.kind === 'epoch');
+    // ZH: v4.36 判斷錯的那幾筆（內建腳本訓練完才有；自帶程式不會回報）。
+    renderMistakes(metrics.filter((m) => m.kind === 'mistakes').pop());
 
     const cards = [];
     if (ds) {
@@ -857,6 +925,64 @@ function renderMetrics(metrics) {
         //     scrollTop 會被還沒定案的高度夾掉。
         fitEpochBox();
         if (stuck) box.scrollTop = box.scrollHeight;
+    }
+}
+
+// ZH: v4.36 「模型判斷錯的」。資料內容是使用者自己上傳的 —— 一律 esc()，不信任。
+//     m.items 最多 10 筆（腳本端 MISTAKES_MAX），m.wrong 是真正錯了幾筆。
+function renderMistakes(m) {
+    const box = $('mistakes');
+    if (!m) { box.hidden = true; return; }
+    const items = m.items || [];
+    const tpl = m.wrong === 0
+        ? T('tr_mis_none', '驗證資料 {n} 筆，模型全部判斷正確。')
+        : (items.length < m.wrong
+            ? T('tr_mis_sum_more', '驗證資料 {n} 筆裡，模型判斷錯了 {w} 筆；下面列出前 {k} 筆。')
+            : T('tr_mis_sum', '驗證資料 {n} 筆裡，模型判斷錯了 {w} 筆。'));
+    $('mis-sum').textContent = tpl.replace('{n}', m.checked).replace('{w}', m.wrong)
+        .replace('{k}', items.length);
+    $('mis-list').innerHTML = items.length ? `
+        <table class="tbl mis">
+          <thead><tr>
+            <th>${esc(T('tr_mis_th_item', '資料'))}</th>
+            <th>${esc(T('tr_mis_th_truth', '正確答案'))}</th>
+            <th>${esc(T('tr_mis_th_pred', '模型判成'))}</th>
+          </tr></thead>
+          <tbody>${items.map((it) => `
+            <tr>
+              <td>${it.path ? `<img class="mis__img" data-thumb="${esc(it.path)}" alt="">` : ''}${esc(it.text)}</td>
+              <td>${esc(it.truth)}</td>
+              <td>${esc(it.pred)}</td>
+            </tr>`).join('')}</tbody>
+        </table>` : '';
+    box.hidden = false;
+    loadThumbs();
+}
+
+// ZH: v4.36 圖片的縮圖。**不能直接 <img src="/api/…">**：瀏覽器載圖只帶 cookie、
+//     不帶 Authorization，而 token 在 sessionStorage —— 必定 401（下載模型檔踩過同一個坑）。
+//     所以 fetch 帶 header 取回 blob、轉成 object URL。
+// ZH: 結果在輪詢與換語言時會整塊重畫 —— 記住拿過的，不要每 3 秒重抓十張圖。
+//     拿不到（資料集被刪了、太大、格式不支援）就把 <img> 拿掉，只留檔名。
+const THUMBS = new Map();
+async function loadThumbs() {
+    const imgs = [...$('mis-list').querySelectorAll('img[data-thumb]')];
+    for (const img of imgs) {
+        const path = img.dataset.thumb;
+        const key = `${jobId}|${path}`;
+        let url = THUMBS.get(key);
+        if (url === undefined) {
+            try {
+                const r = await fetch(`${API}/jobs/${encodeURIComponent(jobId)}/val-image?path=${encodeURIComponent(path)}`,
+                                      { headers: authHeaders() });
+                url = r.ok ? URL.createObjectURL(await r.blob()) : null;
+            } catch {
+                url = null;
+            }
+            THUMBS.set(key, url);
+        }
+        if (url) img.src = url;
+        else img.remove();
     }
 }
 
