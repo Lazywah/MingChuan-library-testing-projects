@@ -1617,6 +1617,11 @@ def set_system_config(db: Session, key: str, value: str, description: Optional[s
 SETTING_GROUPS = [
     {"key": "platform",  "view": "platform", "label": "平台營運", "label_en": "Platform operations"},
     {"key": "myai",      "view": "myai",     "label": "MYAI 廠商整合", "label_en": "MYAI vendor integration"},
+    # ZH: v4.35 點數自成一組，前端畫成「身分 × 點數」的表（`card` 告訴前端別用通用表畫）。
+    #     🔴 這一組的 key 是**寫死在前端卡片裡的**，下方有自檢：
+    #     往這一組加新旋鈕而沒改卡片的話，載入時就炸 —— 不然它會安靜地哪裡都不出現。
+    {"key": "myai_credit", "view": "myai", "card": "credit",
+     "label": "MYAI 點數", "label_en": "MYAI credit"},
     {"key": "assistant", "view": "platform", "label": "小基（RAG 助手）", "label_en": "Assistant (RAG)"},
     # ZH: v3.8 寄信自成一區。塞進「平台營運」的話那一區會變成 9 個旋鈕,
     #     而 SMTP 是「壞了整批通知就全部不會到」的東西,值得自己一格。
@@ -1657,10 +1662,14 @@ SETTING_ORDER = {
                  "lab_network_isolation",
                  "job_timeout_minutes", "max_jobs_per_user", "lab_gpu_max_minutes", "lab_archive_days",
                  "announcement_file_max_mb", "announcement_total_gb"],
-    "myai":     ["myai_autoprovision", "myai_initial_credit", "myai_initial_credit_student", "myai_initial_credit_teacher", "myai_initial_credit_staff", "myai_initial_credit_guest", "myai_initial_credit_admin", "myai_init_pwd_days",
-                 "myai_monthly_topup_to", "myai_monthly_topup_student", "myai_monthly_topup_teacher", "myai_monthly_topup_staff", "myai_monthly_topup_guest", "myai_monthly_topup_admin", "myai_monthly_topup_day",
+    # ZH: v4.35 初始密碼保存天數緊跟自動建號（兩個都是「開通」這件事的）；
+    #     點數那一族搬到自己的分組（myai_credit），不再夾在中間。
+    "myai":     ["myai_autoprovision", "myai_init_pwd_days",
                  "myai_sync_interval_hours", "myai_active_poll_minutes",
                  "myai_usage_window_min"],
+    "myai_credit": ["myai_initial_credit_on", "myai_monthly_topup_on", "myai_monthly_topup_day",
+                    "myai_initial_credit_student", "myai_initial_credit_teacher", "myai_initial_credit_staff", "myai_initial_credit_guest", "myai_initial_credit_admin",
+                    "myai_monthly_topup_student", "myai_monthly_topup_teacher", "myai_monthly_topup_staff", "myai_monthly_topup_guest", "myai_monthly_topup_admin"],
     "assistant": ["rag_chat_model", "rag_top_k", "rag_min_score", "rag_history_turns"],
     "email":    ["myai_provision_email", "bounce_scan_minutes",
                  "login_alert_email", "login_alert_hours",
@@ -1768,15 +1777,23 @@ SYSTEM_SETTINGS = {
     # v3.3 MYAI 自動開通
     "myai_autoprovision":       {"starred": True, "group": "myai", "type": "int",   "default": lambda: 0,                                    "min": 0,   "max": 1,    "label": "MYAI 首次登入自動建號(1=開, 0=關；綁定既有帳號不受此限)", "label_en": "MYAI auto-create vendor account on first login (1 = on, 0 = off; linking existing accounts is always on)"},
     "myai_init_pwd_days":       {"starred": True, "group": "myai", "type": "int",   "default": lambda: 30,                                   "min": 1,   "max": 180,  "label": "MYAI 初始密碼保存天數(逾期自動清除)", "label_en": "MYAI initial password retention (days; purged when it expires)"},
-    "myai_initial_credit":      {"zero_means": "off", "starred": True, "group": "myai", "type": "int",   "default": lambda: 0,                                    "min": 0,   "max": None, "label": "MYAI 新帳號初始點數(0=不發放)", "label_en": "MYAI initial credit for new accounts (0 = none)"},
+    # ZH: v4.35 —— 只是開關。各身分發多少在「MYAI 點數」表裡（myai_initial_credit_<role>）。
+    #     ⚠ 取代了 v4.34 以前的 `myai_initial_credit`（開關＋數字合一）。舊值由
+    #     migrate_myai_credit_switches() 在開機時搬一次，舊的那一列留在資料庫裡不刪。
+    "myai_initial_credit_on":   {"starred": True, "group": "myai_credit", "type": "int", "default": lambda: 0, "min": 0, "max": 1,
+                                 "label": "開通時發放初始點數(1=開, 0=關)",
+                                 "label_en": "Grant initial credit when an account is created (1 = on, 0 = off)"},
     # ZH: v3.9 每月補點（擁有者 2026-08-29 定的三條規則）：
     #       補到**固定值**（不是固定加）· **所有**綁定帳號 · 每月 1 號
     #     到期日不管 —— 那是廠商在處理的事（他們的使用者列表有「有效期間」欄）。
     # ZH: ⚠️ 與 myai_initial_credit 刻意分開：那個是**新帳號**的初始值，
     #     這個是**每月**補到的水位。兩者將來很可能要調成不同數字，共用會綁死。
     # ZH: 🔴 上限 28 是因為 29–31 在某些月份不存在 —— 設 31 的話 2 月永遠不會補。
-    "myai_monthly_topup_to":    {"zero_means": "off", "starred": True, "group": "myai", "type": "int",   "default": lambda: 0,                                    "min": 0,   "max": None, "label": "MYAI 每月補到的點數(0=不補)", "label_en": "MYAI monthly top-up target (0 = no top-up)"},
-    "myai_monthly_topup_day":   {"depends_on": "myai_monthly_topup_to", "starred": True, "group": "myai", "type": "int",   "default": lambda: 1,                                    "min": 1,   "max": 28,   "label": "MYAI 每月補點日(每月第幾天; 上限 28)", "label_en": "MYAI top-up day of month (max 28)"},
+    # ZH: v4.35 —— 只是開關（取代 `myai_monthly_topup_to`，同上）。每人補到多少看身分。
+    "myai_monthly_topup_on":    {"starred": True, "group": "myai_credit", "type": "int", "default": lambda: 0, "min": 0, "max": 1,
+                                 "label": "每月補點(1=開, 0=關)",
+                                 "label_en": "Monthly top-up (1 = on, 0 = off)"},
+    "myai_monthly_topup_day":   {"depends_on": "myai_monthly_topup_on", "starred": True, "group": "myai_credit", "type": "int",   "default": lambda: 1,                                    "min": 1,   "max": 28,   "label": "MYAI 每月補點日(每月第幾天; 上限 28)", "label_en": "MYAI top-up day of month (max 28)"},
     # v3.3 刪除使用者後 Lab volume 的封存保留天數（逾期背景任務真正刪除）
     # ZH: v3.9 GPU 實驗室的最長借用時間（0 = 不限）。
     # ZH: 🔴 **刻意不分角色**，與 scheduler_policy 的 `hard_limit_min` 是兩回事：
@@ -1855,45 +1872,24 @@ SYSTEM_SETTINGS = {
 #     預設來源）。手寫的話改了其中一族而忘了另一族，症狀是「初始發得對、
 #     每月補的不對」—— 而那要等到下個月 1 號才看得出來。
 #
-# ZH: 🔴 **`default_from` 讓沒設過的角色跟著總旋鈕走。**
-#     所以既有部署完全不受影響（全部沿用現在那一個值），
-#     而且「這個角色沒特別設定」與「這個角色設成 0」是**分得開的兩件事**——
-#     前者是空值（畫面顯示預設），後者是明確覆寫成 0（這個身分不發）。
-#     用「0 = 沿用預設」就分不開了，於是「老師不發點」這個要求表達不出來。
-#
-# ZH: ⚠ 總旋鈕仍然是總開關：設成 0 就**整個功能關閉**，不看分級。
-#     （見 myai_credit_for。）不然「先全部關掉」要清五格。
+# ZH: v4.35 —— **每一格都是明確的值，沒有繼承**（拿掉了 v4.34 的 default_from）。
+#     那一版「沒設的跟著總旋鈕走」，結果總旋鈕上的數字變成一個沒有人會拿到的值，
+#     擁有者為了讓大家都是 50000 得打六次。表格化之後每一格都看得到、也都要填，
+#     「這個身分不發」就是那一格填 0 —— 不需要另外的語意。
+# ZH: 預設 0：新部署兩個開關都關、表全是 0，什麼都不發，直到有人填。
 for _role, _zh, _en in MYAI_CREDIT_ROLES:
     SYSTEM_SETTINGS["myai_initial_credit_%s" % _role] = {
-        "depends_on": "myai_initial_credit", "default_from": "myai_initial_credit",
-        "group": "myai", "type": "int", "default": lambda: 0, "min": 0, "max": None,
-        "label": "新帳號初始點數－%s" % _zh,
+        "depends_on": "myai_initial_credit_on", "starred": True,
+        "group": "myai_credit", "type": "int", "default": lambda: 0, "min": 0, "max": None,
+        "label": "初始點數－%s" % _zh,
         "label_en": "Initial credit - %s" % _en,
     }
     SYSTEM_SETTINGS["myai_monthly_topup_%s" % _role] = {
-        "depends_on": "myai_monthly_topup_to", "default_from": "myai_monthly_topup_to",
-        "group": "myai", "type": "int", "default": lambda: 0, "min": 0, "max": None,
-        "label": "每月補到的點數－%s" % _zh,
+        "depends_on": "myai_monthly_topup_on", "starred": True,
+        "group": "myai_credit", "type": "int", "default": lambda: 0, "min": 0, "max": None,
+        "label": "每月補到－%s" % _zh,
         "label_en": "Monthly top-up target - %s" % _en,
     }
-
-
-def _setting_default(db: Session, spec: dict):
-    """ZH: 一個旋鈕的預設值。`default_from` 的話跟著另一個旋鈕的**生效值**走。
-
-    ZH: 這是分級旋鈕能「沒設過就照總旋鈕」的關鍵。`spec["default"]()` 拿不到 db，
-        所以另開一個入口，而不是把 db 灌進每一個 lambda（那要改四十幾行，
-        而且絕大多數旋鈕根本不需要）。
-
-    ZH: 🔴 **不接受鏈狀**（A 的預設來自 B、B 的預設又來自 C）——
-        下方有自檢擋住。允許鏈狀就要處理循環，而這裡沒有一個用得到它的情境。
-
-    @node job-scheduler/app/crud.py::_setting_default
-    """
-    src = spec.get("default_from")
-    if src:
-        return get_setting(db, src)
-    return spec["default"]()
 
 
 _RE_SETTING_EMAIL = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
@@ -1996,7 +1992,7 @@ def get_setting(db: Session, key: str):
     @node job-scheduler/app/crud.py::get_setting
     """
     spec = SYSTEM_SETTINGS[key]
-    default = _setting_default(db, spec)
+    default = spec["default"]()
     raw = get_system_config(db, key, "")
     if raw is None or raw == "":
         return default
@@ -2061,19 +2057,17 @@ def myai_credit_for(db: Session, role: str, kind: str = "initial") -> int:
     """ZH: 這個身分實際會拿到的 MYAI 點數。`kind`: "initial"（新帳號）/ "topup"（每月）。
 
     ZH: 兩層：
-          1. **總旋鈕 <= 0 就是整個功能關閉**，不看分級 ——
-             「先全部停掉」是一個動作，不是清五格。
-          2. 否則看這個身分自己那一格（沒設過的話 default_from 會讓它
-             等於總旋鈕的值，所以既有部署的行為完全不變）。
+          1. **開關關著就是 0**，不看表 ——「先全部停掉」是一個動作，不是清五格。
+          2. 否則就是這個身分那一格的值（v4.35 起每一格都是明確的值，沒有繼承）。
 
     ZH: 🔴 認不得的身分**退回學生**（往低的方向猜）。不 raise 是刻意的：
         這支在發點數的路徑上，丟例外會讓「帳號已經建好」看起來像失敗。
 
     @node job-scheduler/app/crud.py::myai_credit_for
     """
-    master = "myai_initial_credit" if kind == "initial" else "myai_monthly_topup_to"
+    switch = "myai_initial_credit_on" if kind == "initial" else "myai_monthly_topup_on"
     try:
-        if int(get_setting(db, master) or 0) <= 0:
+        if int(get_setting(db, switch) or 0) <= 0:
             return 0
     except (TypeError, ValueError):
         return 0
@@ -2087,6 +2081,52 @@ def myai_credit_for(db: Session, role: str, kind: str = "initial") -> int:
         return max(0, int(get_setting(db, key) or 0))
     except (TypeError, ValueError):
         return 0
+
+
+CREDIT_SWITCH_MIGRATED_KEY = "myai_credit_switch_migrated"
+
+
+def migrate_myai_credit_switches(db: Session) -> dict:
+    """ZH: v4.35 一次性搬移：v4.34 以前的「開關＋數字」總旋鈕 → 純開關 + 補滿表格。
+
+    ZH: 舊語意：`myai_initial_credit` / `myai_monthly_topup_to` 是 0 = 關、N = 開且
+        **沒設的身分拿 N**。新語意：開關只管開關，每一格都是明確的值。所以搬法是：
+          · 舊值 > 0 → 新開關 = 1，**沒設過的格子填入 N**（照舊他們本來就拿 N）
+          · 舊值 <= 0 或從沒設過 → 什麼都不寫（新開關預設就是關）
+        已經明確設過的格子一律不動。
+
+    ZH: 🔴 **只跑一次，靠記號不靠「新開關有沒有值」。** 用後者的話，管理者日後在
+        新開關上按「回到預設」（清空）→ 下次開機又被舊值搬回「開」——
+        一個關不掉的開關。記號寫進 system_config，與每月補點的月份記號同一個做法。
+
+    ZH: 舊的兩列**不刪**：它們已經不在 SYSTEM_SETTINGS 裡（畫面看不到），
+        留著是給「搬之前是什麼」留一份證據，刪掉就查不到了。
+
+    @node job-scheduler/app/crud.py::migrate_myai_credit_switches
+    """
+    if get_system_config(db, CREDIT_SWITCH_MIGRATED_KEY, "") == "1":
+        return {"status": "already_done"}
+    done = {}
+    for kind, old_key, new_key, child in (
+            ("initial", "myai_initial_credit", "myai_initial_credit_on", "myai_initial_credit_%s"),
+            ("topup", "myai_monthly_topup_to", "myai_monthly_topup_on", "myai_monthly_topup_%s")):
+        raw = get_system_config(db, old_key, "")
+        try:
+            old = int(raw) if raw not in (None, "") else 0
+        except (TypeError, ValueError):
+            old = 0
+        filled = []
+        if old > 0:
+            if get_system_config(db, new_key, "") in (None, ""):
+                set_system_config(db, new_key, "1")
+            for r, _z, _e in MYAI_CREDIT_ROLES:
+                if get_system_config(db, child % r, "") in (None, ""):
+                    set_system_config(db, child % r, str(old))
+                    filled.append(r)
+        done[kind] = {"old": old, "filled": filled}
+    set_system_config(db, CREDIT_SWITCH_MIGRATED_KEY, "1")
+    logger.info("MYAI 點數設定搬移完成：%s", done)
+    return {"status": "migrated", **done}
 
 
 def rag_model_choices(db: Session) -> list:
@@ -2194,15 +2234,19 @@ _bad_dep = [k for k, v in SYSTEM_SETTINGS.items()
 if _bad_dep:
     raise RuntimeError("這些旋鈕的 depends_on 指到不存在的 key：%s" % _bad_dep)
 
-# ZH: v4.34 —— default_from 也要指得到，而且**不准鏈狀**（見 _setting_default）。
-_bad_from = [k for k, v in SYSTEM_SETTINGS.items()
-             if v.get("default_from") and v["default_from"] not in SYSTEM_SETTINGS]
-if _bad_from:
-    raise RuntimeError("這些旋鈕的 default_from 指到不存在的 key：%s" % _bad_from)
-_chained = [k for k, v in SYSTEM_SETTINGS.items()
-            if v.get("default_from") and SYSTEM_SETTINGS[v["default_from"]].get("default_from")]
-if _chained:
-    raise RuntimeError("default_from 不可以鏈狀（%s 的來源自己也有 default_from）" % _chained)
+# ZH: v4.35 —— 「MYAI 點數」那一組是前端卡片寫死的版面（admin-ui-V1/platform.js 的
+#     renderCredit）。往這一組加旋鈕而沒改卡片的話，它會安靜地哪裡都不出現
+#     （通用表跳過有 card 的分組）。所以這裡把集合釘死，對不上就在載入時炸。
+_CREDIT_CARD_KEYS = (
+    {"myai_initial_credit_on", "myai_monthly_topup_on", "myai_monthly_topup_day"}
+    | {"myai_initial_credit_%s" % r for r, _z, _e in MYAI_CREDIT_ROLES}
+    | {"myai_monthly_topup_%s" % r for r, _z, _e in MYAI_CREDIT_ROLES})
+_credit_group = {k for k, v in SYSTEM_SETTINGS.items() if v["group"] == "myai_credit"}
+if _credit_group != _CREDIT_CARD_KEYS:
+    raise RuntimeError(
+        "「MYAI 點數」分組與前端卡片對不上：多了 %s、少了 %s（改了這一組要一起改 "
+        "platform.js 的 renderCredit）"
+        % (sorted(_credit_group - _CREDIT_CARD_KEYS), sorted(_CREDIT_CARD_KEYS - _credit_group)))
 
 _bad_view = [g["key"] for g in SETTING_GROUPS if g.get("view") not in _VIEW_KEYS]
 if _bad_view:
@@ -2232,7 +2276,7 @@ def get_all_settings(db: Session) -> list:
             "label_en": spec["label_en"],
             "type": spec["type"],
             "value": get_setting(db, key),
-            "default": _setting_default(db, spec),
+            "default": spec["default"](),
             "min": spec["min"],
             "max": spec["max"],
             "overridden": raw not in (None, ""),

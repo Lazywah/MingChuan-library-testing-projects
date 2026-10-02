@@ -11,7 +11,7 @@
 
     <link rel="stylesheet" href="tokens.css?v=ff9cecda">
     <link rel="stylesheet" href="styles.css?v=d4d21ce8">
-    <link rel="stylesheet" href="admin.css?v=47a68e2d">
+    <link rel="stylesheet" href="admin.css?v=275831f1">
 </head>
 <body>
 
@@ -87,6 +87,30 @@
          ZH: 這一格同時就是**預覽**：寄件人是誰、主旨長什麼樣，都在這裡看得到。
              寄件人現在是從 SMTP 設定來的（可能還是個人信箱），
              把它放在最上面一行，改設定的人才會注意到。 -->
+    <!-- ZH: v4.35 MYAI 點數（擁有者 2026-10-02）。原本是營運設定表裡的 12 列：
+             兩個「開關＋數字」的總旋鈕各帶五個子列，而總旋鈕上的數字在五格都設了之後
+             **沒有任何人會拿到**。這件事本質上是一張「身分 × 點數」的表，就畫成表。 -->
+    <section class="adm-sec" data-view="myai" aria-labelledby="h-credit">
+        <div class="adm-sec__head">
+            <h2>
+                <span id="h-credit" data-i18n="pf_cr_title">MYAI 點數</span>
+                <span class="tip">
+                    <button type="button" class="tip__btn" aria-expanded="false"
+                            aria-controls="tip-credit" data-i18n-aria="tip_more" aria-label="這是什麼">i</button>
+                    <span class="tip__body" id="tip-credit" role="tooltip" hidden>
+                    <span data-i18n="pf_cr_why">新帳號開通時發一次初始點數；每月補點是把低於水位的人補到水位。兩件事各自有開關，點數依身分分開設。</span>
+                    </span>
+                </span>
+            </h2>
+            <span class="topbar__spacer"></span>
+            <button class="btn btn--minor" type="button" id="cr-edit" data-i18n="pf_edit">編輯設定</button>
+            <button class="btn btn--minor" type="button" id="cr-cancel" data-i18n="pf_cancel" hidden>取消</button>
+            <button class="btn btn--primary" type="button" id="cr-save" data-i18n="pf_save" hidden>儲存設定</button>
+        </div>
+        <div id="credit" aria-live="polite"><span class="skeleton skeleton--line"></span></div>
+        <div class="inline-error" id="cr-msg" hidden></div>
+    </section>
+
     <section class="adm-sec" data-view="platform" aria-labelledby="h-alertmail">
         <div class="adm-sec__head">
             <h2>
@@ -269,10 +293,10 @@
 <script src="tz.js?v=2e214a8b"></script>
 <!-- ⚠ ZH: 順序不能動 —— i18n-admin 在 i18n 之後、prefs 之前。 -->
 <script src="i18n.js?v=1f117108"></script>
-<script src="i18n-admin.js?v=1c2353bd"></script>
+<script src="i18n-admin.js?v=c9e96833"></script>
 <script src="tip.js?v=0699f4a2"></script>
 <script src="prefs.js?v=e71609e5"></script>
 <script src="admin-chrome.js?v=2feed1f1"></script>
-<script src="platform.js?v=72bd3d25"></script>
+<script src="platform.js?v=694245d3"></script>
 </body>
 </html>

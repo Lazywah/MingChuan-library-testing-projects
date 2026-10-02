@@ -344,6 +344,158 @@
         }
         renderSettings();
         renderAlertMail();
+        renderCredit();
+    }
+
+    // ══════════════════════════════════════════════════════════════════════
+    // ZH: v4.35 「MYAI 點數」—— 兩個開關 + 身分 × 點數的表（擁有者 2026-10-02）。
+    //
+    // ZH: 為什麼不留在營運設定那張表：那張表一列一個值，而這裡是一張二維的表
+    //     （5 個身分 × 初始／每月）。v4.34 把它攤成 12 列，總旋鈕上還掛著一個
+    //     **沒有人會拿到的數字** —— 擁有者為了讓大家都是 50000 打了六次。
+    //
+    // ZH: 🔴 這一格的 key 是寫死的，後端有自檢（crud._CREDIT_CARD_KEYS）：
+    //     往 myai_credit 分組加旋鈕而沒改這裡的話，後端載入就會炸。
+    //
+    // ZH: 每一格都是**明確的值**（沒有「跟預設走」）—— 編輯時全部預填目前的值，
+    //     存的時候全部送出；清空的格子當 0 送（0 = 這個身分不發），
+    //     存進去的與畫面上看到的永遠是同一個數字。
+    // ══════════════════════════════════════════════════════════════════════
+    var CR_EDITING = false;
+    var CR_ROLES = [
+        ['student', 'role_student', '學生'],
+        ['teacher', 'role_teacher', '教師'],
+        ['staff',   'role_staff',   '職員'],
+        ['guest',   'role_guest',   '訪客'],
+        ['admin',   'role_admin',   '管理員'],
+    ];
+
+    function crVal(k) {
+        var s = settingByKey(k);
+        return s ? s.value : null;
+    }
+
+    function crSwitchHtml(key, labelKey, labelZh, extra) {
+        var on = Number(crVal(key)) > 0;
+        var sw = CR_EDITING
+            ? '<button type="button" class="tsw" role="switch" data-crsw="' + esc(key) + '"'
+                + ' aria-checked="' + (on ? 'true' : 'false') + '"'
+                + ' aria-label="' + esc(T(labelKey, labelZh)) + '">'
+                + '<span class="tsw__knob"></span></button>'
+            : '<span class="tsw tsw--ro"' + (on ? ' data-on="1"' : '')
+                + ' aria-hidden="true"><span class="tsw__knob"></span></span>';
+        return '<div class="cr-switch">' + sw
+            + '<span class="tsw__txt">' + esc(swLabel(on)) + '</span>'
+            + '<span class="cr-switch__label">' + esc(T(labelKey, labelZh)) + '</span>'
+            + (extra || '') + '</div>';
+    }
+
+    function crCell(key, col, roleName) {
+        var v = crVal(key);
+        if (!CR_EDITING) {
+            return '<td class="num" data-crcol="' + col + '">' + esc(num(v)) + '</td>';
+        }
+        return '<td class="num" data-crcol="' + col + '"><input class="field__input cr-num"'
+            + ' type="number" min="0" step="1" data-crkey="' + esc(key) + '"'
+            + ' aria-label="' + esc(roleName + ' ' + (col === 'init'
+                ? T('pf_cr_initial', '初始點數') : T('pf_cr_topup', '每月補到'))) + '"'
+            + ' value="' + esc(v == null ? '' : String(v)) + '"></td>';
+    }
+
+    function renderCredit() {
+        var box = $('credit');
+        if (!box) return;                       // ZH: 舊版 HTML 還在快取時不要整頁炸掉
+        if (!settingByKey('myai_initial_credit_on')) {
+            // ZH: 後端還是舊版（前後端版本不同步）—— 講清楚，不要畫一張全空的表。
+            box.innerHTML = '<p class="footnote">'
+                + esc(T('pf_cr_missing', '後端還沒有這一組設定（版本不同步），重新整理或稍後再試。')) + '</p>';
+            $('cr-edit').hidden = true;
+            return;
+        }
+
+        var day = crVal('myai_monthly_topup_day');
+        var dayHtml = CR_EDITING
+            ? ' <label class="cr-day">' + esc(T('pf_cr_day_pre', '每月第'))
+                + ' <input class="field__input cr-num cr-num--day" type="number" min="1" max="28" step="1"'
+                + ' data-crkey="myai_monthly_topup_day" value="' + esc(String(day)) + '"'
+                + ' aria-label="' + esc(T('pf_cr_day_aria', '每月補點日（1–28）')) + '"> '
+                + esc(T('pf_cr_day_post', '天')) + '</label>'
+            : ' <span class="footnote">' + esc(T('pf_cr_day', '每月 {d} 號').replace('{d}', day)) + '</span>';
+
+        var rows = CR_ROLES.map(function (r) {
+            var name = T(r[1], r[2]);
+            return '<tr><td>' + esc(name) + '</td>'
+                + crCell('myai_initial_credit_' + r[0], 'init', name)
+                + crCell('myai_monthly_topup_' + r[0], 'topup', name) + '</tr>';
+        }).join('');
+
+        box.innerHTML = ''
+            + crSwitchHtml('myai_initial_credit_on', 'pf_cr_init_on', '開通時發放初始點數')
+            + crSwitchHtml('myai_monthly_topup_on', 'pf_cr_topup_on', '每月補點', dayHtml)
+            + tableHtml([['pf_cr_role', '身分'], ['pf_cr_initial', '初始點數', 'num'],
+                         ['pf_cr_topup', '每月補到', 'num']], rows)
+            // ZH: 「補到」最常被誤會成「每月加」—— 而初始點數比水位高時，
+            //     新帳號可能好幾個月都不會被補一次（2026-10-02 檢查時就是這樣）。
+            + '<p class="footnote">' + esc(T('pf_cr_topup_note',
+                '「每月補到」是把低於這個數的人補到這個數，不是每月加這麼多 —— 點數還高於水位的人那個月不會動。'))
+            + '</p>';
+
+        $('cr-edit').hidden = CR_EDITING;
+        $('cr-cancel').hidden = !CR_EDITING;
+        $('cr-save').hidden = !CR_EDITING;
+        crDimColumns();
+        if (CR_EDITING) {
+            box.querySelectorAll('[data-crsw]').forEach(function (sw) {
+                sw.addEventListener('click', function () {
+                    paintSwitch(sw, sw.getAttribute('aria-checked') !== 'true');
+                    crDimColumns();
+                });
+            });
+        }
+    }
+
+    // ZH: 開關關著的那一欄淡化（與營運設定表的 is-dimmed 同一個意思：
+    //     「現在沒作用」的提示，不是鎖 —— 仍然可以先填好再打開）。
+    function crDimColumns() {
+        var box = $('credit');
+        [['myai_initial_credit_on', 'init'], ['myai_monthly_topup_on', 'topup']].forEach(function (p) {
+            var sw = box.querySelector('[data-crsw="' + p[0] + '"]');
+            var on = sw ? sw.getAttribute('aria-checked') === 'true' : Number(crVal(p[0])) > 0;
+            box.querySelectorAll('[data-crcol="' + p[1] + '"]').forEach(function (td) {
+                td.classList.toggle('is-dimmed', !on);
+            });
+        });
+    }
+
+    function readCredit() {
+        var payload = {};
+        var box = $('credit');
+        box.querySelectorAll('[data-crsw]').forEach(function (sw) {
+            payload[sw.dataset.crsw] = sw.getAttribute('aria-checked') === 'true' ? '1' : '0';
+        });
+        box.querySelectorAll('[data-crkey]').forEach(function (el) {
+            // ZH: 🔴 清空的點數格當 0 送，**不送空字串**。空字串在後端是「清除覆寫、回預設」，
+            //     而這裡的預設剛好也是 0 —— 結果一樣，但存進去的應該就是畫面上的那個數，
+            //     不要靠「預設剛好是 0」這種巧合。補點日不在此列（空的就讓後端擋）。
+            var v = el.value.trim();
+            payload[el.dataset.crkey] = (v === '' && el.dataset.crkey !== 'myai_monthly_topup_day') ? '0' : v;
+        });
+        return payload;
+    }
+
+    async function saveCredit() {
+        try {
+            await api('/admin/system-settings', {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(readCredit()),
+            });
+            flash('cr-msg', T('pf_saved', '已儲存'));
+            CR_EDITING = false;
+            await loadSettings();      // ZH: 重讀 —— 後端會夾限，畫面要顯示真正存進去的
+        } catch (e) {
+            say('cr-msg', T('pf_save_fail', '存不起來（{w}）').replace('{w}', e.message));
+        }
     }
 
     // ══════════════════════════════════════════════════════════════════════
@@ -716,7 +868,9 @@
         GROUPS.forEach(function (g) { known[g.key] = true; });
 
         // ZH: 只畫屬於目前檢視的分組。view 由後端給（見 crud.SETTING_GROUPS）。
-        var shown = GROUPS.filter(function (g) { return g.view === VIEW; });
+        // ZH: v4.35 —— 有 `card` 的分組由自己的卡片畫（例：MYAI 點數 → renderCredit），
+        //     通用表跳過。它仍然算「已知分組」（上面的 known），所以不會掉進「其他」。
+        var shown = GROUPS.filter(function (g) { return g.view === VIEW && !g.card; });
 
         // ZH: 不屬於任何**已知分組**的旋鈕才進「其他」；已知但不屬於這個檢視的
         //     不算漏接（它在另一邊）。這兩件事分清楚，否則切到平台時
@@ -1539,6 +1693,19 @@
         renderAlertMail();
     });
     $('am-save').addEventListener('click', function () { saveAlertMail(); });
+
+    // ZH: v4.35 MYAI 點數那一格。同一套：唯讀 → 編輯 → 一次儲存；取消從 SETTINGS 重畫。
+    $('cr-edit').addEventListener('click', function () {
+        CR_EDITING = true;
+        say('cr-msg', '');
+        renderCredit();
+    });
+    $('cr-cancel').addEventListener('click', function () {
+        CR_EDITING = false;
+        say('cr-msg', '');
+        renderCredit();
+    });
+    $('cr-save').addEventListener('click', function () { saveCredit(); });
     $('m-edit').addEventListener('click', function () {
         MODELS_EDIT = true;
         say('m-msg', '');

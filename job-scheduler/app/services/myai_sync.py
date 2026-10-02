@@ -1206,7 +1206,7 @@ async def transfer_credit_batch(rows: list[dict], confirm_grant: bool = False) -
 # ZH: v3.9 每月補點 —— 把所有綁定帳號補到同一個水位
 # ==============================================================================
 # ZH: 規則（擁有者 2026-08-29 裁定）：
-#       · 補到**固定值**（`myai_monthly_topup_to`），不是每人固定加
+#       · 補到**固定值**（v4.35 起依身分：`myai_monthly_topup_<role>`），不是每人固定加
 #       · **所有**綁定且啟用的帳號，不看這個月有沒有登入
 #       · 每月第 `myai_monthly_topup_day` 天（預設 1 號，台北時間）
 #       · 到期日不管 —— 那是廠商在處理的事
@@ -1328,8 +1328,8 @@ async def monthly_topup(db: Session, force: bool = False) -> dict:
 
     @node job-scheduler/app/services/myai_sync.py::monthly_topup
     """
-    target = int(crud.get_setting(db, "myai_monthly_topup_to") or 0)
-    if target <= 0:
+    # ZH: v4.35 —— 純開關。每人補到多少看身分（topup_targets 不給 target 就按身分算）。
+    if int(crud.get_setting(db, "myai_monthly_topup_on") or 0) <= 0:
         return {"status": "disabled"}
 
     month = _taipei_month()
@@ -1355,13 +1355,12 @@ async def monthly_topup(db: Session, force: bool = False) -> dict:
         logger.error("MYAI 每月補點中止：同步失敗，不拿舊點數算差額（%s）", e)
         return {"status": "sync_failed", "error": str(e)[:200]}
 
-    # ZH: v4.34 —— **不傳 target**：每個人補到他身分該有的水位（分級）。
-    #     上面那個 target 仍然是總開關（<=0 就整個關閉），但不再是大家的水位。
+    # ZH: **不傳 target**：每個人補到他身分該有的水位（分級，v4.34 起）。
     rows = topup_targets(db)
     if not rows:
         crud.set_system_config(db, TOPUP_MONTH_KEY, month)
         logger.info("MYAI 每月補點：沒有人低於自己身分的水位，本月完成")
-        return {"status": "nobody_below", "month": month, "target": target}
+        return {"status": "nobody_below", "month": month}
 
     total = sum(r["points"] for r in rows)
     logger.warning("MYAI 每月補點 %s：%d 人、合計 %d 點（依身分分級）",
@@ -1384,8 +1383,7 @@ async def monthly_topup(db: Session, force: bool = False) -> dict:
         return {"status": "unknown", "month": month, "count": len(rows), "points": total}
 
     logger.info("MYAI 每月補點完成 %s：%d 人、合計 %d 點", month, len(rows), total)
-    return {"status": "done", "month": month, "count": len(rows),
-            "points": total, "target": target}
+    return {"status": "done", "month": month, "count": len(rows), "points": total}
 
 
 async def manual_topup(db: Session, target: int, admin_id: str,
@@ -1766,7 +1764,7 @@ async def provision_user(db: Session, user, password: str | None = None) -> dict
 
 async def grant_initial_credit(db: Session, acc, email: str) -> dict:
     """
-    ZH: 發放新帳號的初始點數（`myai_initial_credit`，0 = 不發）。
+    ZH: 發放新帳號的初始點數（開關 `myai_initial_credit_on`，點數看身分那一格）。
 
     ZH: 三件事必須同時成立才會真的送出：設定值 > 0、這個帳號**沒發過**、
         呼叫端明確允許扣點。三者缺一就安靜地不發。

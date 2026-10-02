@@ -36,6 +36,18 @@ def _bind(db, email, points, sn=None):
     return u
 
 
+def _topup_to(db, points):
+    """ZH: v4.35 —— 打開每月補點，並讓五個身分都補到同一個水位。
+
+    ZH: 這一組測的是「一個月只送一次、失敗的方向」這些流程，不是分級；
+        分級另有 test_myai_credit_tiers.py。所以一律設成同一個數，
+        讓斷言跟分級前完全一樣。
+    """
+    crud.set_system_config(db, "myai_monthly_topup_on", "1")
+    for role, _zh, _en in crud.MYAI_CREDIT_ROLES:
+        crud.set_system_config(db, "myai_monthly_topup_%s" % role, str(points))
+
+
 def _no_network(monkeypatch):
     """ZH: sync 換成不做事 —— 這組測試不對廠商送任何東西。"""
     async def fake_sync(db):
@@ -116,7 +128,7 @@ def test_the_source_account_is_never_topped_up(db, monkeypatch):
 def test_runs_once_then_never_again_that_month(db, monkeypatch):
     """ZH: 🔴 整組測試的核心。排程每小時醒一次 —— 第二次醒來絕對不能再送。"""
     _bind(db, "f@example.com", 0)
-    crud.set_system_config(db, "myai_monthly_topup_to", "500")
+    _topup_to(db, 500)
     crud.set_system_config(db, "myai_monthly_topup_day", "1")
     monkeypatch.setattr(M, "_taipei_day", lambda: 1)
     _no_network(monkeypatch)
@@ -136,7 +148,7 @@ def test_force_still_cannot_bypass_the_monthly_gate(db, monkeypatch):
         繞過後者就是重複發放。
     """
     _bind(db, "g@example.com", 0)
-    crud.set_system_config(db, "myai_monthly_topup_to", "500")
+    _topup_to(db, 500)
     _no_network(monkeypatch)
     seen = _capture_transfer(monkeypatch)
 
@@ -148,7 +160,7 @@ def test_force_still_cannot_bypass_the_monthly_gate(db, monkeypatch):
 def test_does_nothing_before_the_topup_day(db, monkeypatch):
     """ZH: 還沒到補點日就不送。"""
     _bind(db, "h@example.com", 0)
-    crud.set_system_config(db, "myai_monthly_topup_to", "500")
+    _topup_to(db, 500)
     crud.set_system_config(db, "myai_monthly_topup_day", "15")
     monkeypatch.setattr(M, "_taipei_day", lambda: 14)
     _no_network(monkeypatch)
@@ -166,7 +178,7 @@ def test_does_nothing_after_the_topup_day(db, monkeypatch):
         真的遇到時的出路是**手動補齊**（manual_topup），不是自動補跑。
     """
     _bind(db, "m@example.com", 0)
-    crud.set_system_config(db, "myai_monthly_topup_to", "500")
+    _topup_to(db, 500)
     crud.set_system_config(db, "myai_monthly_topup_day", "1")
     monkeypatch.setattr(M, "_taipei_day", lambda: 7)
     _no_network(monkeypatch)
@@ -177,7 +189,7 @@ def test_does_nothing_after_the_topup_day(db, monkeypatch):
 
 
 def test_target_zero_means_off(db, monkeypatch):
-    """ZH: 0 = 不補（預設值）。"""
+    """ZH: 開關關著 = 不補（預設值）。"""
     _bind(db, "i@example.com", 0)
     _no_network(monkeypatch)
     seen = _capture_transfer(monkeypatch)
@@ -195,7 +207,7 @@ def test_stale_points_are_never_used(db, monkeypatch):
         而且**不標記月份** —— 下一輪醒來要能再試。
     """
     _bind(db, "j@example.com", 0)
-    crud.set_system_config(db, "myai_monthly_topup_to", "500")
+    _topup_to(db, 500)
 
     async def boom(db_):
         raise RuntimeError("廠商掛了")
@@ -215,7 +227,7 @@ def test_failure_after_sending_does_not_retry(db, monkeypatch):
         否則下一輪會再送一次，有機率發兩倍。
     """
     _bind(db, "k@example.com", 0)
-    crud.set_system_config(db, "myai_monthly_topup_to", "500")
+    _topup_to(db, 500)
     _no_network(monkeypatch)
     seen = _capture_transfer(monkeypatch, granted=False)
 
@@ -235,7 +247,7 @@ def test_exception_after_sending_still_closes_the_month(db, monkeypatch):
         `granted=False` 的那支是正常回傳，走的是不同的路。
     """
     _bind(db, "n@example.com", 0)
-    crud.set_system_config(db, "myai_monthly_topup_to", "500")
+    _topup_to(db, 500)
     _no_network(monkeypatch)
 
     seen = []
@@ -254,7 +266,7 @@ def test_exception_after_sending_still_closes_the_month(db, monkeypatch):
 def test_nobody_below_target_still_closes_the_month(db, monkeypatch):
     """ZH: 沒人需要補也算做完了 —— 否則每小時都會重跑一次同步。"""
     _bind(db, "l@example.com", 9999)
-    crud.set_system_config(db, "myai_monthly_topup_to", "500")
+    _topup_to(db, 500)
     _no_network(monkeypatch)
     seen = _capture_transfer(monkeypatch)
 

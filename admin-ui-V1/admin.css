@@ -1623,6 +1623,21 @@ textarea.field__input {
 }
 #settings tr.is-dimmed td { opacity: 0.45; }
 
+/* ZH: v4.35 MYAI 點數卡片。開關兩列在表格上面；關著的那一欄淡化（不是鎖）。 */
+.cr-switch {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: var(--space-2);
+    margin-bottom: var(--space-2);
+}
+.cr-switch__label { font-weight: 600; }
+.cr-day { display: inline-flex; align-items: center; gap: var(--space-1); }
+#credit .adm-tablewrap { margin-top: var(--space-3); max-width: 36rem; }
+#credit td.is-dimmed { opacity: 0.45; }
+.cr-num { max-width: 9rem; text-align: right; }
+.cr-num--day { max-width: 4.5rem; }
+
 /* ==========================================================================
  * ZH: GPU 開放時段拉條（v4.2，擁有者裁定 2026-09-02）——
  *     一天一條雙把手拉條取代文字輸入。兩個原生 range 疊在同一軌道上

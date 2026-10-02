@@ -236,7 +236,7 @@ def test_grant_is_skipped_when_already_granted(monkeypatch):
 
 
 def test_grant_is_skipped_when_setting_is_zero(monkeypatch):
-    """ZH: myai_initial_credit = 0 就是不發（預設值，且必須真的不送出）。"""
+    """ZH: 開關關著（myai_initial_credit_on = 0）就是不發（預設值，且必須真的不送出）。"""
     called = []
 
     async def boom(*a, **k):
@@ -319,7 +319,7 @@ def _provision_env(monkeypatch, db, send_email_flag, sent):
             return 1
         if key == "myai_provision_email":
             return send_email_flag
-        if key == "myai_initial_credit":
+        if key == "myai_initial_credit_on":
             return 0        # ZH: 這組測的是寄信，點數另有測試
         return real_get_setting(_db, key)
 
