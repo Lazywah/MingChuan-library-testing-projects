@@ -740,6 +740,10 @@ html.aibot-docked #aibot-fab { display: none; }
  * ========================================================================== */
 .page--home { max-width: 1160px; }
 
+/* ZH: v4.36 訓練結果卡裡的模型檔說明（下載鈕下面）。程式碼區沿用 .diag，只限制寬度不溢出。 */
+.model-help { margin-top: var(--space-3); text-align: left; }
+.model-help .diag { overflow-x: auto; white-space: pre; }
+
 /* ZH: 公告在首頁是整寬的一條。`.news` 本身的卡片外框在 styles.css（共用檔），
  *     這裡只負責「在首頁要多寬」—— 不動共用檔（它與管理端逐位元組相同）。 */
 .news--wide { margin-bottom: var(--space-6); }

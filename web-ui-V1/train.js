@@ -282,6 +282,10 @@ async function submitJob(datasetRef, jobName) {
         jobId = body.job_id;
         finished = false;
         lastLogLen = 0;
+        // ZH: v4.36 —— 「再訓練一次」時上一輪的下載鈕與模型說明要收起來，
+        //     不然新的一輪還在排隊，畫面上卻掛著上一輪的模型。
+        $('run-actions').hidden = true;
+        $('model-help').hidden = true;
     } catch (e) {
         setNote(T('tr_submit_fail', '送不出去') + `（${clean(e.message)}）`);
         setGo({ label: T('tr_go', '開始訓練'), enabled: true });
@@ -463,6 +467,61 @@ async function poll() {
     }
 }
 
+// ══════════════════════════════════════════════════════════════════════
+// ZH: v4.36 模型檔說明（接管者回饋 2026-09-30 ②）
+// ══════════════════════════════════════════════════════════════════════
+// ZH: 原本下載鈕旁邊**一個字都沒有**，只有檔案大小 —— 初學者拿到一個 .pt 不知道能做什麼。
+// ZH: 三種情況講法不同，靠後端的 `task`（自帶程式的單是 null）判斷：
+//       圖片 —— 架構是 torchvision 的 ResNet-18，給一段**真的跑得動**的載入程式
+//       表格／文字 —— 架構是內建腳本自己定義的，光有權重載不起來；
+//                     不硬塞一段跑不動的程式，指向實驗室裡有完整定義的範例
+//       自帶程式 —— 格式是他自己的程式決定的，平台講不出更多
+// ZH: 🔴 範例程式碼**不進字典**：程式碼不翻譯，而且字典裡放多行字串很難維護。
+//     它必須與 gpu-worker/builtin_scripts/image_classification.py 存的格式一致
+//     （state_dict / classes / img_size，ImageNet 的 Normalize）—— 那邊改了這裡要跟著改。
+const MODEL_SNIPPET_IMAGE = `import torch
+from torch import nn
+from torchvision import models, transforms
+from PIL import Image
+
+ckpt = torch.load("model.pt", map_location="cpu")
+model = models.resnet18()
+model.fc = nn.Linear(model.fc.in_features, len(ckpt["classes"]))
+model.load_state_dict(ckpt["state_dict"])
+model.eval()
+
+tf = transforms.Compose([
+    transforms.Resize((ckpt["img_size"], ckpt["img_size"])),
+    transforms.ToTensor(),
+    transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225]),
+])
+x = tf(Image.open("photo.jpg").convert("RGB")).unsqueeze(0)
+with torch.no_grad():
+    print(ckpt["classes"][model(x).argmax(1).item()])`;
+
+function renderModelHelp(j) {
+    const box = $('model-help');
+    if (!box) return;
+    const lab = { tabular_classification: 'sample_tabular.py', text_classification: 'sample_text.py' };
+    if (j.task === 'image_classification') {
+        box.innerHTML =
+            `<p class="footnote">${esc(T('tr_model_what_image',
+                '這是剛訓練好的模型（ResNet-18）。可以在自己的 Python 程式裡載入，拿新的照片讓它判斷是哪一類。'))}</p>` +
+            `<details class="fold"><summary class="fold__summary">${esc(T('tr_model_how', '下載之後怎麼用'))}</summary>` +
+            `<div class="fold__body"><p class="footnote">${esc(T('tr_model_how_note',
+                '把 photo.jpg 換成你的照片，和 model.pt 放在同一個資料夾。需要 torch、torchvision、Pillow，程式實驗室裡都已經裝好了。'))}</p>` +
+            `<pre class="diag">${esc(MODEL_SNIPPET_IMAGE)}</pre></div></details>`;
+    } else if (lab[j.task]) {
+        box.innerHTML = `<p class="footnote">${esc(T('tr_model_what_builtin',
+            '這是剛訓練好的模型。它的結構是平台內建程式自己定義的，載入時要用同一份定義 —— 程式實驗室 projects 資料夾裡的 {f} 有完整寫法。')
+            .replace('{f}', lab[j.task]))}</p>`;
+    } else {
+        box.innerHTML = `<p class="footnote">${esc(T('tr_model_what_own',
+            '這是你的程式存到 OUTPUT_DIR 的檔案，格式由你的程式決定。'))}</p>`;
+    }
+    box.hidden = false;
+}
+
 function finish(j) {
     if (j.status === 'completed') {
         setBar(100);
@@ -487,6 +546,7 @@ function finish(j) {
                              `${esc(T('tr_download', '下載模型檔'))}` +
                              `${j.model_bytes ? '（' + human(j.model_bytes) + '）' : ''}</button>`;
             $('dl').addEventListener('click', () => downloadModel($('dl')));
+            renderModelHelp(j);
             if (!viewJobId) setNote(T('tr_done_note', '訓練完成，結果在下面。'));
         } else if (!viewJobId) {
             setNote(T('tr_done_no_model', '訓練完成，結果在下面。模型檔沒能傳回伺服器，' +
