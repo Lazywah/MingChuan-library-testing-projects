@@ -64,19 +64,12 @@ def start_lab(
     #     他會以為 A 壞了。
     # ZH: v3.9 要不要 GPU。沒帶＝不要（既有前端不必改，行為與 v3.8 相同）。
     want_gpu = bool((payload or {}).get("gpu"))
-    # ZH: v4.19 「學習程式碼」選的範例。不認得就當場 400 —— 默默略過的話使用者
-    #     選了「文字」卻開出貓狗，會以為功能壞了。
-    sample = (payload or {}).get("sample") or None
-    if sample is not None and sample not in lab_manager.LAB_SAMPLE_KINDS:
-        raise HTTPException(
-            status_code=400,
-            detail=f"ZH: 不認得的範例 '{sample}'，可用：{', '.join(lab_manager.LAB_SAMPLE_KINDS)} | "
-                   f"EN: Unknown sample '{sample}'")
+    # ZH: v4.36 —— 不再收 `sample`：三種範例每個存檔都會放（lab_manager.seed_samples），
+    #     不必由前端指定。舊前端帶過來的 sample 直接忽略。
     switched_from = lab_manager._stop_other_running(db, current_user.id, keep=session)
     try:
         result = lab_manager.start_session(db, current_user.id, base_image=base_image,
-                                           session=session, want_gpu=want_gpu,
-                                           sample=sample)
+                                           session=session, want_gpu=want_gpu)
     except lab_manager.StorageFrozenError as e:
         # ZH: 🔴 訊息要帶數字、而且要對應**被擋掉的是哪一件事**。
         #     v4.23 起超配額的人是進得來的（清理模式），會走到這裡的只剩

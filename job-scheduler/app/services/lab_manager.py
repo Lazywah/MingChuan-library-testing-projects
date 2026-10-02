@@ -109,45 +109,52 @@ class ContainerLifecycle(Protocol):
 # ==============================================================================
 
 # ==============================================================================
-# ZH: v4.19 —— 「學習程式碼」可選範例
+# ZH: v4.36 —— 每個存檔都放好三種範例（擁有者 2026-10-02）
 # ==============================================================================
-# ZH: 貓狗那份烤在 code-server 映像裡，entrypoint 第一次啟動時放進 ~/projects/。
-#     表格／文字這兩份**不進映像**（兩個映像加起來 26 GB，為了 100 KB 重建不划算）：
-#     放在服務層自己的映像裡（/app/lab_samples/<kind>/），啟動實驗室時用 docker 的
-#     put_archive 直接寫進容器的 ~/projects/。每次啟動都放（會覆蓋同名檔）——
-#     範例是可以隨時還原的東西，使用者自己的檔案不同名不會被動到。
-# ZH: kind → 目錄名。None ＝ 不用放（貓狗已經在映像裡）。
-LAB_SAMPLE_KINDS = {"cats_dogs": None, "tabular": "tabular", "text": "text"}
+# ZH: 之前（v4.19）是「學習程式碼」按鈕選了哪一種才放哪一種。那顆按鈕拿掉了，
+#     改成訓練結果下方的一段說明，告訴使用者「到程式實驗室的 projects 裡就有」——
+#     所以**不管從哪裡開實驗室**，三種範例都要在。
+# ZH: 貓狗那份仍然烤在 code-server 映像裡，由 entrypoint 第一次啟動時放
+#     （10 MB 的圖片，不經過這裡）。表格／文字**不進映像**：兩個映像加起來 26 GB，
+#     為了 100 KB 重建不划算 —— 放在服務層自己的映像裡（/app/lab_samples/<kind>/）。
+# ZH: 🔴 **只放一次，而且不覆蓋。** v4.19 是每次啟動都覆蓋同名檔 —— 那時是使用者
+#     自己按了「要這份範例」，覆蓋說得過去。現在是每次開實驗室都會跑，覆蓋的話
+#     學生改了 EPOCHS、關掉再開就被打回原樣。所以：
+#       · 先放到暫存目錄，再 `cp -n`（不覆蓋）進 ~/projects/
+#       · 放過就寫記號，之後不再放（刪掉了就是不要了，與 entrypoint 的貓狗同一個規則）
+#     已經從舊按鈕拿過其中一份的人：記號不存在 → 補上缺的那份，改過的那份不動。
+LAB_SAMPLE_DIRS = ("tabular", "text")
 LAB_SAMPLES_DIR = pathlib.Path(os.environ.get("LAB_SAMPLES_DIR", "/app/lab_samples"))
+SAMPLES_MARK = ".samples-seeded-v2"
+_SAMPLES_STAGE = ".aibase-samples-stage"
 # ZH: code-server 映像的 coder 使用者。檔案要是他的，不然 VS Code 裡改不了。
 _LAB_UID = 1000
 
 
-def sample_tar(kind: str) -> Optional[bytes]:
-    """ZH: 把一種範例打成 tar（放到 /home/coder 底下：projects/<檔名>）。沒東西要放回 None。
+def samples_tar() -> Optional[bytes]:
+    """ZH: 把表格與文字範例打成一個 tar，放在 /home/coder 底下的暫存目錄。沒東西回 None。
 
-    ZH: 連 `projects/` 目錄本身也放一筆進 tar：全新使用者的容器剛起來時 entrypoint
-        可能還沒 mkdir，put_archive 到不存在的目錄會 404。目錄與檔案都標 uid 1000。
+    ZH: 目錄與檔案都標 uid 1000（coder）。暫存目錄本身也放一筆 ——
+        put_archive 到不存在的目錄會 404。
 
-    @node job-scheduler/app/services/lab_manager.py::sample_tar
+    @node job-scheduler/app/services/lab_manager.py::samples_tar
     """
     import io
     import tarfile
-    if kind not in LAB_SAMPLE_KINDS:
-        raise ValueError(f"unknown sample kind: {kind!r}")
-    sub = LAB_SAMPLE_KINDS[kind]
-    if sub is None:
-        return None
-    src = LAB_SAMPLES_DIR / sub
-    files = sorted(p for p in src.iterdir() if p.is_file()) if src.is_dir() else []
-    if not files:
-        logger.warning("Lab sample %r has no files under %s", kind, src)
-        return None
     import time as _time
+    files = []
+    for sub in LAB_SAMPLE_DIRS:
+        src = LAB_SAMPLES_DIR / sub
+        found = sorted(p for p in src.iterdir() if p.is_file()) if src.is_dir() else []
+        if not found:
+            logger.warning("Lab sample %r has no files under %s", sub, src)
+        files += found
+    if not files:
+        return None
     now = int(_time.time())          # ZH: 不設的話檔案總管裡顯示 1970 年
     buf = io.BytesIO()
     with tarfile.open(fileobj=buf, mode="w") as tf:
-        d = tarfile.TarInfo("projects")
+        d = tarfile.TarInfo(_SAMPLES_STAGE)
         d.type = tarfile.DIRTYPE
         d.mode = 0o755
         d.uid = d.gid = _LAB_UID
@@ -155,7 +162,7 @@ def sample_tar(kind: str) -> Optional[bytes]:
         tf.addfile(d)
         for p in files:
             data = p.read_bytes()
-            ti = tarfile.TarInfo(f"projects/{p.name}")
+            ti = tarfile.TarInfo(f"{_SAMPLES_STAGE}/{p.name}")
             ti.size = len(data)
             ti.mode = 0o644
             ti.uid = ti.gid = _LAB_UID
@@ -164,22 +171,37 @@ def sample_tar(kind: str) -> Optional[bytes]:
     return buf.getvalue()
 
 
-def seed_sample(container, kind: Optional[str]) -> bool:
-    """ZH: 把選定的範例放進剛啟動的容器。放不進去**不影響開實驗室**（記 warning）。
+# ZH: 在容器裡跑的那一段。mkdir -p：剛起來的容器 entrypoint 可能還沒建 projects/。
+#     `cp -n` 不覆蓋；有記號就整段跳過；暫存目錄一律清掉。
+_SEED_SH = (
+    'mkdir -p "$HOME/projects"; '
+    'if [ ! -f "$HOME/projects/{mark}" ]; then '
+    'cp -n "$HOME/{stage}/"* "$HOME/projects/" && touch "$HOME/projects/{mark}"; '
+    'fi; rm -rf "$HOME/{stage}"'
+).format(mark=SAMPLES_MARK, stage=_SAMPLES_STAGE)
 
-    @node job-scheduler/app/services/lab_manager.py::seed_sample
+
+def seed_samples(container) -> bool:
+    """ZH: 把表格與文字範例放進剛啟動的容器（一次、不覆蓋）。放不進去**不影響開實驗室**。
+
+    @node job-scheduler/app/services/lab_manager.py::seed_samples
     """
-    if not kind:
-        return False
     try:
-        data = sample_tar(kind)
+        data = samples_tar()
         if data is None:
             return False
         container.put_archive(LAB_HOME, data)
-        logger.info("Seeded lab sample %r into %s", kind, container.name)
+        # ZH: 以 coder 執行 —— 用 root 跑的話 touch 出來的記號是 root 的，學生刪不掉。
+        res = container.exec_run(["sh", "-c", _SEED_SH], user="coder",
+                                 environment={"HOME": LAB_HOME})
+        code = getattr(res, "exit_code", None)
+        if code not in (0, None):
+            logger.warning("Lab samples seed script exited %s in %s", code, container.name)
+            return False
+        logger.info("Seeded lab samples into %s", container.name)
         return True
     except Exception as e:  # noqa: BLE001 - 範例放不進去不該讓實驗室開不起來
-        logger.warning("Could not seed lab sample %r: %s", kind, e)
+        logger.warning("Could not seed lab samples: %s", e)
         return False
 
 
@@ -369,8 +391,8 @@ class CodeServerLifecycle:
             logger.info("Started code-server container %s for user %s", name, user_id[:8])
             if gpu_until:
                 _write_gpu_notice(container, gpu_until)
-            # ZH: v4.19 「學習程式碼」選的範例（沒選＝不放，貓狗那份本來就在映像裡）
-            seed_sample(container, config.get("sample"))
+            # ZH: v4.36 三種範例都放（一次、不覆蓋）—— 不管從哪裡開實驗室。
+            seed_samples(container)
             return container.id, name
         except APIError as e:
             logger.error("Failed to start container %s: %s", name, e)
@@ -752,8 +774,7 @@ def _stop_other_running(db: Session, user_id: str, keep: str) -> Optional[str]:
 
 
 def start_session(db: Session, user_id: str, base_image: Optional[str] = None,
-                  session: str = DEFAULT_SESSION, want_gpu: bool = False,
-                  sample: Optional[str] = None) -> dict:
+                  session: str = DEFAULT_SESSION, want_gpu: bool = False) -> dict:
     """
     ZH: 啟動使用者的 code-server session（含配額檢查、secrets 注入、DB 紀錄）
     EN: Start a user's code-server session (with quota check, secrets injection, DB record)
@@ -948,7 +969,6 @@ def start_session(db: Session, user_id: str, base_image: Optional[str] = None,
             "session":      session,
             "gpu_index":    gpu_index,
             # ZH: v4.19 「學習程式碼」選的範例（cats_dogs / tabular / text；None ＝ 不放）
-            "sample":       sample,
             # ZH: v4.24 隔離開啟時＝這個人自己的網路；關閉時 None ＝ 共用網路
             "network":      lab_network,
         })
