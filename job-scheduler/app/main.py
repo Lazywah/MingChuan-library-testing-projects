@@ -364,10 +364,13 @@ from .routers import chat, admin, datasets, worker, sso, lab, secrets, announcem
 from .routers import models as models_router
 from .routers import external_ai
 from .routers import assistant
+from .routers import admin_ai  # v4.37 管理端 AI
 from .routers import reports
 from .routers import system
 app.include_router(chat.router,      prefix="/api/v1/chat")
 app.include_router(admin.router,     prefix="/api/v1/admin")
+# ZH: v4.37 管理端 AI（唯讀查詢、本機模型）
+app.include_router(admin_ai.router,  prefix="/api/v1/admin/ai")
 # ZH: 動態模型清單（各 AI 工具的下拉依 tool_type 抓取）| EN: Dynamic model list per tool
 app.include_router(models_router.router, prefix="/api/v1/models")
 app.include_router(datasets.router,  prefix="/api/v1/datasets")

@@ -1670,7 +1670,7 @@ SETTING_ORDER = {
     "myai_credit": ["myai_initial_credit_on", "myai_monthly_topup_on", "myai_monthly_topup_day",
                     "myai_initial_credit_student", "myai_initial_credit_teacher", "myai_initial_credit_staff", "myai_initial_credit_guest", "myai_initial_credit_admin",
                     "myai_monthly_topup_student", "myai_monthly_topup_teacher", "myai_monthly_topup_staff", "myai_monthly_topup_guest", "myai_monthly_topup_admin"],
-    "assistant": ["rag_chat_model", "rag_top_k", "rag_min_score", "rag_history_turns"],
+    "assistant": ["rag_chat_model", "rag_top_k", "rag_min_score", "rag_history_turns", "admin_ai_model"],
     "email":    ["myai_provision_email", "bounce_scan_minutes",
                  "login_alert_email", "login_alert_hours",
                  "myai_balance_alert_days", "lab_purge_first_days",
@@ -1863,6 +1863,14 @@ SYSTEM_SETTINGS = {
     "login_alert_email":        {"starred": True, "group": "email", "type": "int",   "default": lambda: 1,                                    "min": 0,   "max": 1,    "label": "登入通知信(1=寄, 0=不寄)", "label_en": "Login alert email (1 = send, 0 = do not)"},
     "login_alert_hours":        {"depends_on": "login_alert_email", "starred": True, "group": "email", "type": "int",   "default": lambda: 0,                                    "min": 0,   "max": 720,  "label": "登入通知信的最短間隔(小時; 0=每次都寄; 換 IP 一律照寄)", "label_en": "Minimum interval between login alerts (hours; 0 = every login; a new IP always sends)"},
     "rag_chat_model":           {"starred": True, "group": "assistant", "type": "choice", "default": lambda: settings.RAG_CHAT_MODEL,             "min": None, "max": None, "label": "小基回應用的模型", "label_en": "Model the assistant replies with"},
+    # ZH: v4.37 管理端 AI（擁有者 2026-10-04：本機模型、只能查不能改）。
+    #     🔴 `choices: "local"` —— 選單**只列本機（ollama）模型**。它會讀到學號、信箱、日誌，
+    #     擁有者裁定資料不出校；services/admin_ai.py 呼叫前會再擋一次。
+    #     與小基分開設：小基哪天改用校外模型，管理端不能跟著被帶出去。
+    "admin_ai_model":           {"group": "assistant", "type": "choice", "choices": "local",
+                                 "default": lambda: settings.RAG_CHAT_MODEL, "min": None, "max": None,
+                                 "label": "管理端 AI 用的模型（只能選本機模型，資料不出校）",
+                                 "label_en": "Model for the admin AI (local models only - data stays on campus)"},
 }
 
 # ==============================================================================
@@ -2157,6 +2165,17 @@ def rag_model_choices(db: Session) -> list:
     return out
 
 
+def setting_choices(db: Session, spec: dict) -> list:
+    """ZH: 下拉型旋鈕的選項。`choices: "local"` 只留本機（ollama）模型（v4.37 管理端 AI）。
+
+    @node job-scheduler/app/crud.py::setting_choices
+    """
+    out = rag_model_choices(db)
+    if spec.get("choices") == "local":
+        out = [c for c in out if c.get("provider") == "ollama"]
+    return out
+
+
 def rag_model_provider(db: Session, model_id: str) -> str:
     """ZH: 這個模型該走哪個 provider。查不到就當成 ollama（本機）。
 
@@ -2298,7 +2317,7 @@ def get_all_settings(db: Session) -> list:
         }
         # ZH: 下拉型的旋鈕要把選項一起送 —— 前端不該自己去猜有哪些值。
         if spec["type"] == "choice":
-            item["choices"] = rag_model_choices(db)
+            item["choices"] = setting_choices(db, spec)
         out.append(item)
     # ZH: v4.2 組內照 SETTING_ORDER 排（上游在前、父子相鄰），
     #     沒列到的排該組最後、維持 registry 順序（排序穩定，原順序不動）。
@@ -3213,7 +3232,7 @@ def set_settings(db: Session, updates: dict) -> list:
         if spec["type"] == "choice":
             # ZH: 只接受選單裡真的有的值。不驗的話，一個打錯的模型名會被存進去，
             #     然後小基每次回答都失敗 —— 而設定頁看起來一切正常。
-            allowed = {c["value"] for c in rag_model_choices(db)}
+            allowed = {c["value"] for c in setting_choices(db, spec)}
             v = str(val).strip()
             if v not in allowed:
                 raise ValueError(f"設定 {key} 的值不在可選清單裡：{v}")

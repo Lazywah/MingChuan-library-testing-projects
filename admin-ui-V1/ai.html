@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="zh-Hant" data-theme="yellow">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title data-i18n="adm_t_ai">AI 查詢 · MCU AI Base 管理端</title>
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Open+Sans:wght@400;600;700&display=swap" rel="stylesheet">
+
+    <link rel="stylesheet" href="tokens.css?v=ff9cecda">
+    <link rel="stylesheet" href="styles.css?v=d4d21ce8">
+    <link rel="stylesheet" href="admin.css?v=f3b2139e">
+</head>
+<body>
+
+<!-- ZH: 頂部列由 admin-chrome.js 產生（唯一真相來源）。 -->
+
+<main class="page page--admin">
+
+    <div class="adm-sec__head">
+        <h1 class="hero__title" data-i18n="adm_nav_ai">AI 查詢</h1>
+    </div>
+
+    <!-- ZH: v4.37 管理端 AI（擁有者 2026-10-04）：用一句話查平台狀況。
+             擁有者裁定：**本機模型（資料不出校）、只能查不能改**。
+             ZH: 🔴 每一筆都附「原始資料」—— 本機 8B 模型整理的說明可能講錯，
+             管理員要能直接對照查到的東西，不是只能相信模型。 -->
+    <section class="adm-sec" aria-labelledby="h-ask">
+        <h2 class="sr-only" id="h-ask" data-i18n="ai_ask_h">提問</h2>
+        <p class="footnote" data-i18n="ai_intro">用一句話查平台狀況，例如帳號、MYAI 同步、最近的錯誤、某次訓練。只能查、不能改；用的是本機模型，資料不出校。說明是模型整理的，可能有誤，以每一筆下面的原始資料為準。</p>
+        <form class="ai-form" id="ai-form" autocomplete="off">
+            <textarea class="field__input ai-q" id="ai-q" rows="2" maxlength="500"
+                      data-i18n-placeholder="ai_ph" data-i18n-aria="ai_ph"
+                      aria-label="例如：檢查 12361114 帳號狀態，信箱收到實驗室刪除通知"
+                      placeholder="例如：檢查 12361114 帳號狀態，信箱收到實驗室刪除通知"></textarea>
+            <button class="btn btn--primary" type="submit" id="ai-go" data-i18n="ai_ask">查詢</button>
+        </form>
+        <div class="ai-chips" role="group" aria-label="常用問題" data-i18n-aria="ai_examples">
+            <button class="btn btn--minor" type="button" data-q="MYAI 同步正常嗎" data-i18n="ai_ex_myai">MYAI 同步正常嗎</button>
+            <button class="btn btn--minor" type="button" data-q="最近 24 小時有什麼錯誤" data-i18n="ai_ex_err">最近 24 小時有什麼錯誤</button>
+            <button class="btn btn--minor" type="button" data-q="系統狀態" data-i18n="ai_ex_sys">系統狀態</button>
+            <button class="btn btn--minor" type="button" data-fill="查帳號 " data-i18n="ai_ex_user">查帳號（輸入學號）</button>
+        </div>
+        <div class="inline-error" id="ai-err" hidden></div>
+    </section>
+
+    <section class="adm-sec" aria-labelledby="h-ans" aria-live="polite">
+        <h2 class="sr-only" id="h-ans" data-i18n="ai_ans_h">查詢結果</h2>
+        <div id="ai-list"><p class="footnote" id="ai-empty" data-i18n="ai_empty">還沒有查詢。</p></div>
+    </section>
+
+</main>
+
+<script src="tz.js?v=2e214a8b"></script>
+<!-- ⚠ ZH: 順序不能動 —— i18n-admin 在 i18n 之後、prefs 之前。 -->
+<script src="i18n.js?v=a885be5f"></script>
+<script src="i18n-admin.js?v=838ec824"></script>
+<script src="tip.js?v=0699f4a2"></script>
+<script src="prefs.js?v=e71609e5"></script>
+<script src="admin-chrome.js?v=1dc21458"></script>
+<script src="ai.js?v=502ecb5d"></script>
+</body>
+</html>

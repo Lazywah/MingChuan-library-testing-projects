@@ -1912,3 +1912,40 @@ textarea.field__input {
     /* ZH: 語言切換不要撐滿 —— 兩顆小鈕拉成一整列會看起來像可以按整條。 */
     .topbar__tools .lang-switch { align-self: flex-start; }
 }
+
+/* ==========================================================================
+ * AI 查詢（v4.37）
+ * ZH: 一筆＝問題 → 模型說明 → 程式判斷 → 可展開的原始資料。
+ *     原始資料預設收起來（多半很長），但標題寫明「以這裡為準」。
+ * ========================================================================== */
+.ai-form {
+    display: flex;
+    gap: var(--space-2);
+    align-items: flex-end;
+    margin-top: var(--space-3);
+}
+.ai-form .ai-q { flex: 1; resize: vertical; min-height: 3em; }
+/* ZH: styles.css 讓表單裡的主按鈕撐滿（登入頁那種）—— 這裡跟輸入框並排，要縮回內容寬。 */
+.ai-form .btn { width: auto; flex: none; }
+.ai-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-2);
+    margin-top: var(--space-2);
+}
+.ai-item {
+    border: 1px solid var(--hairline);
+    border-radius: var(--radius-md, 8px);
+    padding: var(--space-3);
+    margin-bottom: var(--space-3);
+}
+.ai-q-text { font-weight: 700; margin: 0; }
+.ai-answer { white-space: pre-wrap; line-height: 1.7; margin-top: var(--space-2); }
+.ai-sub { font-size: 1rem; margin: var(--space-3) 0 var(--space-1); }
+.ai-findings { margin: 0; padding-left: 1.4em; }
+.ai-raw { margin-top: var(--space-3); }
+.ai-raw > summary { cursor: pointer; font-weight: 600; }
+.ai-kv th { white-space: nowrap; text-align: left; }
+@media (max-width: 640px) {
+    .ai-form { flex-direction: column; align-items: stretch; }
+}

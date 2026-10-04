@@ -65,7 +65,7 @@
     var API = '/api/v1';
     var TOKEN_KEY = 'ai_hud_token';
 
-    // ZH: 五頁。`file` 對應實際檔名，`key` 是翻譯 key。
+    // ZH: 六頁。`file` 對應實際檔名，`key` 是翻譯 key。
     //     順序＝設計文件第 1 節推導的使用時機：先「看有沒有出事」，最後才是「查數字」。
     var NAV = [
         { file: 'index.html',     key: 'adm_nav_overview',  zh: '總覽' },
@@ -73,6 +73,8 @@
         { file: 'platform.html',  key: 'adm_nav_platform',  zh: '平台設定' },
         { file: 'reports.html',   key: 'adm_nav_msg',       zh: '訊息' },
         { file: 'analytics.html', key: 'adm_nav_analytics', zh: '數據' },
+        // ZH: v4.37 管理端 AI（唯讀查詢、本機模型）。放最後：它是查問題的輔助，不是日常巡視的一站。
+        { file: 'ai.html',        key: 'adm_nav_ai',        zh: 'AI 查詢' },
     ];
 
     function token() {
