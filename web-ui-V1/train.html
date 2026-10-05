@@ -11,7 +11,7 @@
 
     <link rel="stylesheet" href="tokens.css?v=ff9cecda">
     <link rel="stylesheet" href="styles.css?v=d4d21ce8">
-    <link rel="stylesheet" href="web.css?v=a5ce19b3">
+    <link rel="stylesheet" href="web.css?v=2658d2e4">
     <!-- ZH: 🔴 側欄狀態必須在**首次繪製之前**套用，否則每換一頁都會看到
              內容滑出去讓位（widget 的 JS 在 body 尾端才跑，那時已經畫過一次了）。
              這一段刻意內嵌而不是外部檔案 —— 外部檔案要等網路往返，
@@ -30,13 +30,56 @@
 
 <main class="page page--narrow">
 
+<div class="tr-layout" id="tr-layout">
+    <!-- ZH: v4.38 側欄（擁有者 2026-10-05）：「開始的方式」與「要練哪一種」兩個維度都在這裡，
+             原本兩者擠在表單最上面，容易誤會成同一件事。
+         ZH: 主區塊**維持置中**（擁有者），側欄是 position:fixed 貼在主區塊左邊、不跟著捲動；
+             放不下的寬度（見 web.css）退回表單上方的一列。清單的真相仍在 train.js 的 TASKS。
+         ZH: 「用自己的程式」時種類只決定「用平台準備好的範例」給哪一包（見 #side-hard-note）。 -->
+    <aside class="tr-side" id="tr-side">
+        <div class="tr-side__mode" id="mode-now">
+            <p class="tr-side__cur"><span class="tr-side__t" data-i18n="tr_now">目前的方式：</span><b id="mode-now-name" data-i18n="tr_mode_normal">用自己的資料</b></p>
+            <button class="btn btn--minor" type="button" id="mode-reopen" data-i18n="tr_pick_again">重新選擇模式</button>
+        </div>
+        <h2 class="tr-side__t" id="side-t" data-i18n="tr_side_t">要練哪一種</h2>
+        <div class="tr-side__tabs" role="tablist" aria-orientation="vertical" aria-labelledby="side-t" id="task-tabs">
+            <button class="tr-tab" type="button" role="tab" id="tab-image" data-task="image_classification"
+                    aria-selected="true" aria-controls="tr-form" tabindex="0">
+                <span class="tr-tab__i" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="1.8"/><path d="M21 17l-5-5-9 8"/></svg></span>
+                <span class="tr-tab__txt">
+                    <span class="tr-tab__name" data-i18n="tr_task_image">圖片分類</span>
+                    <span class="tr-tab__eg"><span data-i18n="tr_side_sample">範例：</span><span data-i18n="gpu_kind_cats">貓狗圖片</span></span>
+                </span>
+            </button>
+            <button class="tr-tab" type="button" role="tab" id="tab-tabular" data-task="tabular_classification"
+                    aria-selected="false" aria-controls="tr-form" tabindex="-1">
+                <span class="tr-tab__i" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 10h18M3 15h18M9 4v16"/></svg></span>
+                <span class="tr-tab__txt">
+                    <span class="tr-tab__name" data-i18n="tr_task_tabular">表格資料分類</span>
+                    <span class="tr-tab__eg"><span data-i18n="tr_side_sample">範例：</span><span data-i18n="gpu_kind_tab">學生及格表格</span></span>
+                </span>
+            </button>
+            <button class="tr-tab" type="button" role="tab" id="tab-text" data-task="text_classification"
+                    aria-selected="false" aria-controls="tr-form" tabindex="-1">
+                <span class="tr-tab__i" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h16M4 11h16M4 16h10"/></svg></span>
+                <span class="tr-tab__txt">
+                    <span class="tr-tab__name" data-i18n="tr_task_text">文字分類</span>
+                    <span class="tr-tab__eg"><span data-i18n="tr_side_sample">範例：</span><span data-i18n="gpu_kind_text">餐廳評論文字</span></span>
+                </span>
+            </button>
+        </div>
+        <p class="tr-side__note" id="side-hard-note" hidden data-i18n="tr_side_hard">用自己的程式時，這裡只決定「用平台準備好的範例」會給你哪一包資料。</p>
+    </aside>
+
+    <div class="tr-main">
+
     <!-- ==================================================================
          ZH: 這個畫面存在的理由：**不會寫程式也能訓練出一個模型。**
              所以整頁只問兩件事——「你的圖片」與「跑幾輪」，其餘一律由平台決定。
              刻意不露出 batch_size / learning_rate / 模型架構：
              會調那些的人本來就該去程式實驗室，而不會調的人看到只會卡住。
          ================================================================== -->
-    <section class="primary-card" aria-labelledby="tr-title">
+    <section class="primary-card" id="tr-form" role="tabpanel" aria-labelledby="tr-title">
         <h1 class="hero__title" id="tr-title" data-i18n="tr_h1">交給平台訓練</h1>
         <p class="hero__sub">
             <span id="tr-sub1" data-i18n="tr_sub1">上傳一包分好類的圖片，平台幫你訓練，不用寫程式。</span><br>
@@ -50,22 +93,8 @@
                  要給人看、哪些已經替他決定好。這樣有興趣的人可以就地切換、不必重來，
                  也不會長出第二套要一起維護的畫面。哪個欄位在哪種方式出現，見 train.js 的 MODE_SHOWS。
                  ZH: 體驗模式不畫這一排 —— 那群人看到「方式」兩個字就會開始猶豫；
-                 他們要換的話，底下有一行「我想自己調」。 -->
-        <!-- ZH: v4.38 原本這裡是三顆切換鈕；改成「目前的方式＋重新選擇模式」，選擇本身在全版遮罩（#mpick）。 -->
-        <p class="mode-now" id="mode-now">
-            <span><span data-i18n="tr_now">目前的方式：</span><b id="mode-now-name" data-i18n="tr_mode_normal">用自己的資料</b></span>
-            <button class="btn btn--minor" type="button" id="mode-reopen" data-i18n="tr_pick_again">重新選擇模式</button>
-        </p>
-
-        <!-- ZH: v4.19 —— 三種內建任務。放在最上面，因為它決定下面每一段文案
-                 （壓縮檔長什麼樣、失敗的常見原因、範例是哪一包）。
-                 選項的順序是「最直覺 → 最不直覺」：圖片一看就懂，文字要先想一下
-                 「答案欄」是什麼。清單的真相在 train.js 的 TASKS。 -->
-        <div class="seg" role="group" aria-label="訓練種類" data-i18n-aria="tr_task_aria" id="task-seg">
-            <button type="button" data-task="image_classification" aria-pressed="true" data-i18n="tr_task_image">圖片分類</button>
-            <button type="button" data-task="tabular_classification" aria-pressed="false" data-i18n="tr_task_tabular">表格資料分類</button>
-            <button type="button" data-task="text_classification" aria-pressed="false" data-i18n="tr_task_text">文字分類</button>
-        </div>
+                 他們要換的話，用側欄的「重新選擇模式」。 -->
+        <!-- ZH: v4.38 原本這裡是三顆方式切換鈕；「目前的方式＋重新選擇模式」搬到側欄（#tr-side），選擇本身在全版遮罩（#mpick）。 -->
 
         <!-- ZH: v4.36 體驗模式：把「要決定的事」換成「已經替你決定好的事」。
                  接管者原話：對什麼都不懂的使用者來說，壓縮檔格式、要練幾輪、
@@ -75,7 +104,6 @@
             <p class="easy__row"><span class="easy__k" data-i18n="tr_easy_what_k">要訓練的模型</span><span class="easy__v" id="easy-what"></span></p>
             <p class="easy__row"><span class="easy__k" data-i18n="tr_easy_data_k">資料</span><span class="easy__v" id="easy-data"></span></p>
             <p class="easy__row"><span class="easy__k" data-i18n="tr_easy_time_k">要多久</span><span class="easy__v" id="easy-time"></span></p>
-            <p class="easy__row"><button class="btn btn--minor" type="button" id="easy-change" data-i18n="tr_easy_change">換一種範例</button></p>
         </div>
 
         <!-- ZH: 版面要求講在「選檔案之前」。等他選完才說格式不對，
@@ -154,11 +182,7 @@
         </div>
 
         <button class="btn btn--primary" id="go" type="button" disabled data-i18n="tr_go">開始訓練</button>
-        <!-- ZH: v4.36 體驗模式的出口：**就地**展開成完整表單（不換頁、已選的種類保留）。
-                 接管者擔心的是「選項太多看不懂」，不是「不准看」—— 想動手的人一次點擊就到。 -->
-        <p class="to-normal" id="to-normal-row" hidden>
-            <button class="btn btn--minor" type="button" id="to-normal" data-i18n="tr_to_normal">我想自己調（用自己的資料、改輪數、用自己的程式）</button>
-        </p>
+        <!-- ZH: v4.38 拿掉「我想自己調」（擁有者 2026-10-05）：側欄的「重新選擇模式」就是那個出口，留兩個會讓人以為是兩件事。 -->
         <div class="handoff" id="note" hidden></div>
     </section>
 
@@ -240,15 +264,20 @@
         </details>
     </section>
 
-    <nav class="minor">
-        <a href="gpu.html" data-i18n="tr_back">回到上一頁</a>
+    </div>
+</div>
+
+    <!-- ZH: v4.38 一般情況不放「回到首頁」（擁有者 2026-10-05：頂部列就有首頁）。
+             只有「只看結果」（?job=）時亮出來，那時它是「回到我的訓練」（initViewMode 填）。 -->
+    <nav class="minor" id="tr-back-row" hidden>
+        <a href="jobs.html" id="tr-back" data-i18n="jl_back">回到我的訓練</a>
     </nav>
 
 </main>
 
 <!-- ZH: v4.38 全版遮罩三選一（擁有者 2026-10-05）。一進訓練頁就蓋上來，選了才看得到表單；
-         表單上方的「重新選擇模式」會再叫出同一個遮罩。入口頁的三張卡因此收成一顆「開始訓練」——
-         **只有一個地方選方式**，不會有兩種長相的選擇畫面。
+         表單上方的「重新選擇模式」會再叫出同一個遮罩。入口頁（gpu.html）拿掉了，只剩轉址 ——
+         **只有一個地方選方式**。要練哪一種在左側分頁（#tr-side），不在這裡選。
      ZH: 第一次（還沒選）沒有 ×、Esc 與點遮罩也不關：關掉之後他會面對一張沒選過的表單。
          要離開就用底下的「回到上一頁」。重新選擇時才有 ×／Esc／點遮罩關閉，關了＝維持原本的方式。
      ZH: 🔴 z-index 800：高於 topbar（30）、低於小基（900）—— 遮罩要蓋住整頁，
@@ -280,18 +309,20 @@
                 <span class="mpick__need"><span data-i18n="tr_pick_need">要準備：</span><span data-i18n="tr_pick_need_hard">一支 .py 訓練程式，加上一包資料（或用範例）</span></span>
             </button>
         </div>
-        <p class="mpick__foot" id="mpick-foot"><a href="gpu.html" data-i18n="tr_back">回到上一頁</a></p>
+        <!-- ZH: 頁面底部的「回到首頁」拿掉了，這一個保留：第一次的遮罩蓋住頂部列、又不能關，
+                 這是不選方式也能離開的唯一出口。 -->
+        <p class="mpick__foot" id="mpick-foot"><a href="index.html" data-i18n="tr_home">回到首頁</a></p>
     </div>
 </div>
 
 <script src="tz.js?v=2e214a8b"></script>
 <script src="docs-entry.js?v=131ee7af"></script>
-<script src="i18n.js?v=de4cc1cf"></script>
+<script src="i18n.js?v=582f58fc"></script>
 <script src="prefs.js?v=e71609e5"></script>
 <!-- ZH: 小基（浮動助手）。客服模式公開，登入頁也放 —— 設計文件的使用者需求是「不會用這個平台時想直接問」。 -->
 <script src="assistant-widget.js?v=74e3c4b6"></script>
-<script src="chrome.js?v=9368462b"></script>
-<script src="train.js?v=539c3ffb"></script>
+<script src="chrome.js?v=c352d352"></script>
+<script src="train.js?v=358ca7f4"></script>
 <!-- ZH: 到訪人次。每一頁都載（這是「網站」的計數，不是首頁的），一個工作階段只送一次；
          只有放了 [data-visits] 的頁面（登入頁、首頁）會顯示數字。 -->
 <script src="visits.js"></script>

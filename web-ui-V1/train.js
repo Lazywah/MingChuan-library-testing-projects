@@ -43,7 +43,6 @@ let mode = 'normal';      // ZH: v4.36 easy / normal / hard
 //     宣告放在後面的話是 TDZ（直接 ReferenceError，整頁 JS 停擺）；
 //     初值是 false 的話，遮罩還沒出現網址就被寫成 mode=normal，重新整理就跳過遮罩。
 let pickerFirst = !viewJobId && !reuseId && !['easy', 'normal', 'hard'].includes(QS.get('mode'));
-let taskSegOpen = false;  // ZH: 體驗模式下按了「換一種範例」才把種類分頁打開
 let LAST_JOB = null;      // ZH: 語言切換時重畫結果下方的說明用
 // ZH: v3.6 使用者自帶的訓練程式（原始碼字串，不是檔案 —— 隨送單一起走）
 let scriptSource = null;
@@ -114,8 +113,12 @@ function setTask(t) {
     if (!TASKS[t]) return;
     task = t;
     const c = TASKS[t];
-    $('task-seg').querySelectorAll('button').forEach((b) =>
-        b.setAttribute('aria-pressed', String(b.dataset.task === t)));
+    // ZH: v4.38 左側分頁（roving tabindex：只有選中的那一個在 Tab 順序裡）。
+    taskTabs().forEach((b) => {
+        const on = b.dataset.task === t;
+        b.setAttribute('aria-selected', String(on));
+        b.tabIndex = on ? 0 : -1;
+    });
     // ZH: 同時改 data-i18n 與文字：prefs.js 換語言時是重掃 data-i18n，
     //     只改文字的話，一切換語言就會跳回圖片那一版。
     const targets = [['tr-sub1', 'sub1'], ['fmt-p', 'fmtP'], ['tree', 'tree'], ['fmt-note', 'fmtNote']];
@@ -130,11 +133,27 @@ function setTask(t) {
     if (mode === 'easy') { renderEasy(); loadSample(); }
     syncUrl();
 }
-$('task-seg').addEventListener('click', (e) => {
-    const b = e.target.closest('button[data-task]');
+function taskTabs() { return [...document.querySelectorAll('#task-tabs [role="tab"]')]; }
+$('task-tabs').addEventListener('click', (e) => {
+    const b = e.target.closest('[role="tab"]');
     if (b) setTask(b.dataset.task);
 });
-// ZH: v4.19 從 gpu.html 的三選一過來時帶 ?task=<種類>，這裡預選同一種。
+// ZH: 分頁的鍵盤操作：上下（窄畫面是左右）換一個、Home／End 到頭尾，換了就選（自動啟用）。
+$('task-tabs').addEventListener('keydown', (e) => {
+    const tabs = taskTabs();
+    const i = tabs.indexOf(document.activeElement);
+    if (i < 0) return;
+    const step = { ArrowDown: 1, ArrowRight: 1, ArrowUp: -1, ArrowLeft: -1 }[e.key];
+    let j = null;
+    if (step) j = (i + step + tabs.length) % tabs.length;
+    else if (e.key === 'Home') j = 0;
+    else if (e.key === 'End') j = tabs.length - 1;
+    if (j === null) return;
+    e.preventDefault();
+    setTask(tabs[j].dataset.task);
+    tabs[j].focus();
+});
+// ZH: 網址帶 ?task=<種類>（選過之後 syncUrl 寫的、舊入口頁的連結、書籤）就預選同一種。
 //     不認得的值就維持預設（圖片），不報錯。
 if (TASKS[QS.get('task')]) setTask(QS.get('task'));
 
@@ -177,14 +196,13 @@ $('sample').addEventListener('click', () => { pickedIsSampleFor = null; loadSamp
 //       hard   —— 不分種類（跑的是他自己的程式），自帶程式一進來就展開
 const MODES = ['easy', 'normal', 'hard'];
 const MODE_SHOWS = {
-    'task-seg':      ['normal'],          // ZH: 體驗模式按了「換一種範例」才打開（見 setMode）
+    'side-hard-note': ['hard'],
     'easy-box':      ['easy'],
     'fmt-fold':      ['normal'],
     'drop':          ['normal', 'hard'],
     'sample-row':    ['normal', 'hard'],
     'epochs-field':  ['normal', 'hard'],
     'own-fold':      ['hard'],
-    'to-normal-row': ['easy'],
 };
 
 // ZH: 「目前的方式」那一行的名字。用 T() 一個個寫是為了 check_i18n 抓得到 key。
@@ -205,7 +223,6 @@ function setMode(m) {
         const el = $(id);
         if (el) el.hidden = !modes.includes(m);
     });
-    if (m === 'easy' && taskSegOpen) $('task-seg').hidden = false;
     if (m === 'hard') $('own-code').open = true;
     renderSub();
     // ZH: 先算開始鈕，再抓範例 —— 反過來的話「正在取得範例…」會馬上被蓋回「開始訓練」。
@@ -286,9 +303,9 @@ function openPicker(first) {
     const box = $('mpick');
     $('mpick-x').hidden = pickerFirst;
     $('mpick-foot').hidden = !pickerFirst;
-    const kindBtn = document.querySelector(`#task-seg [data-task="${task}"]`);
-    $('mpick-sub').textContent = T('tr_pick_sub', '種類：{k}。選好之後，隨時可以按「重新選擇模式」換。')
-        .replace('{k}', kindBtn ? kindBtn.textContent.trim() : task);
+    const kindName = document.querySelector(`#task-tabs [data-task="${task}"] .tr-tab__name`);
+    $('mpick-sub').textContent = T('tr_pick_sub', '目前要練：{k}（可以在「要練哪一種」分頁換）。開始的方式選好之後，隨時可以按「重新選擇模式」再換。')
+        .replace('{k}', kindName ? kindName.textContent.trim() : task);
     pickerOptions().forEach((b) => {
         const cur = !pickerFirst && b.dataset.mode === mode;
         b.classList.toggle('is-current', cur);
@@ -333,13 +350,6 @@ $('mpick').addEventListener('keydown', (e) => {
 });
 
 $('mode-reopen').addEventListener('click', () => openPicker(false));
-$('to-normal').addEventListener('click', () => setMode('normal'));
-$('easy-change').addEventListener('click', () => {
-    taskSegOpen = true;
-    $('task-seg').hidden = false;
-    const first = $('task-seg').querySelector('button[aria-pressed="true"]');
-    if (first) first.focus();
-});
 
 // ══════════════════════════════════════════════════════════════════════
 // ZH: v4.36 上傳一張圖片試試看（接管者回饋 2026-09-30 ①；後端 /jobs/{id}/try，服務層 CPU 推論）
@@ -638,13 +648,10 @@ else {
 
 // ── 只看既有任務 ─────────────────────────────────────────────────────
 function initViewMode() {
-    // ZH: 從「我的訓練」進來的，回去也該回那裡（不是 gpu.html）。
-    const back = document.querySelector('.minor a[href="gpu.html"]');
-    if (back) {
-        back.href = 'jobs.html';
-        back.removeAttribute('data-i18n');
-        back.textContent = T('jl_back', '回到我的訓練');
-    }
+    // ZH: 從「我的訓練」進來的，回去也該回那裡（不是首頁）。
+    $('tr-back-row').hidden = false;
+    // ZH: 只看結果時沒有表單，側欄（方式、種類）也沒有意義 —— 收起來。
+    $('tr-side').hidden = true;
     // ZH: 把送單那張卡整個收起來 —— 這條路不上傳、不設輪數、不送出。
     //     留著一顆按不了的按鈕比拿掉更讓人困惑。
     const card = document.querySelector('.primary-card');

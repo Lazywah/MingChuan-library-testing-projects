@@ -163,7 +163,7 @@ async function load() {
             //     不到 --tap-min 44px。這裡是**動作**（去訓練第一個模型），不是引述連結。
             return showNote(T('docs_empty1', '文件庫還沒有內容。') + '<br>'
                 + T('docs_empty2', '這裡之後會放同學的作品與教學影片。想成為第一個嗎？') + '<br>'
-                + `<a class="btn--minor" href="gpu.html">${T('docs_empty_cta', '從訓練你的第一個模型開始')}</a>`);
+                + `<a class="btn--minor" href="train.html">${T('docs_empty_cta', '從訓練你的第一個模型開始')}</a>`);
         }
         ALL.sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')));
         $('msg').hidden = true;

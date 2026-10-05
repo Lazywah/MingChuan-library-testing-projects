@@ -740,10 +740,7 @@ html.aibot-docked #aibot-fab { display: none; }
  * ========================================================================== */
 .page--home { max-width: 1160px; }
 
-/* ZH: v4.36 入口頁的三種方式（gpu.html）。沿用 .gcard 的卡片長相，由淺到深**往下排**：
- *     順序本身就是分級，不靠顏色分主次（接管者回饋：誰是主要取決於你是誰）。
- *     主卡是置中排版，卡片內文改回靠左 —— 兩行說明置中讀起來像標語。 */
-.gpu-start { margin-top: var(--space-4); }
+/* ZH: v4.38 入口頁（gpu.html）拿掉了，原本的 .modes／.gpu-start 一起刪。 */
 
 /* ZH: v4.36 訓練頁的體驗模式：三行「已經替你決定好的事」。 */
 .easy {
@@ -759,7 +756,6 @@ html.aibot-docked #aibot-fab { display: none; }
 .easy__k { flex: 0 0 6.5em; color: var(--text-muted); font-size: 0.875rem; }
 .easy__v { flex: 1 1 auto; min-width: 0; font-weight: 600; color: var(--text-strong); }
 .easy__row:last-child { margin-top: var(--space-2); }
-.to-normal { margin-top: var(--space-3); }
 .learn { margin-top: var(--space-4); text-align: left; }
 /* ZH: v4.36 模型判斷錯的。資料欄可能很長（一整列表格或一整句），要能折行；
  *     外層可以橫向捲，免得手機上把整頁撐寬。 */
@@ -1217,19 +1213,179 @@ html:has(.mpick:not([hidden])) { overflow: hidden; }
 .mpick__need > span:first-child { color: var(--text-muted); }
 .mpick__foot { margin: var(--space-4) 0 0; }
 
-/* ZH: 訓練表單上方「目前的方式：… ［重新選擇模式］」 */
-.mode-now {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    justify-content: center;
-    gap: var(--space-2);
-    margin: var(--space-3) 0 0;
-}
+/* ZH: 「目前的方式＋重新選擇模式」v4.38 搬到側欄，樣式見 .tr-side__mode。 */
 
 @media (max-width: 760px) {
     .mpick { align-items: flex-start; padding: var(--space-3); }
     .mpick__box { padding: var(--space-4) var(--space-3); }
     .mpick__grid { grid-template-columns: 1fr; gap: var(--space-2); }
     .mpick__opt { min-height: 0; padding: var(--space-3) var(--space-4); }
+}
+
+/* ==========================================================================
+ * ZH: v4.38 訓練頁側欄：目前的方式＋要練哪一種（擁有者 2026-10-05）。
+ *
+ * ZH: 擁有者要求兩件事：**主區塊維持置中**、**側欄不跟著捲動**。所以側欄是 position:fixed，
+ *     left 由「主區塊的左緣」往左推：主區塊是 .page--narrow（34rem、置中），
+ *     左緣 = 50% − 17rem；再減掉間距 1.5rem 與側欄寬 13.5rem ＝ 50% − 32rem。
+ *
+ * ZH: 🔴 放不放得下要分兩種情況算（量過）：
+ *       小基沒停靠：需要 50vw ≥ 32rem＋邊距 → 視窗 ≥ 1100px。
+ *       小基停靠  ：body 右邊讓出 --aibot-w（28vw），內容中心變成 (100% − 28vw)/2，
+ *                   需要 0.72·vw ≥ 65rem → 視窗 ≥ 1445px。1280px 停靠時會蓋到主區塊。
+ *     放不下就**退回表單上方的一列**（預設樣式），不要硬塞。
+ *     停靠的那一條另外減掉 --aibot-w／2，不然側欄會比主區塊偏左半個小基寬。
+ *
+ * ZH: 沒有 z-index：遮罩（800）、小基（900）、頂部列（30，sticky 在最上面）都要蓋過它。
+ * ========================================================================== */
+
+/* ── 預設（放不下時）：表單上方一列 ───────────────────────────────── */
+.tr-side { margin-bottom: var(--space-3); }
+.tr-side__t {
+    margin: 0 0 var(--space-2);
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: var(--text-muted);
+}
+.tr-side__mode {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-2);
+    margin-bottom: var(--space-3);
+    padding: var(--space-2) var(--space-3);
+    border: 1px solid var(--hairline);
+    border-radius: var(--radius-md);
+    background-color: var(--surface);
+}
+.tr-side__cur { margin: 0; }
+.tr-side__cur .tr-side__t { margin: 0; font-size: 0.875rem; }
+.tr-side__cur b { color: var(--text-strong); }
+
+.tr-side__tabs { display: flex; gap: var(--space-1); }
+.tr-tab {
+    display: flex;
+    flex: 1 1 0;
+    min-width: 0;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-2);
+    padding: var(--space-2) var(--space-1);
+    border: 1px solid transparent;
+    border-bottom: 3px solid transparent;
+    border-radius: var(--radius-md);
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    text-align: center;
+    cursor: pointer;
+}
+.tr-tab:hover { background-color: var(--surface-2); }
+.tr-tab[aria-selected="true"] {
+    border-color: var(--hairline);
+    border-bottom-color: var(--accent);
+    background-color: var(--surface);
+    box-shadow: var(--shadow-2);
+}
+/* ZH: 一列時三格平分寬度（375px 實測：帶圖示時總寬 430px，第三格被擠出畫面），
+ *     圖示與範例名收起來，只留名字。 */
+.tr-tab__i, .tr-tab__eg { display: none; }
+.tr-tab__txt { min-width: 0; }
+.tr-tab__name { display: block; font-weight: 700; font-size: 0.9375rem; color: var(--text-strong); }
+.tr-side__note { margin: var(--space-2) 0 0; font-size: 0.8125rem; color: var(--text-muted); }
+
+/* ── 放得下時：固定在主區塊左邊的直排側欄 ───────────────────────── */
+/* ZH: ⚠ 下面兩段內容相同、只差前綴與 left（由 scratchpad 腳本產生）—— 改一段要改兩段。 */
+@media (min-width: 1100px) {
+    html:not(.aibot-docked) .tr-side {
+        position: fixed;
+        top: 5.5rem;
+        left: calc(50% - 32rem);
+        width: 13.5rem;
+        max-height: calc(100dvh - 7rem);
+        overflow-y: auto;
+        margin: 0;
+    }
+    html:not(.aibot-docked) .tr-side .tr-side__mode {
+        flex-direction: column;
+        align-items: stretch;
+        gap: var(--space-2);
+        margin-bottom: var(--space-4);
+        padding: var(--space-3);
+    }
+    html:not(.aibot-docked) .tr-side .tr-side__cur .tr-side__t { display: block; margin-bottom: 2px; }
+    html:not(.aibot-docked) .tr-side .tr-side__cur b { font-size: 1.0625rem; }
+    html:not(.aibot-docked) .tr-side .tr-side__tabs { flex-direction: column; }
+    html:not(.aibot-docked) .tr-side .tr-tab {
+        flex: 0 0 auto;
+        justify-content: flex-start;
+        align-items: flex-start;
+        padding: var(--space-3);
+        border-bottom-width: 1px;
+        border-left: 3px solid transparent;
+        text-align: left;
+    }
+    html:not(.aibot-docked) .tr-side .tr-tab[aria-selected="true"] { border-bottom-color: var(--hairline); border-left-color: var(--accent); }
+    html:not(.aibot-docked) .tr-side .tr-tab__i {
+        display: inline-flex;
+        flex: 0 0 auto;
+        align-items: center;
+        justify-content: center;
+        width: 2rem;
+        height: 2rem;
+        border-radius: var(--radius-pill);
+        background-color: var(--surface-2);
+        color: var(--text-muted);
+    }
+    html:not(.aibot-docked) .tr-side .tr-tab[aria-selected="true"] .tr-tab__i { background-color: var(--accent); color: var(--on-accent); }
+    html:not(.aibot-docked) .tr-side .tr-tab__i svg { width: 1.25rem; height: 1.25rem; display: block; }
+    html:not(.aibot-docked) .tr-side .tr-tab__eg { display: block; font-size: 0.8125rem; color: var(--text-muted); }
+    html:not(.aibot-docked) .tr-side .tr-tab__name { font-size: 1rem; }
+}
+@media (min-width: 1445px) {
+    html.aibot-docked .tr-side {
+        position: fixed;
+        top: 5.5rem;
+        left: calc(50% - var(--aibot-w) / 2 - 32rem);
+        width: 13.5rem;
+        max-height: calc(100dvh - 7rem);
+        overflow-y: auto;
+        margin: 0;
+    }
+    html.aibot-docked .tr-side .tr-side__mode {
+        flex-direction: column;
+        align-items: stretch;
+        gap: var(--space-2);
+        margin-bottom: var(--space-4);
+        padding: var(--space-3);
+    }
+    html.aibot-docked .tr-side .tr-side__cur .tr-side__t { display: block; margin-bottom: 2px; }
+    html.aibot-docked .tr-side .tr-side__cur b { font-size: 1.0625rem; }
+    html.aibot-docked .tr-side .tr-side__tabs { flex-direction: column; }
+    html.aibot-docked .tr-side .tr-tab {
+        flex: 0 0 auto;
+        justify-content: flex-start;
+        align-items: flex-start;
+        padding: var(--space-3);
+        border-bottom-width: 1px;
+        border-left: 3px solid transparent;
+        text-align: left;
+    }
+    html.aibot-docked .tr-side .tr-tab[aria-selected="true"] { border-bottom-color: var(--hairline); border-left-color: var(--accent); }
+    html.aibot-docked .tr-side .tr-tab__i {
+        display: inline-flex;
+        flex: 0 0 auto;
+        align-items: center;
+        justify-content: center;
+        width: 2rem;
+        height: 2rem;
+        border-radius: var(--radius-pill);
+        background-color: var(--surface-2);
+        color: var(--text-muted);
+    }
+    html.aibot-docked .tr-side .tr-tab[aria-selected="true"] .tr-tab__i { background-color: var(--accent); color: var(--on-accent); }
+    html.aibot-docked .tr-side .tr-tab__i svg { width: 1.25rem; height: 1.25rem; display: block; }
+    html.aibot-docked .tr-side .tr-tab__eg { display: block; font-size: 0.8125rem; color: var(--text-muted); }
+    html.aibot-docked .tr-side .tr-tab__name { font-size: 1rem; }
 }
