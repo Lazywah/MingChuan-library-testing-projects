@@ -45,6 +45,9 @@
         recent_errors: function () { return T('ai_tool_err', '最近的錯誤'); },
         job_report:    function () { return T('ai_tool_job', '訓練查詢'); },
         system_status: function () { return T('ai_tool_sys', '系統狀態'); },
+        email_report:  function () { return T('ai_tool_mail', '寄信紀錄'); },
+        admin_activity: function () { return T('ai_tool_audit', '管理操作紀錄'); },
+        log_search:    function () { return T('ai_tool_log', '日誌搜尋'); },
     };
 
     function valueText(v) {
@@ -141,8 +144,12 @@
     });
     document.querySelectorAll('.ai-chips [data-fill]').forEach(function (b) {
         b.addEventListener('click', function () {
-            $('ai-q').value = b.dataset.fill;
-            $('ai-q').focus();
+            var q = $('ai-q');
+            q.value = b.dataset.fill;
+            q.focus();
+            // ZH: 「在日誌裡找「」」—— 游標放進引號中間，直接打要找的字。
+            var at = q.value.lastIndexOf('」');
+            if (at > 0) q.setSelectionRange(at, at);
         });
     });
 })();

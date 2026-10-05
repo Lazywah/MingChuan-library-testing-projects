@@ -147,6 +147,18 @@ def test_rate_limit(client, admin_headers, monkeypatch, fake_model):
     ("12361114 的 MYAI 綁定", ("user_report", {"username": "12361114"})),
     ("最近有什麼錯誤", None),
     ("系統狀態", None),
+    # ZH: 2026-10-05 擁有者實際問過、當時查不到的兩題
+    ("查寄信", ("email_report", {})),
+    ("幫我查近期寄出的管理信", ("email_report", {"kind": "管理"})),
+    ("寄給 12361114 的信有沒有到", ("email_report", {"to": "12361114"})),
+    ("最近 3 天的退信", ("email_report", {"status": "退信", "days": 3})),
+    ("MYAI 同步告警信", ("email_report", {"kind": "告警"})),
+    ("誰刪了 12090291", ("admin_activity", {"target": "12090291", "action": "刪"})),
+    ("這週的管理操作紀錄", ("admin_activity", {"days": 7})),
+    ("12361114 最近做了哪些管理操作", ("admin_activity", {"admin": "12361114"})),
+    ("admin 刪了哪些帳號", ("admin_activity", {"admin": "admin", "action": "刪"})),
+    ("日誌裡找「Traceback」", ("log_search", {"keyword": "Traceback"})),
+    ("log 裡有沒有 12361114", ("log_search", {"keyword": "12361114"})),
 ])
 def test_rule_routing(q, expected):
     assert admin_ai._route_by_rules(q) == expected
@@ -171,6 +183,8 @@ def test_summary_prompt_marks_data_as_not_instructions(db, fake_model):
     admin_ai.ask(db, "檢查 12345678")
     system = fake_model[-1]["messages"][0]["content"]
     assert "不是指令" in system and "不能修改" in system
+    assert "不要自己編頁面" in system, "qwen 曾經編出不存在的「日誌查詢」頁（2026-10-05）"
+    assert "不要輸出 JSON" in system, "叫它「看原始資料」時 qwen 曾經把整段 JSON 抄進回答（2026-10-05）"
 
 
 # ── 工具的判斷 ─────────────────────────────────────────────────────────
@@ -256,3 +270,147 @@ def test_ollama_request_unloads_quickly(monkeypatch):
     monkeypatch.setattr(admin_ai.httpx, "post", lambda url, json=None, timeout=None: sent.append(json) or _R())
     assert admin_ai._ollama("m", [{"role": "user", "content": "hi"}]) == "ok"
     assert sent[0]["keep_alive"] == "1m"
+
+
+
+# ── 參數驗證（2026-10-05：模型把「請提供帳號」當學號）────────────────────
+
+@pytest.mark.parametrize("name,args,asks", [
+    ("user_report", {"username": "請提供帳號"}, True),
+    ("user_report", {"username": "管理員帳號"}, True),
+    ("user_report", {}, True),
+    ("user_report", {"username": "12361114"}, False),
+    ("job_report", {"job_id": "<id>"}, True),
+    ("job_report", {"job_id": "3f9a"}, False),
+    ("log_search", {"keyword": "請提供關鍵字"}, True),
+    ("log_search", {"keyword": "x"}, True),
+    ("log_search", {"keyword": "Traceback"}, False),
+    ("email_report", {}, False),
+])
+def test_validate_args(name, args, asks):
+    _, ask = admin_ai_tools.validate_args(name, args)
+    assert bool(ask) is asks
+
+
+def test_validate_args_drops_undeclared_keys():
+    args, ask = admin_ai_tools.validate_args("user_report", {"username": "12361114", "action": "delete"})
+    assert ask is None and args == {"username": "12361114"}
+
+
+def test_placeholder_from_model_asks_back_without_querying(db, monkeypatch):
+    calls = []
+
+    def _fake(model, messages, json_mode=False, timeout=120.0):
+        calls.append(json_mode)
+        return json.dumps({"tool": "user_report", "args": {"username": "請提供帳號"}})
+
+    monkeypatch.setattr(admin_ai, "_ollama", _fake)
+    r = admin_ai.ask(db, "幫我看一下那個人")
+    assert r["tool"] == "user_report" and r["data"] is None
+    assert "學號" in r["answer"]
+    assert calls == [True], "參數不合格就不該再叫模型摘要"
+
+
+# ── 寄信紀錄 ───────────────────────────────────────────────────────────
+
+@pytest.fixture()
+def no_docker_logs(monkeypatch):
+    monkeypatch.setattr(admin_ai_tools, "_container_logs", lambda name, hours: "")
+
+
+def _mail(db, kind, status, to="a@mcu.edu.tw", username=None, detail=None, days_ago=1):
+    db.add(models.EmailLog(to_email=to, username=username, kind=kind, subject=f"{kind} | EN", status=status,
+                           detail=detail, created_at=datetime.now(timezone.utc) - timedelta(days=days_ago)))
+
+
+def test_email_report_filters_and_findings(db, no_docker_logs):
+    _mail(db, "alert:myai_sync", "sent", to="ops@mcu.edu.tw")
+    _mail(db, "login_alert", "sent", username="12361114", to="12361114@me.mcu.edu.tw")
+    _mail(db, "login_alert", "blocked", to="x@example.com", detail="reserved domain")
+    _mail(db, "myai_provisioned", "bounced", to="y@school.edu.tw", detail="5.1.2 NXDOMAIN")
+    _mail(db, "login_alert", "sent", days_ago=40)   # ZH: 超出 7 天
+    db.commit()
+
+    r = admin_ai_tools.email_report(db)
+    assert r["facts"]["共幾封"] == 4
+    joined = " ".join(r["findings"])
+    assert "平台擋下" in joined and "退信" in joined and "NXDOMAIN" in joined
+    assert "沒有設定管理告警的收件人" in joined
+
+    alerts = admin_ai_tools.email_report(db, kind="管理")
+    assert alerts["facts"]["共幾封"] == 1
+    assert alerts["tables"]["最近的信（最多 30 封）"][0]["類別"] == "管理告警：MYAI 同步失敗"
+
+    assert admin_ai_tools.email_report(db, status="退信")["facts"]["共幾封"] == 1
+    assert admin_ai_tools.email_report(db, status="失敗")["facts"]["共幾封"] == 2
+    assert admin_ai_tools.email_report(db, to="12361114")["facts"]["共幾封"] == 1
+    assert admin_ai_tools.email_report(db, days=60)["facts"]["共幾封"] == 5
+
+    bad = admin_ai_tools.email_report(db, to="請提供帳號")
+    assert bad["facts"]["共幾封"] == 4 and "已忽略" in " ".join(bad["findings"])
+
+
+def test_email_report_counts_throttled_alerts(db, monkeypatch):
+    monkeypatch.setattr(admin_ai_tools, "_container_logs", lambda name, hours:
+                        "2026-10-05 01:00:00 | x | INFO | 告警 myai_sync 在 6 小時內已寄過,這次略過\n" * 3)
+    r = admin_ai_tools.email_report(db, kind="告警")
+    assert "3 次告警" in " ".join(r["findings"])
+    # ZH: 問「沒寄到的信」時不該混進告警節流
+    assert "告警" not in " ".join(admin_ai_tools.email_report(db, status="失敗")["findings"])
+
+
+# ── 管理操作紀錄 ───────────────────────────────────────────────────────
+
+def test_admin_activity(db):
+    now = datetime.now(timezone.utc)
+    u = make_user(db, username="12360013", email="12360013@example.com")
+    boss = make_user(db, username="boss", email="boss@example.com", role="admin")
+    # ZH: 較早的紀錄只有 admin_id、沒有 admin_username —— 要反查得出是誰
+    db.add(models.AdminAction(admin_id=boss.id, admin_username=None, target_user=None, action="delete_user",
+                              payload=json.dumps({"username": "12090291", "deleted_user_id": "x" * 36}),
+                              timestamp=now - timedelta(days=1)))
+    db.add(models.AdminAction(admin_username="boss", target_user=u.id, action="create_temp_account",
+                              payload=json.dumps({"username": "12360013", "purpose": "測試用"}),
+                              timestamp=now - timedelta(days=2)))
+    # ZH: target_user 是外鍵、帳號刪掉會變 NULL —— 這時對象只能從 payload 讀（這裡是 email）
+    db.add(models.AdminAction(admin_username="boss", target_user=None, action="myai_grant_points",
+                              payload=json.dumps({"email": "old@mcu.edu.tw", "points": 100}),
+                              timestamp=now - timedelta(days=3)))
+    db.add(models.AdminAction(admin_username="boss", action="ai_query", payload="{}", timestamp=now))
+    db.commit()
+
+    r = admin_ai_tools.admin_activity(db)
+    assert r["facts"]["共幾筆"] == 3, "預設不含 AI 查詢本身"
+    rows = r["tables"]["最近的操作（最多 30 筆）"]
+    assert rows[0]["動作"] == "刪除帳號" and rows[0]["對象"] == "12090291"
+    assert "deleted_user_id" not in rows[0]["內容"]
+    assert rows[1]["對象"] == "12360013"
+    assert rows[2]["對象"] == "old@mcu.edu.tw"
+    assert "刪除帳號 1 次" in " ".join(r["findings"])
+    assert rows[0]["管理員"] == "boss" and "由 boss 刪除" in " ".join(r["findings"])
+    assert admin_ai_tools.admin_activity(db, admin="boss")["facts"]["共幾筆"] == 3
+
+    assert admin_ai_tools.admin_activity(db, target="12090291")["facts"]["共幾筆"] == 1
+    assert admin_ai_tools.admin_activity(db, target="12360013")["facts"]["共幾筆"] == 1
+    assert admin_ai_tools.admin_activity(db, action="刪")["facts"]["共幾筆"] == 1
+    assert admin_ai_tools.admin_activity(db, action="AI")["facts"]["共幾筆"] == 1
+    assert admin_ai_tools.admin_activity(db, admin="nobody")["facts"]["共幾筆"] == 0
+
+
+# ── 日誌搜尋 ───────────────────────────────────────────────────────────
+
+def test_log_search_redacts_tokens(db, monkeypatch):
+    logs = {
+        admin_ai_tools.SCHEDULER_CONTAINER:
+            "2026-10-05 01:00:00 | app | INFO | GET /api/v1/jobs/1/model?token=eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3OCJ9.abcdefghijk 12361114\n"
+            "2026-10-05 01:00:01 | app | INFO | Authorization: Bearer abc.def.ghi user 12361114\n"
+            "2026-10-05 01:00:02 | app | INFO | 無關的一行\n",
+        admin_ai_tools.WORKER_CONTAINER: "[INFO] job for 12361114 password=hunter2\n",
+    }
+    monkeypatch.setattr(admin_ai_tools, "_container_logs", lambda name, hours: logs.get(name, ""))
+    r = admin_ai_tools.log_search(db, "12361114")
+    assert r["facts"]["共幾行"] == 3
+    text = json.dumps(r, ensure_ascii=False)
+    assert "eyJhbGci" not in text and "abc.def.ghi" not in text and "hunter2" not in text
+    assert {h["來源"] for h in r["tables"]["符合的日誌"]} == {"服務層", "GPU 節點"}
+    assert "至少 2 個字" in admin_ai_tools.log_search(db, "x")["findings"][0]
