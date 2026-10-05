@@ -74,8 +74,11 @@ def _ollama(model: str, messages: list, json_mode: bool = False, timeout: float 
 
     @node job-scheduler/app/services/admin_ai.py::_ollama
     """
+    # ZH: keep_alive 1 分鐘（Ollama 預設 5 分鐘）。擁有者 2026-10-05：管理端與小基用不同模型，
+    #     兩個同時待在顯卡上會跟訓練搶顯存（實測 qwen3.5:9b 9.9 GB＋llama3 6.0 GB）；
+    #     管理端是偶爾查一下，問完很快卸載。同一輪的路由＋摘要相隔不到幾秒，不受影響。
     body = {"model": model, "messages": messages, "stream": False, "think": False,
-            "options": {"temperature": 0}}
+            "keep_alive": "1m", "options": {"temperature": 0}}
     if json_mode:
         body["format"] = "json"
     url = f"{settings.OLLAMA_BASE_URL.rstrip('/')}/api/chat"

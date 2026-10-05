@@ -241,3 +241,18 @@ def test_admin_ai_model_setting_lists_only_local(client, db, admin_headers):
     r = client.put("/api/v1/admin/system-settings", headers=admin_headers,
                    json={"admin_ai_model": "gpt-x"})
     assert r.status_code in (400, 422), r.text
+
+
+def test_ollama_request_unloads_quickly(monkeypatch):
+    """ZH: 管理端呼叫要帶 keep_alive=1m（擁有者 2026-10-05：兩端不同模型時少佔顯存）。"""
+    sent = []
+
+    class _R:
+        status_code = 200
+        text = ""
+        def raise_for_status(self): pass
+        def json(self): return {"message": {"content": "ok"}}
+
+    monkeypatch.setattr(admin_ai.httpx, "post", lambda url, json=None, timeout=None: sent.append(json) or _R())
+    assert admin_ai._ollama("m", [{"role": "user", "content": "hi"}]) == "ok"
+    assert sent[0]["keep_alive"] == "1m"
