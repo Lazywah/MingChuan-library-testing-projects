@@ -743,7 +743,7 @@ html.aibot-docked #aibot-fab { display: none; }
 /* ZH: v4.36 入口頁的三種方式（gpu.html）。沿用 .gcard 的卡片長相，由淺到深**往下排**：
  *     順序本身就是分級，不靠顏色分主次（接管者回饋：誰是主要取決於你是誰）。
  *     主卡是置中排版，卡片內文改回靠左 —— 兩行說明置中讀起來像標語。 */
-.modes { display: grid; gap: var(--space-2); margin-top: var(--space-4); text-align: left; }
+.gpu-start { margin-top: var(--space-4); }
 
 /* ZH: v4.36 訓練頁的體驗模式：三行「已經替你決定好的事」。 */
 .easy {
@@ -1022,7 +1022,7 @@ html.aibot-docked #aibot-fab { display: none; }
  *     擋住周圍、露出中間。
  *
  * ZH: 🔴 **z-index 1100。** 既有的分層是
- *       內容 → 下拉 20 → ☰ 面板 25 → topbar 30 → tip 40 → 小基 900 → 初次設定 1000。
+ *       內容 → 下拉 20 → ☰ 面板 25 → topbar 30 → tip 40 → 訓練頁選方式 800 → 小基 900 → 初次設定 1000。
  *     導覽要圈得住**頂部列的導覽鈕**（其中一步就是請他點「首頁」），
  *     所以必須蓋過 30；與初次設定不會同時出現（tour.js 會等 `.onb` 消失）。
  *     ⚠ 這一段與 web.css 的小基、topbar 兩處註解、styles.css 的 tip 註解
@@ -1121,4 +1121,115 @@ html.tour-open body { overflow: hidden; }
         width: auto;
         transform: none !important;
     }
+}
+
+/* ==========================================================================
+ * ZH: v4.38 訓練頁的全版遮罩三選一（擁有者 2026-10-05）。
+ * ZH: 🔴 z-index 800：蓋過 topbar（30）與 tip（40），低於小基（900）——
+ *     「不知道選哪個」正是會想問小基的時候。分層約定見上面 .tour__panel 的註解。
+ * ZH: 三格等寬直排卡（桌機三欄、窄畫面一欄）。盒子沿用 .line 的留白與圓章：
+ *     同一個平台的「大選項」長同一個樣子。
+ * ========================================================================== */
+.mpick {
+    position: fixed;
+    inset: 0;
+    height: 100dvh;           /* ZH: 同 .onb：iOS 的 100vh 含網址列，按鈕會被推出可見區 */
+    z-index: 800;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: var(--space-4);
+    background: rgb(31 35 40 / 55%);
+    overflow-y: auto;
+}
+.mpick[hidden] { display: none; }
+html:has(.mpick:not([hidden])) { overflow: hidden; }
+
+.mpick__box {
+    position: relative;
+    width: min(1040px, 100%);
+    max-height: 100%;
+    overflow-y: auto;
+    padding: var(--space-5);
+    border-radius: var(--radius-lg);
+    background-color: var(--surface);
+    box-shadow: var(--shadow-2);
+    text-align: center;
+}
+.mpick__t { margin: 0; font-size: 1.5rem; }
+.mpick__sub { margin: var(--space-2) 0 0; color: var(--text-muted); }
+.mpick__x {
+    position: absolute;
+    top: var(--space-2);
+    right: var(--space-2);
+    width: var(--tap-min);
+    height: var(--tap-min);
+    border: 0;
+    border-radius: var(--radius-pill);
+    background: transparent;
+    color: var(--text-muted);
+    font-size: 1.5rem;
+    line-height: 1;
+    cursor: pointer;
+}
+.mpick__x:hover { background-color: var(--surface-2); color: var(--text-strong); }
+
+.mpick__grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: var(--space-3);
+    margin-top: var(--space-5);
+    text-align: left;
+}
+.mpick__opt {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    min-height: 15rem;
+    padding: var(--space-5) var(--space-4);
+    border: 2px solid var(--hairline);
+    border-radius: var(--radius-md);
+    background-color: var(--surface);
+    color: inherit;
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+}
+.mpick__opt:hover { border-color: var(--accent); box-shadow: var(--shadow-2); }
+/* ZH: 重新選擇時標出「現在是這個」—— 邊框加粗加色，不靠只有顏色（還有右上的字）。 */
+.mpick__opt.is-current { border-color: var(--accent); background-color: var(--surface-2); }
+.mpick__opt.is-current .mpick__name::after {
+    content: "（目前）";
+    font-weight: 400;
+    font-size: 0.875rem;
+    color: var(--text-muted);
+}
+:root[lang="en"] .mpick__opt.is-current .mpick__name::after { content: " (current)"; }
+.mpick__name { font-size: 1.25rem; font-weight: 700; color: var(--text-strong); }
+.mpick__who { color: var(--text-muted); }
+.mpick__need {
+    margin-top: auto;           /* ZH: 「要準備」貼底，三格的底線對齊 */
+    padding-top: var(--space-2);
+    border-top: 1px solid var(--hairline);
+    font-size: 0.875rem;
+    color: var(--text-strong);
+}
+.mpick__need > span:first-child { color: var(--text-muted); }
+.mpick__foot { margin: var(--space-4) 0 0; }
+
+/* ZH: 訓練表單上方「目前的方式：… ［重新選擇模式］」 */
+.mode-now {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-2);
+    margin: var(--space-3) 0 0;
+}
+
+@media (max-width: 760px) {
+    .mpick { align-items: flex-start; padding: var(--space-3); }
+    .mpick__box { padding: var(--space-4) var(--space-3); }
+    .mpick__grid { grid-template-columns: 1fr; gap: var(--space-2); }
+    .mpick__opt { min-height: 0; padding: var(--space-3) var(--space-4); }
 }

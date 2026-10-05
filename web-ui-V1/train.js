@@ -38,6 +38,11 @@ let picked = null;        // ZH: 使用者選的檔案（尚未上傳）
 //     （換了種類、或從別的方式切過來而手上是他自己的檔）。null＝不是範例。
 let pickedIsSampleFor = null;
 let mode = 'normal';      // ZH: v4.36 easy / normal / hard
+// ZH: v4.38 全版遮罩「第一次、還沒選過」。🔴 **必須在這裡、而且宣告時就算好**：
+//     下面 `if (TASKS[QS.get('task')]) setTask(...)` 在載入時就會跑 syncUrl，
+//     宣告放在後面的話是 TDZ（直接 ReferenceError，整頁 JS 停擺）；
+//     初值是 false 的話，遮罩還沒出現網址就被寫成 mode=normal，重新整理就跳過遮罩。
+let pickerFirst = !viewJobId && !reuseId && !['easy', 'normal', 'hard'].includes(QS.get('mode'));
 let taskSegOpen = false;  // ZH: 體驗模式下按了「換一種範例」才把種類分頁打開
 let LAST_JOB = null;      // ZH: 語言切換時重畫結果下方的說明用
 // ZH: v3.6 使用者自帶的訓練程式（原始碼字串，不是檔案 —— 隨送單一起走）
@@ -172,7 +177,6 @@ $('sample').addEventListener('click', () => { pickedIsSampleFor = null; loadSamp
 //       hard   —— 不分種類（跑的是他自己的程式），自帶程式一進來就展開
 const MODES = ['easy', 'normal', 'hard'];
 const MODE_SHOWS = {
-    'mode-seg':      ['normal', 'hard'],
     'task-seg':      ['normal'],          // ZH: 體驗模式按了「換一種範例」才打開（見 setMode）
     'easy-box':      ['easy'],
     'fmt-fold':      ['normal'],
@@ -183,11 +187,20 @@ const MODE_SHOWS = {
     'to-normal-row': ['easy'],
 };
 
+// ZH: 「目前的方式」那一行的名字。用 T() 一個個寫是為了 check_i18n 抓得到 key。
+//     key 也寫完整（不要 'tr_mode_' + m）：拼出來的 key check_i18n 驗不到。
+const MODE_NAME = {
+    easy:   { key: 'tr_mode_easy',   text: () => T('tr_mode_easy', '先體驗看看') },
+    normal: { key: 'tr_mode_normal', text: () => T('tr_mode_normal', '用自己的資料') },
+    hard:   { key: 'tr_mode_hard',   text: () => T('tr_mode_hard', '用自己的程式') },
+};
+
 function setMode(m) {
     if (!MODES.includes(m)) m = 'normal';
     mode = m;
-    $('mode-seg').querySelectorAll('button').forEach((b) =>
-        b.setAttribute('aria-pressed', String(b.dataset.mode === m)));
+    const name = $('mode-now-name');
+    name.setAttribute('data-i18n', MODE_NAME[m].key);
+    name.textContent = MODE_NAME[m].text();
     Object.entries(MODE_SHOWS).forEach(([id, modes]) => {
         const el = $(id);
         if (el) el.hidden = !modes.includes(m);
@@ -206,7 +219,9 @@ function setMode(m) {
 //     網址還停在圖片，一重新整理就跳回貓狗（2026-10-02 實測抓到）。
 //     看結果（?job=）與重用資料集（?dataset=）兩條路不動網址：那裡的 id 才是重點。
 function syncUrl() {
-    if (viewJobId || reuseId) return;
+    // ZH: 遮罩還沒選（pickerFirst）時不寫 —— 否則底下先墊的 normal 會進網址，
+    //     一重新整理就跳過遮罩，等於替他選了「用自己的資料」。
+    if (viewJobId || reuseId || pickerFirst) return;
     try {
         const u = new URL(location.href);
         u.searchParams.set('task', task);
@@ -259,10 +274,65 @@ function renderLearnCode(j) {
     box.hidden = false;
 }
 
-$('mode-seg').addEventListener('click', (e) => {
-    const b = e.target.closest('button[data-mode]');
-    if (b) setMode(b.dataset.mode);
+// ══════════════════════════════════════════════════════════════════════
+// ZH: v4.38 全版遮罩三選一（擁有者 2026-10-05）。HTML 註解寫了為什麼第一次不能關。
+// ══════════════════════════════════════════════════════════════════════
+let pickerReturn = null;    // ZH: 關掉後焦點回到哪裡
+
+function pickerOptions() { return [...document.querySelectorAll('#mpick .mpick__opt')]; }
+
+function openPicker(first) {
+    pickerFirst = !!first;
+    const box = $('mpick');
+    $('mpick-x').hidden = pickerFirst;
+    $('mpick-foot').hidden = !pickerFirst;
+    const kindBtn = document.querySelector(`#task-seg [data-task="${task}"]`);
+    $('mpick-sub').textContent = T('tr_pick_sub', '種類：{k}。選好之後，隨時可以按「重新選擇模式」換。')
+        .replace('{k}', kindBtn ? kindBtn.textContent.trim() : task);
+    pickerOptions().forEach((b) => {
+        const cur = !pickerFirst && b.dataset.mode === mode;
+        b.classList.toggle('is-current', cur);
+        if (cur) b.setAttribute('aria-current', 'true'); else b.removeAttribute('aria-current');
+    });
+    pickerReturn = pickerFirst ? null : document.activeElement;
+    box.hidden = false;
+    const target = pickerOptions().find((b) => b.classList.contains('is-current')) || pickerOptions()[0];
+    if (target) target.focus();
+}
+
+function closePicker() {
+    $('mpick').hidden = true;
+    if (pickerReturn && pickerReturn.focus) pickerReturn.focus();
+    pickerReturn = null;
+}
+
+$('mpick').addEventListener('click', (e) => {
+    const b = e.target.closest('.mpick__opt');
+    if (b) {
+        const first = pickerFirst;
+        pickerFirst = false;          // ZH: 先清掉，setMode 裡的 syncUrl 才會把選擇寫進網址
+        setMode(b.dataset.mode);
+        closePicker();
+        // ZH: 第一次選完把焦點交給表單的第一個可按的東西，不要掉回 body 頂端。
+        if (first) ($('go').disabled ? $('mode-reopen') : $('go')).focus();
+        return;
+    }
+    // ZH: 點遮罩（不是點盒子裡面）＝關閉；第一次不行（見 HTML 註解）。
+    if (!pickerFirst && (e.target === e.currentTarget || e.target.id === 'mpick-x')) closePicker();
 });
+
+// ZH: Esc 關閉、Tab 留在框裡（aria-modal 只是告訴讀屏，鍵盤要自己圈）。
+$('mpick').addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && !pickerFirst) { e.preventDefault(); closePicker(); return; }
+    if (e.key !== 'Tab') return;
+    const items = [...$('mpick').querySelectorAll('button, a[href]')].filter((el) => el.offsetParent !== null);
+    if (!items.length) return;
+    const first = items[0], last = items[items.length - 1];
+    if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+    else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+});
+
+$('mode-reopen').addEventListener('click', () => openPicker(false));
 $('to-normal').addEventListener('click', () => setMode('normal'));
 $('easy-change').addEventListener('click', () => {
     taskSegOpen = true;
@@ -556,9 +626,13 @@ async function initReuse() {
 if (viewJobId) initViewMode();
 else {
     initReuse();
-    // ZH: v4.36 方式：入口頁帶 ?mode= 過來；重用資料集一律「用自己的資料」（資料已經有了）；
-    //     其餘（「我的訓練」的「開始一個新的訓練」等）沒帶＝用自己的資料。
-    setMode(reuseId ? 'normal' : (QS.get('mode') || 'normal'));
+    // ZH: v4.38 方式：重用資料集一律「用自己的資料」（資料已經有了，不問）；
+    //     網址帶了 ?mode=（選過之後 syncUrl 寫的、或書籤）就照它；
+    //     都沒有＝一進來就蓋上全版遮罩讓他選。底下先墊 normal 把表單畫好，選完再換。
+    const qm = QS.get('mode');
+    if (reuseId) setMode('normal');
+    else if (MODES.includes(qm)) setMode(qm);
+    else { pickerFirst = true; setMode('normal'); openPicker(true); }
 }
 
 

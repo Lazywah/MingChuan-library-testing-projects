@@ -11,7 +11,7 @@
 
     <link rel="stylesheet" href="tokens.css?v=ff9cecda">
     <link rel="stylesheet" href="styles.css?v=d4d21ce8">
-    <link rel="stylesheet" href="web.css?v=e84e8189">
+    <link rel="stylesheet" href="web.css?v=a5ce19b3">
     <!-- ZH: 🔴 側欄狀態必須在**首次繪製之前**套用，否則每換一頁都會看到
              內容滑出去讓位（widget 的 JS 在 body 尾端才跑，那時已經畫過一次了）。
              這一段刻意內嵌而不是外部檔案 —— 外部檔案要等網路往返，
@@ -43,7 +43,7 @@
         <h1 class="hero__title" id="gpu-title" data-i18n="gpu_h1">做出一個能分辨貓和狗的模型</h1>
         <p class="hero__sub">
             <span id="gpu-sub1" data-i18n="gpu_sub1">用學校的 GPU，訓練通常不到一分鐘。</span><br>
-            <span data-i18n="gpu_pick_mode">選一種開始的方式：</span>
+            <span data-i18n="gpu_next">下一步選要怎麼開始：先體驗、用自己的資料，或用自己的程式。</span>
         </p>
 
         <!-- ZH: v4.36 三種方式（擁有者 2026-10-02，接管者回饋 2026-09-30）。
@@ -56,20 +56,9 @@
                  告訴有興趣的人怎麼到程式實驗室看那支程式（擁有者：不要連結，純說明）。
              ZH: 三張卡共用上面選的種類；連結的 ?task= 由 gpu.js 的 setKind 填。
                  卡片沿用 .gcard（同一個平台不要有兩種卡片長相）。 -->
-        <nav class="modes" aria-label="開始的方式" data-i18n-aria="gpu_modes_aria">
-            <a class="gcard" data-mode="easy" href="train.html?mode=easy">
-                <span class="gcard__t" data-i18n="gpu_mode_easy_t">先體驗看看</span>
-                <span class="gcard__d" data-i18n="gpu_mode_easy_d">第一次來。用平台準備好的範例，按一下就開始。</span>
-            </a>
-            <a class="gcard" data-mode="normal" href="train.html?mode=normal">
-                <span class="gcard__t" data-i18n="gpu_mode_normal_t">用自己的資料</span>
-                <span class="gcard__d" data-i18n="gpu_mode_normal_d">有一包整理好的資料。平台幫你訓練，不用寫程式。</span>
-            </a>
-            <a class="gcard" data-mode="hard" href="train.html?mode=hard">
-                <span class="gcard__t" data-i18n="gpu_mode_hard_t">用自己的程式</span>
-                <span class="gcard__d" data-i18n="gpu_mode_hard_d">會寫訓練程式。上傳 .py，借學校的 GPU 跑。</span>
-            </a>
-        </nav>
+        <!-- ZH: v4.38（擁有者 2026-10-05）三張方式卡收成這一顆：選方式改在訓練頁的全版遮罩，
+                 只有一個地方選，不會有兩種長相的選擇畫面。href 的 ?task= 由 gpu.js 的 setKind 填。 -->
+        <p class="gpu-start"><a class="btn btn--primary" id="gpu-start" href="train.html" data-i18n="tr_go">開始訓練</a></p>
     </section>
 
     <!-- 層級 2 · 三步驟預覽（純說明、不可點）。
@@ -103,12 +92,12 @@
 
 <script src="docs-entry.js?v=131ee7af"></script>
 <script src="tz.js?v=2e214a8b"></script>
-<script src="i18n.js?v=a885be5f"></script>
+<script src="i18n.js?v=de4cc1cf"></script>
 <script src="prefs.js?v=e71609e5"></script>
 <!-- ZH: 小基（浮動助手）。客服模式公開，登入頁也放 —— 設計文件的使用者需求是「不會用這個平台時想直接問」。 -->
 <script src="assistant-widget.js?v=74e3c4b6"></script>
 <script src="chrome.js?v=9368462b"></script>
-<script src="gpu.js?v=e30f8d5e"></script>
+<script src="gpu.js?v=06a4ad0a"></script>
 <!-- ZH: 到訪人次。每一頁都載（這是「網站」的計數，不是首頁的），一個工作階段只送一次；
          只有放了 [data-visits] 的頁面（登入頁、首頁）會顯示數字。 -->
 <script src="visits.js"></script>

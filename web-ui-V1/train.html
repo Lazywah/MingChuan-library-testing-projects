@@ -11,7 +11,7 @@
 
     <link rel="stylesheet" href="tokens.css?v=ff9cecda">
     <link rel="stylesheet" href="styles.css?v=d4d21ce8">
-    <link rel="stylesheet" href="web.css?v=e84e8189">
+    <link rel="stylesheet" href="web.css?v=a5ce19b3">
     <!-- ZH: 🔴 側欄狀態必須在**首次繪製之前**套用，否則每換一頁都會看到
              內容滑出去讓位（widget 的 JS 在 body 尾端才跑，那時已經畫過一次了）。
              這一段刻意內嵌而不是外部檔案 —— 外部檔案要等網路往返，
@@ -51,11 +51,11 @@
                  也不會長出第二套要一起維護的畫面。哪個欄位在哪種方式出現，見 train.js 的 MODE_SHOWS。
                  ZH: 體驗模式不畫這一排 —— 那群人看到「方式」兩個字就會開始猶豫；
                  他們要換的話，底下有一行「我想自己調」。 -->
-        <div class="seg" role="group" aria-label="開始的方式" data-i18n-aria="tr_mode_aria" id="mode-seg" hidden>
-            <button type="button" data-mode="easy" aria-pressed="false" data-i18n="tr_mode_easy">先體驗看看</button>
-            <button type="button" data-mode="normal" aria-pressed="true" data-i18n="tr_mode_normal">用自己的資料</button>
-            <button type="button" data-mode="hard" aria-pressed="false" data-i18n="tr_mode_hard">用自己的程式</button>
-        </div>
+        <!-- ZH: v4.38 原本這裡是三顆切換鈕；改成「目前的方式＋重新選擇模式」，選擇本身在全版遮罩（#mpick）。 -->
+        <p class="mode-now" id="mode-now">
+            <span><span data-i18n="tr_now">目前的方式：</span><b id="mode-now-name" data-i18n="tr_mode_normal">用自己的資料</b></span>
+            <button class="btn btn--minor" type="button" id="mode-reopen" data-i18n="tr_pick_again">重新選擇模式</button>
+        </p>
 
         <!-- ZH: v4.19 —— 三種內建任務。放在最上面，因為它決定下面每一段文案
                  （壓縮檔長什麼樣、失敗的常見原因、範例是哪一包）。
@@ -246,14 +246,52 @@
 
 </main>
 
+<!-- ZH: v4.38 全版遮罩三選一（擁有者 2026-10-05）。一進訓練頁就蓋上來，選了才看得到表單；
+         表單上方的「重新選擇模式」會再叫出同一個遮罩。入口頁的三張卡因此收成一顆「開始訓練」——
+         **只有一個地方選方式**，不會有兩種長相的選擇畫面。
+     ZH: 第一次（還沒選）沒有 ×、Esc 與點遮罩也不關：關掉之後他會面對一張沒選過的表單。
+         要離開就用底下的「回到上一頁」。重新選擇時才有 ×／Esc／點遮罩關閉，關了＝維持原本的方式。
+     ZH: 🔴 z-index 800：高於 topbar（30）、低於小基（900）—— 遮罩要蓋住整頁，
+         但「不知道選哪個」正是會想問小基的時候，所以小基留在上面。
+         初次設定（1000）與導覽（1100）照舊在更上面。
+     ZH: ⚠ 必須放在 <main> **外面**：放在裡面時頂部列沒有被蓋到（2026-10-05 實測）。分層約定見 web.css 的 .tour__panel 註解。 -->
+<div class="mpick" id="mpick" role="dialog" aria-modal="true" aria-labelledby="mpick-t" hidden>
+    <div class="mpick__box">
+        <button class="mpick__x" id="mpick-x" type="button" aria-label="關閉" data-i18n-aria="tr_pick_close" hidden>×</button>
+        <h2 class="mpick__t" id="mpick-t" data-i18n="tr_pick_t">要怎麼開始？</h2>
+        <p class="mpick__sub" id="mpick-sub"></p>
+        <div class="mpick__grid" role="group" aria-label="開始的方式" data-i18n-aria="tr_mode_aria">
+            <button class="mpick__opt" type="button" data-mode="easy">
+                <span class="line__n" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polygon points="7 4 20 12 7 20 7 4"/></svg></span>
+                <span class="mpick__name" data-i18n="tr_mode_easy">先體驗看看</span>
+                <span class="mpick__who" data-i18n="gpu_mode_easy_d">第一次來。用平台準備好的範例，按一下就開始。</span>
+                <span class="mpick__need"><span data-i18n="tr_pick_need">要準備：</span><span data-i18n="tr_pick_need_easy">什麼都不用</span></span>
+            </button>
+            <button class="mpick__opt" type="button" data-mode="normal">
+                <span class="line__n" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg></span>
+                <span class="mpick__name" data-i18n="tr_mode_normal">用自己的資料</span>
+                <span class="mpick__who" data-i18n="gpu_mode_normal_d">有一包整理好的資料。平台幫你訓練，不用寫程式。</span>
+                <span class="mpick__need"><span data-i18n="tr_pick_need">要準備：</span><span data-i18n="tr_pick_need_normal">一包整理好的資料（沒有也可以先用範例）</span></span>
+            </button>
+            <button class="mpick__opt" type="button" data-mode="hard">
+                <span class="line__n" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg></span>
+                <span class="mpick__name" data-i18n="tr_mode_hard">用自己的程式</span>
+                <span class="mpick__who" data-i18n="gpu_mode_hard_d">會寫訓練程式。上傳 .py，借學校的 GPU 跑。</span>
+                <span class="mpick__need"><span data-i18n="tr_pick_need">要準備：</span><span data-i18n="tr_pick_need_hard">一支 .py 訓練程式，加上一包資料（或用範例）</span></span>
+            </button>
+        </div>
+        <p class="mpick__foot" id="mpick-foot"><a href="gpu.html" data-i18n="tr_back">回到上一頁</a></p>
+    </div>
+</div>
+
 <script src="tz.js?v=2e214a8b"></script>
 <script src="docs-entry.js?v=131ee7af"></script>
-<script src="i18n.js?v=a885be5f"></script>
+<script src="i18n.js?v=de4cc1cf"></script>
 <script src="prefs.js?v=e71609e5"></script>
 <!-- ZH: 小基（浮動助手）。客服模式公開，登入頁也放 —— 設計文件的使用者需求是「不會用這個平台時想直接問」。 -->
 <script src="assistant-widget.js?v=74e3c4b6"></script>
 <script src="chrome.js?v=9368462b"></script>
-<script src="train.js?v=d3584547"></script>
+<script src="train.js?v=539c3ffb"></script>
 <!-- ZH: 到訪人次。每一頁都載（這是「網站」的計數，不是首頁的），一個工作階段只送一次；
          只有放了 [data-visits] 的頁面（登入頁、首頁）會顯示數字。 -->
 <script src="visits.js"></script>

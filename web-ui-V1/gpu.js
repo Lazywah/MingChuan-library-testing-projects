@@ -3,7 +3,8 @@
  *
  * ZH: v4.36（擁有者 2026-10-02，接管者回饋 2026-09-30）改成「種類 × 方式」：
  *       種類：貓狗圖片／學生及格表格／餐廳評論文字（決定標題與說明）
- *       方式：先體驗看看／用自己的資料／用自己的程式（三張卡 → train.html?task=&mode=）
+ *       方式：先體驗看看／用自己的資料／用自己的程式 —— v4.38 起在訓練頁的全版遮罩選，
+ *             這裡只剩一顆「開始訓練」（→ train.html?task=）
  *     以前的「學習程式碼」主按鈕會在這裡直接開實驗室，所以這支要查算力、查實驗室配額；
  *     那顆按鈕拿掉之後這些都不需要了 —— 排隊與算力由訓練頁自己顯示。
  * ========================================================================== */
@@ -54,10 +55,9 @@ function setKind(k) {
             el.setAttribute('data-i18n', c.keys[key]);
             el.textContent = c[key]();
         });
-    // ZH: 三張方式卡都帶著這一種過去 —— 他在這裡選了表格，過去不該又是圖片。
-    document.querySelectorAll('.modes a[data-mode]').forEach((a) => {
-        a.href = `train.html?task=${encodeURIComponent(c.task)}&mode=${a.dataset.mode}`;
-    });
+    // ZH: 「開始訓練」帶著這一種過去 —— 他在這裡選了表格，過去不該又是圖片。
+    //     v4.38 起不帶 ?mode=：方式在訓練頁的全版遮罩選。
+    $('gpu-start').href = `train.html?task=${encodeURIComponent(c.task)}`;
 }
 $('kind-seg').addEventListener('click', (e) => {
     const b = e.target.closest('button[data-kind]');
