@@ -1293,7 +1293,16 @@ html:has(.mpick:not([hidden])) { overflow: hidden; }
 .tr-tab__i, .tr-tab__eg { display: none; }
 .tr-tab__txt { min-width: 0; }
 .tr-tab__name { display: block; font-weight: 700; font-size: 0.9375rem; color: var(--text-strong); }
-.tr-side__note { margin: var(--space-2) 0 0; font-size: 0.8125rem; color: var(--text-muted); }
+/* ZH: v4.38「用自己的程式」的程式區塊：不可收合，用一個有底色的盒子跟上面的資料上傳分開。 */
+.own {
+    margin-top: var(--space-4);
+    padding: var(--space-3) var(--space-4);
+    border: 1px solid var(--hairline);
+    border-radius: var(--radius-md);
+    background-color: var(--surface-2);
+    text-align: left;
+}
+.own__h { margin: 0 0 var(--space-2); font-size: 1rem; }
 
 /* ── 放得下時：固定在主區塊左邊的直排側欄 ───────────────────────── */
 /* ZH: ⚠ 下面兩段內容相同、只差前綴與 left（由 scratchpad 腳本產生）—— 改一段要改兩段。 */

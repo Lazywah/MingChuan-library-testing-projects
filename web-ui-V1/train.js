@@ -161,13 +161,11 @@ if (TASKS[QS.get('task')]) setTask(QS.get('task'));
 //     檔名用翻譯過的名字（會變成任務名與「我的資料集」裡的名字）。
 // ZH: v4.36 抽成 loadSample()：體驗模式一進來就自動抓（接管者：「用平台準備好的範例」
 //     那顆鈕不夠明顯 —— 對初學者來說那正是主要動作，所以乾脆替他按）。
+// ZH: v4.38 只有「先體驗看看」會用到（範例鈕拿掉了，見 train.html）。
 async function loadSample() {
     const want = task;
     if (pickedIsSampleFor === want && picked) return;      // ZH: 手上已經是這一種的範例
-    const btn = $('sample');
-    btn.disabled = true;
-    btn.textContent = T('tr_sample_loading', '正在取得範例…');
-    if (mode === 'easy') setGo({ label: T('tr_sample_loading', '正在取得範例…'), enabled: false });
+    setGo({ label: T('tr_sample_loading', '正在取得範例…'), enabled: false });
     try {
         const r = await fetch(`samples/${want}.zip`, { cache: 'force-cache' });
         if (!r.ok) throw new Error(`HTTP ${r.status}`);
@@ -178,13 +176,17 @@ async function loadSample() {
     } catch {
         setNote(T('tr_sample_fail', '範例暫時拿不到，請稍後再試，或上傳自己的資料。'));
         refreshGo();
-    } finally {
-        btn.disabled = false;
-        // ZH: 不用「抓之前的文字」還原 —— 兩次抓取重疊時那個值會是「正在取得範例…」。
-        btn.textContent = T('tr_sample', '用平台準備好的範例');
     }
 }
-$('sample').addEventListener('click', () => { pickedIsSampleFor = null; loadSample(); });
+
+// ZH: 把手上的檔案清掉、上傳區回到空白。
+function clearPicked() {
+    picked = null;
+    pickedIsSampleFor = null;
+    $('drop').classList.remove('drop--has');
+    $('drop-main').textContent = T('tr_drop', '把 zip 拖到這裡，或點一下選檔案');
+    $('drop-hint').textContent = T('tr_drop_sub', '只收 .zip，每人上限 2 GB');
+}
 
 // ══════════════════════════════════════════════════════════════════════
 // ZH: v4.36 三種方式（擁有者 2026-10-02，接管者回饋 2026-09-30）
@@ -196,11 +198,10 @@ $('sample').addEventListener('click', () => { pickedIsSampleFor = null; loadSamp
 //       hard   —— 不分種類（跑的是他自己的程式），自帶程式一進來就展開
 const MODES = ['easy', 'normal', 'hard'];
 const MODE_SHOWS = {
-    'side-hard-note': ['hard'],
+    'side-tasks':    ['easy', 'normal'],   // ZH: 用自己的程式不分種類（後端有 script_source 就不看）
     'easy-box':      ['easy'],
     'fmt-fold':      ['normal'],
     'drop':          ['normal', 'hard'],
-    'sample-row':    ['normal', 'hard'],
     'epochs-field':  ['normal', 'hard'],
     'own-fold':      ['hard'],
 };
@@ -223,7 +224,9 @@ function setMode(m) {
         const el = $(id);
         if (el) el.hidden = !modes.includes(m);
     });
-    if (m === 'hard') $('own-code').open = true;
+    // ZH: v4.38 範例只屬於「先體驗看看」—— 離開體驗模式時手上的範例要清掉，
+    //     不然「用自己的資料」會拿著範例送出去。
+    if (m !== 'easy' && pickedIsSampleFor) clearPicked();
     renderSub();
     // ZH: 先算開始鈕，再抓範例 —— 反過來的話「正在取得範例…」會馬上被蓋回「開始訓練」。
     refreshGo();
@@ -559,7 +562,8 @@ async function submitJob(datasetRef, jobName) {
                 ...(mode === 'hard' && scriptSource ? { script_source: scriptSource } : {}),
                 // ZH: 種類寫明。不寫也會落到預設，但寫出來的話**日後多一種任務時
                 //     這張舊單仍然指向同一支腳本**，不會跟著預設值漂走。
-                config: { epochs: epochs, task: task },
+                // ZH: v4.38 用自己的程式不送種類（沒有「要練哪一種」，後端也不看）。
+                config: Object.assign({ epochs: epochs }, mode === 'hard' ? {} : { task: task }),
             }, datasetRef)),
         });
         if (r.status === 401 || r.status === 403) {
@@ -829,11 +833,7 @@ function renderModelHelp(j) {
 function finish(j) {
     if (j.status === 'completed') {
         setBar(100);
-        picked = null;
-        pickedIsSampleFor = null;
-        $('drop').classList.remove('drop--has');
-        $('drop-main').textContent = T('tr_drop', '把 zip 拖到這裡，或點一下選檔案');
-        $('drop-hint').textContent = T('tr_drop_sub', '只收 .zip，每人上限 2 GB');
+        clearPicked();
         // ZH: 只看模式下那張卡是收起來的，不要去動裡面的按鈕。
         // ZH: 🔴 v4.36 修：原本這裡一律 enabled:true，但上面剛把 picked 清掉 ——
         //     「再訓練一次」按下去在 click 第一行就 return，**什麼都不會發生**。

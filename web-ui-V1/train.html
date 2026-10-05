@@ -11,7 +11,7 @@
 
     <link rel="stylesheet" href="tokens.css?v=ff9cecda">
     <link rel="stylesheet" href="styles.css?v=d4d21ce8">
-    <link rel="stylesheet" href="web.css?v=2658d2e4">
+    <link rel="stylesheet" href="web.css?v=97a63a02">
     <!-- ZH: 🔴 側欄狀態必須在**首次繪製之前**套用，否則每換一頁都會看到
              內容滑出去讓位（widget 的 JS 在 body 尾端才跑，那時已經畫過一次了）。
              這一段刻意內嵌而不是外部檔案 —— 外部檔案要等網路往返，
@@ -35,12 +35,14 @@
              原本兩者擠在表單最上面，容易誤會成同一件事。
          ZH: 主區塊**維持置中**（擁有者），側欄是 position:fixed 貼在主區塊左邊、不跟著捲動；
              放不下的寬度（見 web.css）退回表單上方的一列。清單的真相仍在 train.js 的 TASKS。
-         ZH: 「用自己的程式」時種類只決定「用平台準備好的範例」給哪一包（見 #side-hard-note）。 -->
+         ZH: 「用自己的程式」沒有「要練哪一種」（#side-tasks）—— 跑的是他自己的程式，後端不看種類
+             （crud.builtin_task_for：有 script_source 就不套內建腳本）。 -->
     <aside class="tr-side" id="tr-side">
         <div class="tr-side__mode" id="mode-now">
             <p class="tr-side__cur"><span class="tr-side__t" data-i18n="tr_now">目前的方式：</span><b id="mode-now-name" data-i18n="tr_mode_normal">用自己的資料</b></p>
             <button class="btn btn--minor" type="button" id="mode-reopen" data-i18n="tr_pick_again">重新選擇模式</button>
         </div>
+        <div id="side-tasks">
         <h2 class="tr-side__t" id="side-t" data-i18n="tr_side_t">要練哪一種</h2>
         <div class="tr-side__tabs" role="tablist" aria-orientation="vertical" aria-labelledby="side-t" id="task-tabs">
             <button class="tr-tab" type="button" role="tab" id="tab-image" data-task="image_classification"
@@ -68,7 +70,7 @@
                 </span>
             </button>
         </div>
-        <p class="tr-side__note" id="side-hard-note" hidden data-i18n="tr_side_hard">用自己的程式時，這裡只決定「用平台準備好的範例」會給你哪一包資料。</p>
+        </div>
     </aside>
 
     <div class="tr-main">
@@ -137,31 +139,25 @@
         </div>
         <input type="file" id="file" accept=".zip" hidden>
 
-        <!-- ZH: v4.19 —— 沒有資料的人也能走完整條路。範例 zip 由前端抓回來
-                 再走**同一條上傳路**，所以送單、快取、「我的資料集」全部一致，
-                 不用為範例另開一條後端路徑。檔案在 samples/（貓狗那份見 nginx.conf）。 -->
-        <p class="field__label" id="sample-row">
-            <span data-i18n="tr_sample_lead">沒有自己的資料？</span>
-            <button class="btn btn--minor" id="sample" type="button" data-i18n="tr_sample">用平台準備好的範例</button>
-        </p>
+        <!-- ZH: v4.38 拿掉「用平台準備好的範例」鈕（擁有者 2026-10-05）：範例只屬於「先體驗看看」（自動帶入），
+                 「用自己的資料／程式」就是要用自己的 —— 每種方式有什麼是**訂死的**，不做方式之間的轉換。 -->
 
         <label class="field" id="epochs-field">
             <span class="field__label" for="epochs" data-i18n="tr_epochs">要練幾輪</span>
             <input class="field__input" id="epochs" type="number" min="1" max="50" value="10"
                    inputmode="numeric">
-            <span class="field__label" data-i18n="tr_epochs_hint">練越多輪越久，也不一定越準（範例資料 10 輪通常不到一分鐘，GPU 忙的時候要先排隊）。不確定就用預設值。</span>
+            <span class="field__label" data-i18n="tr_epochs_hint">練越多輪越久，也不一定越準（GPU 忙的時候要先排隊）。不確定就用預設值。</span>
             <!-- ZH: 逾時那一句由 train.js 的 renderTimeoutNote 填（分鐘數是
                      管理端可即時改的設定，寫死會過時）。⚠ 只有這一份，
                      2026-09-24 曾經差點又加一個同樣的 span。 -->
             <span class="field__label" id="timeout-note" hidden></span>
         </label>
 
-        <!-- ZH: 自帶程式。v4.36 起只在「用自己的程式」這種方式出現，而且一進來就展開 ——
-                 選了這種方式的人就是要它，再讓他點一次摺疊是多餘的。 -->
-        <div class="fold" id="own-fold">
-            <details id="own-code">
-                <summary class="fold__summary" data-i18n="tr_own_title">我要用自己的訓練程式</summary>
-                <div class="fold__body">
+        <!-- ZH: 自帶程式。只在「用自己的程式」出現。v4.38 起**不可收合**（擁有者 2026-10-05）——
+                 這一種方式的主角就是它，摺起來等於把必填欄位藏起來。 -->
+        <section class="own" id="own-fold" aria-labelledby="own-h">
+                <h2 class="own__h" id="own-h" data-i18n="tr_own_h">你的訓練程式</h2>
+                <div>
                     <p data-i18n="tr_own_p">選一支 .py。平台會把資料準備好、把它跑起來，其餘由你的程式決定。</p>
                     <!-- ZH: 契約寫在選檔**之前**。等他跑失敗才知道路徑不對，
                              是把可以避免的失敗留到最貴的時候（GPU 已經排隊跑過一輪）。 -->
@@ -178,8 +174,7 @@
                     </div>
                     <input type="file" id="codefile" accept=".py" hidden>
                 </div>
-            </details>
-        </div>
+        </section>
 
         <button class="btn btn--primary" id="go" type="button" disabled data-i18n="tr_go">開始訓練</button>
         <!-- ZH: v4.38 拿掉「我想自己調」（擁有者 2026-10-05）：側欄的「重新選擇模式」就是那個出口，留兩個會讓人以為是兩件事。 -->
@@ -317,12 +312,12 @@
 
 <script src="tz.js?v=2e214a8b"></script>
 <script src="docs-entry.js?v=131ee7af"></script>
-<script src="i18n.js?v=582f58fc"></script>
+<script src="i18n.js?v=42b9abc1"></script>
 <script src="prefs.js?v=e71609e5"></script>
 <!-- ZH: 小基（浮動助手）。客服模式公開，登入頁也放 —— 設計文件的使用者需求是「不會用這個平台時想直接問」。 -->
 <script src="assistant-widget.js?v=74e3c4b6"></script>
 <script src="chrome.js?v=c352d352"></script>
-<script src="train.js?v=358ca7f4"></script>
+<script src="train.js?v=5f90938e"></script>
 <!-- ZH: 到訪人次。每一頁都載（這是「網站」的計數，不是首頁的），一個工作階段只送一次；
          只有放了 [data-visits] 的頁面（登入頁、首頁）會顯示數字。 -->
 <script src="visits.js"></script>
