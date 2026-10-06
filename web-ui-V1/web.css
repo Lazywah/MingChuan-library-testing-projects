@@ -1046,6 +1046,17 @@ html.aibot-docked #aibot-fab { display: none; }
     transition: all .15s ease;
 }
 
+/* ZH: v4.40 透明擋板（擁有者 2026-10-06）：純說明的步驟要「看得到、但點不到」。
+ *     四塊遮罩留的那個洞只對「請你點它」的步驟有意義；純說明時洞開著，
+ *     使用者點下去可能真的啟動實驗室或送出訓練單，導覽就斷在那裡。
+ * ZH: ⚠ 透明但**要吃掉點擊** —— 所以不要 pointer-events:none（那是 ring 的事，
+ *     ring 畫在目標上面只是裝飾，放行才對；這一塊的工作正好相反）。 */
+.tour__guard {
+    position: fixed;
+    z-index: 1101;
+    background: transparent;
+}
+
 .tour__box {
     position: fixed;
     z-index: 1102;

@@ -333,6 +333,20 @@ const TOUR_PAGES = ['index.html', 'myai.html', 'train.html', 'lab.html',
     eq(Tour.badTransitions(noNav), [], '砍完之後也不會卡住');
 }
 
+// ── TestDangerousTargetsAreNeverClickSteps ─────────────────────────
+{
+    // ZH: 🔴 這幾步圈住的按鈕**按下去會有真的後果**：起一個實驗室容器並開新分頁、
+    //     送出一張真的訓練單。它們必須是純說明（非 click），畫面上才會蓋上
+    //     透明擋板（tour.js 的 guard）讓人點不到。
+    //     標成 click 的話導覽會「等他點」，而他一點就斷在那裡 —— 不會有任何錯誤訊息。
+    [['tr_start', '開始訓練'], ['lab_start', '啟動並開啟實驗室'],
+     ['lab_hero', '實驗室主卡（裡面就是那顆啟動鈕）']].forEach(([id, what]) => {
+        const s = Tour.STEPS.find((x) => x.id === id);
+        eq(!!s, true, id + ' 這一步還在');
+        eq(!!s.click, false, id + '（' + what + '）必須是純說明，不能等使用者點');
+    });
+}
+
 console.log('tour.js —— 頁面判斷');
 
 {

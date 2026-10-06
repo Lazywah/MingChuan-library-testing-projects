@@ -627,6 +627,7 @@
     var cur = -1;
     var box = null;          // 說明卡
     var ring = null;         // 高亮框（只是一圈邊，不負責變暗）
+    var guard = null;        // ZH: v4.40 非點擊步驟的透明擋板 —— 看得到但點不到（見 ensureChrome）
     var panels = [];         // 目標四周的遮罩（上右下左）—— 中間留給使用者點
     var armed = null;        // 這一步掛在目標上的點擊監聽（要記得拆）
 
@@ -709,8 +710,10 @@
         disarm();
         panels.forEach(function (p) { p.remove(); });
         panels = [];
-        [ring, box].forEach(function (el) { if (el) el.remove(); });
-        ring = box = null;
+        // ZH: 🔴 guard 一定要一起拆 —— 它是一塊 pointer-events 吃掉點擊的透明方塊，
+        //     留在頁面上的話，導覽結束後那一區就永遠點不到了（而且看不出原因）。
+        [ring, guard, box].forEach(function (el) { if (el) el.remove(); });
+        ring = guard = box = null;
         document.removeEventListener('keydown', onKey);
         global.removeEventListener('resize', reposition);
         global.removeEventListener('scroll', reposition, true);
@@ -746,6 +749,17 @@
         ring = document.createElement('div');
         ring.className = 'tour__ring';
         document.body.appendChild(ring);
+
+        // ZH: 🔴 v4.40 透明擋板（擁有者 2026-10-06）。四塊遮罩擋住**周圍**，
+        //     中間那個洞是故意留著讓他點目標的 —— 但那只有「請你點它」的步驟需要。
+        //     純說明的步驟（例如圈住實驗室的「啟動並開啟實驗室」、訓練頁的「開始訓練」）
+        //     洞一樣開著，點下去會真的起容器／送出訓練單，而導覽當場斷在那裡。
+        //     所以非點擊步驟改成把洞也蓋起來：**看得到、但點不到**。
+        // ZH: ⚠ 疊在 ring 之上、說明卡（1102）之下 —— 不能擋到 × 與「繼續」。
+        guard = document.createElement('div');
+        guard.className = 'tour__guard';
+        guard.hidden = true;
+        document.body.appendChild(guard);
 
         box = document.createElement('div');
         box.className = 'tour__box';
@@ -802,6 +816,7 @@
 
         if (!el) {
             ring.hidden = true;
+            guard.hidden = true;   // ZH: 沒有洞 —— 整頁都被第一塊遮罩蓋住了
             setPanels(null);
             box.style.left = '50%';
             box.style.top = '50%';
@@ -817,6 +832,16 @@
         ring.style.width = (r.width + pad * 2) + 'px';
         ring.style.height = (r.height + pad * 2) + 'px';
         setPanels(r);
+
+        // ZH: 要他自己點的步驟才把洞留著；其餘一律蓋上（連 ring 那一圈 padding 一起蓋，
+        //     不然目標邊緣那 6px 仍然點得到）。
+        guard.hidden = !!s.click;
+        if (!guard.hidden) {
+            guard.style.left = (r.left - pad) + 'px';
+            guard.style.top = (r.top - pad) + 'px';
+            guard.style.width = (r.width + pad * 2) + 'px';
+            guard.style.height = (r.height + pad * 2) + 'px';
+        }
 
         // ZH: 說明卡放目標下面；下面放不下就放上面。
         //     ⚠ 用 `offsetHeight` 量自己 —— 文案長度會變，寫死高度遲早會撞。
