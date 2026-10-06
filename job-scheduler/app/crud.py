@@ -1643,13 +1643,16 @@ _GROUP_KEYS = {g["key"] for g in SETTING_GROUPS}
 # ZH: 🔴 **五個角色一個都不能少。** 漏掉一個的話那個身分會落到「找不到 key」，
 #     而找不到的處理是退回學生 —— 一個安靜的錯誤分級。
 #     所以這份清單與 ONBOARDING_FIELDS 的角色集合要一致（下方有自檢）。
-MYAI_CREDIT_ROLES = (
+# ZH: 平台的身分清單 —— **唯一一份**。v4.35 MYAI 點數分級先用了它，
+#     v4.39 GPU 權限分級也用同一份：多一份清單＝多一個以後會漏掉新身分的地方。
+ROLES = (
     ("student", "學生",   "students"),
     ("teacher", "老師",   "teachers"),
     ("staff",   "職員",   "staff"),
     ("guest",   "訪客",   "guests"),
     ("admin",   "管理員", "admins"),
 )
+MYAI_CREDIT_ROLES = ROLES   # ZH: v4.35 的舊名，既有程式還在用
 
 # ZH: v4.2 組內顯示順序（擁有者裁定 2026-09-02）：**上游在前、父子相鄰**。
 #     一個設定決定另一個「有沒有意義」時排前面（開關是最常見的上游）；
@@ -1659,6 +1662,8 @@ MYAI_CREDIT_ROLES = (
 #     只是排尾不會消失；列了不存在的 key 則在載入時就炸（見下方自檢）。
 SETTING_ORDER = {
     "platform": ["sso_autocreate", "max_accounts", "sso_verify_id_token", "gpu_features_enabled",
+                 "gpu_enabled_student", "gpu_enabled_teacher", "gpu_enabled_staff",
+                 "gpu_enabled_guest", "gpu_enabled_admin",
                  "lab_network_isolation",
                  "job_timeout_minutes", "max_jobs_per_user", "lab_gpu_max_minutes", "lab_archive_days",
                  "announcement_file_max_mb", "announcement_total_gb"],
@@ -1741,10 +1746,12 @@ SYSTEM_SETTINGS = {
                                  "default": lambda: 1, "min": 0, "max": 1,
                                  "label": "驗證 SSO 的 id_token 簽章(1=開, 0=暫時關閉；關閉時每次登入都會在 log 留紀錄)",
                                  "label_en": "Verify the SSO id_token signature (1 = on, 0 = temporarily off; every login is logged while off)"},
+    # ZH: v4.39 語意變了：這是**總開關**（維護時一鍵全部暫停），平常誰能用由
+    #     下面的 gpu_enabled_<身分> 決定。v4.38 以前它是唯一的閘門（0＝除了管理員全擋）。
     "gpu_features_enabled":     {"starred": True, "public": True, "group": "platform", "type": "int",
                                  "default": lambda: 1, "min": 0, "max": 1,
-                                 "label": "GPU 相關功能對一般使用者開放(1=開, 0=暫停；管理員不受限)",
-                                 "label_en": "GPU features available to non-admin users (1 = on, 0 = paused; admins unaffected)"},
+                                 "label": "GPU 功能總開關(1=依下面的身分開放, 0=全部暫停；管理員不受限)",
+                                 "label_en": "GPU features master switch (1 = per-role below, 0 = paused for everyone; admins unaffected)"},
     "job_timeout_minutes":      {"starred": True, "public": True, "group": "platform", "type": "int",   "default": lambda: settings.JOB_TIMEOUT_MINUTES,         "min": 1,   "max": None, "label": "任務逾時(分鐘)", "label_en": "Job timeout (minutes)"},
     # ZH: v4.17（方案二 2.4）每人同時執行中的訓練上限。
     #
@@ -1885,6 +1892,22 @@ SYSTEM_SETTINGS = {
 #     擁有者為了讓大家都是 50000 得打六次。表格化之後每一格都看得到、也都要填，
 #     「這個身分不發」就是那一格填 0 —— 不需要另外的語意。
 # ZH: 預設 0：新部署兩個開關都關、表全是 0，什麼都不發，直到有人填。
+# ZH: v4.39 GPU 功能依身分開放（擁有者 2026-10-06）。預設：老師／職員／管理員可用，
+#     學生與訪客不可用 —— 擁有者 2026-10-06 的裁定，之後在管理端隨時可改，不必改程式。
+# ZH: 🔴 管理員那一列**只是為了表格完整**：真正的管理員判定走 `is_admin`（gpu_access 的第一行），
+#     把這一列關掉也擋不住管理員。理由同 v4.8：關閉期間必須有人能驗證平台還活著。
+_GPU_ROLE_DEFAULTS = {"student": 0, "teacher": 1, "staff": 1, "guest": 0, "admin": 1}
+for _role, _zh, _en in ROLES:
+    SYSTEM_SETTINGS["gpu_enabled_%s" % _role] = {
+        # ZH: 不標 public —— 前端的閘門讀 /auth/me 的 gpu_access（後端算好的），
+        #     不需要前台拿得到這張表。starred 跟 MYAI 點數分級那幾列同一個做法。
+        "depends_on": "gpu_features_enabled", "starred": True,
+        "group": "platform", "type": "int", "min": 0, "max": 1,
+        "default": (lambda d: (lambda: d))(_GPU_ROLE_DEFAULTS[_role]),
+        "label": "　└ %s可以用 GPU 功能(訓練與程式實驗室)" % _zh,
+        "label_en": "    - GPU features for %s" % _en,
+    }
+
 for _role, _zh, _en in MYAI_CREDIT_ROLES:
     SYSTEM_SETTINGS["myai_initial_credit_%s" % _role] = {
         "depends_on": "myai_initial_credit_on", "starred": True,
@@ -2135,6 +2158,70 @@ def migrate_myai_credit_switches(db: Session) -> dict:
     set_system_config(db, CREDIT_SWITCH_MIGRATED_KEY, "1")
     logger.info("MYAI 點數設定搬移完成：%s", done)
     return {"status": "migrated", **done}
+
+
+# ══════════════════════════════════════════════════════════════════════
+# ZH: v4.39 GPU 功能依身分開放
+# ══════════════════════════════════════════════════════════════════════
+
+def gpu_access(db: Session, user) -> dict:
+    """ZH: 這個人現在能不能用 GPU 功能（訓練、程式實驗室、資料集）。
+
+    ZH: 回 {"allowed": bool, "reason": None|"paused"|"role"} —— reason 要分得開，
+        因為畫面上要講不同的話：「維護中，之後會恢復」與「這個身分沒有這個功能」
+        對使用者的下一步完全不同（前者是等，後者是去問管理者）。
+
+    ZH: 🔴 **全站唯一的判定點。** 前端（/auth/me 帶 gpu_access）與後端閘門
+        （auth.require_gpu）都讀它，不要在別處自己寫 `if role == ...` ——
+        散在各處的判定正是 v3.8 改一次要找四個地方的原因。
+
+    ZH: 🔴 管理員永遠放行（看 is_admin 不看 role，同 require_admin）：
+        關閉期間必須有人能驗證平台還活著（v4.8 的理由，v4.39 繼續成立）。
+
+    ZH: 不認得的身分一律**不開放** —— 存取控制要往關的那一邊猜。
+        （對照 rag_model_provider 那裡是往「本機」猜，兩邊都是猜向比較安全的那一側。）
+
+    @node job-scheduler/app/crud.py::gpu_access
+    """
+    if getattr(user, "is_admin", 0):
+        return {"allowed": True, "reason": None}
+    if not get_setting(db, "gpu_features_enabled"):
+        return {"allowed": False, "reason": "paused"}
+    key = "gpu_enabled_%s" % str(getattr(user, "role", "") or "").lower()
+    if key not in SYSTEM_SETTINGS or not get_setting(db, key):
+        return {"allowed": False, "reason": "role"}
+    return {"allowed": True, "reason": None}
+
+
+GPU_ROLE_MIGRATED_KEY = "gpu_role_switches_migrated"
+
+
+def migrate_gpu_role_switches(db: Session) -> dict:
+    """ZH: v4.39 一次性搬移：總開關 0/1 的「全部暫停」→ 依身分開放。
+
+    ZH: 2026-09-07 把 `gpu_features_enabled` 設成 0，是當時**沒有身分概念**時
+        唯一能做的事（擋掉所有非管理員）。現在身分開關接手了這件事，
+        總開關交還給「維護時全部暫停」，所以把它放回 1 ——
+        否則舊的那個 0 會把新的身分政策整個蓋掉，老師職員還是進不去，
+        而管理者會看著一張寫著「老師可以用」的表，卻沒有人用得了。
+
+    ZH: 🔴 **只跑一次，靠記號不靠「總開關現在是幾」。** 用後者的話，
+        管理者日後自己把總開關關掉（維護）→ 下次開機又被搬回 1 ——
+        一個關不掉的開關。做法與 migrate_myai_credit_switches 同一套。
+
+    ZH: 身分開關本身不寫：讓它們留在預設值（老師／職員／管理員開，學生／訪客關），
+        管理者按「回到預設」時拿到的才是同一組值。
+
+    @node job-scheduler/app/crud.py::migrate_gpu_role_switches
+    """
+    if get_system_config(db, GPU_ROLE_MIGRATED_KEY, "") == "1":
+        return {"status": "already_done"}
+    was = get_system_config(db, "gpu_features_enabled", "")
+    if was == "0":
+        set_system_config(db, "gpu_features_enabled", "1")
+    set_system_config(db, GPU_ROLE_MIGRATED_KEY, "1")
+    logger.info("GPU 身分開關搬移完成：總開關原本=%r", was)
+    return {"status": "migrated", "was": was}
 
 
 def rag_model_choices(db: Session) -> list:

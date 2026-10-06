@@ -823,15 +823,16 @@
         ob.observe(document.body, { childList: true, subtree: true });
     }
 
-    async function gpuEnabled() {
-        // ZH: 讀不到設定時**當成開著** —— 與 chrome.js 的 applyGpuGate 同一個判斷
-        //     （暫時性的政策，不該因為一次讀取失敗就把功能講成關閉）。
-        try {
-            if (!global.Chrome || !global.Chrome.publicSettings) return true;
-            var st = await global.Chrome.publicSettings();
-            return String(st.gpu_features_enabled) !== '0';
-        } catch (e) { return true; }
+    // ZH: v4.39 改讀 /auth/me 的 gpu_access（依身分），不再自己讀設定算一次 ——
+    //     與 chrome.js 的 applyGpuGate 同一個來源，不會出現「導覽帶他看訓練、
+    //     但那兩頁對他是灰的」。拿不到就**當成開著**（同 applyGpuGate 的 fail-open）。
+    function gpuEnabled() {
+        return !(_me && _me.gpu_access && _me.gpu_access.allowed === false);
     }
+
+    // ZH: chrome:ready 帶來的 /auth/me。存起來是因為 start() 也會被「再看一次導覽」
+    //     從帳號選單叫起來（那時沒有事件可以拿）。
+    var _me = null;
 
     /* ZH: 開始（或續走）。`force` 是「再看一次」用的 —— 忽略「看過了」。
      *
@@ -850,7 +851,7 @@
             && global.Prefs.isDismissed(SEEN_KEY)) return;
 
         var here = pageName(location.pathname);
-        var gpuOn = await gpuEnabled();
+        var gpuOn = gpuEnabled();
         steps = stepsFor({
             here: here,
             gpuOn: gpuOn,
@@ -911,6 +912,7 @@
     document.addEventListener('chrome:ready', function (ev) {
         var me = ev && ev.detail ? ev.detail.me : null;
         if (!me) return;               // ZH: 沒登入就不導
+        _me = me;
         start(false);
     });
 }(window));

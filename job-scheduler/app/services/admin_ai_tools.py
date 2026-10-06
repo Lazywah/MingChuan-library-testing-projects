@@ -444,7 +444,11 @@ def system_status(db: Session) -> dict:
     labs = db.query(models.LabSession).filter(models.LabSession.status == "running").count()
     du = shutil.disk_usage("/data") if __import__("os").path.isdir("/data") else None
     facts = {"排隊中的訓練": queued, "執行中的訓練": running, "開著的實驗室": labs,
-             "GPU 功能對學生開放": bool(crud.get_setting(db, "gpu_features_enabled")),
+             # ZH: v4.39 GPU 依身分開放 —— 只講總開關會誤導（總開關開著，學生仍可能沒開放）。
+             "GPU 總開關": "開" if crud.get_setting(db, "gpu_features_enabled") else "全部暫停",
+             "GPU 開放的身分": "、".join(
+                 zh for r, zh, _e in crud.ROLES if crud.get_setting(db, "gpu_enabled_%s" % r)
+             ) or "（都沒開）",
              "帳號": crud.account_cap_state(db),
              "資料磁碟剩餘 GB": round(du.free / 1024 ** 3) if du else None}
     if du and du.free / du.total < 0.1:

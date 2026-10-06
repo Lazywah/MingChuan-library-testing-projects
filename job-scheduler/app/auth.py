@@ -226,6 +226,35 @@ async def get_current_user(
     return user
 
 
+def require_gpu(current_user: models.User = Depends(get_current_user),
+                db: Session = Depends(get_db)) -> models.User:
+    """ZH: GPU 功能的閘門（訓練、程式實驗室、資料集上傳）。v4.39 新增。
+
+    ZH: 在此之前**只有前端擋**（chrome.js 把頁面換成「暫停使用」）——
+        拿一般使用者的 token 直接打 API，訓練照樣會跑。暫時性的維護暫停可以只做前端，
+        但 v4.39 起這是**長期的身分政策**，只畫在畫面上的政策不算政策。
+
+    ZH: 判定本身在 crud.gpu_access（全站唯一一份），這裡只負責翻成 HTTP 403
+        與兩種分得開的訊息。
+
+    @node job-scheduler/app/auth.py::require_gpu
+    """
+    access = crud.gpu_access(db, current_user)
+    if access["allowed"]:
+        return current_user
+    if access["reason"] == "paused":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="ZH: GPU 相關功能目前暫停使用，恢復時間請看首頁公告。 "
+                   "| EN: GPU features are paused right now - see the home page announcements.")
+    raise HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail="ZH: 你的身分目前沒有開放 GPU 相關功能（訓練與程式實驗室）。"
+               "需要的話請用「問題回報」告訴管理者。 "
+               "| EN: GPU features are not available for your role. "
+               "Use \u201cReport an issue\u201d if you need access.")
+
+
 def require_admin(current_user: models.User = Depends(get_current_user)) -> models.User:
     """
     ZH: 管理權限檢查 —— **看 `is_admin` 旗標，不看 `role`**（v3.8 起）。

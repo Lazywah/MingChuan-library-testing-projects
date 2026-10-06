@@ -497,6 +497,8 @@ def read_users_me(current_user: models.User = Depends(get_current_user),
     unlock = crud.active_unlock(db, current_user.id)
     out.profile_unlock = ([f for f in (unlock.fields or "").split(",") if f]
                           if unlock else None)
+    # ZH: v4.39 GPU 權限（依身分）。同上：ORM 模式帶不出計算欄位,要明確填。
+    out.gpu_access = crud.gpu_access(db, current_user)
     return out
 
 # ==============================================================================

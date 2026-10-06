@@ -199,6 +199,25 @@ def client(db_engine):
 
 # ── Helper factories ───────────────────────────────────────────────────────────
 
+@pytest.fixture(autouse=True)
+def gpu_open_for_tests(db):
+    """ZH: v4.39 起 GPU 功能依身分開放，而**預設學生不能用**（擁有者 2026-10-06）。
+
+    ZH: 既有的一百多支測試都以學生身分送訓練／開實驗室／上傳資料集 —— 它們測的是
+        送單與排程的邏輯，不是權限政策。不開的話那些測試會全部變成 403，
+        而失敗訊息只說「你的身分沒有開放」，看不出真正要測的東西有沒有壞。
+        所以測試環境一律開放給所有身分。
+
+    ZH: 🔴 權限政策本身**不靠這個 fixture 測** —— tests/test_gpu_role_access.py
+        會先把這些覆寫清掉、回到預設值，再測它要測的組合。
+
+    @node tests/conftest.py::gpu_open_for_tests
+    """
+    from app import crud
+    for role, _zh, _en in crud.ROLES:
+        crud.set_system_config(db, "gpu_enabled_%s" % role, "1")
+
+
 def repo_file(*parts):
     """ZH: 找 repo 裡的檔案。本機是 <repo>/job-scheduler/app/…；在 scheduler 容器裡跑時
         tests 被 cp 到 /app/tests，而 /app **就是** job-scheduler —— 沒有那一層。

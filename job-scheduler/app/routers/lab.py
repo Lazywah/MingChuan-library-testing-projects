@@ -27,7 +27,7 @@ from fastapi import APIRouter, Body, Depends, HTTPException, status, Header, Req
 from sqlalchemy.orm import Session
 
 from .. import crud, models, schemas
-from ..auth import get_current_user
+from ..auth import get_current_user, require_gpu
 from ..database import get_db
 from ..services import lab_manager, secrets_service, quota_service, storage_lifecycle
 from ..rate_limit import limiter
@@ -47,6 +47,8 @@ def start_lab(
     payload: dict = Body(default={}),
     current_user: models.User = Depends(get_current_user),
     db: Session = Depends(get_db),
+    # ZH: v4.39 GPU 功能依身分開放。閘門在 auth.require_gpu（判定在 crud.gpu_access）。
+    _gpu: models.User = Depends(require_gpu),
 ):
     """
     ZH: 啟動使用者的 code-server 容器，回傳 URL 與 one-time password
@@ -289,6 +291,8 @@ def create_my_session(
     payload: schemas.LabSessionCreate,
     current_user: models.User = Depends(get_current_user),
     db: Session = Depends(get_db),
+    # ZH: v4.39 GPU 功能依身分開放。閘門在 auth.require_gpu（判定在 crud.gpu_access）。
+    _gpu: models.User = Depends(require_gpu),
 ) -> Dict[str, Any]:
     """
     ZH: 新增一份存檔（只建紀錄；容器與 volume 等到啟動時才建）。

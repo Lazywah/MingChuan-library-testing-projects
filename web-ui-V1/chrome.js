@@ -966,12 +966,18 @@
     }
 
     // ══════════════════════════════════════════════════════════════════
-    // ZH: v4.8 GPU 功能暫停（擁有者裁定 2026-09-07）
+    // ZH: v4.8 GPU 功能閘門 → v4.39 改成**依身分**（擁有者裁定 2026-10-06）
     // ══════════════════════════════════════════════════════════════════
-    // ZH: 由旋鈕 `gpu_features_enabled` 控制（管理端「平台設定」可切回來，
-    //     不必改程式）。關閉時**一般使用者**看到的是「灰掉且點不下去」，
-    //     不是把項目藏起來 —— 藏起來的話使用者不知道發生什麼事，
-    //     只會覺得功能不見了、然後來問。
+    // ZH: 能不能用由**後端算**（/auth/me 的 `gpu_access`，規則在 crud.gpu_access）。
+    //     前端不自己讀設定再算一次：規則有兩份的話，改了一邊而忘了另一邊時，
+    //     畫面會與實際權限對不上，而且不會有任何地方報錯。
+    //     v4.38 以前這裡讀 `gpu_features_enabled` 自己判斷，那時只有「全開／全關」。
+    //
+    // ZH: 關閉時**一般使用者**看到的是「灰掉且點不下去」，不是把項目藏起來 ——
+    //     藏起來的話使用者不知道發生什麼事，只會覺得功能不見了、然後來問
+    //     （擁有者 2026-10-06 再次裁定：依身分關閉時也照這個做法）。
+    // ZH: 兩種原因要講不同的話：`paused`=維護中（等就好）、`role`=這個身分沒有開放
+    //     （要去問管理者）。講一樣的話會讓學生一直等一個永遠不會來的恢復。
     //
     // ZH: 🔴 **管理員不受限**：關閉期間必須有人能驗證平台還活著。
     //
@@ -984,43 +990,56 @@
     var GPU_PAGES = ['gpu.html', 'train.html', 'lab.html',
                      'jobs.html', 'datasets.html', 'status.html'];
 
-    function markOff(el) {
+    function gpuText(reason, what) {
+        return reason === 'role'
+            ? { hint:  T('gpu_norole_hint', '你的身分沒有開放這項功能'),
+                title: T('gpu_norole_title', '你的身分沒有開放這項功能'),
+                body:  T('gpu_norole_body', 'GPU 相關功能（訓練與程式實驗室）目前只開放給部分身分，其他功能不受影響。需要用的話，請用「問題回報」告訴管理者。') }[what]
+            : { hint:  T('gpu_off_hint', '這項功能暫停使用中'),
+                title: T('gpu_off_title', '這項功能暫停使用'),
+                body:  T('gpu_off_body', 'GPU 相關功能（訓練與程式實驗室）目前暫停開放，其他功能不受影響。恢復時間請看首頁公告。') }[what];
+    }
+
+    function markOff(el, reason) {
         // ZH: 拿掉 href 才是真的點不下去（只加 class 的話鍵盤與中鍵仍可開）。
         el.removeAttribute('href');
         el.classList.add('is-off');
         el.setAttribute('aria-disabled', 'true');
-        el.setAttribute('title', T('gpu_off_hint', '這項功能暫停使用中'));
+        el.setAttribute('title', gpuText(reason, 'hint'));
     }
 
-    function blockPage() {
+    function blockPage(reason) {
+        // ZH: 🔴 頁面自己的全螢幕浮層要一起拿掉 —— 它們在 <main> **外面**（要蓋住頂部列），
+        //     所以換掉 main 的內容擋不到它們。2026-10-06 實測：學生看到「你的身分沒有開放」，
+        //     訓練頁的選方式遮罩卻照樣蓋在上面。
+        //     用屬性而不是寫死 id：chrome.js 不該知道某一頁有哪些浮層。
+        document.querySelectorAll('[data-gpu-overlay]').forEach(function (el) { el.remove(); });
         var main = document.querySelector('main');
         if (!main) return;
         main.innerHTML =
             '<section class="primary-card">'
-            + '<h1 class="hero__title">' + esc(T('gpu_off_title', '這項功能暫停使用')) + '</h1>'
-            + '<p class="hero__sub">' + esc(T('gpu_off_body',
-                'GPU 相關功能（訓練與程式實驗室）目前暫停開放，其他功能不受影響。'
-                + '恢復時間請看首頁公告。')) + '</p>'
+            + '<h1 class="hero__title">' + esc(gpuText(reason, 'title')) + '</h1>'
+            + '<p class="hero__sub">' + esc(gpuText(reason, 'body')) + '</p>'
             + '<a class="btn btn--primary btn--block" href="index.html">'
             + esc(T('gpu_off_home', '回首頁')) + '</a>'
             + '</section>';
     }
 
-    async function applyGpuGate(me) {
-        // ZH: 管理員直接放行 —— 不必為此多打一次設定 API。
-        if (!me || me.is_admin) return;
-        var st = await publicSettings();
-        // ZH: 讀不到設定時**不擋** —— 這是暫時性的政策，不該因為一次
-        //     API 失敗就把平台的一半功能鎖起來（fail-open 是這裡的正解）。
-        if (String(st.gpu_features_enabled) !== '0') return;
+    function applyGpuGate(me) {
+        // ZH: 🔴 拿不到 me 或後端沒給 gpu_access 時**不擋**（fail-open）——
+        //     一次 /auth/me 失敗不該把平台的一半功能鎖起來，而且後端那道閘門還在，
+        //     真的沒權限的人按下去仍然會被 403 擋下，不會真的跑起來。
+        //     （v4.39 以前這裡 fail-open 是唯一一道防線，現在它只是「畫面別亂跳」。）
+        if (!me || !me.gpu_access || me.gpu_access.allowed !== false) return;
+        var reason = me.gpu_access.reason;
 
         document.querySelectorAll('a[href]').forEach(function (a) {
             var href = (a.getAttribute('href') || '').split('?')[0].split('#')[0];
-            if (GPU_PAGES.indexOf(href) >= 0) markOff(a);
+            if (GPU_PAGES.indexOf(href) >= 0) markOff(a, reason);
         });
 
         var here = (location.pathname.split('/').pop() || 'index.html');
-        if (GPU_PAGES.indexOf(here) >= 0) blockPage();
+        if (GPU_PAGES.indexOf(here) >= 0) blockPage(reason);
     }
 
     // ── 前台可見的營運設定（v3.8）────────────────────────────────────

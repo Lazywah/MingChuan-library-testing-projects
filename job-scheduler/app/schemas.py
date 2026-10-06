@@ -417,6 +417,11 @@ class UserResponse(BaseModel):
     #     沒有這個欄位的話,前端無從得知「現在可以改了」,
     #     管理者開了也沒有任何地方能用（v3.8 開發中實際發生過）。
     profile_unlock: Optional[List[str]] = None
+    # ZH: v4.39 GPU 功能這個人能不能用：{"allowed": bool, "reason": None|"paused"|"role"}。
+    #     🔴 唯讀的狀態回報，而且**前端不自己算** —— 規則只有 crud.gpu_access 一份，
+    #     前端自己照抄一次的話，改規則時一定會有一邊忘了改（而忘掉的那一邊不會報錯，
+    #     只會讓畫面與實際權限對不上）。/auth/me 明確填它（同 campuses、profile_unlock）。
+    gpu_access: Optional[dict] = None
     login_count: int = 0
     lifetime_tokens_used: int = 0
     last_login_ip: Optional[str] = None

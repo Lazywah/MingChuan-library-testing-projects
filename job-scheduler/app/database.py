@@ -544,4 +544,15 @@ def init_db():
     except Exception as e:  # noqa: BLE001 - 搬移失敗不該擋住開機（開關預設關，最壞是不發點）
         logger.warning(f"MYAI credit switch migration skipped: {e}")
 
+    # --- v4.39 GPU 功能依身分開放：總開關的「全部暫停」→ 身分開關（一次性）---
+    try:
+        from . import crud as _crud
+        _db = SessionLocal()
+        try:
+            _crud.migrate_gpu_role_switches(_db)
+        finally:
+            _db.close()
+    except Exception as e:  # noqa: BLE001 - 搬移失敗不該擋住開機（最壞是維持全部暫停）
+        logger.warning(f"GPU role switch migration skipped: {e}")
+
     logger.info(f"ZH: 資料庫初始化完成 ({settings.DATABASE_PATH}) | EN: Database initialized ({settings.DATABASE_PATH})")

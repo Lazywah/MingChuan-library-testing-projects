@@ -33,7 +33,7 @@ from typing import Optional, Dict, Any
 import asyncio
 
 from .. import crud, schemas, models
-from ..auth import get_current_user
+from ..auth import get_current_user, require_gpu
 from ..database import get_db
 from ..config import SCHEDULER_POLICY, settings
 from ..services import storage_lifecycle
@@ -87,7 +87,9 @@ router = APIRouter(tags=["訓練任務 Training Jobs"])
 def submit_job(
     job: schemas.JobCreate,
     current_user: models.User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    # ZH: v4.39 GPU 功能依身分開放。閘門在 auth.require_gpu（判定在 crud.gpu_access）。
+    _gpu: models.User = Depends(require_gpu),
 ):
     """
     ZH: 提交新的訓練任務

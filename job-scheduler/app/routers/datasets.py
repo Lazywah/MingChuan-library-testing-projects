@@ -10,7 +10,7 @@ import re
 import logging
 
 from .. import models, crud
-from ..auth import get_current_user
+from ..auth import get_current_user, require_gpu
 from ..database import get_db
 from ..services import storage_lifecycle
 from ..rate_limit import limiter
@@ -41,6 +41,8 @@ async def upload_dataset(
     file: UploadFile = File(...),
     current_user: models.User = Depends(get_current_user),
     db: Session = Depends(get_db),
+    # ZH: v4.39 GPU 功能依身分開放。閘門在 auth.require_gpu（判定在 crud.gpu_access）。
+    _gpu: models.User = Depends(require_gpu),
 ) -> Dict[str, Any]:
     """
     ZH: 上傳資料集，並自動推薦訓練參數
