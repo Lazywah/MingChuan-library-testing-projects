@@ -220,7 +220,8 @@ console.log('tour.js —— 進度用 id，不用索引');
     // ZH: 🔴 站與站之間直接走（擁有者 2026-09-24：不要每次都回首頁），
     //     所以「過橋」那一步有兩個版本，由閘門挑一個。
     //     兩個都活 = 走同一座橋兩次；兩個都死 = 斷鏈。兩種都不會報錯。
-    const PAIRS = [['go_jobs', 'go_usage_myai'], ['go_docs', 'go_report_usage']];
+    // ZH: v4.40 開著時的那座橋改成 go_train（先去訓練頁，再從實驗室接到 jobs）。
+    const PAIRS = [['go_train', 'go_usage_myai'], ['go_docs', 'go_report_usage']];
     [true, false].forEach((gpuOn) => [true, false].forEach((docsOn) => {
         const st = Tour.stepsFor({ here: 'index.html', gpuOn, docsOn, has: ALL });
         const ids = st.map((x) => x.id);
@@ -247,13 +248,14 @@ const DESKTOP = (sel) => (/topbar__burger/.test(sel) ? /topnav|navmenu/.test(sel
 // ZH: 手機：反過來 —— 只看得到 ☰，導覽列收在裡面。
 const MOBILE = (sel) => (/topbar__burger/.test(sel) ? true : !/topnav|navmenu/.test(sel));
 
-const TOUR_PAGES = ['index.html', 'myai.html', 'jobs.html', 'usage.html',
-                    'docs.html', 'report.html'];
+// ZH: v4.40 加了訓練頁與程式實驗室兩站（擁有者 2026-10-06）。
+const TOUR_PAGES = ['index.html', 'myai.html', 'train.html', 'lab.html',
+                    'jobs.html', 'usage.html', 'docs.html', 'report.html'];
 
 {
     const all = Tour.stepsFor({ here: 'index.html', ...BOTH_ON, has: ALL });
     const pages = [...new Set(all.map((s) => s.page))].sort();
-    eq(pages, [...TOUR_PAGES].sort(), '兩道閘門都開時，導覽會走過這六頁');
+    eq(pages, [...TOUR_PAGES].sort(), '兩道閘門都開時，導覽會走過這八頁');
 }
 
 // ── TestTheDocsStopIsItsOwnGate ────────────────────────────────────

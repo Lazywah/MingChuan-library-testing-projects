@@ -90,7 +90,7 @@
           t: ['tour_hello_t', '歡迎使用 AI 基地'],
           d: ['tour_hello_d',
               '這裡是銘傳大學圖書館的 AI 平台：可以直接用現成的 AI 工具，也可以自己訓練模型。'
-              + '接下來帶你把整個平台走一遍，大約五分鐘，每一步都是你自己點。'
+              + '接下來帶你把整個平台走一遍，每一步都是你自己點。'
               + '隨時可以按右上角的 × 離開，之後在帳號選單裡可以再看一次。'] },
 
         { id: 'news', page: 'index.html', target: '#news',
@@ -160,7 +160,10 @@
               '手機的畫面比較窄，所以上面那排選單收進了這顆按鈕。'
               + '點一下把它打開 —— 接下來每次要換頁都從這裡走。'] },
 
-        { id: 'grp_mine_myai', page: 'myai.html', click: true,
+        // ZH: v4.40 這一步只剩**閘門關著**時在用：開著時改從「AI 工具一把罩」那一組
+        //     去訓練頁（見下面 grp_do_myai）。不標 gpuOff 的話兩條路會同時出現，
+        //     使用者在同一頁被要求開兩次不同的分類。
+        { id: 'grp_mine_myai', page: 'myai.html', click: true, gpuOff: true,
           target: '.navmenu__toggle[data-i18n="grp_mine_t"]',
           probe: '.topbar__burger, .navmenu__toggle[data-i18n="grp_mine_t"]',
           t: ['tour_grp_mine_t', '「個人使用紀錄」這一組'],
@@ -168,16 +171,9 @@
               '跟「你自己做過什麼」有關的都收在這一組：你的訓練、模型與上傳的資料、'
               + '使用量明細。點一下這個分類，把它展開。'] },
 
-        // ZH: 🔴 同一座橋的兩個版本（見檔頭）：閘門開著走訓練進度，
-        //     關著就直接去使用量。兩個都在上面那一組下拉裡，
-        //     所以前面「開選單」那兩步是共用的。
-        { id: 'go_jobs', page: 'myai.html', click: true, gpu: true,
-          target: '.navmenu__menu a[href="jobs.html"]',
-          probe: '.topbar__burger, .navmenu__toggle[data-i18n="grp_mine_t"]',
-          t: ['tour_jobs_go_t', '下一站：我的訓練與資料'],
-          d: ['tour_jobs_go_d',
-              '點「我的訓練與資料」，我們過去看那一頁長什麼樣子、平常什麼時候會用到它。'] },
-
+        // ZH: 🔴 同一座橋的兩個版本（見檔頭）：閘門開著走第二條（訓練），
+        //     關著就直接去使用量。v4.40 以前開著時是直接去「我的訓練與資料」——
+        //     那一頁在講「你跑過的訓練」，而使用者根本還沒看過訓練長什麼樣。
         { id: 'go_usage_myai', page: 'myai.html', click: true, gpuOff: true,
           target: '.navmenu__menu a[href="usage.html"]',
           probe: '.topbar__burger, .navmenu__toggle[data-i18n="grp_mine_t"]',
@@ -185,6 +181,121 @@
           d: ['tour_usage_go_d',
               '點「使用量明細」，看看你的點數到底花在哪裡、還剩多少。'
               + '這一頁跟額度有關的問題大多在這裡就能自己查清楚。'] },
+
+        // ZH: 🔴 v4.40 這一段是「第二條」與「第三條」的實地走訪（擁有者 2026-10-06）。
+        //     在這之前導覽只在首頁用卡片介紹它們，整圈走完仍然沒看過訓練頁長什麼樣。
+        //     路線接在 MYAI（第一條）之後，剛好照首頁那三條的 1、2、3 順序。
+        //     ⚠ 這幾步**全部要標 gpu: true**：閘門關著時 go_train 那座橋不在，
+        //     但 stepsFor 的可達性只看「上一個留下來的步驟是不是 click」——
+        //     不標的話，GPU 關的人會從 go_usage_myai 那座橋直接掉進訓練頁的步驟。
+        { id: 'grp_do_myai', page: 'myai.html', click: true, gpu: true,
+          target: '.navmenu__toggle[data-i18n="grp_do_t"]',
+          probe: '.topbar__burger, .navmenu__toggle[data-i18n="grp_do_t"]',
+          t: ['tour_grp_do_t', '「AI 工具一把罩」這一組'],
+          d: ['tour_grp_do_d',
+              '想「做點什麼」的功能都收在這一組：剛才的付費版 AI、交給平台訓練、'
+              + '程式實驗室，還有看 GPU 現在忙不忙。點一下這個分類，把它展開。'] },
+
+        { id: 'go_train', page: 'myai.html', click: true, gpu: true,
+          target: '.navmenu__menu a[href="train.html"]',
+          probe: '.topbar__burger, .navmenu__toggle[data-i18n="grp_do_t"]',
+          t: ['tour_trgo_t', '下一站：交給平台訓練'],
+          d: ['tour_trgo_d',
+              '點「體驗現有模型訓練」，我們實際走一次 —— 看它會問你哪些事、'
+              + '哪些是平台已經替你決定好的，以及跑完之後結果要去哪裡看。'] },
+
+        // ══════════════════════════════════════════════════════════
+        // ZH: 交給平台訓練（第二條）。GPU 暫停時整段消失。
+        // ZH: ⚠ **不要**讓任何一步真的按下「開始訓練」—— 那會送出一張真的單、
+        //     佔掉 GPU、而且導覽還停在原地。要按的只有「選一種開始的方式」。
+        // ══════════════════════════════════════════════════════════
+        { id: 'tr_pick', page: 'train.html', gpu: true, click: true,
+          target: '.mpick__opt[data-mode="easy"]',
+          t: ['tour_tr_pick_t', '先選一種開始的方式'],
+          d: ['tour_tr_pick_d',
+              '一進來會先問你要怎麼開始：完全沒準備就選「先體驗看看」，有自己的資料或'
+              + '自己的程式就選另外兩個。現在點「先體驗看看」—— 平台會把範例資料準備好。'] },
+
+        { id: 'tr_side', page: 'train.html', gpu: true, target: '#tr-side',
+          t: ['tour_tr_side_t', '左邊是兩個可以隨時換的選擇'],
+          d: ['tour_tr_side_d',
+              '上面那格是你剛才選的方式，按「重新選擇模式」可以換；下面是要練哪一種'
+              + '（圖片、表格、文字），各附了一份範例。選錯了不用重來，在這裡換就好。'] },
+
+        { id: 'tr_start', page: 'train.html', gpu: true, target: '#go',
+          t: ['tour_tr_start_t', '按下去就開始，但現在先不要'],
+          d: ['tour_tr_start_d',
+              '按下去就會真的送出一張訓練單，跑完大約一分鐘內（GPU 忙的時候要排隊）。'
+              + '結果會直接顯示在這一頁下面：正確率、每一輪的變化，還有模型判斷錯的那幾筆。'
+              + '導覽先不按，等走完你再自己來跑一次。'] },
+
+        { id: 'menu_train', page: 'train.html', gpu: true, target: '.topbar__burger', click: true,
+          t: ['tour_burger_t', '選單收在這顆 ☰ 裡'],
+          d: ['tour_burger_d',
+              '手機的畫面比較窄，所以上面那排選單收進了這顆按鈕。'
+              + '點一下把它打開 —— 接下來每次要換頁都從這裡走。'] },
+
+        { id: 'grp_do_train', page: 'train.html', click: true, gpu: true,
+          target: '.navmenu__toggle[data-i18n="grp_do_t"]',
+          probe: '.topbar__burger, .navmenu__toggle[data-i18n="grp_do_t"]',
+          t: ['tour_grp_do_t', '「AI 工具一把罩」這一組'],
+          d: ['tour_grp_do_d',
+              '想「做點什麼」的功能都收在這一組：剛才的付費版 AI、交給平台訓練、'
+              + '程式實驗室，還有看 GPU 現在忙不忙。點一下這個分類，把它展開。'] },
+
+        { id: 'go_lab', page: 'train.html', click: true, gpu: true,
+          target: '.navmenu__menu a[href="lab.html"]',
+          probe: '.topbar__burger, .navmenu__toggle[data-i18n="grp_do_t"]',
+          t: ['tour_lab_go_t', '下一站：程式實驗室'],
+          d: ['tour_lab_go_d',
+              '點「程式實驗室」—— 那是第三條路，給想自己寫程式的人用的。'
+              + '我們過去看一下它長什麼樣子，不會真的啟動它。'] },
+
+        // ══════════════════════════════════════════════════════════
+        // ZH: 程式實驗室（第三條）。**只講不按**（擁有者 2026-10-06）——
+        //     按「啟動並開啟實驗室」會真的起一個容器、佔磁碟，而且開新分頁，
+        //     導覽當場被丟在舊分頁上。所以這一段沒有任何 click 步驟，
+        //     離開這一頁靠下面的選單三步。
+        // ══════════════════════════════════════════════════════════
+        { id: 'lab_hero', page: 'lab.html', gpu: true, target: '.primary-card',
+          t: ['tour_lab_hero_t', '瀏覽器裡的一套 VS Code'],
+          d: ['tour_lab_hero_d',
+              '不用在自己電腦裝任何東西：按「啟動並開啟實驗室」會在新分頁打開一套完整的'
+              + 'VS Code，Python 與訓練用的套件都裝好了。關掉分頁不會弄丟東西，閒置太久會自動關掉省資源。'] },
+
+        { id: 'lab_start', page: 'lab.html', gpu: true, target: '#go',
+          t: ['tour_lab_start_t', '這顆按下去會開新分頁'],
+          d: ['tour_lab_start_d',
+              '導覽現在不按它 —— 按下去會另開一個分頁，導覽就留在這邊了。'
+              + '等走完整圈，你自己回來按這一顆。第一次啟動要等個十幾秒，之後就快了。'] },
+
+        { id: 'lab_saves', page: 'lab.html', gpu: true, target: '#ws-list',
+          t: ['tour_lab_saves_t', '你的檔案會一直留著'],
+          d: ['tour_lab_saves_d',
+              '每一份存檔都是獨立的空間，裡面已經放好三種範例程式（貓狗圖片、表格、文字）。'
+              + '在檔案上按右鍵選「Run on GPU」就會送去 GPU 跑 —— 直接按播放鍵會失敗，'
+              + '因為實驗室本身沒有裝訓練用的套件。'] },
+
+        { id: 'menu_lab', page: 'lab.html', gpu: true, target: '.topbar__burger', click: true,
+          t: ['tour_burger_t', '選單收在這顆 ☰ 裡'],
+          d: ['tour_burger_d',
+              '手機的畫面比較窄，所以上面那排選單收進了這顆按鈕。'
+              + '點一下把它打開 —— 接下來每次要換頁都從這裡走。'] },
+
+        { id: 'grp_mine_lab', page: 'lab.html', click: true, gpu: true,
+          target: '.navmenu__toggle[data-i18n="grp_mine_t"]',
+          probe: '.topbar__burger, .navmenu__toggle[data-i18n="grp_mine_t"]',
+          t: ['tour_grp_mine_t', '「個人使用紀錄」這一組'],
+          d: ['tour_grp_mine_d',
+              '跟「你自己做過什麼」有關的都收在這一組：你的訓練、模型與上傳的資料、'
+              + '使用量明細。點一下這個分類，把它展開。'] },
+
+        { id: 'go_jobs', page: 'lab.html', click: true, gpu: true,
+          target: '.navmenu__menu a[href="jobs.html"]',
+          probe: '.topbar__burger, .navmenu__toggle[data-i18n="grp_mine_t"]',
+          t: ['tour_jobs_go_t', '下一站：我的訓練與資料'],
+          d: ['tour_jobs_go_d',
+              '點「我的訓練與資料」，我們過去看那一頁長什麼樣子、平常什麼時候會用到它。'] },
 
         // ══════════════════════════════════════════════════════════
         // ZH: 我的訓練與資料（GPU 暫停時整段消失，橋由上面那個版本接手）
