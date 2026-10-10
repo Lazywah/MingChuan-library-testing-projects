@@ -246,6 +246,8 @@ def _bounce_status(db) -> dict:
 @router.get("/email-log", summary="寄信紀錄（誰、何時、結果）")
 def get_email_log(
     limit: int = Query(200, ge=1, le=1000),
+    # ZH: v4.41 分頁（擁有者 2026-10-10：寄信紀錄 10 條一頁）。與 /admin/audit 同一套參數。
+    offset: int = Query(0, ge=0),
     status: Optional[str] = Query(None, description="sent / refused / failed / mock / bounced / deferred"),
     db: Session = Depends(get_db),
     _admin: models.User = Depends(require_admin),
@@ -263,13 +265,16 @@ def get_email_log(
     q = db.query(models.EmailLog)
     if status:
         q = q.filter(models.EmailLog.status == status)
-    rows = q.order_by(models.EmailLog.created_at.desc()).limit(limit).all()
+    total = q.count()
+    rows = q.order_by(models.EmailLog.created_at.desc()).offset(offset).limit(limit).all()
     _smtp_cfg = crud.effective_smtp(db)
     counts = dict(
         db.query(models.EmailLog.status, func.count(models.EmailLog.id))
         .group_by(models.EmailLog.status).all()
     )
     return {
+        # ZH: v4.41 分頁用：符合條件的總筆數（有 status 篩選時是篩選後的）。
+        "total": total, "limit": limit, "offset": offset,
         "counts": counts,
         # ZH: v3.8 顯示生效值 —— 這一頁就是管理者用來確認「我剛改的設定生效了沒」的地方，
         #     顯示 .env 的舊值會讓他以為沒存到，然後再存一次。

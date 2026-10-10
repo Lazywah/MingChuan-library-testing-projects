@@ -373,10 +373,47 @@
             + '</p>';
     }
 
-    async function loadMail() {
+    // ── 分頁（v4.41，擁有者 2026-10-10：寄信紀錄與管理動作 10 條一頁）────────
+    // ZH: 兩區共用。由後端分頁（offset/limit/total），不是一次撈全部再切 ——
+    //     這兩張表只會越來越長，一次撈 50 筆的舊做法到後面就看不到更早的紀錄了。
+    // ZH: 樣式與文案沿用帳號頁的臨時帳號預覽（pf_pg_*），同一個平台不要有兩種分頁器。
+    var PER_PAGE = 10;
+    var PAGES = { mail: 0, audit: 0 };      // ZH: 目前第幾頁（從 0 算）
+
+    function pagerHtml(key, total) {
+        var pages = Math.max(1, Math.ceil(total / PER_PAGE));
+        var at = PAGES[key] + 1;
+        if (pages <= 1) return '';
+        return '<div class="adm-inline tu-pager">'
+            + '<button class="btn btn--minor" type="button" id="' + key + '-prev"'
+            + (at <= 1 ? ' disabled' : '') + '>' + esc(T('pf_pg_prev', '上一頁')) + '</button>'
+            + '<span class="footnote">'
+            + esc(T('pf_pg_of', '第 {a} / {b} 頁').replace('{a}', at).replace('{b}', pages))
+            + esc(T('rp_pg_total', '（共 {n} 筆）').replace('{n}', total))
+            + '</span>'
+            + '<button class="btn btn--minor" type="button" id="' + key + '-next"'
+            + (at >= pages ? ' disabled' : '') + '>' + esc(T('pf_pg_next', '下一頁')) + '</button>'
+            + '</div>';
+    }
+
+    // ZH: 換頁之後整段 innerHTML 重畫，原本按的那顆鈕已經不存在 —— 焦點會掉回 <body>，
+    //     用鍵盤的人得從頁首重新 Tab 過來。所以重畫完把焦點放回同一個位置的鈕上；
+    //     那顆變成 disabled（到第一頁／最後一頁）時改放另一顆。
+    function wirePager(key, load, focusId) {
+        var prev = $(key + '-prev'), next = $(key + '-next');
+        if (prev) prev.addEventListener('click', function () { PAGES[key]--; load(key + '-prev'); });
+        if (next) next.addEventListener('click', function () { PAGES[key]++; load(key + '-next'); });
+        if (focusId) {
+            var el = $(focusId);
+            if (el && el.disabled) el = $(focusId === key + '-prev' ? key + '-next' : key + '-prev');
+            if (el && !el.disabled) el.focus();
+        }
+    }
+
+    async function loadMail(focusId) {
         var data;
         try {
-            data = await api('/admin/email-log?limit=50');
+            data = await api('/admin/email-log?limit=' + PER_PAGE + '&offset=' + (PAGES.mail * PER_PAGE));
         } catch (e) {
             $('mail').innerHTML = '<p class="footnote">'
                 + esc(T('ov_fail_part', '這一段暫時讀不到（{w}）').replace('{w}', e.message)) + '</p>';
@@ -388,6 +425,8 @@
         //     （端點在 `14fbddd` 就改成物件了，前端一直沒跟上。）
         var rows = (data && data.logs) || [];
         var head0 = bounceLine(data && data.bounce);
+        // ZH: 別人刪了資料、或停在最後一頁時筆數變少 → 那一頁空了就退回上一頁，不要停在空白頁。
+        if (!rows.length && PAGES.mail > 0) { PAGES.mail--; return loadMail(focusId); }
         if (!rows.length) {
             $('mail').innerHTML = head0
                 + '<p class="footnote">' + esc(T('rp_mail_none', '沒有寄信紀錄。')) + '</p>';
@@ -422,20 +461,23 @@
                     + '<td>' + esc(TW.when(m.created_at) || '—') + '</td>'
                     + '</tr>';
             }).join('')
-            + '</tbody></table></div>';
+            + '</tbody></table></div>'
+            + pagerHtml('mail', (data && data.total) || rows.length);
+        wirePager('mail', loadMail, focusId);
     }
 
     // ── 管理動作紀錄 ──────────────────────────────────────────────────────
-    async function loadAudit() {
+    async function loadAudit(focusId) {
         var rows;
         try {
-            rows = await api('/admin/audit?limit=50');
+            rows = await api('/admin/audit?limit=' + PER_PAGE + '&offset=' + (PAGES.audit * PER_PAGE));
         } catch (e) {
             $('audit').innerHTML = '<p class="footnote">'
                 + esc(T('ov_fail_part', '這一段暫時讀不到（{w}）').replace('{w}', e.message)) + '</p>';
             return;
         }
         var list = rows.items || rows || [];
+        if (!list.length && PAGES.audit > 0) { PAGES.audit--; return loadAudit(focusId); }
         if (!list.length) {
             $('audit').innerHTML = '<p class="footnote">'
                 + esc(T('rp_audit_none', '還沒有任何管理動作。')) + '</p>';
@@ -457,7 +499,9 @@
                     + '<td>' + esc(TW.when(a.timestamp) || '—') + '</td>'
                     + '</tr>';
             }).join('')
-            + '</tbody></table></div>';
+            + '</tbody></table></div>'
+            + pagerHtml('audit', rows.total || list.length);
+        wirePager('audit', loadAudit, focusId);
     }
 
     // ── 載入 ──────────────────────────────────────────────────────────────
