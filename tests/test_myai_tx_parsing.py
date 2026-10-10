@@ -64,6 +64,30 @@ ROWS_BUT_UNPARSEABLE = """
 """
 
 
+# ZH: v4.41 廠商「查無資料」的真實樣子（2026-10-10 從正式環境抓的空時間範圍）。
+VENDOR_NO_RESULTS = """
+<html><body><table><tbody>
+  <tr><td colspan="6" align="center" style="padding:16px;">沒有符合的結果<br>請調整日期區間或關鍵字。</td></tr>
+</tbody></table></body></html>
+"""
+
+
+def test_vendor_no_results_row_is_not_counted():
+    """ZH: 🔴 2026-10-10 的誤報：只撈近一天的輪詢遇到空範圍時，這一列被算成 1 列、
+        解出 0 筆 → 每 5 分鐘報一次「版型可能又改了」，同一輪的點數提醒也被跳過。"""
+    assert tx_row_count(VENDOR_NO_RESULTS) == 0
+    assert parse_transactions(VENDOR_NO_RESULTS) == []
+
+
+def test_other_single_cell_rows_still_count():
+    """ZH: 修誤報不能把真的異常一起吞掉 —— 只排除廠商那一句「沒有符合的結果」，
+        其他單格列（系統維護中、看不懂的訊息）照算，sync_transactions 才會照樣報錯。"""
+    assert tx_row_count(ROWS_BUT_UNPARSEABLE) == 2
+    mixed = VENDOR_NO_RESULTS.replace(
+        "</tbody>", '<tr><td colspan="6">系統維護中</td></tr></tbody>')
+    assert tx_row_count(mixed) == 1
+
+
 def test_counts_rows_in_both_layouts():
     """ZH: 偵測器要能數兩種版型 —— 只認新版的話，回退到舊版就偵測不到。"""
     assert tx_row_count(V2_TABLE) == 2

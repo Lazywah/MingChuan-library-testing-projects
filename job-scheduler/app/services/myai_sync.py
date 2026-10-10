@@ -521,6 +521,26 @@ def _disambiguate_keys(rows: list[dict]) -> list[dict]:
     return rows
 
 
+# ZH: v4.41 廠商「查無資料」那一列的固定文字（2026-10-10 實際抓到的頁面）：
+#     <tr><td colspan="6" ...>沒有符合的結果<br>請調整日期區間或關鍵字。</td></tr>
+#     🔴 **只認這一句，不要放寬成「單一格的列一律不算」** —— 「系統維護中」那種
+#     單格列正是要被當成異常的（tests/test_myai_tx_parsing.py 的 ROWS_BUT_UNPARSEABLE）。
+#     不認得的單格列寧可誤報，也不能被當成「沒資料」吞掉（8 月那 29 天就是這樣漏掉的）。
+_EMPTY_ROW_MARKERS = ("沒有符合的結果",)
+
+
+def _is_vendor_empty_row(tr) -> bool:
+    """ZH: 這一列是不是廠商的「查無資料」佔位列（只有一格，而且是那句固定文字）。
+
+    @node job-scheduler/app/services/myai_sync.py::_is_vendor_empty_row
+    """
+    tds = tr.xpath("./td")
+    if len(tds) != 1:
+        return False
+    text = tds[0].text_content()
+    return any(m in text for m in _EMPTY_ROW_MARKERS)
+
+
 def tx_row_count(html: str) -> int:
     """ZH: 頁面上「看起來有幾列交易」——與解析無關，只數 DOM。
            用來偵測「頁面有資料但一列都解不出來」＝版型又變了（見 sync_transactions）。
@@ -548,7 +568,10 @@ def tx_row_count(html: str) -> int:
         raise MyaiSyncError(
             f"交易日誌頁面解不開（長度 {len(html or '')}）：{e}"
         ) from e
-    n = len(doc.xpath("//tbody/tr"))
+    # ZH: v4.41 排掉廠商的「沒有符合的結果」那一列。在此之前它被算成 1 列、解出 0 筆，
+    #     於是只撈近一天的餘額輪詢在「最近剛好沒有交易」時每 5 分鐘誤報一次
+    #     「版型可能又改了」，而且同一輪後面的點數提醒也被連帶跳過（2026-10-10 實測）。
+    n = sum(1 for tr in doc.xpath("//tbody/tr") if not _is_vendor_empty_row(tr))
     n += len(doc.xpath("//div[contains(concat(' ', normalize-space(@class), ' '), ' kbx-row ')]"))
     return n
 
