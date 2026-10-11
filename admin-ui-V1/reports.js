@@ -106,14 +106,14 @@
         //     （執行時組出來的 key，掃描器看不到字面值）。
         STATUSES.map(function (s) { return [s, T('st_' + s, s)]; }));
 
+        // ZH: v4.41 下拉（擁有者 2026-10-11）。只換 <option>、不換 <select> 本身 ——
+        //     每次 load() 都會重畫一次（數量會變），整個換掉的話剛選完焦點就掉回 <body>。
         $('filters').innerHTML = opts.map(function (o) {
             var n = o[0] ? (counts[o[0]] || 0)
                          : STATUSES.reduce(function (a, s) { return a + (counts[s] || 0); }, 0);
-            return '<button class="btn btn--minor' + (FILTER === o[0] ? ' is-current' : '') + '"'
-                + ' type="button" data-filter="' + esc(o[0]) + '"'
-                + (FILTER === o[0] ? ' aria-current="true"' : '') + '>'
-                // ZH: 每個篩選都帶數量 —— 不帶的話你得逐一點過才知道哪裡有事。
-                + esc(o[1]) + '　' + n + '</button>';
+            // ZH: 每個篩選都帶數量 —— 不帶的話你得逐一切過才知道哪裡有事。
+            return '<option value="' + esc(o[0]) + '"' + (FILTER === o[0] ? ' selected' : '') + '>'
+                + esc(o[1]) + '（' + n + '）</option>';
         }).join('');
 
         // ZH: 類別篩選另起一排。不帶數量 —— summary 端點只算狀態，
@@ -123,28 +123,14 @@
             [['', T('rp_all', '全部')]].concat(CATEGORIES.map(function (c) {
                 return [c[0], T(c[1], c[2])];
             })).map(function (o) {
-                // ZH: 每個類別帶自己的 class，選中時才上色（見 admin.css）——
-                //     沒選中就保持中性，五顆全上色的話反而看不出選了哪一個。
-                return '<button class="btn btn--minor btn--cat-' + esc(o[0] || 'all')
-                    + (CAT_FILTER === o[0] ? ' is-current' : '') + '"'
-                    + ' type="button" data-cat="' + esc(o[0]) + '"'
-                    + (CAT_FILTER === o[0] ? ' aria-current="true"' : '') + '>'
-                    + esc(o[1]) + '</button>';
+                return '<option value="' + esc(o[0]) + '"' + (CAT_FILTER === o[0] ? ' selected' : '') + '>'
+                    + esc(o[1]) + '</option>';
             }).join('');
-        $('cat-filters').querySelectorAll('[data-cat]').forEach(function (b) {
-            b.addEventListener('click', function () {
-                CAT_FILTER = b.dataset.cat;
-                load();
-            });
-        });
-
-        $('filters').querySelectorAll('[data-filter]').forEach(function (b) {
-            b.addEventListener('click', function () {
-                FILTER = b.dataset.filter;
-                load();
-            });
-        });
     }
+
+    // ZH: 監聽只掛一次（<select> 本身不會被重畫，見 renderFilters）。
+    $('filters').addEventListener('change', function (e) { FILTER = e.target.value; load(); });
+    $('cat-filters').addEventListener('change', function (e) { CAT_FILTER = e.target.value; load(); });
 
     // ZH: 展開中的回報（id → 1）。跨重畫保留，見 renderReports 末尾的說明。
     // ZH: 類別代碼 → 顯示文字。🔴 代碼必須與 schemas.IssueReportCreate.CATEGORIES

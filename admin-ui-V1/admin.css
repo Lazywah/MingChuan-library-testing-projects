@@ -1453,13 +1453,8 @@ textarea.field__input {
 .rp__cat--account { color: var(--mcu-ink);       background: var(--mcu-yellow-050); border-color: transparent; }
 .rp__cat--other   { color: var(--mcu-grey-400);  background: var(--mcu-grey-050);   border-color: transparent; }
 
-/* ZH: 類別篩選鈕也上同一組色 —— 篩選列與清單上的標籤不同色的話，
- *     「我點的是哪一個」要靠讀字確認，等於顏色白上了。 */
-.btn--cat-quota[aria-current]   { background: var(--mcu-warn-050);   color: var(--mcu-warn-600); }
-.btn--cat-train[aria-current]   { background: var(--mcu-slate-050);  color: var(--mcu-blue-600); }
-.btn--cat-lab[aria-current]     { background: var(--mcu-slate-050);  color: var(--mcu-slate-600); }
-.btn--cat-account[aria-current] { background: var(--mcu-yellow-050); color: var(--mcu-ink); }
-.btn--cat-other[aria-current]   { background: var(--mcu-grey-050);   color: var(--mcu-grey-400); }
+/* ZH: v4.41 類別篩選從一排按鈕改成下拉（擁有者 2026-10-11），原本的 .btn--cat-* 上色規則跟著刪了。
+ *     清單上的類別標籤（.rp__cat--*）照舊上色。 */
 
 /* ── 彈窗 ────────────────────────────────────────────────────────── */
 /* ZH: <dialog> 的預設值會蓋掉 max-width，所以三個都要寫。 */
@@ -1948,4 +1943,20 @@ textarea.field__input {
 .ai-kv th { white-space: nowrap; text-align: left; }
 @media (max-width: 640px) {
     .ai-form { flex-direction: column; align-items: stretch; }
+}
+
+/* ZH: v4.41 回報的篩選改成兩個下拉（擁有者 2026-10-11）。桌機並排；
+ *     窄畫面各佔一整行（flex-basis 12rem 撐不下兩個就自然換行），標籤在左、下拉吃剩下的寬。 */
+.rp-filters { gap: var(--space-3); margin-bottom: var(--space-3); }
+.rp-filter {
+    display: flex;
+    flex: 1 1 12rem;
+    align-items: center;
+    gap: var(--space-2);
+    max-width: 22rem;
+}
+.rp-filter > span { flex: 0 0 auto; font-size: 0.875rem; color: var(--text-muted); }
+.rp-filter > select { flex: 1 1 auto; min-width: 0; }
+@media (max-width: 640px) {
+    .rp-filter { max-width: none; }
 }

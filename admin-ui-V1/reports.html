@@ -11,7 +11,7 @@
 
     <link rel="stylesheet" href="tokens.css?v=ff9cecda">
     <link rel="stylesheet" href="styles.css?v=d4d21ce8">
-    <link rel="stylesheet" href="admin.css?v=f3b2139e">
+    <link rel="stylesheet" href="admin.css?v=a838d63a">
 </head>
 <body>
 
@@ -59,10 +59,19 @@
 
     <section class="adm-sec" aria-labelledby="h-reports">
         <div class="adm-sec__head"><h2 id="h-reports" data-i18n="adm_nav_reports">回報</h2></div>
-        <!-- ZH: 每個篩選都帶數量 —— 不帶的話你得逐一點過才知道哪裡有事。 -->
-        <div class="adm-inline" id="filters"></div>
-        <!-- ZH: 類別另起一排（見 reports.js 的說明）。 -->
-        <div class="adm-inline" id="cat-filters"></div>
+        <!-- ZH: v4.41 兩排按鈕改成兩個下拉（擁有者 2026-10-11）：手機上兩排按鈕折成四、五行，
+                 回報本身被推到畫面外。選項由 reports.js 的 renderFilters 填；
+                 狀態的每一項仍帶數量 —— 不帶的話你得逐一切過才知道哪裡有事。 -->
+        <div class="adm-inline rp-filters">
+            <label class="rp-filter">
+                <span data-i18n="rp_f_status">狀態</span>
+                <select class="field__input" id="filters"></select>
+            </label>
+            <label class="rp-filter">
+                <span data-i18n="rp_f_cat">類別</span>
+                <select class="field__input" id="cat-filters"></select>
+            </label>
+        </div>
         <div id="list" aria-live="polite"><span class="skeleton skeleton--line"></span></div>
         <!-- ZH: 單則回報的彈窗。**只有一個**，每次填內容 ——
                  一則一個的話，一百則回報就有一百份隱藏的表單掛在 DOM 上。
@@ -99,10 +108,10 @@
 <script src="tz.js?v=2e214a8b"></script>
 <!-- ⚠ ZH: 順序不能動 —— i18n-admin 在 i18n 之後、prefs 之前。 -->
 <script src="i18n.js?v=aa848110"></script>
-<script src="i18n-admin.js?v=cea7fa77"></script>
+<script src="i18n-admin.js?v=50794bb4"></script>
 <script src="tip.js?v=0699f4a2"></script>
 <script src="prefs.js?v=e71609e5"></script>
 <script src="admin-chrome.js?v=1dc21458"></script>
-<script src="reports.js?v=6b028752"></script>
+<script src="reports.js?v=8f86dfff"></script>
 </body>
 </html>
