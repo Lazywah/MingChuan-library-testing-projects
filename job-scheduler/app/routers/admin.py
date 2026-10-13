@@ -2930,6 +2930,8 @@ async def myai_manual_topup(
     dry_run: bool = Body(True, embed=True, description="true=只預覽不送出"),
     confirm_username: str = Body("", embed=True,
                                  description="操作者自己的帳號（只有 dry_run=false 時要）"),
+    # ZH: v4.41 這次不補的信箱（預覽與送出要帶同一份，見 myai_sync.manual_topup）。
+    exclude: list = Body([], embed=True, description="這次不補的信箱清單"),
     db: Session = Depends(get_db),
     admin: models.User = Depends(require_admin),
 ):
@@ -2951,7 +2953,8 @@ async def myai_manual_topup(
     if not dry_run:
         _require_self_confirm(confirm_username, admin)
     try:
-        return await myai_sync.manual_topup(db, target, admin.id, dry_run=dry_run)
+        return await myai_sync.manual_topup(db, target, admin.id, dry_run=dry_run,
+                                            exclude=[str(x) for x in (exclude or [])][:500])
     except myai_sync.MyaiSyncError as e:
         raise HTTPException(status_code=400, detail=str(e))
 

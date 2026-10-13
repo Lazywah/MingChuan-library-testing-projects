@@ -1410,7 +1410,7 @@ async def monthly_topup(db: Session, force: bool = False) -> dict:
 
 
 async def manual_topup(db: Session, target: int, admin_id: str,
-                       dry_run: bool = True) -> dict:
+                       dry_run: bool = True, exclude=None) -> dict:
     """
     ZH: 手動把所有綁定帳號補到指定水位。給例外狀況用（活動、補償、排程漏跑…）。
 
@@ -1425,6 +1425,12 @@ async def manual_topup(db: Session, target: int, admin_id: str,
 
     ZH: `dry_run=True`（預設）只回報會補誰、補多少，不送出任何東西。
 
+    ZH: v4.41 `exclude`：這次不補的信箱（擁有者 2026-10-13，例如已停用的臨時帳號）。
+        🔴 **預覽與真的送出都要帶同一份** —— 送出時後端會重新同步、重新算名單
+        （見下面），只有預覽帶的話，被移除的人在送出那一刻又會被算回來。
+        比對不分大小寫；回傳的 `excluded` 只列「本來會補、因為排除而沒補」的人，
+        已經不在名單上的不列（不然畫面會出現一個點了也沒作用的「復原」）。
+
     @node job-scheduler/app/services/myai_sync.py::manual_topup
     """
     target = int(target or 0)
@@ -1436,8 +1442,12 @@ async def manual_topup(db: Session, target: int, admin_id: str,
     await sync(db)
 
     rows = topup_targets(db, target)
+    skip = {str(e).strip().lower() for e in (exclude or []) if str(e).strip()}
+    excluded = [r["email"] for r in rows if (r["email"] or "").lower() in skip]
+    rows = [r for r in rows if (r["email"] or "").lower() not in skip]
     total = sum(r["points"] for r in rows)
     preview = {"target": target, "count": len(rows), "points": total,
+               "excluded": excluded,
                "rows": [{"email": r["email"], "points": r["points"]} for r in rows]}
 
     if dry_run:
@@ -1445,8 +1455,8 @@ async def manual_topup(db: Session, target: int, admin_id: str,
     if not rows:
         return {"status": "nobody_below", **preview}
 
-    logger.warning("MYAI 手動補齊：admin=%s 補到 %d 點，%d 人、合計 %d 點",
-                   admin_id, target, len(rows), total)
+    logger.warning("MYAI 手動補齊：admin=%s 補到 %d 點，%d 人、合計 %d 點（排除 %d 人）",
+                   admin_id, target, len(rows), total, len(excluded))
 
     import json as _json
 
@@ -1455,7 +1465,8 @@ async def manual_topup(db: Session, target: int, admin_id: str,
         db.add(models.AdminAction(
             admin_id=admin_id, target_user=None, action="myai_manual_topup",
             payload=_json.dumps({"target": target, "count": len(rows),
-                                 "points": total, "outcome": outcome},
+                                 "points": total, "excluded": excluded,
+                                 "outcome": outcome},
                                 ensure_ascii=False),
             timestamp=datetime.now(timezone.utc)))
         db.commit()

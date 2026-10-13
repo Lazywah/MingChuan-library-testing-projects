@@ -11,7 +11,7 @@
 
     <link rel="stylesheet" href="tokens.css?v=ff9cecda">
     <link rel="stylesheet" href="styles.css?v=d4d21ce8">
-    <link rel="stylesheet" href="admin.css?v=a838d63a">
+    <link rel="stylesheet" href="admin.css?v=8c2e3651">
 </head>
 <body>
 
@@ -91,14 +91,20 @@
     <!-- ZH: v4.4 使用者詳情改彈窗＋名片頭（擁有者裁定 2026-09-03）：
              原本詳情整疊長在清單下面，看完要捲回去——改成 <dialog>，
              與公告/回報/臨時帳號同一套。內容仍由 people.js 的 renderDetail 產生。 -->
-    <dialog class="rmod rmod--person" id="user-dialog" data-view="platform">
+    <!-- ZH: 🔴 v4.41 三個彈窗都**不掛 data-view**（2026-10-13 事故）。
+             切到 MYAI 檢視時 [data-view="platform"] 會被 display:none !important ——
+             而確認框（pw-dialog）是兩個檢視共用的：MYAI 檢視的「確認補齊」也用它。
+             結果是 showModal() 成功、框卻 0×0 看不見，modal 又把整頁設成 inert，
+             擁有者看到的是「沒有跳出輸入確認、網頁卡住了」。
+             彈窗沒打開時本來就不顯示，掛檢視篩選只有壞處沒有好處。 -->
+    <dialog class="rmod rmod--person" id="user-dialog">
         <div id="detail" aria-live="polite"></div>
     </dialog>
     <!-- ZH: v4.4b 管理員密碼確認的小彈窗（擁有者裁定 2026-09-03）：
              停用/刪除/儲存前確認都走這一個。內容由 people.js 的 pwConfirm() 產生。 -->
-    <dialog class="rmod rmod--pw" id="pw-dialog" data-view="platform"></dialog>
+    <dialog class="rmod rmod--pw" id="pw-dialog"></dialog>
     <!-- ZH: v4.6 Alma 回填的預覽／結果彈窗。內容由 people.js 的 openAlma() 產生。 -->
-    <dialog class="rmod" id="alma-dialog" data-view="platform"></dialog>
+    <dialog class="rmod" id="alma-dialog"></dialog>
 
     <!-- ZH: 廠商帳號的維運工作。**數字與動作常駐** —— 有幾個人對不上、
              有幾個等著開通，正是你該注意到的事；收起來就等於沒有人會看到。
@@ -169,6 +175,14 @@
         <!-- ZH: v4.2b 提醒在表格**上面**（擁有者裁定 2026-09-03）——
                  「幾個帳號、合計幾點」是決策資訊，要在捲名單之前看到。 -->
         <div class="inline-error" id="tu-msg" hidden></div>
+        <!-- ZH: v4.41 搜尋＋已移除名單（擁有者 2026-10-13）。放在 tu-result 外面：
+                 那一塊每換一頁就整段重畫，搜尋框放裡面的話每打一個字就掉焦點。 -->
+        <div id="tu-tools" hidden>
+            <input class="field__input tu-search" type="search" id="tu-search" autocomplete="off"
+                   data-i18n-placeholder="pf_topup_search" data-i18n-aria="pf_topup_search"
+                   placeholder="搜尋帳號" aria-label="搜尋帳號">
+            <div class="tu-removed" id="tu-removed" hidden></div>
+        </div>
         <div id="tu-result" aria-live="polite"></div>
     </section>
 
@@ -177,10 +191,10 @@
 <script src="tz.js?v=2e214a8b"></script>
 <!-- ⚠ ZH: 順序不能動 —— i18n-admin 在 i18n 之後、prefs 之前。 -->
 <script src="i18n.js?v=aa848110"></script>
-<script src="i18n-admin.js?v=50794bb4"></script>
+<script src="i18n-admin.js?v=2315b19d"></script>
 <script src="tip.js?v=0699f4a2"></script>
 <script src="prefs.js?v=e71609e5"></script>
 <script src="admin-chrome.js?v=1dc21458"></script>
-<script src="people.js?v=4e0610d4"></script>
+<script src="people.js?v=86b5c805"></script>
 </body>
 </html>

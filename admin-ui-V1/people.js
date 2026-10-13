@@ -2206,6 +2206,10 @@
         //     擋得住「多打一個 0」的地方。
         var TU_LAST = { count: 0, points: 0 };
         var TU_PAGE_SIZE = 10;     // ZH: 預覽名單 10 人一頁（擁有者裁定 2026-09-03）
+        // ZH: v4.41 這次不補的信箱（擁有者 2026-10-13）。🔴 預覽與送出都帶它 ——
+        //     送出時後端會重新算名單，只在預覽帶的話，被移除的人會在送出那一刻被算回來。
+        var TU_EXCLUDE = [];
+        var TU_ROWS = null;        // ZH: 最近一次預覽（只拿來搜尋、畫畫面，不當送出的依據）
 
         function btns() {
             $('tu-apply').hidden = !PREVIEWED;
@@ -2219,11 +2223,45 @@
             //     改成「改了數字就讓預覽失效」，同樣防得住「看 A 的預覽、送出 B」。
         }
 
-        function reset() {
+        // ZH: `keepExclude`：改了點數只是讓預覽失效，「這次不補誰」是另一件事，留著；
+        //     按「取消預覽」或送出完成才全部清掉。
+        function reset(keepExclude) {
             PREVIEWED = null;
+            TU_ROWS = null;
+            if (keepExclude !== true) TU_EXCLUDE = [];
             $('tu-result').innerHTML = '';
+            $('tu-tools').hidden = true;
+            $('tu-search').value = '';
             say('tu-msg', '');
             btns();
+        }
+
+        // ZH: 已移除的人：一行列出，各帶「復原」。只列後端回報「本來會補、被排除」的人。
+        function renderRemoved(excluded) {
+            var box = $('tu-removed');
+            if (!excluded || !excluded.length) { box.hidden = true; box.innerHTML = ''; return; }
+            box.innerHTML = '<span class="footnote">'
+                + esc(T('pf_topup_removed', '這次不補：')) + '</span>'
+                + excluded.map(function (e) {
+                    return '<span class="tu-chip">' + esc(e)
+                        + ' <button class="btn btn--minor" type="button" data-undo="' + esc(e) + '"'
+                        + ' aria-label="' + esc(T('pf_topup_undo_aria', '把 {e} 加回名單').replace('{e}', e)) + '">'
+                        + esc(T('pf_topup_undo', '復原')) + '</button></span>';
+                }).join('');
+            box.hidden = false;
+            box.querySelectorAll('[data-undo]').forEach(function (b) {
+                b.addEventListener('click', function () {
+                    var who = b.dataset.undo.toLowerCase();
+                    TU_EXCLUDE = TU_EXCLUDE.filter(function (x) { return x !== who; });
+                    preview();
+                });
+            });
+        }
+
+        function filtered(r) {
+            var q = ($('tu-search').value || '').trim().toLowerCase();
+            return q ? r.rows.filter(function (x) { return (x.email || '').toLowerCase().indexOf(q) >= 0; })
+                     : r.rows;
         }
 
         function target() {
@@ -2232,6 +2270,10 @@
         }
 
         function renderPreview(r) {
+            TU_ROWS = r;
+            renderRemoved(r.excluded);
+            // ZH: 名單被移除到空也要留著工具列 —— 不然「復原」的鈕會跟著消失。
+            $('tu-tools').hidden = !(r.count || (r.excluded && r.excluded.length));
             if (!r.count) {
                 $('tu-result').innerHTML = '<p class="footnote">'
                     + esc(T('pf_topup_nobody', '沒有人低於這個點數，不需要補。')) + '</p>';
@@ -2245,19 +2287,30 @@
         // ZH: 10 人一頁（擁有者裁定 2026-09-03：整班補點時名單太長）。
         //     只是**顯示**分頁 —— 送出的仍是整批（後端本來就重新算，見上面 🔴）。
         function renderPreviewPage(r, page) {
-            var pages = Math.max(1, Math.ceil(r.rows.length / TU_PAGE_SIZE));
+            var list = filtered(r);
+            if (!list.length) {
+                $('tu-result').innerHTML = '<p class="footnote">'
+                    + esc(T('pf_topup_nomatch', '沒有符合的帳號。')) + '</p>';
+                return;
+            }
+            var pages = Math.max(1, Math.ceil(list.length / TU_PAGE_SIZE));
             page = Math.min(Math.max(1, page), pages);
-            var slice = r.rows.slice((page - 1) * TU_PAGE_SIZE, page * TU_PAGE_SIZE);
+            var slice = list.slice((page - 1) * TU_PAGE_SIZE, page * TU_PAGE_SIZE);
             // ZH: .adm-tablewrap 是必要的（橫向捲動）—— 自己組光溜溜的 <table>，
             //     窄畫面會把整頁撐寬。與本頁其他表格同一套。
             $('tu-result').innerHTML =
                 '<div class="adm-tablewrap"><table class="adm-table"><thead><tr>'
                 + '<th>' + esc(T('pf_topup_who', '帳號')) + '</th>'
                 + '<th class="num">' + esc(T('pf_topup_add', '要補')) + '</th>'
+                + '<th><span class="sr-only">' + esc(T('pf_topup_act', '操作')) + '</span></th>'
                 + '</tr></thead><tbody>'
                 + slice.map(function (x) {
                     return '<tr><td>' + esc(x.email) + '</td>'
-                         + '<td class="num">' + num(x.points) + '</td></tr>';
+                         + '<td class="num">' + num(x.points) + '</td>'
+                         + '<td class="tu-act"><button class="btn btn--minor" type="button"'
+                         + ' data-rm="' + esc(x.email) + '"'
+                         + ' aria-label="' + esc(T('pf_topup_rm_aria', '這次不補給 {e}').replace('{e}', x.email)) + '">'
+                         + esc(T('pf_topup_remove', '移除')) + '</button></td></tr>';
                 }).join('')
                 + '</tbody></table></div>'
                 + (pages > 1
@@ -2277,6 +2330,15 @@
                 $('tu-prev').addEventListener('click', function () { renderPreviewPage(r, page - 1); });
                 $('tu-next').addEventListener('click', function () { renderPreviewPage(r, page + 1); });
             }
+            // ZH: 移除 = 加進排除名單 → **請後端重算**（不是前端自己扣）：
+            //     合計點數與確認框裡的數字都要是後端算的那一份。
+            $('tu-result').querySelectorAll('[data-rm]').forEach(function (b) {
+                b.addEventListener('click', function () {
+                    var who = b.dataset.rm.toLowerCase();
+                    if (TU_EXCLUDE.indexOf(who) < 0) TU_EXCLUDE.push(who);
+                    preview();
+                });
+            });
         }
 
         async function preview() {
@@ -2287,7 +2349,7 @@
                 var r = await api('/admin/myai/topup', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ target: t, dry_run: true }),
+                    body: JSON.stringify({ target: t, dry_run: true, exclude: TU_EXCLUDE }),
                 });
                 PREVIEWED = t;
                 TU_LAST = { count: r.count || 0, points: r.points || 0 };
@@ -2314,7 +2376,11 @@
                     + '從平台的管理帳號轉出，送出後收不回來。')
                     .replace('{n}', num(TU_LAST.count))
                     .replace('{t}', num(t))
-                    .replace('{p}', num(TU_LAST.points)),
+                    .replace('{p}', num(TU_LAST.points))
+                    // ZH: 有排除的話確認框要講出來 —— 不講的話，人數比上次少他也看不出為什麼。
+                    + (TU_EXCLUDE.length
+                        ? T('pf_topup_confirm_ex', '（已排除 {m} 個帳號）').replace('{m}', num(TU_EXCLUDE.length))
+                        : ''),
                 ((window.AdminMe && window.AdminMe()) || {}).username || '',
                 async function (name) { await sendTopup(t, name); },
                 T('pf_topup_self', '你自己的帳號'));
@@ -2327,7 +2393,7 @@
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ target: t, dry_run: false,
-                                           confirm_username: name }),
+                                           confirm_username: name, exclude: TU_EXCLUDE }),
                 });
                 reset();
                 if (r.status === 'unknown') {
@@ -2351,10 +2417,15 @@
 
         $('tu-preview').addEventListener('click', preview);
         $('tu-apply').addEventListener('click', apply);
-        $('tu-cancel').addEventListener('click', reset);
+        $('tu-cancel').addEventListener('click', function () { reset(); });
         // ZH: 改了數字就讓預覽失效 —— 否則會發生「看著 A 的預覽、送出 B」。
+        //     排除名單留著（那是「補給誰」，跟「補到多少」無關）。
         $('tu-target').addEventListener('input', function () {
-            if (PREVIEWED) reset();
+            if (PREVIEWED) reset(true);
+        });
+        // ZH: 搜尋只篩**顯示**，不影響送出（送出的名單永遠是後端算的，扣掉排除的人）。
+        $('tu-search').addEventListener('input', function () {
+            if (TU_ROWS && TU_ROWS.count) renderPreviewPage(TU_ROWS, 1);
         });
         btns();
     })();

@@ -1960,3 +1960,25 @@ textarea.field__input {
 @media (max-width: 640px) {
     .rp-filter { max-width: none; }
 }
+
+/* ZH: v4.41 手動補齊名單的搜尋與「這次不補」（擁有者 2026-10-13）。 */
+#tu-tools { margin: var(--space-3) 0 var(--space-2); }
+.tu-search { width: 100%; max-width: 24rem; }
+.tu-removed {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-2);
+    margin-top: var(--space-2);
+}
+.tu-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-1);
+    padding: 2px 2px 2px var(--space-2);
+    border: 1px solid var(--hairline);
+    border-radius: var(--radius-pill);
+    background-color: var(--surface-2);
+    font-size: 0.875rem;
+}
+.tu-act { width: 1%; white-space: nowrap; text-align: right; }
