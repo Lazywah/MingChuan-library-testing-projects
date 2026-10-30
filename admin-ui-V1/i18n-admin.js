@@ -313,7 +313,7 @@
         pf_topup_title: '確認補齊點數',
         pf_topup_confirm: '要把 {n} 個帳號補到 {t} 點嗎？合計 {p} 點，從平台的管理帳號轉出，送出後收不回來。',
         pf_topup_self: '你自己的帳號',
-        tmp_ext_title: '確認延長',
+        tmp_ext_confirm_title: '確認延長',
         unl_confirm_title: '確認開放修改',
         pp_confirm_type: '請輸入「{n}」以確認。',
         pp_confirm_label: '帳號',
@@ -796,22 +796,20 @@
         an_points: '點',
 
         // ── 共用版面元件（v4.45 版面整理，admin-chrome.js）────────────
-        // ZH: 分頁器、「更多▾」、編輯中標示、DEMO 橫幅。分頁器的上一頁／下一頁／第幾頁
+        // ZH: 分頁器、「更多▾」、編輯中標示。分頁器的上一頁／下一頁／第幾頁
         //     沿用既有的 pf_pg_* 與 rp_pg_total，不另開一套 —— 同一個平台不要有兩種分頁器文案。
         adm_pg_total: '共 {n} 筆',
         adm_pg_nav: '分頁',
         adm_more: '更多',
         adm_editing: '編輯中',
-        adm_demo_note: '版面 DEMO —— 功能都是真的（按了會真的送出）',
-        adm_demo_back: '回到正式版',
-        adm_demo_frame: '區塊加框',
 
-        // ── v4.45 版面整理 DEMO：各頁新增的文案（dz_ 開頭）──────────────
-        // 總覽（v4.45 DEMO）
+        // ── v4.45 版面整理：各頁新增的文案（dz_ 開頭）──────────────
+        // 總覽（v4.45）
         dz_ov_tiles: '摘要',
         dz_ov_t_todo: '待處理',
         dz_ov_t_nodes: '節點在線',
         dz_ov_t_gpu: 'GPU 忙碌',
+        dz_ov_t_running: '執行中 {n} 張任務',
         dz_ov_t_reports: '待處理回報',
         dz_ov_t_offplat: '不在平台',
         dz_ov_ext_live: '平台在線是即時的；用量是定期向廠商同步來的。',
@@ -820,7 +818,7 @@
         dz_ov_a_offplat: '{n} 人在外部 AI 有用量，人卻不在平台上（可能是帳號被借用）',
         dz_ov_a_partial: '有 {n} 個資料來源暫時讀不到，這份清單可能不完整。',
         dz_ov_m_count: '{on} / {all} 在線',
-        // 帳號（v4.45 DEMO）
+        // 帳號（v4.45）
         dz_pp_ext_edit: '編輯綁定',
         dz_pp_lab_title: '確認強制關閉實驗室',
         dz_pp_live_q: '磁碟 +{g} GB',
@@ -835,10 +833,21 @@
         dz_pp_tu_to: '補到',
         dz_pp_unl_rv_hint: '收回之後 {n} 就不能再改，要改得重新開放一次。',
         dz_pp_unl_rv_title: '確認收回修改授權',
-        // 平台設定（v4.45 DEMO）
+        // 平台設定（v4.45）
         dz_pf_save_n: '儲存 {n} 項變更',
+        // ZH: 英文單複數不同（Save 1 change / Save 2 changes），中文兩個 key 同一句。
+        dz_pf_save_1: '儲存 1 項變更',
+        // ZH: 組字用的分隔符也走字典 —— 寫死全形的「：」「、」「　」，英文介面就會出現
+        //     「Preferred email：…」「Campus、Department」這種中英混排（2026-10-30 版面掃描）。
+        sep_colon: '：',
+        sep_list: '、',
+        sep_gap: '　',
+        sep_space: '　',
+        sep_paren: '{a}（{b}）',
+        rp_bounce_paren: '（{c}）',
+        dz_rp_opt_n: '{label}（{n}）',
         dz_pf_export_json: 'JSON（.json）',
-        // 訊息（v4.45 DEMO）
+        // 訊息（v4.45）
         dz_rp_open_n: '{n} 則待處理',
         dz_rp_news_pub: '{v} 則公開中',
         dz_rp_news_all: '全部 {n} 則',
@@ -877,7 +886,7 @@
         dz_rp_a_pending_delete: '標記為待刪除',
         dz_rp_a_permanent_delete: '永久刪除資料',
         dz_rp_a_ai_query: 'AI 查詢',
-        // 數據 · AI 查詢（v4.45 DEMO）
+        // 數據 · AI 查詢（v4.45）
         dz_an_export_scope: '只含 MYAI 點數消耗',
         dz_an_jobs_noperiod: '不受期間影響（最近 500 筆）',
         dz_an_pie_other: '其他 {n} 項',
@@ -1172,7 +1181,7 @@
         pf_topup_title: 'Confirm top-up',
         pf_topup_confirm: 'Top {n} accounts up to {t} points? That is {p} points in total, transferred from the platform admin account. It cannot be taken back.',
         pf_topup_self: 'Your own account',
-        tmp_ext_title: 'Confirm extension',
+        tmp_ext_confirm_title: 'Confirm extension',
         unl_confirm_title: 'Confirm unlock',
         pp_confirm_type: 'Type \u201c{n}\u201d to confirm.',
         pp_confirm_label: 'Account',
@@ -1659,16 +1668,14 @@
         adm_pg_nav: 'Pagination',
         adm_more: 'More',
         adm_editing: 'Editing',
-        adm_demo_note: 'Layout DEMO — everything is live (buttons really submit)',
-        adm_demo_back: 'Back to the live version',
-        adm_demo_frame: 'Frame sections',
 
-        // ── v4.45 layout tidy-up DEMO: per-page strings (dz_ prefix) ──
-        // Overview (v4.45 DEMO)
+        // ── v4.45 layout tidy-up: per-page strings (dz_ prefix) ──
+        // Overview (v4.45)
         dz_ov_tiles: 'Summary',
         dz_ov_t_todo: 'Needs attention',
         dz_ov_t_nodes: 'Nodes online',
         dz_ov_t_gpu: 'GPUs busy',
+        dz_ov_t_running: '{n} job(s) running',
         dz_ov_t_reports: 'Open reports',
         dz_ov_t_offplat: 'Off-platform',
         dz_ov_ext_live: 'Platform presence is live; usage is synced from the vendor periodically.',
@@ -1677,7 +1684,7 @@
         dz_ov_a_offplat: '{n} people are using external AI but are not on the platform (the account may be shared)',
         dz_ov_a_partial: '{n} data source(s) could not be read; this list may be incomplete.',
         dz_ov_m_count: '{on} / {all} online',
-        // Accounts (v4.45 DEMO)
+        // Accounts (v4.45)
         dz_pp_ext_edit: 'Edit binding',
         dz_pp_lab_title: 'Confirm force-stopping the lab',
         dz_pp_live_q: 'Disk +{g} GB',
@@ -1692,10 +1699,18 @@
         dz_pp_tu_to: 'Top up to',
         dz_pp_unl_rv_hint: 'Once revoked, {n} can no longer make the edit; you would have to allow it again.',
         dz_pp_unl_rv_title: 'Confirm revoking the edit permission',
-        // Platform settings (v4.45 DEMO)
+        // Platform settings (v4.45)
         dz_pf_save_n: 'Save {n} changes',
+        dz_pf_save_1: 'Save 1 change',
+        sep_colon: ': ',
+        sep_list: ', ',
+        sep_gap: ' · ',
+        sep_space: ' ',
+        sep_paren: '{a} ({b})',
+        rp_bounce_paren: ' ({c})',
+        dz_rp_opt_n: '{label} ({n})',
         dz_pf_export_json: 'JSON (.json)',
-        // Messages (v4.45 DEMO)
+        // Messages (v4.45)
         dz_rp_open_n: '{n} open',
         dz_rp_news_pub: '{v} public',
         dz_rp_news_all: 'All {n}',
@@ -1734,7 +1749,7 @@
         dz_rp_a_pending_delete: 'Marked for deletion',
         dz_rp_a_permanent_delete: 'Permanently deleted data',
         dz_rp_a_ai_query: 'AI lookup',
-        // Analytics · AI lookup (v4.45 DEMO)
+        // Analytics · AI lookup (v4.45)
         dz_an_export_scope: 'MYAI credit usage only',
         dz_an_jobs_noperiod: 'Not filtered by period (latest 500)',
         dz_an_pie_other: '{n} others',

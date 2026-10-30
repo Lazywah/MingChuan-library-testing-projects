@@ -169,69 +169,7 @@
             + '</div>';
 
         document.body.insertBefore(bar, document.body.firstChild);
-        demoBanner();
         wire();
-    }
-
-    /* ── DEMO 橫幅（v4.45 版面整理）────────────────────────────────────────────
-     * @node demoBanner
-     * ZH: 版面 DEMO 是把整套管理端複製到 `admin-ui-V1/_demo/` 底下給擁有者比較。
-     *     🔴 它接的是**真的後端**（同一個 origin、同一個 token），按了會真的送出 ——
-     *     所以要一條醒目的橫幅講清楚，免得有人以為在試玩假資料。
-     * ZH: 只看路徑有沒有 `/_demo/`：正式版的路徑裡不會有這一段，橫幅構造上就不會出現在那裡。
-     * ZH: 「區塊加框」是擁有者待決事項 1 的 A／B 對照：切 body 的 `adm-framed`
-     *     （樣式在 admin.css 的「加框模式」）。記在 localStorage，存取被擋就只記這一次 ——
-     *     這只是看版面用的偏好，不能讓它擋住頁面。
-     * ──────────────────────────────────────────────────────────────────────── */
-    var DEMO_FRAME_KEY = 'adm_demo_framed';
-
-    function demoBanner() {
-        if (location.pathname.indexOf('/_demo/') < 0) return;
-
-        var framed = false;
-        try { framed = localStorage.getItem(DEMO_FRAME_KEY) === '1'; } catch (e) { /* 當作沒設過 */ }
-        document.body.classList.toggle('adm-framed', framed);
-
-        var box = document.createElement('div');
-        box.className = 'adm-demo';
-
-        var note = document.createElement('span');
-        note.className = 'adm-demo__note';
-        note.setAttribute('data-i18n', 'adm_demo_note');
-        note.textContent = T('adm_demo_note', '版面 DEMO —— 功能都是真的（按了會真的送出）');
-        box.appendChild(note);
-
-        // ZH: 開關：外觀沿用滑條開關 .tsw（營運設定那一套），狀態用 role=switch + aria-checked。
-        var sw = document.createElement('button');
-        sw.type = 'button';
-        sw.className = 'adm-demo__frame';
-        sw.setAttribute('role', 'switch');
-        sw.setAttribute('aria-checked', String(framed));
-        sw.innerHTML = '<span class="tsw" aria-hidden="true"><span class="tsw__knob"></span></span>';
-        var swText = document.createElement('span');
-        swText.setAttribute('data-i18n', 'adm_demo_frame');
-        swText.textContent = T('adm_demo_frame', '區塊加框');
-        sw.appendChild(swText);
-        sw.addEventListener('click', function () {
-            framed = !framed;
-            sw.setAttribute('aria-checked', String(framed));
-            document.body.classList.toggle('adm-framed', framed);
-            try { localStorage.setItem(DEMO_FRAME_KEY, framed ? '1' : '0'); } catch (e) { /* 同上 */ }
-        });
-        box.appendChild(sw);
-
-        // ZH: 回到正式版：同一頁、同樣的查詢字串與錨點，只拿掉路徑裡的 `_demo/`。
-        //     用 .btn--quiet：看起來是一條連結，點擊範圍仍是 44px。
-        var back = document.createElement('a');
-        back.className = 'btn--quiet';
-        back.href = location.pathname.replace('/_demo/', '/') + location.search + location.hash;
-        back.setAttribute('data-i18n', 'adm_demo_back');
-        back.textContent = T('adm_demo_back', '回到正式版');
-        box.appendChild(back);
-
-        // ZH: 放在頂部列**上面**：頂部列是 sticky，橫幅捲走之後不佔畫面，
-        //     但一打開頁面第一眼一定看得到。
-        document.body.insertBefore(box, document.body.firstChild);
     }
 
     // ZH: 取文案。字典裡沒有就用 fallback，**不清空**。
@@ -284,6 +222,49 @@
         document.addEventListener('keydown', function (ev) {
             if (ev.key === 'Escape') close();
         });
+    }
+
+    // ZH: 頂部列放不下一排時改成 ☰（.topbar.is-compact，樣式在 admin.css「手機版把頂部列…」那段）。
+    //     原本只看 ≤640px 這一條斷點，可是 640 以上也放不下：英文到約 1085px、中文到約 860px，
+    //     頂部列折成兩三排（113／161px）。它是 sticky —— 錨點跳過來時標題被蓋住；1024 英文時
+    //     還會隨著直捲軸出現／消失在一排與兩排之間跳，切篩選時整頁上下跳 57px（2026-10-30 版面掃描）。
+    //     斷點寫死不了（語言、帳號名稱長度、字級都會改變需要的寬度），所以**實際量**：
+    //     先拿掉 is-compact 排一次，任何一項的中線跟品牌不在同一排，就收成 ☰。
+    //     兩種狀態頂部列都是一排 56px，切換本身不改頁面高度，不會來回跳。
+    function wireFit(bar) {
+        if (!bar) return;
+        var queued = false;
+        function fit() {
+            queued = false;
+            bar.classList.remove('is-compact');
+            var narrow = window.innerWidth <= 640;
+            if (!narrow) {
+                var items = bar.querySelectorAll('.topbar__brand, .adm-nav__item, .topbar__tools > :not(nav)');
+                var lo = Infinity, hi = -Infinity;
+                [].forEach.call(items, function (e) {
+                    var r = e.getBoundingClientRect();
+                    if (!r.height) return;
+                    var c = r.top + r.height / 2;
+                    if (c < lo) lo = c;
+                    if (c > hi) hi = c;
+                });
+                narrow = hi - lo > 12;
+            }
+            bar.classList.toggle('is-compact', narrow);
+        }
+        // ZH: 用 setTimeout 不用 requestAnimationFrame：分頁在背景時 rAF 整個停掉，
+        //     在背景換了語言（或寬度）回來時頂部列會停在折行的樣子，直到下一次改視窗大小。
+        function later() {
+            if (queued) return;
+            queued = true;
+            setTimeout(fit, 0);
+        }
+        fit();
+        window.addEventListener('resize', later);
+        // ZH: 換語言／字級（prefs:applied）、帳號名稱載入（loadWho 改了按鈕寬度）都會改變需要的寬度。
+        document.addEventListener('prefs:applied', later);
+        if (window.ResizeObserver) new ResizeObserver(later).observe(bar);
+        if (document.fonts && document.fonts.ready) document.fonts.ready.then(later);
     }
 
     function wireToggle(toggle, menu) {
@@ -419,6 +400,7 @@
         wireToggle(_toggle, _menu);
         wireBurger(document.getElementById('adm-burger'),
                    document.getElementById('adm-tools'));
+        wireFit(document.querySelector('.topbar'));
         renderMenu();
         loadWho();
     }
@@ -556,18 +538,31 @@
         function setOpen(open) {
             menu.hidden = !open;
             toggle.setAttribute('aria-expanded', String(open));
+            // ZH: 上一次打開時夾邊寫的 left/right 先清掉，讓 CSS 的對齊（往右／.adm-dd--left 往左）
+            //     重新生效 —— 不然視窗放大之後選單還停在上次手機寬時被推過去的位置。
+            menu.style.left = '';
+            menu.style.right = '';
             if (!open) return;
             // ZH: 在 <dialog> 裡改用 fixed 定位，讓選單**可以超出對話框**（擁有者 2026-10-30）。
             //     對話框是 overflow-y:auto，絕對定位的選單會被它切掉、要捲才看得到；
             //     fixed 的定位基準是視窗，不受對話框的 overflow 影響。
             //     座標每次打開時現量；對話框捲動時就收起來（不然選單會停在原地跟按鈕分開）。
+            // ZH: 對齊要跟 CSS 一樣：預設**右緣對齊按鈕右緣**（往左長），只有 .adm-dd--left 才從左緣往右長。
+            //     原本一律寫 left = 按鈕左緣，個人對話框外部 AI 的「更多▾」在對話框右緣，
+            //     選單往右長出對話框 100px、1024 寬時被螢幕切掉（2026-10-30 版面掃描）。
             var dlg = toggle.closest('dialog');
+            var vw = document.documentElement.clientWidth;
             if (dlg) {
                 var rc = toggle.getBoundingClientRect();
                 menu.style.position = 'fixed';
                 menu.style.top = Math.round(rc.bottom + 8) + 'px';
-                menu.style.left = Math.round(rc.left) + 'px';
-                menu.style.right = 'auto';
+                if (toggle.closest('.adm-dd--left')) {
+                    menu.style.left = Math.round(rc.left) + 'px';
+                    menu.style.right = 'auto';
+                } else {
+                    menu.style.left = 'auto';
+                    menu.style.right = Math.round(vw - rc.right) + 'px';
+                }
                 if (!dlg._ddScroll) {
                     dlg._ddScroll = true;
                     dlg.addEventListener('scroll', function () {
@@ -579,6 +574,16 @@
                         });
                     });
                 }
+            }
+            // ZH: 最後夾進視窗（左右各留 8px）。手機寬時按鈕會換行到左邊，往左長的選單
+            //     就伸出螢幕左緣（組織對照表的「匯出▾」在 375 寬時 -51px）。量一次、差多少推多少；
+            //     left 用算出來的值（absolute 與 fixed 都適用：getComputedStyle 給的是實際的 px）。
+            var M = 8, mr = menu.getBoundingClientRect(), shift = 0;
+            if (mr.right > vw - M) shift = (vw - M) - mr.right;
+            if (mr.left + shift < M) shift = M - mr.left;
+            if (shift) {
+                menu.style.left = Math.round(parseFloat(getComputedStyle(menu).left) + shift) + 'px';
+                menu.style.right = 'auto';
             }
         }
         toggle.addEventListener('click', function () { setOpen(menu.hidden); });
@@ -637,7 +642,7 @@
     window.AdminDropdown = wireDropdown;
 
     /* ==========================================================================
-     * v4.45 共用版面元件（版面整理 DEMO，計畫第 3 節）
+     * v4.45 共用版面元件（版面整理，計畫第 3 節）
      *
      * ZH: 放在這支的理由與 AdminDownload / AdminDropdown 相同：每一頁都載它，
      *     而這幾樣東西原本是**各頁各抄一份**（分頁器有四份），抄寫會漂開。

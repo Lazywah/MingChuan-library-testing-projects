@@ -310,7 +310,9 @@
 /* ZH: 三欄自動排 —— 視窗窄就自己疊起來，不必寫斷點。 */
 .adm-cols {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    /* ZH: min(300px, 100%)：容器比 300px 窄時（375 寬的卡片裡只有 275px）一欄就是整寬，
+     *     不會凸出卡片右緣（GPU 節點編輯，2026-10-30 版面掃描）。比 300 寬時跟原本一樣。 */
+    grid-template-columns: repeat(auto-fit, minmax(min(300px, 100%), 1fr));
     gap: var(--space-4);
     align-items: start;
 }
@@ -885,12 +887,13 @@ textarea.field__input {
     position: absolute;
     top: 0;
     bottom: 0;
-    transform: translateX(-50%);
 }
+/* ZH: 感應區已經在 analytics.js 夾進圖框（頭尾兩塊不再伸出半格、撐出橫向捲動），
+ *     節點不一定在區塊正中間 —— 垂直線與圓點畫在 --cx（節點在區塊裡的位置）。 */
 .adm-line__hit::before {
     content: '';
     position: absolute;
-    left: 50%;
+    left: var(--cx, 50%);
     top: 0;
     bottom: 0;
     width: 1px;
@@ -904,7 +907,7 @@ textarea.field__input {
 .adm-line--dots .adm-line__hit::after {
     content: '';
     position: absolute;
-    left: 50%;
+    left: var(--cx, 50%);
     bottom: var(--y);
     width: 5px;
     height: 5px;
@@ -970,7 +973,7 @@ textarea.field__input {
 .adm-line__plot .adm-line__hit.is-active::after {
     content: '';
     position: absolute;
-    left: 50%;
+    left: var(--cx, 50%);
     bottom: var(--y);
     width: 9px;
     height: 9px;
@@ -1041,11 +1044,11 @@ textarea.field__input {
     background-color: var(--chart-me);
     align-self: center;
 }
+/* ZH: 換行而不是「…」截斷 —— 欄寬差 2px 時省略號只吃掉最後一個字（「應用日語學…」），
+ *     看起來像打錯字；這一頁是截圖交報告用的，名稱要完整（2026-10-30 版面掃描抓到）。 */
 .adm-pie__name {
     color: var(--text);
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+    overflow-wrap: anywhere;
 }
 .adm-pie__val {
     color: var(--text-strong);
@@ -1056,6 +1059,10 @@ textarea.field__input {
     color: var(--text-muted);
     font-variant-numeric: tabular-nums;
     white-space: nowrap;
+    /* ZH: 每一列是各自的 grid，百分比欄寬跟著位數變 —— 「3%」那列的數值比「12%」那列
+     *     往右 7px，一欄數字的右緣對不齊。固定 4ch（放得下 100%）＋靠右，數值欄就切齊了。 */
+    min-width: 4ch;
+    text-align: right;
 }
 
 /* ZH: 網址欄要寬 —— 標籤收窄、輸入框吃掉剩下的，說明另起一行對齊輸入框。 */
@@ -1115,15 +1122,6 @@ textarea.field__input {
 .adm-tablewrap--narrow {
     max-width: 100%;
 }
-/* ZH: 筆數緊跟著標題。用 space-between 推到最右邊的話，
-       它離標題 1246px（實測）—— 那個數字在講誰完全看不出來。 */
-.adm-block__n {
-    font-size: 1.125rem;
-    font-weight: 600;
-    color: var(--text-strong);
-    font-variant-numeric: tabular-nums;
-}
-
 /* ── 區塊標題右側的控制項（數據頁的「分組方式」）─────────────────────
  * ZH: 2026-08-27 新增。原本借用 .adm-inline —— 那個 class 是給
  *     「加額度那排」用的,帶著 margin-top 又會換行,
@@ -1185,7 +1183,9 @@ textarea.field__input {
  *     沒對齊的話它看起來就不像信件抬頭，只像四行普通文字。 */
 .am-row {
     display: grid;
-    grid-template-columns: 7.5rem 1fr;
+    /* ZH: minmax(0, 1fr) 而不是 1fr —— 1fr 的下限是內容的最小寬度，收件人輸入框
+     *     撐出的那 187px 讓這一欄縮不下去，375 寬時整頁橫向捲動 25px（2026-10-30 版面掃描）。 */
+    grid-template-columns: 7.5rem minmax(0, 1fr);
     gap: var(--space-2) var(--space-3);
     align-items: start;
     padding-block: var(--space-2);
@@ -1269,6 +1269,9 @@ textarea.field__input {
 /* ZH: 輸入框融進 chip 那一排 —— 有自己的框線會變成「兩個欄位」。 */
 .am-chips__in {
     flex: 1 1 8rem;
+    /* ZH: width:0 —— 不然 <input> 自帶約 20 個字寬（187px）的預設寬度，成了整排的最小寬度；
+     *     實際寬度交給上面的 flex-basis／grow。 */
+    width: 0;
     min-width: 8rem;
     border: 0;
     background: none;
@@ -1343,10 +1346,13 @@ textarea.field__input {
 .rp__cat {
     flex: none;
     font-size: 0.75rem;
+    /* ZH: 與 .adm-pill 同一個框（padding 0、行高 1.6）—— 原本 1px padding ＋ 繼承 1.65 行高，
+     *     比緊鄰的狀態藥丸高 3px，兩個框並排上下緣對不齊。 */
+    line-height: 1.6;
     color: var(--text-muted);
     border: 1px solid var(--hairline);
     border-radius: var(--radius-pill);
-    padding: 1px var(--space-2);
+    padding: 0 var(--space-2);
     white-space: nowrap;
 }
 /* ZH: 展開後的主旨。收合列會被 ellipsis 截斷，這裡是完整的那一句。 */
@@ -1355,9 +1361,11 @@ textarea.field__input {
     font-size: 1rem;
     color: var(--text-strong);
 }
-/* ZH: 窄畫面把類別也收掉（同摘要與時間）—— 一列硬塞六個欄位讀不了。 */
+/* ZH: 窄畫面把類別也收掉（同摘要與時間）—— 一列硬塞六個欄位讀不了。
+ * ZH: ⚠ 只收**清單列**上的。沒限定範圍時連回報對話框標題下的類別也一起藏了，
+ *     手機上哪裡都看不到類別（清單的理由正是「彈窗裡有完整的」）。 */
 @media (max-width: 640px) {
-    .rp__cat { display: none; }
+    .rp__row .rp__cat { display: none; }
 }
 
 
@@ -1553,6 +1561,13 @@ textarea.field__input {
 .cr-switch__label { font-weight: 600; }
 .cr-day { display: inline-flex; align-items: center; gap: var(--space-1); }
 #credit .adm-tablewrap { margin-top: var(--space-3); max-width: 36rem; }
+/* ZH: 表頭可以換行：英文「Monthly top-up to」整句不折，375 寬時這張三欄的小表要橫向捲 26px。 */
+#credit .adm-table th { white-space: normal; }
+/* ZH: 編輯時格子裡的點數欄位：表格輸入框的通用下限（6rem，見「表格裡的輸入框」）在這張 36rem 的
+ *     小表上太寬 —— 手機寬英文編輯時又要橫向捲 47px。點數最多五位數，4.5rem 夠。 */
+/* ZH: 4.5rem 的框扣掉左右各 12px 只剩 46px，剛好等於「20000」的寬 —— 五位數被切。
+ *     內距收小，不加寬（加寬的話手機上又要橫捲）。 */
+#credit .adm-table td > input[type="number"].field__input { min-width: 4.5rem; padding-inline: 6px; }
 #credit td.is-dimmed { opacity: 0.45; }
 .cr-num { max-width: 9rem; text-align: right; }
 .cr-num--day { max-width: 4.5rem; }
@@ -1565,13 +1580,20 @@ textarea.field__input {
  * ========================================================================== */
 .dslider {
     display: flex;
+    /* ZH: 可以換行 —— 放不下時「＋加一段」掉到下一行靠右，不再伸出節點卡、
+     *     撐出整頁橫向捲動（1024 英文、375 都會，2026-10-30 版面掃描）。 */
+    flex-wrap: wrap;
     align-items: flex-start;
     gap: var(--space-3);
 }
 .dslider__dayname { flex: none; width: 1.5em; padding-top: 5px; }
+/* ZH: 英文星期是三個字母（Mon／Wed 約 2.1em），1.5em 裝不下、字伸進後面勾選框的間距裡。
+ *     寬度仍然寫死（七列的勾選框要對齊），只是英文時寬一點。 */
+:lang(en) .dslider__dayname { width: 2.25em; }
 .dslider__on { width: 18px; height: 18px; flex: none; margin-top: 6px; }
 .dslider__segs {
-    flex: 1;
+    flex: 1 1 14rem;
+    min-width: 0;
     display: flex;
     flex-direction: column;
     gap: var(--space-1);
@@ -1592,12 +1614,12 @@ textarea.field__input {
     font-size: 0.9rem;
 }
 .dslider__del:hover { color: var(--error); }
-.dslider__add { flex: none; margin-top: 0; }
+.dslider__add { flex: none; margin-top: 0; margin-left: auto; }
 .dslider__track {
     position: relative;
     flex: 1;
     height: 28px;
-    min-width: 160px;
+    min-width: 5rem;
 }
 .dslider__track::before {
     content: '';
@@ -1659,7 +1681,9 @@ textarea.field__input {
 }
 .dslider__val {
     flex: none;
-    min-width: 132px;
+    /* ZH: 最長是「09:00 – 18:00」（13 個等寬字），7.5em 裝得下；原本 132px 多留了 40px。 */
+    width: 7.5em;
+    white-space: nowrap;
     text-align: right;
     font-variant-numeric: tabular-nums;
     color: var(--text);
@@ -1675,6 +1699,10 @@ textarea.field__input {
 }
 .pcard {
     display: flex;
+    /* ZH: 可以換行：手機寬時名片只有 262px，頭像＋停用／刪除＋讓給 ✕ 的位置就吃光了，
+     *     中間那欄被擠成 0（每一行剩「l…」、帳號名疊到按鈕上，2026-10-30 版面掃描）。
+     *     中間那欄拿不到 12rem 時，按鈕整組換到下一行（margin-left:auto 仍靠右）。 */
+    flex-wrap: wrap;
     align-items: flex-start;
     gap: var(--space-4);
     padding-right: 3rem;               /* ZH: 讓出右上角 ✕ 的位置 */
@@ -1696,7 +1724,7 @@ textarea.field__input {
     font-size: 1.5rem;
     font-weight: 700;
 }
-.pcard__main { min-width: 0; }
+.pcard__main { flex: 1 1 12rem; min-width: 0; }
 .pcard__name {
     display: flex;
     align-items: center;
@@ -1714,7 +1742,6 @@ textarea.field__input {
     text-overflow: ellipsis;
     white-space: nowrap;
 }
-.pcard__id { margin-top: var(--space-1); font-size: 0.7rem; color: var(--text-muted); }
 
 /* ZH: v4.4b 名片右側的動作鈕（停用/刪除）＋密碼確認小彈窗。 */
 .pcard__acts {
@@ -1725,10 +1752,17 @@ textarea.field__input {
     gap: var(--space-2);
     padding-right: 2.75rem;            /* ZH: 讓出右上角 ✕ */
 }
+/* ZH: 手機寬時動作鈕掉到名片下面一整列，兩顆並排。🔴 要寫在上面那條**後面** ——
+ *     權重相同，寫在前面的話永遠被 flex-direction:column 蓋掉（2026-10-30 複驗抓到）。 */
+/* ZH: 名片的每一行，桌面寬用刪節號就夠；手機寬只剩 214px，信箱會被切成「liangyu@mail.mcu.ed…」——
+ *     那是這張名片最重要的資訊，改成換行。 */
+@media (max-width: 30rem) {
+    .pcard__acts { flex-direction: row; flex-wrap: wrap; }
+    .pcard__line { white-space: normal; overflow-wrap: anywhere; }
+}
 .rmod--pw { width: min(420px, calc(100vw - 2 * var(--space-5))); }
 
-/* ZH: v4.4d 外部 AI 卡佔滿整列＋內部左右分欄（左=綁定、右=消耗）。 */
-.adm-card--wide { grid-column: 1 / -1; }
+/* ZH: v4.4d 外部 AI 卡內部左右分欄（左=綁定、右=消耗）。 */
 .ext-cols {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
@@ -1756,80 +1790,80 @@ textarea.field__input {
 }
 .topbar__burger { display: none; }
 
-@media (max-width: 640px) {
-    .topbar__burger {
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        min-width: var(--tap-min);
-        min-height: var(--tap-min);
-        padding: 0 var(--space-2);
-        font-size: 1.25rem;
-        line-height: 1;
-        color: var(--text);
-        background: transparent;
-        border: 1px solid var(--hairline);
-        border-radius: var(--radius-md);
-        cursor: pointer;
-    }
-    .topbar__burger[aria-expanded="true"] {
-        background-color: var(--surface-2);
-        border-color: var(--link);
-    }
-
-    /* ZH: 面板錨在 .topbar 上 —— 它是 sticky，sticky 也是一種 positioned，
-     *     絕對定位的子元素就以它為準，不必另外加 position: relative。 */
-    .topbar__tools {
-        display: none;
-        position: absolute;
-        top: 100%;
-        left: 0;
-        right: 0;
-        flex-direction: column;
-        align-items: stretch;
-        gap: var(--space-2);
-        padding: var(--space-3) var(--space-4) var(--space-4);
-        background-color: var(--surface);
-        border-bottom: 1px solid var(--hairline);
-        box-shadow: var(--shadow-2);
-        z-index: 25;
-        /* ZH: 字級放大時可能比螢幕高 —— 給它自己捲，不要把頁面撐長。 */
-        max-height: calc(100vh - 56px);
-        overflow-y: auto;
-    }
-    .topbar__tools.is-open { display: flex; }
-
-    /* ZH: 五個導覽項改直排。它原本就有 flex-wrap，在窄螢幕上會折成兩行 ——
-     *     折行與「一項一行」看起來很像，但折行的斷點是文字寬度決定的，
-     *     同一組會被拆開；直排則每一項都對齊，掃起來快得多。 */
-    .topbar__tools .adm-nav {
-        flex-direction: column;
-        align-items: stretch;
-        gap: var(--space-1);
-        width: 100%;
-    }
-    .topbar__tools .adm-nav__item { width: 100%; }
-
-    /* ZH: 帳號選單在面板裡就地展開，不要再浮一層 —— 浮層會蓋住底下的東西，
-     *     而面板本身就已經是一層了。左邊那條線表示「這幾項屬於上面那顆鈕」。 */
-    .topbar__tools .account { position: static; }
-    .topbar__tools .account__toggle {
-        width: 100%;
-        justify-content: space-between;
-    }
-    .topbar__tools .account__menu {
-        position: static;
-        min-width: 0;
-        border: 0;
-        border-left: 2px solid var(--hairline);
-        border-radius: 0;
-        box-shadow: none;
-        margin: var(--space-1) 0 0 var(--space-3);
-        padding: 0 0 0 var(--space-2);
-    }
-    /* ZH: 語言切換不要撐滿 —— 兩顆小鈕拉成一整列會看起來像可以按整條。 */
-    .topbar__tools .lang-switch { align-self: flex-start; }
+/* ZH: 收成 ☰ 的條件不是寫死的斷點，是 admin-chrome.js 的 wireFit **實際量**放不放得下一排
+ *     （≤640px 一律收）—— 640 以上英文到約 1085px 仍然會折成兩三排，見 wireFit 的註解。 */
+.topbar.is-compact .topbar__burger {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: var(--tap-min);
+    min-height: var(--tap-min);
+    padding: 0 var(--space-2);
+    font-size: 1.25rem;
+    line-height: 1;
+    color: var(--text);
+    background: transparent;
+    border: 1px solid var(--hairline);
+    border-radius: var(--radius-md);
+    cursor: pointer;
 }
+.topbar.is-compact .topbar__burger[aria-expanded="true"] {
+    background-color: var(--surface-2);
+    border-color: var(--link);
+}
+
+/* ZH: 面板錨在 .topbar 上 —— 它是 sticky，sticky 也是一種 positioned，
+ *     絕對定位的子元素就以它為準，不必另外加 position: relative。 */
+.topbar.is-compact .topbar__tools {
+    display: none;
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    flex-direction: column;
+    align-items: stretch;
+    gap: var(--space-2);
+    padding: var(--space-3) var(--space-4) var(--space-4);
+    background-color: var(--surface);
+    border-bottom: 1px solid var(--hairline);
+    box-shadow: var(--shadow-2);
+    z-index: 25;
+    /* ZH: 字級放大時可能比螢幕高 —— 給它自己捲，不要把頁面撐長。 */
+    max-height: calc(100vh - 56px);
+    overflow-y: auto;
+}
+.topbar.is-compact .topbar__tools.is-open { display: flex; }
+
+/* ZH: 五個導覽項改直排。它原本就有 flex-wrap，在窄螢幕上會折成兩行 ——
+ *     折行與「一項一行」看起來很像，但折行的斷點是文字寬度決定的，
+ *     同一組會被拆開；直排則每一項都對齊，掃起來快得多。 */
+.topbar.is-compact .topbar__tools .adm-nav {
+    flex-direction: column;
+    align-items: stretch;
+    gap: var(--space-1);
+    width: 100%;
+}
+.topbar.is-compact .topbar__tools .adm-nav__item { width: 100%; }
+
+/* ZH: 帳號選單在面板裡就地展開，不要再浮一層 —— 浮層會蓋住底下的東西，
+ *     而面板本身就已經是一層了。左邊那條線表示「這幾項屬於上面那顆鈕」。 */
+.topbar.is-compact .topbar__tools .account { position: static; }
+.topbar.is-compact .topbar__tools .account__toggle {
+    width: 100%;
+    justify-content: space-between;
+}
+.topbar.is-compact .topbar__tools .account__menu {
+    position: static;
+    min-width: 0;
+    border: 0;
+    border-left: 2px solid var(--hairline);
+    border-radius: 0;
+    box-shadow: none;
+    margin: var(--space-1) 0 0 var(--space-3);
+    padding: 0 0 0 var(--space-2);
+}
+/* ZH: 語言切換不要撐滿 —— 兩顆小鈕拉成一整列會看起來像可以按整條。 */
+.topbar.is-compact .topbar__tools .lang-switch { align-self: flex-start; }
 
 /* ==========================================================================
  * AI 查詢（v4.37）
@@ -1844,7 +1878,9 @@ textarea.field__input {
 }
 .ai-form .ai-q { flex: 1; resize: vertical; min-height: 3em; }
 /* ZH: styles.css 讓表單裡的主按鈕撐滿（登入頁那種）—— 這裡跟輸入框並排，要縮回內容寬。 */
-.ai-form .btn { width: auto; flex: none; }
+.ai-form .btn { width: auto; flex: none; margin-top: 0; }
+/* ZH: ↑ margin-top 也要歸零：共用的 .btn--primary 帶 16px 上外距。並排時 align-items:flex-end
+ *     看不出來；手機寬改直排後就成了「輸入框→查詢 24px、查詢→常用問題 8px」。 */
 /* ZH: v4.45 八顆預設問題（.ai-chips）收成「常用問題▾」，樣式在檔尾的 .ai-ex。 */
 .ai-item {
     border: 1px solid var(--hairline);
@@ -1893,9 +1929,17 @@ textarea.field__input {
  *     （帳號選單在頁面右上角）。放在左邊的按鈕要改成往左對齊，否則選單會
  *     伸出左緣 —— 在對話框裡就是被 overflow 切掉。 */
 .adm-dd--left .account__menu { left: 0; right: auto; }
+/* ZH: 選單寬度照最長的那一項（不換行），上限是螢幕寬減兩邊 16。
+ *     絕對定位的選單寬度被外殼（＝按鈕那麼寬）限住，只剩 min-width 13rem ——
+ *     英文的「CSV (account detail only)」「Errors in the last 24 hours」就折成兩行，
+ *     同一個選單裡項目高低不一（2026-10-30 版面掃描）。超出視窗的部分由 wireDropdown 夾回來。 */
+.adm-dd > .account__menu {
+    width: max-content;
+    max-width: min(22rem, calc(100vw - 2 * var(--space-4)));
+}
 
 /* ==========================================================================
- * v4.45 版面整理（DEMO，計畫第 3 節「共用的版面規則」＋第 5 節第 1 步）
+ * v4.45 版面整理（計畫第 3 節「共用的版面規則」＋第 5 節第 1 步）
  *
  * ZH: 這一整段是**一起加、一起刪**的：要還原第 1 步，刪掉從這裡到檔尾即可
  *     （上面只另外改了兩件真的是 bug 的事：四處未定義的 --border、--seg-h 35→44）。
@@ -1913,8 +1957,6 @@ textarea.field__input {
  *       in    16  同一個區塊內的元素之間
  *       sub   24  區塊內的小段：上 24 ＋ 一條細線 ＋ 下 24
  *       sec   64  區塊與區塊之間（沒有線，所以空白要比 sub 的整段 48 還大）
- * ZH: 寫成變數而不是數字：加框模式（.adm-framed）只要改 --adm-gap-sec 一個值，
- *     面板的框本身就在分段，空白可以縮回 24。
  * ZH: 欄位寬三級（數字／日期與下拉／文字與搜尋）。用 ch 是因為它跟著字級縮放；
  *     加上左右 padding（.field__input 各 12px）與框線才是外框寬，不然 10 位數會被切掉。 */
 .page--admin,
@@ -1936,7 +1978,10 @@ textarea.field__input {
 /* ZH: 區塊內一律 16。⚠ 用「相鄰兄弟」而不是給每個元件各自的 margin ——
  *     各自帶外距正是原本 12／24／36 混用的來源。標題列的下外距也改成 16，
  *     與下一個元素的上外距重疊（margin collapse）後剛好是 16，不會變成 32。 */
-.page--admin .adm-sec > * + * { margin-top: var(--adm-gap-in); }
+.page--admin .adm-sec > * + :where(:not(dialog)) { margin-top: var(--adm-gap-in); }
+/* ZH: ↑ 跳過 <dialog>：放在區塊裡的對話框（訊息頁的公告編輯、回報）靠 .rmod 的 margin:auto 置中，
+ *     這條的權重比它高，蓋成 16px 之後對話框貼在視窗頂端（2026-10-30 版面掃描）。
+ *     用 :where() 包起來，權重維持 (0,2,0) —— 不要因此蓋過後面同級的規則。 */
 .page--admin .adm-sec > :is(.adm-sec__head, .adm-head) { margin-bottom: var(--adm-gap-in); }
 
 /* ZH: 區塊內的小段（數據頁的每一張圖）：細線分段，上下各 24。
@@ -1950,6 +1995,13 @@ textarea.field__input {
 }
 .page--admin .adm-sec :is(.adm-duo, .adm-cols) > .adm-block,
 .page--admin .adm-sec :is(.adm-block, .adm-duo, .adm-cols):first-child {
+    margin-top: 0;
+    padding-top: 0;
+    border-top: 0;
+}
+/* ZH: 緊接在標題列後面的第一段也不畫（:first-child 抓不到它 —— 標題列才是第一個）。
+ *     外部 AI（MYAI）的「連線設定」原本在標題下多一條線＋49px 空白。 */
+.page--admin .adm-sec > :is(.adm-head, .adm-sec__head) + :is(.adm-block, .adm-duo, .adm-cols) {
     margin-top: 0;
     padding-top: 0;
     border-top: 0;
@@ -1972,6 +2024,19 @@ textarea.field__input {
 :is(.page--admin, .rmod) :is(.adm-inline, .adm-sec__head, .adm-head, .adm-head__what, .adm-head__do,
     .adm-block__head, .adm-pager, .ds__actions, .rmod__head, .cr-switch, .adm-sec__tool,
     .adm-fold__head) > :is(p, div, span).footnote { margin-top: 0; }
+
+/* ── 上下疊的欄位之間 12 ────────────────────────────────────────────────────
+ * ZH: 共用的 .field 沒有外距，兩個欄位疊在一起時上一個的框直接貼著下一個的標籤
+ *     （「帳號名稱」框 → 「用途（必填）」、Email → 學系 → 角色，勾選列 → Email、
+ *     公告的置頂／公開那一排 → 附件也一樣），
+ *     而旁邊的說明是 8、.adm-inline 是 12 —— 同一張表單裡間距忽有忽無（2026-10-30 版面掃描；
+ *     正式版就有）。對齊 .adm-inline 的 12。
+ * ZH: 只管對話框裡**直排**的表單：並排在一列裡的欄位（.adm-inline／.pp-find，
+ *     flex 列，間距交給 gap）排除，不然上外距會把那一個欄位整個往下推。 */
+/* ZH: .nw-cols 是左右並排的格線，第二格不能往下推（公告對話框的「公開」會比旁邊的「置頂」低 12px）。 */
+.rmod :is(.field, .adm-inline, .nw-cols) + .field:not(:is(.adm-inline, .pp-find, .nw-cols) > *) { margin-top: var(--space-3); }
+/* ZH: 登入頁同一個問題（帳號框貼著「密碼」標籤）。登入頁不是 .rmod，標籤到框是 8、框到按鈕 16 —— 給 16。 */
+#adm-form > .field + .field { margin-top: var(--space-4); }
 
 /* ── 標題列一律 44px 高 ─────────────────────────────────────────────────────
  * ZH: 有按鈕的標題列 44px、沒按鈕的 25px —— 每個區塊的內容就從不同的高度開始，
@@ -2030,8 +2095,11 @@ textarea.field__input {
 }
 h1.adm-head__title { font-size: 1.5rem; }
 h3.adm-head__title { font-size: 1rem; font-weight: 600; }
-/* ZH: 篩選和標題群之間多留 8 —— 「標題＋數量＋ⓘ」是一個詞，篩選是另一件事。 */
-.adm-head__what > :is(.adm-head__filter, .adm-seg, select) { margin-left: var(--space-2); }
+/* ZH: 篩選和標題群之間多留 8 —— 「標題＋數量＋ⓘ」是一個詞，篩選是另一件事。
+ * ZH: 用整列的欄距（16）而不是篩選自己的左外距：外距換行之後還在，折到第二行的篩選
+ *     會比上面的標題往右縮 8px（手機寬的回報、數據頁「分組方式」，2026-10-30 版面掃描）。
+ *     標題的數量與 ⓘ 在 <h2> 裡面（自己的 gap），不受這一條影響。 */
+.adm-head__what:has(> :is(.adm-head__filter, .adm-seg, select)) { column-gap: var(--space-4); }
 
 /* ZH: 數量徽章。中性灰 —— 只有「要處理」的數量才上色（.adm-head__count--warn），
  *     全部上色等於沒有一個被凸顯（與 .adm-pill 同一條原則）。 */
@@ -2132,8 +2200,8 @@ h3.adm-head__title { font-size: 1rem; font-weight: 600; }
 .btn--minor.btn--danger:hover { border-color: var(--error); color: var(--error); }
 
 /* ZH: 共用 .btn--minor 的 hover 底色是 --surface（白）—— 它原本假設自己坐在灰底上。
- *     放在白色的對話框或加框面板上，hover 就完全看不出來。只在那兩種白底上改成灰。 */
-:is(.rmod, .adm-framed .adm-sec) .btn--minor:hover:not(:disabled) { background-color: var(--surface-2); }
+ *     放在白色的對話框上，hover 就完全看不出來。只在對話框裡改成灰。 */
+.rmod .btn--minor:hover:not(:disabled) { background-color: var(--surface-2); }
 
 /* ── 下拉選單裡的分組與危險項 ───────────────────────────────────────────────
  * ZH: 危險項（解除綁定、刪除…）永遠在選單最底下，紅字，上面隔一條線。
@@ -2181,9 +2249,15 @@ h3.adm-head__title { font-size: 1rem; font-weight: 600; }
  * ZH: 下拉用「至少 16ch、內容多長就多長」而不是釘死 16ch：選項文字比 16ch 長時
  *     釘死會把它切掉（例如「AI 額度（4）」這種帶數字的選項）。
  * ========================================================================== */
+/* ZH: 🔴 下限不能寫 `min(16ch, 100%)`（擁有者 2026-10-30 截圖：回報的「狀態」下拉蓋到旁邊的「類別」）。
+ *     放在寬度自動的一列裡時，外層量內容寬度的那一刻百分比算成 0 —— 外層照「0」排版，
+ *     排完下拉又長回 16ch，就凸出去疊到下一個欄位上。寫死 16ch 量起來才一致。
+ * ZH: ⚠ 手機寬也**不要**退回 `min(…, 100%)`：同一個機制在 ≤420px 照樣發生（數據頁「分組方式」
+ *     的下拉凸出標籤 60px，2026-10-30 版面掃描）。16ch 只有 154px，最窄的容器（對話框 262px）
+ *     也放得下；表格格子裡的下拉另外處理（見「表格裡的輸入框」）。 */
 :where(.page--admin, .rmod) select.field__input {
     width: auto;
-    min-width: min(var(--adm-fw-m), 100%);
+    min-width: var(--adm-fw-m);
     max-width: 100%;
 }
 /* ZH: 日期的上限也要寫在 max-width —— 放在 .adm-inline 裡時那一列的
@@ -2220,7 +2294,13 @@ h3.adm-head__title { font-size: 1rem; font-weight: 600; }
 .page--admin .adm-table :is(th, td).grow {
     width: 100%;
     white-space: normal;
-    overflow-wrap: anywhere;
+    /* ZH: 🔴 不能用 `anywhere` —— 它會把這一格的最小寬度降成一個字。窄畫面時其他欄
+     *     （nowrap、1%）先把寬度吃光，grow 欄就只拿到那一個字：375 寬時 Email 欄 37px、
+     *     每個信箱一兩個字一行、一列 400 多 px 高（2026-10-30 版面掃描）。
+     *     break-word 照樣會把過長的字串折斷，但不降低最小寬度；再給一個下限（中文標題
+     *     本來就每個字都能斷），放不下時整張表在 .adm-tablewrap 裡橫向捲動 —— 那正是它的用途。 */
+    overflow-wrap: break-word;
+    min-width: 8rem;
 }
 .page--admin .adm-table:has(.grow) :is(th, td):not(.grow) { width: 1%; }
 
@@ -2264,6 +2344,10 @@ h3.adm-head__title { font-size: 1rem; font-weight: 600; }
     flex-wrap: wrap;
     align-items: center;
     gap: var(--space-2);
+    /* ZH: ▸ 移出排版（絕對定位），所有項目從三角形後面開始 —— 它原本是第一個 flex 項目，
+     *     換行之後第二行回到容器左緣、跑到 ▸ 底下（寄信紀錄的「最後退信回收：…」，375 寬）。 */
+    position: relative;
+    padding-left: calc(1em + var(--space-2));
     min-height: var(--tap-min);
     cursor: pointer;
     list-style: none;                     /* ZH: 拿掉原生三角，改用下面那個（大小與顏色可控） */
@@ -2272,7 +2356,13 @@ h3.adm-head__title { font-size: 1rem; font-weight: 600; }
 .adm-fold > .adm-fold__head::-webkit-details-marker { display: none; }
 .adm-fold > .adm-fold__head::before {
     content: '▸';
-    flex: none;
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;   /* ZH: 字在框的正中心，旋轉 90° 時才不會位移 */
     width: 1em;
     color: var(--text-muted);
     transition: transform 0.15s ease;
@@ -2292,68 +2382,7 @@ h3.adm-head__title { font-size: 1rem; font-weight: 600; }
 }
 
 /* ==========================================================================
- * 加框模式（.adm-framed，擁有者待決事項 1 的 B 案）
- *
- * ZH: 預設不加框（A 案，計畫建議）：只靠間距和細線分段。這個模式讓擁有者在
- *     DEMO 橫幅上一鍵切過去比較 —— 每個區塊變成一張白底面板，左右邊緣全部對齊。
- * ZH: 面板之間只隔 24：框本身就在分段，不需要再靠 64 的空白。
- * ========================================================================== */
-.adm-framed .page--admin { --adm-gap-sec: var(--space-5); }
-.adm-framed .page--admin .adm-sec {
-    background-color: var(--surface);
-    border: 1px solid var(--hairline);
-    border-radius: var(--radius-md);
-    padding: var(--space-4) var(--space-5) var(--space-5);
-}
-/* ZH: 編輯中的色條吃掉 2px 的框寬差，內容不左右跳。 */
-.adm-framed .page--admin .adm-sec.is-editing {
-    border-left: 3px solid var(--accent);
-    padding-left: calc(var(--space-5) - 2px);
-}
-/* ZH: 萬一有區塊套區塊，裡面那層不要再畫一次框（框套框就是「亂」本身）。 */
-.adm-framed .page--admin .adm-sec .adm-sec {
-    background: none;
-    border: 0;
-    border-radius: 0;
-    padding: 0;
-}
-
-/* ==========================================================================
- * DEMO 橫幅（只在 /_demo/ 底下出現，admin-chrome.js 產生）
- *
- * ZH: 用警示色、放在頂部列**上面**：這份 DEMO 接的是真的後端，按了會真的送出 ——
- *     要讓人一眼分得出「我現在在 DEMO」，而不是以為在試玩假資料。
- * ========================================================================== */
-.adm-demo {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 0 var(--space-4);
-    padding: 0 var(--space-4);
-    background-color: var(--warn-soft);
-    border-bottom: 1px solid var(--warn);
-    color: var(--text-strong);
-    font-size: 0.875rem;
-}
-.adm-demo__note { flex: 1 1 auto; font-weight: 600; padding-block: var(--space-2); }
-.adm-demo__frame {
-    display: inline-flex;
-    align-items: center;
-    gap: var(--space-2);
-    min-height: var(--tap-min);
-    padding: 0 var(--space-2);
-    border: 0;
-    background: none;
-    color: inherit;
-    font: inherit;
-    cursor: pointer;
-}
-/* ZH: 開關外觀沿用 .tsw，但狀態寫在外層按鈕（role=switch）上，所以這裡另接一次。 */
-.adm-demo__frame[aria-checked="true"] .tsw { background-color: var(--accent); border-color: var(--accent); }
-.adm-demo__frame[aria-checked="true"] .tsw__knob { transform: translateX(20px); }
-
-/* ==========================================================================
- * 總覽（v4.45 DEMO，計畫第 4 節「總覽」＋第 5 節第 4 步）
+ * 總覽（v4.45，計畫第 4 節「總覽」＋第 5 節第 4 步）
  *
  * ZH: 範圍一律掛在 `main.dz-ov` 底下（只有 index.html 掛這個 class），
  *     別頁的 .adm-stats／.adm-grid／.adm-alert 不受影響。
@@ -2381,10 +2410,12 @@ h3.adm-head__title { font-size: 1rem; font-weight: 600; }
 }
 .dz-ov > .dz-ov-tiles + .adm-sec { margin-top: var(--adm-gap-sub); }
 
+/* ZH: 內容靠上（不是置中）—— GPU 那一格多一行「執行中 N 張任務」，置中的話它的大數字
+ *     會比旁邊四格高半行，一排數字就對不齊了。 */
 .dz-ov-tile {
     display: flex;
     flex-direction: column;
-    justify-content: center;
+    justify-content: flex-start;
     gap: var(--space-1);
     min-height: var(--tap-min);
     color: inherit;
@@ -2392,6 +2423,7 @@ h3.adm-head__title { font-size: 1rem; font-weight: 600; }
     transition: border-color 0.15s;
 }
 .dz-ov-tile:hover { border-color: var(--link); }
+.dz-ov-tile__sub { font-size: 0.8125rem; color: var(--text-muted); }
 .dz-ov-tile:hover .adm-stat__label { color: var(--link); }
 /* ZH: --focus-ring 是一個顏色，不是完整的 outline 值 —— 單寫 `outline: var(--focus-ring)`
  *     樣式會是 none，等於沒有焦點框。 */
@@ -2463,7 +2495,9 @@ h3.adm-head__title { font-size: 1rem; font-weight: 600; }
  *     各自 auto，於是「12034 / 24576 MB」那條的長條比「45 %」那條短一截。 */
 .dz-ov-meters {
     display: grid;
-    grid-template-columns: 4.5em minmax(0, 1fr) max-content;
+    /* ZH: 標籤欄用 max-content 而不是寫死 4.5em —— 英文的「Temperature」比 4.5em 寬，
+     *     會蓋到長條上（擁有者 2026-10-30 截圖）。整張卡共用這一欄，三條長條仍然等寬。 */
+    grid-template-columns: max-content minmax(0, 1fr) max-content;
     align-items: center;
     gap: var(--space-2);
     font-size: 0.8125rem;
@@ -2514,7 +2548,7 @@ h3.adm-head__title { font-size: 1rem; font-weight: 600; }
 }
 
 /* ==========================================================================
- * v4.45 帳號頁（people.html / people.js）— 版面整理 DEMO
+ * v4.45 帳號頁（people.html / people.js）— 版面整理
  * ZH: 只在帳號頁與個人對話框用到；類別名一律 pp- 開頭（rmod__foot--end 例外，見下）。
  * ========================================================================== */
 
@@ -2522,12 +2556,15 @@ h3.adm-head__title { font-size: 1rem; font-weight: 600; }
  *     人數藥丸緊貼在框的右邊。藥丸 1.5rem 高、欄位 44px —— 往上推半個差距，對齊欄位中線。 */
 .pp-find {
     display: flex;
-    flex-wrap: wrap;
+    /* ZH: 不換行：欄位本來就可以縮（min-width:0），手機寬時是欄位變窄、人數留在框旁邊；
+     *     換行的話人數掉到框下面靠左，看不出是這個框的數量（2026-10-30 版面掃描）。 */
+    flex-wrap: nowrap;
     align-items: flex-end;
     gap: var(--space-2) var(--space-3);
 }
 .pp-find > .field { flex: 0 1 var(--adm-fw-l); min-width: 0; }
-.pp-find > .adm-head__count { margin-bottom: calc((var(--tap-min) - 1.5rem) / 2); }
+.pp-find > .adm-head__count { flex: none; margin-bottom: calc((var(--tap-min) - 1.5rem) / 2); }
+/* ZH: ↑ 這個位移以「欄位 44px」為前提 —— 搜尋框要真的是 44px（見「同一列的輸入框 44px」）。 */
 
 /* ZH: 名片上「正在生效的授權／加碼」（開放修改中、磁碟 +N GB）。外框、不填色 ——
  *     .adm-pill--ok 與 .adm-pill--temp 都是 --accent-soft，掛 --ok 的話跟「臨時帳號」並排時
@@ -2555,6 +2592,9 @@ h3.adm-head__title { font-size: 1rem; font-weight: 600; }
     color: var(--text);
 }
 .pp-tgt__field > .field__input { flex: none; width: var(--adm-fw-s); }
+/* ZH: 英文的「Top up to」與「Reclaim down to」長度不同，上下兩列的欄位差 53px 對不齊。
+ *     只對英文：中文「補到／收到」一樣長，本來就對齊，加下限反而多一段空白。 */
+:lang(en) .pp-tgt__field > span:first-child { min-width: 8em; }
 
 /* ZH: 對話框頁腳：靠右，［取消］［下一步］［確認］—— 確認鍵永遠在右下角（計畫第 3 節）。
  *     通用修飾類別，其他頁的對話框要統一時可以直接套。 */
@@ -2602,7 +2642,9 @@ h3.adm-head__title { font-size: 1rem; font-weight: 600; }
 /* ZH: 磁碟加碼的三個欄位：各帶看得見的標籤，寬度照內容分級。 */
 .rmod--person .pp-qrow { align-items: flex-end; }
 .rmod--person .pp-qrow > .field { flex: 0 0 auto; }
-.rmod--person .pp-qrow > .pp-qrow__gb { width: var(--adm-fw-s); }
+.rmod--person .pp-qrow > .pp-qrow__gb { min-width: var(--adm-fw-s); width: auto; }
+/* ZH: ↑ 至少數字級（10ch），標籤更長時跟著標籤寬 —— 寫死 10ch 的話英文「How many GB to add」
+ *     折成兩行，這一列靠底對齊，它的標籤就比另外兩個高一截（2026-10-30 版面掃描）。 */
 .rmod--person .pp-qrow > .pp-qrow__why { flex: 1 1 14rem; max-width: var(--adm-fw-l); }
 .rmod--person .pp-qrow > .pp-qrow__exp { width: var(--adm-fw-m); }
 
@@ -2619,10 +2661,17 @@ h3.adm-head__title { font-size: 1rem; font-weight: 600; }
  *     半開關那格（滑條＋數字欄）不換行，兩個控制項要待在同一行。
  * ZH: min-width：窄畫面時讓 .adm-tablewrap 自己橫捲，不要把名稱欄擠成一個字一行。 */
 #settings .pf-set { table-layout: fixed; min-width: 48rem; }
+/* ZH: 編輯時多一欄 .pf-set__act（10rem），固定欄合計剛好 48rem —— 名稱欄分到 0，
+ *     每個字一行、一列 1000px 高（2026-10-30 版面掃描）。下限跟著加，讓名稱欄仍有 10rem。 */
+#settings .pf-set:has(> colgroup > .pf-set__act) { min-width: 58rem; }
 #settings .pf-set .pf-set__val { width: 20rem; }
 #settings .pf-set .pf-set__def { width: 11rem; }
 #settings .pf-set .pf-set__rng { width: 7rem; }
 #settings .pf-set .pf-set__act { width: 10rem; }
+/* ZH: 編輯時多了動作欄，1024 寬名稱欄只剩 172px（英文一列 209px 高）。
+ *     值欄最寬的控制項 106px、預設欄只有「開／關」，編輯時把這兩欄收窄讓給名稱。 */
+#settings .pf-set:has(> colgroup > .pf-set__act) .pf-set__val { width: 14rem; }
+#settings .pf-set:has(> colgroup > .pf-set__act) .pf-set__def { width: 7rem; }
 #settings .pf-set :is(th, td) { white-space: normal; overflow-wrap: anywhere; }
 #settings .pf-set .tsw-cell { white-space: nowrap; }
 
@@ -2643,7 +2692,7 @@ h3.adm-head__title { font-size: 1rem; font-weight: 600; }
 }
 
 /* ==========================================================================
- * v4.45 訊息頁（reports.html / reports.js）—— 版面整理 DEMO，計畫第 4 節「訊息」
+ * v4.45 訊息頁（reports.html / reports.js）—— 版面整理，計畫第 4 節「訊息」
  *
  * ZH: 只有這一頁用到的幾條。共用的標題列、分頁器、收合區、表格欄寬都在上面那一段。
  * ========================================================================== */
@@ -2710,7 +2759,7 @@ h3.adm-head__title { font-size: 1rem; font-weight: 600; }
 }
 
 /* ==========================================================================
- * 數據 · AI 查詢（v4.45 版面整理 DEMO，計畫第 4 節）
+ * 數據 · AI 查詢（v4.45 版面整理，計畫第 4 節）
  * ========================================================================== */
 
 /* ZH: 期間下拉的最小寬度要贏過共用的 `:where(.page--admin) select.field__input { min-width: min(16ch, 100%) }`。
@@ -2799,7 +2848,7 @@ h3.adm-head__title { font-size: 1rem; font-weight: 600; }
 }
 
 /* ==========================================================================
- * 小控制項的可點範圍（v4.45 DEMO，計畫第 3 節「44px」）
+ * 小控制項的可點範圍（v4.45，計畫第 3 節「44px」）
  * ZH: 外觀不變、只把**點得到的範圍**往外擴到 44px（透明的 ::before）。
  *     ⓘ 刻意畫成 24px（styles.css 的註解：放在標題文字旁，做成 44px 會把行高撐開）——
  *     那個理由講的是外觀，可點範圍不必跟著小。styles.css 是共用檔，不動；這裡只對管理端。
@@ -2824,3 +2873,130 @@ h3.adm-head__title { font-size: 1rem; font-weight: 600; }
 /* ZH: 結果卡裡的小標（程式算出的判斷、原始資料各表）原本 1rem，跟頁面的 h2 差不多大，
  *     會跟卡片最上面那句粗體的問題搶。降一級。 */
 .ai-item .ai-sub { font-size: 0.875rem; }
+
+/* ==========================================================================
+ * 小錯誤掃描（2026-10-30，擁有者：「要注意這種小錯誤」）
+ *
+ * ZH: 換掉正式版之前用版面偵測（每頁 1280／1024／375 × 中／英 × 各種對話框、選單、
+ *     編輯模式）掃出來的一批**小**問題：疊字、被切掉、凸出外框、同一列高低不一、
+ *     手機寬時橫向捲動。能改在原規則上的已經改在原處；這裡放的是新加的規則。
+ * ========================================================================== */
+
+/* ── 同一列的輸入框 44px ──────────────────────────────────────────────────
+ * ZH: .field__input 自帶 12px 上下 padding，算出來 52px（日期 54px）；跟 44px 的按鈕
+ *     放在同一列就上下各凸 4px —— 「補到 [__] 點［預覽］」「[日期]［延期］」，靠底對齊的
+ *     加額度那一列則是按鈕比欄位低半截。標題列（.adm-head .field__input）、期間（.an-range__d）、
+ *     回報頁腳的下拉早就這樣處理，這裡補上其餘「欄位與按鈕並排」的地方。
+ *     搜尋框（.pp-find）也算：旁邊人數藥丸的置中位移是照 44px 算的。 */
+:is(.adm-inline, .pp-find) :is(input:not([type="checkbox"], [type="radio"]), select).field__input {
+    height: var(--tap-min);
+    padding-block: 0;
+}
+
+/* ── 表格裡的輸入框 ──────────────────────────────────────────────────────
+ * ZH: 一般的表格是 auto 排版。格子裡 width:100% 的輸入框，量最小寬度時算成 0 ——
+ *     窄畫面時欄位被擠成 26px（組織、模型、代碼對應的編輯表，375 寬），而不是讓整張表
+ *     在 .adm-tablewrap 裡橫向捲動。給文字欄位一個下限，表格放不下就捲。
+ * ZH: 下拉照選項寬就好：共用的 16ch 下限（上面「欄位寬三級」）是給表單用的，放在表格裡
+ *     「是／否」也要 154px，旁邊的文字欄位反而被擠到放不下「人文社會科學暨教育學院」。
+ *     max-content 而不是 0：auto 表格量最小寬度時 max-width:100% 會讓下拉也被擠扁。
+ * ZH: 固定欄寬的表（.pf-set、.pf-fixed）不套：欄寬是寫死的，控制項跟著格子寬（max-width:100%）。 */
+.adm-table:not(.pf-set, .pf-fixed) td > input.field__input:not([type="number"], [type="checkbox"], [type="radio"]) {
+    min-width: 9rem;
+}
+.adm-table:not(.pf-set, .pf-fixed) td > input[type="number"].field__input { min-width: 6rem; }
+.adm-table td > select.field__input { min-width: max-content; }
+.adm-table:is(.pf-set, .pf-fixed) td > select.field__input { min-width: 0; }
+
+/* ZH: 外部 AI 的連線設定：說明欄很長（英文一句就 600px），整欄 nowrap 時英文版要橫向捲 250px；
+ *     編輯時網址欄位只有 214px，放不下 https://www.myai168.com/mcu/ai/user/logout_info。
+ *     說明可以換行；網址欄位想要 28rem，空間不夠時最少 12rem、其餘交給橫向捲動。 */
+#ext-conn td.footnote { white-space: normal; min-width: 14rem; }
+#ext-conn td > input.field__input { min-width: 12rem; }
+#ext-conn td > input.field__input:not([type="number"]) { width: 28rem; max-width: 100%; }
+/* ZH: 英文的設定名稱（Early reminder threshold (getting lower)）nowrap 時 284px，1024 寬編輯時多捲 40px。 */
+#ext-conn td:first-child { white-space: normal; min-width: 10rem; }
+
+/* ── 分頁的表格用固定欄寬（platform.js fixedCols）───────────────────────
+ * ZH: 一次只畫 20 列的表，auto 排版的欄寬跟著「這一頁」走，按下一頁表頭整排左右跳
+ *     （廠商模型代碼對應、組織對照表的編輯模式）。
+ *     短欄寫死（.pf-col--*），名稱欄平分剩下的寬度並換行。下限讓手機寬時表格橫向捲，
+ *     不是把名稱欄擠成一個字一行；編輯時格子裡是輸入框，下限再大一點。 */
+.adm-table.pf-fixed { table-layout: fixed; }
+.adm-table.pf-fixed :is(th, td) { white-space: normal; overflow-wrap: anywhere; }
+.adm-table.pf-fixed td > :is(input, select).field__input { max-width: 100%; }
+.pf-fixed .pf-col--xs { width: 5.5rem; }
+.pf-fixed .pf-col--s  { width: 7.5rem; }
+.pf-fixed .pf-col--m  { width: 9rem; }
+.adm-table.pf-mm { min-width: 40rem; }
+.adm-table.pf-mm.is-edit { min-width: 52rem; }
+/* ZH: 組織對照表只有編輯時是固定欄寬（唯讀時是 grow ＋ .pf-sizer，見 platform.js renderOrg）。 */
+.adm-table.pf-org { min-width: 58rem; }
+/* ZH: 學系表有四個名稱欄平分剩下的寬度；70rem 時每欄只有 155px，「人文社會科學暨教育學院」被切。
+ *     每欄至少約 13rem —— 1280 寬時表格在框裡小捲一點，換來名稱看得完整。 */
+.adm-table.pf-org--dept { min-width: 78rem; }
+/* ZH: 唯讀的組織對照表把其他頁的列也畫進去、但收起來：看不見、不佔高度，只拿來決定欄寬
+ *     （換頁時欄寬不跳）。visibility:collapse 用在表格列上就是這個意思。 */
+.adm-table tr.pf-sizer { visibility: collapse; }
+/* ZH: 收起來的列一樣會撐欄寬 —— nowrap 的「學院（英）」被最長的那一列撐到 337px，1280 寬唯讀也要橫捲。
+ *     讓它換行（platform.js orgRowRo 的 .pf-wrap）。 */
+.adm-table td.pf-wrap { white-space: normal; min-width: 10rem; }
+
+/* ── 訊息頁 ────────────────────────────────────────────────────────────── */
+/* ZH: 回報清單 641–960px：六欄的固定部分加起來 570px 以上，主旨（1fr）分到 0 —— 768 寬的平板上
+ *     每一列只剩狀態、類別、名字、時間，看不出在講什麼。≤640 的窄版斷點來得太晚。
+ *     中間加兩段：先收類別（對話框裡看得到），再窄一點連時間也收；主旨至少 8rem，
+ *     回報者讓它先縮。 */
+@media (max-width: 960px) {
+    .page--admin .rp__row.dz-rp-row {
+        grid-template-columns: 7rem minmax(0, 8rem) minmax(8rem, 1fr) 9.5rem 4.5rem;
+    }
+    .dz-rp-row > :is(.rp__cat, .dz-rp-nocat) { display: none; }
+}
+@media (max-width: 760px) {
+    .page--admin .rp__row.dz-rp-row {
+        grid-template-columns: 7rem minmax(0, 8rem) minmax(8rem, 1fr) 4.5rem;
+    }
+    .dz-rp-row > .rp__when { display: none; }
+}
+/* ZH: ↑ ≤640 那一條（三欄：狀態｜回報者｜已回覆）寫在更前面、權重相同 —— 再寫一次讓它贏過上面兩段。 */
+@media (max-width: 640px) {
+    .page--admin .rp__row.dz-rp-row { grid-template-columns: auto minmax(0, 1fr) auto; }
+}
+
+/* ZH: 公告表的「發布時間」窄畫面可以折成日期／時間兩行 —— nowrap 時它佔 137px，
+ *     標題欄只剩 55px，一兩個字一行。 */
+@media (max-width: 640px) {
+    #news .adm-table td:nth-child(2) { white-space: normal; }
+}
+/* ZH: 標題欄 8rem 的下限在 375 寬中文版多出 14px —— 為了看到［編輯］要橫捲。 */
+@media (max-width: 480px) {
+    #news .adm-table .grow { min-width: 7rem; }
+}
+
+/* ZH: 回報對話框頁腳（改狀態＋取消＋送出）在手機寬塞不下一行，最後一顆（送出）單獨掉到第二行，
+ *     跟［取消］拆開。改成下拉自己佔一行，兩顆按鈕一起在下一行靠右。 */
+@media (max-width: 480px) {
+    .rmod .dz-rp-foot > select.field__input { flex: 1 0 100%; max-width: none; }
+}
+
+/* ── 數據頁 ────────────────────────────────────────────────────────────── */
+/* ZH: 自訂期間的那一組（起／訖／套用）換行時，最後一行也靠右 —— 不然「套用」單獨掉在最左邊，
+ *     跟它所屬的那一組（靠右）分家。 */
+.adm-head__do > .adm-inline { justify-content: flex-end; }
+
+/* ZH: 平台使用表的分組名稱可以換行：英文系名（Computer Science and Information Engineering
+ *     Department）三倍長，整欄 nowrap 時 1280 寬也放不下，登入／Token 欄被擠到捲動區外。 */
+#platform .adm-table tbody td:first-child { white-space: normal; min-width: 12em; }
+/* ZH: 表頭也要能換行：英文表頭全部 nowrap 時最窄 1085px，1024／1100 寬都要橫捲。 */
+#platform .adm-table th { white-space: normal; }
+
+/* ZH: 並排的兩塊（用量 Top 10）標題列：放不下時切換鈕整個換到下一行，不要把標題折成兩行
+ *     （手機寬英文「Top 10 models by usage」折行後，這一塊的長條比旁邊那塊低 6px）。同 .an-pies。 */
+.adm-duo .adm-block__head { flex-wrap: wrap; row-gap: var(--space-2); }
+.adm-duo .adm-block__title { white-space: nowrap; }
+
+/* ── 對話框 ────────────────────────────────────────────────────────────── */
+/* ZH: 對話框裡的區塊標題可以換行 —— 對話框最寬 920px，用不到 nowrap 的保護；
+ *     手機寬英文「Permission to edit their own details」比對話框寬，整個對話框橫向捲動。 */
+.rmod .adm-head__title { white-space: normal; }

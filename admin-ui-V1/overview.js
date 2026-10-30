@@ -17,7 +17,7 @@
  * ZH: 自動更新 10 秒一次，**而且畫面上要寫最後更新時間**。
  *     沒有那個時間戳的話，「資料沒變」與「更新卡住了」長得一模一樣。
  *
- * ZH: v4.45 版面整理（DEMO）：
+ * ZH: v4.45 版面整理：
  *       · 數字格（HTML 寫好結構，這裡只改數字）
  *       · GPU 卡片 + 節點表 → 一台機器一張卡
  *       · 外部 AI 四格 → 「有用量 × 不在平台」攤開並升成一列提醒，其他三格只給人數、名單點開才看
@@ -323,7 +323,9 @@
             + (n
                 ? '<dl class="dz-ov-mach__facts">'
                     + fact('ov_n_pool', '池別', n.effective_pool || '—')
-                    + fact('ov_n_running', '執行中', n.running_jobs != null ? n.running_jobs : '—')
+                    // ZH: 🔴 running_jobs 是**任務清單**（crud.list_gpu_nodes），不是數字 —— 直接印的話
+                    //     空清單印成空白、一筆印成 [object Object]（擁有者 2026-10-30 截圖：Running 後面是空的）。
+                    + fact('ov_n_running', '執行中', Array.isArray(n.running_jobs) ? n.running_jobs.length : '—')
                     + fact('ov_n_next', '下次變化', n.next_change ? TW.when(n.next_change) : '—')
                     + fact('ov_n_seen', '最後心跳', n.last_seen ? TW.when(n.last_seen) : '—')
                     + '</dl>'
@@ -543,6 +545,14 @@
                 return g.status === 'online' && (g.utilization || 0) >= BUSY_PCT;
             }).length;
             tile('gpu', busy + ' / ' + stats.length, false);
+        }
+        var sub = $('ts-gpu');
+        if (failed(jobs)) {
+            sub.hidden = true;
+        } else {
+            var nRun = (jobs || []).filter(function (j) { return j.status === 'running'; }).length;
+            sub.textContent = T('dz_ov_t_running', '執行中 {n} 張任務').replace('{n}', nRun);
+            sub.hidden = false;
         }
         tile('reports', failed(reports) ? null : (reports.open || 0), !failed(reports) && reports.open > 0);
         tile('offplat', nOff, nOff > 0);

@@ -515,7 +515,7 @@
             + '<div class="kv"><span class="kv__k">' + esc(T('tmp_ext_until', '到期')) + '</span>'
             + '<span class="kv__v">'
             + esc(forever ? T('tmp_ext_never', '不到期（永久有效）') : TW.dateTime(u.expires_at))
-            + (gone ? '　<span class="adm-pill adm-pill--expired">'
+            + (gone ? esc(T('sep_space', '　')) + '<span class="adm-pill adm-pill--expired">'
                 + esc(T('tmp_expired', '已到期')) + '</span>' : '')
             + '</span></div>'
             + '<div class="adm-inline">'
@@ -561,7 +561,7 @@
             say('x-msg', '');
             // ZH: v4.10b 延長＝把一個可能已經到期關掉的帳號重新打開
             //     （後端會把 is_active 設回 1）—— 算對帳號的操作，要確認。
-            targetConfirm(T('tmp_ext_title', '確認延長'),
+            targetConfirm(T('tmp_ext_confirm_title', '確認延長'),
                           forever ? T('tmp_ext_forever_warn',
                               '這個帳號將**不再到期**，與一般帳號一樣。') : null,
                           u.username,
@@ -638,8 +638,8 @@
         //     做了會讓同一行一半中文一半英文 —— 與「數據」那頁同一個判斷）。
         if (u.unit) parts.push(u.unit);
         var line = parts.join(' / ');
-        var camp = (u.campuses || []).join('、');
-        if (camp) line = line ? (line + '（' + camp + '）') : camp;
+        var camp = (u.campuses || []).join(T('sep_list', '、'));
+        if (camp) line = line ? T('sep_paren', '{a}（{b}）').replace('{a}', line).replace('{b}', camp) : camp;
         return line;
     }
 
@@ -714,9 +714,9 @@
             + '<div class="pcard__main">'
             + '<div class="pcard__name">' + esc(u.username) + pills + '</div>'
             + '<div class="pcard__line">' + esc(shownEmail(u)) + '</div>'
-            + '<div class="pcard__line">' + esc(T('pp_contact', '常用信箱')) + '：'
+            + '<div class="pcard__line">' + esc(T('pp_contact', '常用信箱') + T('sep_colon', '：'))
             + esc(u.contact_email || T('pp_contact_none', '—（用學號信箱）')) + '</div>'
-            + '<div class="pcard__line">' + esc(T('pp_org', '組織')) + '：'
+            + '<div class="pcard__line">' + esc(T('pp_org', '組織') + T('sep_colon', '：'))
             + esc(orgLine(u) || T('pp_org_none', '—（未設定）')) + '</div>'
             + '<div class="pcard__line">' + esc(meta.join(' · ')) + '</div>'
             // ZH: v4.45 UUID 搬進「較少用」收合區 —— 排查問題時才需要它。
@@ -1602,9 +1602,9 @@
                             (a.fields || []).map(function (f) {
                                 return T(UNLOCK_LABELS[f] ? UNLOCK_LABELS[f][0] : f,
                                          UNLOCK_LABELS[f] ? UNLOCK_LABELS[f][1] : f);
-                            }).join('、')))
-                      + '　<span class="footnote">' + esc(TW.date(a.granted_at))
-                      + (a.reason ? '　' + esc(a.reason) : '') + '</span></span>'
+                            }).join(T('sep_list', '、'))))
+                      + esc(T('sep_gap', '　')) + '<span class="footnote">' + esc(TW.date(a.granted_at))
+                      + (a.reason ? esc(T('sep_gap', '　')) + esc(a.reason) : '') + '</span></span>'
                       + '<button class="btn--quiet" type="button" id="unl-cancel">'
                       + esc(T('pp_unl_cancel', '收回')) + '</button></div>'
                     : '<p class="footnote">' + esc(T('pp_unl_locked', '目前鎖定中。')) + '</p>')
@@ -1629,7 +1629,7 @@
                     unlockFieldsFor(u).map(function (f) {
                         var lab = UNLOCK_LABELS[f] || [f, f];
                         return T(lab[0], lab[1]);
-                    }).join('、'))) + '</p>'
+                    }).join(T('sep_list', '、')))) + '</p>'
                 + field('unl-reason', T('pp_unl_reason', '原因（會寫進稽核）'), '')
                 + '<div class="ds__actions">'
                 + '<button class="btn btn--minor" type="button" id="unl-go">'
@@ -1736,9 +1736,10 @@
                 + (live.length
                     ? live.map(function (g) {
                         return '<div class="adm-alert">'
-                            + '<span>+' + esc(g.extra_quota_gb) + ' GB　'
+                            + '<span>+' + esc(g.extra_quota_gb) + ' GB' + esc(T('sep_space', '　'))
                             + '<span class="footnote">' + esc(g.reason || '')
-                            + (g.expires_at ? '　→ ' + esc(TW.date(g.expires_at)) : '') + '</span></span>'
+                            + (g.expires_at ? esc(T('sep_space', '　')) + '→ ' + esc(TW.date(g.expires_at)) : '')
+                            + '</span></span>'
                             + '<button class="btn--quiet" type="button" data-revoke="' + esc(g.id) + '"'
                             + ' data-gb="' + esc(g.extra_quota_gb) + '">'
                             + esc(T('pp_q_revoke', '收回')) + '</button></div>';
@@ -1824,11 +1825,12 @@
                         //     那樣會讓每一份都顯示「default」，是個看起來很正常的錯誤答案。
                         //     現在後端會回了（force_stop 那次一起補的），但這個寫法的教訓留著。
                         return '<div class="adm-alert"><span>'
-                            + esc(s.display_name || s.session_name || '—') + '　'
-                            + '<span class="footnote mono">' + esc(s.container_name || '') + '</span>　'
+                            + esc(s.display_name || s.session_name || '—') + esc(T('sep_space', '　'))
+                            + '<span class="footnote mono">' + esc(s.container_name || '') + '</span>'
+                            + esc(T('sep_space', '　'))
                             + '<span class="adm-pill adm-pill--' + esc(s.status) + '">'
                             + esc(s.status) + '</span>'
-                            + (s.started_at ? '　<span class="footnote">'
+                            + (s.started_at ? esc(T('sep_space', '　')) + '<span class="footnote">'
                                 + esc(TW.when(s.started_at)) + '</span>' : '')
                             + '</span>'
                             // ZH: 用 data 屬性而不是 id —— 同一個 id 出現多次是無效的 HTML，

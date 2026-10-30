@@ -245,7 +245,9 @@
         var b = $(btnId);
         if (!b) return;
         if (n > 0) {
-            b.textContent = T('dz_pf_save_n', '儲存 {n} 項變更').replace('{n}', num(n));
+            // ZH: n=1 用單數句（英文「Save 1 change」，不是「Save 1 changes」）。
+            b.textContent = n === 1 ? T('dz_pf_save_1', '儲存 1 項變更')
+                                    : T('dz_pf_save_n', '儲存 {n} 項變更').replace('{n}', num(n));
         } else {
             b.innerHTML = '<span data-i18n="pf_save">' + esc(T('pf_save', '儲存設定')) + '</span>';
         }
@@ -1598,7 +1600,9 @@
             //     那些總覽已經有了，在這裡重複只會讓人不確定該信哪一邊。
             return '<option value="' + esc(n.node_id) + '"'
                 + (n.node_id === current ? ' selected' : '') + '>'
-                + esc(n.display_name ? n.display_name + '（' + n.node_id + '）' : n.node_id)
+                // ZH: node_id 放**前面** —— 它才是分辨機器的那一段；放在名字後面的話
+                //     手機寬時被下拉的寬度切掉（「桃園校區 服務層 RTX5090（gpu-nod…」，2026-10-30 版面掃描）。
+                + esc(n.display_name ? n.node_id + ' · ' + n.display_name : n.node_id)
                 + '</option>';
         }).join('');
     }
@@ -2244,8 +2248,13 @@
         var cols = [['pf_mm_code', '廠商原始代碼'], ['pf_mm_name', '顯示名稱'],
                     ['pf_m_provider', '供應者'], ['pf_mm_cat', '類別'],
                     ['pf_mm_tx', '交易筆數']];
+        // ZH: 分頁之後一次只畫 20 列 —— auto 排版的欄寬跟著「這一頁」的內容走，
+        //     按下一頁整排表頭左右跳（2026-10-30 版面掃描：第一欄 394 → 440 → 489px）。
+        //     改成固定欄寬（admin.css 的 .pf-fixed）：短欄寫死，兩個名稱欄平分剩下的。
         $('mm-list').innerHTML =
-            '<div class="adm-tablewrap"><table class="adm-table"><thead><tr>'
+            '<div class="adm-tablewrap"><table class="adm-table pf-fixed pf-mm' + (MAP_EDIT ? ' is-edit' : '') + '">'
+            + fixedCols(['', '', 'm', 'm', 's'].concat(MAP_EDIT ? ['s'] : []))
+            + '<thead><tr>'
             + cols.map(function (h) { return '<th>' + esc(T(h[0], h[1])) + '</th>'; }).join('')
             + (MAP_EDIT ? '<th></th>' : '')
             + '</tr></thead><tbody>'
@@ -2256,6 +2265,14 @@
 
         wireMapRows();
         recount('mm-block');
+    }
+
+    // ZH: 固定欄寬表格的 <colgroup>。'' = 不寫寬度（平分剩下的），其餘對應 admin.css 的
+    //     .pf-col--xs / s / m。用在分頁的表格上 —— 欄寬不跟著「這一頁」的內容變。
+    function fixedCols(list) {
+        return '<colgroup>' + list.map(function (k) {
+            return k ? '<col class="pf-col--' + k + '">' : '<col>';
+        }).join('') + '</colgroup>';
     }
 
     function mapRowRo(r) {
@@ -2640,14 +2657,32 @@
         // ZH: v4.45 唯讀時「英文名」那一欄（第二欄）是 grow 欄（admin.css 的「表格欄寬」）：
         //     官方英文名動輒五六十個字母，原本整欄 nowrap，1280 寬時整張表 1536px、要橫向捲動。
         //     讓它吃剩下的寬度並換行，其餘欄只佔內容需要的寬度。
-        // ZH: 🔴 **編輯時不掛**：其餘欄會變成 width:1%，而格子裡的輸入框是 width:100% ——
+        // ZH: 分頁之後一次只畫 20 列 —— auto 排版的欄寬跟著「這一頁」的內容走，按下一頁整排表頭
+        //     左右跳（2026-10-30 版面掃描：行政單位的「單位（英）」606 → 718 → 648px）。
+        //     唯讀時把**其他頁的列**也畫進去，但 visibility:collapse（.pf-sizer）：看不見、不佔高度，
+        //     欄寬仍然照它們算 —— 每一頁的欄寬都是「全部的列」的欄寬，換頁不再跳。
+        //     放在前面，這一頁的最後一列才是 tr:last-child（共用樣式拿掉最後一列的底線）。
+        // ZH: 🔴 **編輯時不掛 grow**：其餘欄會變成 width:1%，而格子裡的輸入框是 width:100% ——
         //     百分比寬的輸入框放在「依內容決定寬度」的欄裡，欄寬會塌成幾乎 0。
+        //     編輯時改用固定欄寬（.pf-fixed，見 fixedCols）：名稱欄平分剩下的寬度，校區／來源／
+        //     啟用／人數寫死 —— 同樣不跟著這一頁變。
+        var widths = [];
+        for (var c = 0; c < cols.length - 4; c++) widths.push('');
+        var sizers = ORG_EDIT ? '' : rows.filter(function (r, k) {
+            return k < start || k >= start + ORG_PER;
+        }).map(function (r) {
+            return orgRowRo(r, isDept).replace('<tr>', '<tr class="pf-sizer" aria-hidden="true">');
+        }).join('');
         $('og-list').innerHTML =
-            '<div class="adm-tablewrap"><table class="adm-table"><thead><tr>'
+            '<div class="adm-tablewrap"><table class="adm-table'
+            + (ORG_EDIT ? ' pf-fixed pf-org' + (isDept ? ' pf-org--dept' : '') + '">'
+                          + fixedCols(widths.concat(['m', 'xs', 'xs', 'xs']))   // ZH: 來源（Alma／人工）、啟用都很短，寬度讓給名稱欄
+                        : '">')
+            + '<thead><tr>'
             + cols.map(function (h, k) {
                 return '<th' + (!ORG_EDIT && k === 1 ? ' class="grow"' : '') + '>' + esc(T(h[0], h[1])) + '</th>';
             }).join('')
-            + '</tr></thead><tbody>'
+            + '</tr></thead><tbody>' + sizers
             + rows.slice(start, start + ORG_PER).map(function (r, k) {
                 return ORG_EDIT ? orgRowEdit(r, start + k, isDept, d) : orgRowRo(r, isDept);
             }).join('')
@@ -2817,7 +2852,7 @@
                 : '<span class="footnote">—</span>') + '</td>'
             + (isDept
                 ? '<td>' + esc(r.college || '—') + '</td>'
-                  + '<td>' + (r.college_en ? esc(r.college_en)
+                  + '<td class="pf-wrap">' + (r.college_en ? esc(r.college_en)   // ZH: 見 admin.css .pf-wrap
                       : '<span class="footnote">—</span>') + '</td>'
                 : '<td>' + esc(r.parent || '—') + '</td>')
             + '<td>' + esc(r.campus || '—') + '</td>'

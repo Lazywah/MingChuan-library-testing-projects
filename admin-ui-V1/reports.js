@@ -120,7 +120,8 @@
                          : STATUSES.reduce(function (a, s) { return a + (counts[s] || 0); }, 0);
             // ZH: 每個篩選都帶數量 —— 不帶的話你得逐一切過才知道哪裡有事。
             return '<option value="' + esc(o[0]) + '"' + (FILTER === o[0] ? ' selected' : '') + '>'
-                + esc(o[1]) + '（' + n + '）</option>';
+                // ZH: 括號跟著語言走 —— 英文用半形「Open (1)」，寫死全形會多出一段寬空白。
+                + esc(T('dz_rp_opt_n', '{label}（{n}）').replace('{label}', o[1]).replace('{n}', n)) + '</option>';
         }).join('');
 
         // ZH: 類別篩選另起一排。不帶數量 —— summary 端點只算狀態，
@@ -278,7 +279,7 @@
             +   (r.category
                     ? '<span class="rp__cat">' + esc(catLabel(r.category)) + '</span>'
                     : '')
-            +   '<span class="rmod__meta">' + esc(who) + '　'
+            +   '<span class="rmod__meta">' + esc(who) + esc(T('sep_gap', '　'))
             +     esc(TW.dateTime(r.created_at)) + '</span>'
             + '</div>'
 
@@ -297,7 +298,7 @@
                   + '<p class="adm-report__body">' + esc(r.admin_reply || '') + '</p>'
                   + '<p class="footnote">'
                   + esc(T('rp_replied', '已於 {when} 回覆').replace('{when}', TW.dateTime(r.replied_at)))
-                  + '　' + esc(T('rp_locked', '回覆送出後不能再改 —— 對方已經看到了。'))
+                  + esc(T('sep_gap', '　')) + esc(T('rp_locked', '回覆送出後不能再改 —— 對方已經看到了。'))
                   + '</p></div>'
                 : '<label class="field">'
                   + '<span class="field__label" for="rp-reply">' + esc(T('rp_reply', '回覆')) + '</span>'
@@ -380,8 +381,9 @@
         if (b.last_scan) {
             var p = String(b.last_scan).split('|');
             when = (TW.when(p[0]) || p[0])
-                + '（' + T('rp_bounce_counts', '讀 {s} 封、退信 {b} 封、回填 {a} 筆')
-                    .replace('{s}', p[1] || 0).replace('{b}', p[2] || 0).replace('{a}', p[3] || 0) + '）';
+                + T('rp_bounce_paren', '（{c}）').replace('{c}',
+                    T('rp_bounce_counts', '讀 {s} 封、退信 {b} 封、回填 {a} 筆')
+                    .replace('{s}', p[1] || 0).replace('{b}', p[2] || 0).replace('{a}', p[3] || 0));
         }
         return T('rp_bounce_on', '最後退信回收：{w}').replace('{w}', when);
     }

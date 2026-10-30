@@ -11,7 +11,7 @@
 
     <link rel="stylesheet" href="tokens.css?v=ff9cecda">
     <link rel="stylesheet" href="styles.css?v=d4d21ce8">
-    <link rel="stylesheet" href="admin.css?v=dccae4c3">
+    <link rel="stylesheet" href="admin.css?v=cdbdc994">
 </head>
 <body>
 
@@ -55,6 +55,10 @@
         <a class="adm-stat dz-ov-tile" id="tile-gpu" href="#h-nodes">
             <span class="adm-stat__label" data-i18n="dz_ov_t_gpu">GPU 忙碌</span>
             <span class="adm-stat__value" id="tv-gpu">—</span>
+            <!-- ZH: 「忙碌」量的是卡有沒有在算（使用率），「執行中」是平台派出去的任務 ——
+                     兩個數字放在一起才看得出對不上（有任務卡卻閒著＝可能卡住；卡在忙卻沒任務＝平台外的人在用）。
+                     擁有者 2026-10-30 選的是「一格加一行小字」，不是拆成兩格。 -->
+            <span class="dz-ov-tile__sub" id="ts-gpu" hidden></span>
         </a>
         <!-- ZH: 連到回報區（#h-reports），不是訊息頁頂端 —— 頂端是公告，
                  從這裡點過去的人要的是「那幾則還沒處理的回報」。 -->
@@ -157,11 +161,11 @@
 <!-- ⚠ ZH: 順序不能動 —— i18n-admin 要在 i18n 之後（它 assign 到 I18N 上）、
          prefs 之前（不然字典還沒併好就先套用一次，畫面會閃一下原文）。 -->
 <script src="i18n.js?v=6de7dc28"></script>
-<script src="i18n-admin.js?v=5c61b49c"></script>
+<script src="i18n-admin.js?v=2a602f73"></script>
 <script src="prefs.js?v=e71609e5"></script>
-<script src="admin-chrome.js?v=978b50d5"></script>
+<script src="admin-chrome.js?v=6c9efcda"></script>
 <!-- ZH: ⓘ 泡泡（外部 AI 的說明）。委派在 document 上，所以放在哪個 script 之前都可以。 -->
 <script src="tip.js?v=0699f4a2"></script>
-<script src="overview.js?v=69ce84f1"></script>
+<script src="overview.js?v=e8eff9fd"></script>
 </body>
 </html>

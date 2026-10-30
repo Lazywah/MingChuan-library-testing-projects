@@ -210,11 +210,19 @@
         // ZH: 資料放在 data-*，提示框由 wireLine() 用 textContent 組 ——
         //     不走 innerHTML，帳號名稱之類的內容就不必擔心跳脫。
         var sum = rows.reduce(function (a, r) { return a + r.consumed; }, 0);
+        // ZH: 感應區以節點為中心、左右各半格，但**夾在圖框內**：頭尾兩塊原本各伸出半格
+        //     （7 天時約 100px、自訂 2 天時半張圖寬），圖框不裁切，整頁就多出一段橫向捲動
+        //     （2026-10-30 版面掃描）。夾掉之後節點不一定在感應區正中間 ——
+        //     --cx 記節點在區塊裡的位置（%），垂直線與圓點照它畫；data-x 給提示框定位。
         var w = n > 1 ? 100 / (n - 1) : 100;
         var hits = rows.map(function (r, k) {
             var share = sum ? Math.round(r.consumed / sum * 100) : 0;
-            return '<span class="adm-line__hit" style="left:' + xOf(k).toFixed(3) + '%;'
-                + 'width:' + w.toFixed(3) + '%;--y:' + (100 - yOf(k)).toFixed(3) + '%"'
+            var x = xOf(k);
+            var lo = Math.max(0, x - w / 2), hi = Math.min(100, x + w / 2);
+            var cx = hi > lo ? (x - lo) / (hi - lo) * 100 : 50;
+            return '<span class="adm-line__hit" data-x="' + x.toFixed(3) + '" style="left:' + lo.toFixed(3) + '%;'
+                + 'width:' + (hi - lo).toFixed(3) + '%;--cx:' + cx.toFixed(3) + '%;'
+                + '--y:' + (100 - yOf(k)).toFixed(3) + '%"'
                 + ' data-date="' + esc(r.date) + '"'
                 + ' data-val="' + esc(num(r.consumed) + ' ' + unit) + '"'
                 + ' data-share="' + esc(T('an_tip_share', '佔期間 {p}%').replace('{p}', share)) + '"'
@@ -311,7 +319,7 @@
             // ZH: 先取消 hidden 才量得到尺寸 —— 隱藏的元素量出來是 0。
             tip.hidden = false;
             var ph = plot.clientHeight;
-            var x = parseFloat(h.style.left) / 100 * plot.clientWidth;
+            var x = parseFloat(h.dataset.x) / 100 * plot.clientWidth;
             var yPx = parseFloat(h.style.getPropertyValue('--y')) / 100 * ph;
             placeTip(tip, plot, x, ph - yPx);
         }
