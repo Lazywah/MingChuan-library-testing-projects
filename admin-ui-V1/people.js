@@ -148,19 +148,16 @@
         });
     }
 
-    function listPager(total) {
-        var pages = Math.max(1, Math.ceil(total / LIST_PER_PAGE));
-        if (pages <= 1) return '';
-        var at = LIST_PAGE + 1;
-        return '<div class="adm-inline tu-pager">'
-            + '<button class="btn btn--minor" type="button" id="pp-prev"'
-            + (at <= 1 ? ' disabled' : '') + '>' + esc(T('pf_pg_prev', '上一頁')) + '</button>'
-            + '<span class="footnote">'
-            + esc(T('pf_pg_of', '第 {a} / {b} 頁').replace('{a}', at).replace('{b}', pages))
-            + '</span>'
-            + '<button class="btn btn--minor" type="button" id="pp-next"'
-            + (at >= pages ? ' disabled' : '') + '>' + esc(T('pf_pg_next', '下一頁')) + '</button>'
-            + '</div>';
+    // ZH: v4.45 分頁器改用共用的 AdminPager（admin-chrome.js）——
+    //     原本這裡、補齊預覽、回收預覽、reports.js 各抄一份 `.tu-pager`，只差 id 前綴。
+    //     id 前綴維持 pp（按鈕仍是 #pp-prev / #pp-next）。
+    // ZH: ⚠ LIST_PAGE 是**從 0 算**的（slice 用），AdminPager 要的是畫面上的頁碼（從 1 算）——
+    //     進出時各換算一次，不要把兩種混在同一個變數裡。
+    function listPagerOpts(total, focus) {
+        return {
+            id: 'pp', page: LIST_PAGE + 1, perPage: LIST_PER_PAGE, total: total, focus: focus,
+            onGo: function (p, which) { LIST_PAGE = p - 1; renderList(which); },
+        };
     }
 
 
@@ -175,7 +172,9 @@
         return e;
     }
 
-    function renderList() {
+    // ZH: `focus`（'prev' / 'next'）只有分頁器換頁時會給 —— 重畫後把焦點放回同一顆
+    //     （到頭變灰就放另一顆），用鍵盤的人不必從頁首重新 Tab。其他呼叫端不給。
+    function renderList(focus) {
         var q = $('q').value.trim().toLowerCase();
         var rows = sortUsers(ALL.filter(function (u) { return matches(u, q); }));
         // ZH: 刪了人、或搜尋縮短清單時，目前這一頁可能已經不存在 —— 退到最後一頁。
@@ -197,21 +196,26 @@
         //     組織改在點開的詳情裡看（見 orgLine）。清單這一條是用來
         //     **找人**的，欄位越少越好找；而學系對職員一律是空的，
         //     那一欄有一半的列是「—」。
+        // ZH: v4.45 第二欄（Email）是 grow 欄（admin.css 的「表格欄寬」）：Email 是唯一長短差很多的欄，
+        //     讓它吃掉剩下的寬度，其他欄只佔內容需要的寬度 —— 不再每欄平均拉開。
         var head = [
-            ['pp_c_user', '帳號'], ['', 'Email'],
+            ['pp_c_user', '帳號'], ['', 'Email', 'grow'],
             ['pp_c_role', '角色'], ['pp_c_state', '狀態'], ['pp_c_source', '來源'],
             ['pp_c_seen', '最後登入'],
         ];
 
+        var pg = listPagerOpts(rows.length, focus);
         $('list').innerHTML =
             '<div class="adm-tablewrap"><table class="adm-table"><thead><tr>'
-            + head.map(function (h) { return '<th>' + esc(T(h[0], h[1])) + '</th>'; }).join('')
+            + head.map(function (h) {
+                return '<th' + (h[2] ? ' class="' + h[2] + '"' : '') + '>' + esc(T(h[0], h[1])) + '</th>';
+            }).join('')
             + '</tr></thead><tbody>'
             + slice.map(function (u) {
                 return '<tr class="is-clickable' + (CURRENT && CURRENT.id === u.id ? ' is-picked' : '')
                     + '" data-id="' + esc(u.id) + '" tabindex="0">'
                     + '<td>' + esc(u.username) + '</td>'
-                    + '<td>' + esc(shownEmail(u)) + '</td>'
+                    + '<td class="grow">' + esc(shownEmail(u)) + '</td>'
                     + '<td>' + esc(T('role_' + u.role, u.role)) + '</td>'
                     + '<td>' + stateCell(u) + '</td>'
                     + '<td>' + esc(u.auth_source || '—') + '</td>'
@@ -219,21 +223,8 @@
                     + '</tr>';
             }).join('')
             + '</tbody></table></div>'
-            + listPager(rows.length);
-
-        // ZH: 換頁之後重畫，剛按的那顆鈕已經不在了 —— 焦點放回同一個位置
-        //     （到頭／到尾時那顆變灰，改放另一顆），用鍵盤的人不必從頁首重新 Tab。
-        [['pp-prev', -1], ['pp-next', 1]].forEach(function (p) {
-            var b = $(p[0]);
-            if (!b) return;
-            b.addEventListener('click', function () {
-                LIST_PAGE += p[1];
-                renderList();
-                var back = $(p[0]);
-                if (back && back.disabled) back = $(p[1] < 0 ? 'pp-next' : 'pp-prev');
-                if (back && !back.disabled) back.focus();
-            });
-        });
+            + AdminPager.html(pg);
+        AdminPager.wire(pg);
 
         $('list').querySelectorAll('tr[data-id]').forEach(function (tr) {
             tr.addEventListener('click', function () { pick(tr.dataset.id); });
@@ -288,7 +279,9 @@
                 '選到哪一天，帳號就用到那天結束（台灣時間）。')) + '</p>'
             // ZH: v4.20 永久有效（擁有者 2026-09-21）—— 勾了就不設到期日，
             //     與一般帳號同形。用途仍然必填：永久的帳號更需要有人說得出它為什麼在。
-            + '<label class="adm-inline" style="margin:.25rem 0 .5rem">'
+            // ZH: v4.45 拿掉 inline 的 margin —— 間距交給容器（.adm-inline 本身的上外距、
+            //     admin.css 的 footnote 規則），各處自帶外距正是間距忽大忽小的來源。
+            + '<label class="adm-inline">'
             +   '<input type="checkbox" id="t-forever"> '
             +   '<span>' + esc(T('tmp_forever', '永久有效（不設到期日，與一般帳號一樣）')) + '</span>'
             + '</label>'
@@ -300,17 +293,19 @@
                 '要自己指定的話 8~20 個字元（MYAI 廠商的規則）。同一組密碼平台與 MYAI 都能用。')) + '</p>'
             // ZH: v4.20 MYAI 開通。**預設不勾** —— 會在廠商端真的建一個帳號，
             //     那不是可以隨手做的事（帳號刪不掉、點數也跟著走）。
-            + '<label class="adm-inline" style="margin:.25rem 0 .5rem">'
+            + '<label class="adm-inline">'
             +   '<input type="checkbox" id="t-myai"> '
             +   '<span>' + esc(T('tmp_myai', '同時開通 MYAI 帳號（需要填 Email；密碼與上面同一組）')) + '</span>'
             + '</label>'
             + '<p class="footnote">' + esc(T('tmp_myai_hint',
                 '不勾的話這個帳號進得了平台，但沒有 MYAI 額度 —— 密碼登入的帳號不會自動開通。')) + '</p>'
-            + '<div class="adm-inline rmod__foot">'
-            + '<button class="btn btn--primary" type="button" id="t-go">'
-            + esc(T('tmp_create', '建立')) + '</button>'
+            // ZH: v4.45 對話框頁腳一律靠右、確認鍵在最右邊（計畫第 3 節「對話框」）：
+            //     ［取消］［下一步］［確認］。原本這一頁有的是確認在前、有的是取消在前。
+            + '<div class="adm-inline rmod__foot rmod__foot--end">'
             + '<button class="btn btn--minor" type="button" id="t-cancel">'
             + esc(T('tmp_cancel', '取消')) + '</button>'
+            + '<button class="btn btn--primary" type="button" id="t-go">'
+            + esc(T('tmp_create', '建立')) + '</button>'
             + '</div>'
             + '<div class="inline-error" id="t-msg" hidden></div>';
 
@@ -399,11 +394,11 @@
             //     密碼不是我們給的這一組，照著交出去對方會登不進 MYAI。
             + (out.myai ? '<div class="kv"><span class="kv__k">MYAI</span>'
                 + '<span class="kv__v">' + esc(myaiText(out.myai)) + '</span></div>' : '')
-            + '<div class="adm-inline rmod__foot">'
-            + '<button class="btn btn--primary" type="button" id="t-copy">'
-            + esc(T('tmp_copy', '複製帳號與密碼')) + '</button>'
+            + '<div class="adm-inline rmod__foot rmod__foot--end">'
             + '<button class="btn btn--minor" type="button" id="t-close">'
             + esc(T('tmp_close', '知道了')) + '</button>'
+            + '<button class="btn btn--primary" type="button" id="t-copy">'
+            + esc(T('tmp_copy', '複製帳號與密碼')) + '</button>'
             + '</div>'
             + '<div class="inline-error" id="t-msg" hidden></div>';
 
@@ -513,8 +508,8 @@
         //     NaN <= now 為 false，所以不會誤標「已到期」；寫出來是因為下面還要用它。
         var forever = !u.expires_at;
         var gone = !forever && Date.parse(u.expires_at) <= Date.now();
-        return '<section class="adm-card adm-card--temp">'
-            + '<div class="adm-card__title">' + esc(T('tmp_ext_title', '臨時帳號')) + '</div>'
+        return '<section class="adm-card adm-card--temp pp-blk">'
+            + blkHead(T('tmp_ext_title', '臨時帳號'))
             + '<div class="kv"><span class="kv__k">' + esc(T('tmp_ext_purpose', '用途')) + '</span>'
             + '<span class="kv__v">' + esc(u.temp_purpose || '—') + '</span></div>'
             + '<div class="kv"><span class="kv__k">' + esc(T('tmp_ext_until', '到期')) + '</span>'
@@ -533,7 +528,8 @@
             // ZH: v4.42 延期也可以改成永久（擁有者 2026-10-30）——
             //     以前只能選日期，想讓一個臨時帳號轉正只好設一個很遠的日子，
             //     而那種帳號到期時沒有人記得它為什麼在。
-            + '<label class="adm-inline">'
+            // ZH: v4.45 pp-check：整個 label 可點，給到 44px 高（admin.css「小控制項的可點範圍」）。
+            + '<label class="adm-inline pp-check">'
             +   '<input type="checkbox" id="x-forever"> '
             +   '<span>' + esc(T('tmp_ext_forever', '改成永久有效（不設到期日）')) + '</span>'
             + '</label>'
@@ -647,14 +643,64 @@
         return line;
     }
 
+    // ══════════════════════════════════════════════════════════════════
+    // ZH: v4.45 個人對話框照**使用頻率**重排（版面整理計畫第 4 節「帳號」）：
+    //       名片（含正在生效的授權／加碼藥丸）
+    //       → 外部 AI（加點、回收點數在前；編輯綁定、解除綁定收進「更多▾」，解除排最底、紅字）
+    //       → 基本資料 → 臨時帳號（有才出現）
+    //       → 「較少用」收合區：開放一次修改、磁碟額外授與、程式實驗室、UUID
+    // ZH: 原本是六張同樣份量的卡排成兩欄，一打開 15–21 個控制項，
+    //     最醒目的 primary 卻是一年用幾次的「開放一次修改」。
+    // ZH: 版面從 .adm-cols 的卡片格改成**單欄一疊**，區塊之間只靠細線分段（.pp-stack）——
+    //     兩欄的卡高度參差、底邊對不齊，那正是「亂」的一部分。
+    //     區塊仍掛 .adm-card：勾選框等既有樣式掛在它底下（.adm-card .field--check…），
+    //     外框則由 .rmod--person .pp-blk 拿掉。
+    // ══════════════════════════════════════════════════════════════════
+
+    // ZH: 區塊標題列：與頁面上的區塊同一套 .adm-head（左＝標題、右＝動作），用 h3。
+    //     `doHtml` 是呼叫端組好的按鈕字串（裡面的文字呼叫端自己 esc）。
+    function blkHead(title, doHtml) {
+        return '<div class="adm-head"><div class="adm-head__what">'
+            + '<h3 class="adm-head__title">' + esc(title) + '</h3></div>'
+            + (doHtml ? '<div class="adm-head__do">' + doHtml + '</div>' : '')
+            + '</div>';
+    }
+
+    // ZH: 名片上「正在生效」的藥丸 —— 授權與加碼收進「較少用」之後，
+    //     **收起來不等於看不到它生效了**：狀態留在名片上，表單才收起來。
+    //     兩格各自由 loadUnlock / loadQuota 填（非同步，誰先回來誰先畫）。
+    var LIVE = { unl: 0, q: 0 };
+    var RARE = null;              // ZH: 「較少用」收合區的控制物件（AdminFold.wire 回傳）
+
+    // ZH: 🔴 `slot` 要由呼叫端在 **await 之前**就抓好（元素，不是 id）。
+    //     載入是非同步的：資料回來時對話框可能已經換人或重畫過，
+    //     這時再用 id 去找，會把上一個人的狀態寫到下一個人的名片上。
+    //     抓好的元素若已經不在畫面上（isConnected 為 false），就代表這筆結果過期了，直接丟掉。
+    function setLive(slot, kind, n, html) {
+        if (!slot || !slot.isConnected) return;
+        LIVE[kind] = n;
+        slot.innerHTML = n ? html : '';
+        slot.hidden = !n;
+        // ZH: 收合區標題上的數字＝生效中的項目數。0 就不顯示（空字串會讓藥丸藏起來）。
+        var total = LIVE.unl + LIVE.q;
+        if (RARE) {
+            RARE.setCount(total ? T('dz_pp_rare_live', '{n} 項生效中').replace('{n}', total) : '');
+        }
+    }
+
     function pcardHtml(u) {
+        // ZH: v4.45「已停用」改用 adm-pill--disabled（--warn-soft 的警示色）—— 與清單那一格同一個顏色。
+        //     原本這裡掛的是 adm-pill--temp（--accent-soft，淺黃），跟「臨時帳號」那顆一模一樣，
+        //     於是停用的帳號在對話框裡看起來像臨時帳號。
         var pills = '<span class="adm-pill">' + esc(T('role_' + u.role, u.role)) + '</span>'
             + (u.is_admin ? '<span class="adm-pill">'
                 + esc(T('pp_c_is_admin', '管理權限')) + '</span>' : '')
             + (u.expires_at ? '<span class="adm-pill adm-pill--temp">'
                 + esc(T('pp_pill_temp', '臨時帳號')) + '</span>' : '')
-            + (!u.is_active ? '<span class="adm-pill adm-pill--temp">'
-                + esc(T('pf_org_off', '停用')) + '</span>' : '');
+            + (!u.is_active ? '<span class="adm-pill adm-pill--disabled">'
+                + esc(T('pf_org_off', '停用')) + '</span>' : '')
+            // ZH: 兩個空槽，等 loadUnlock / loadQuota 回來再填（見 setLive）。
+            + '<span id="pc-live-unl" hidden></span><span id="pc-live-q" hidden></span>';
         // ZH: v4.11 組織從 meta 那一行**搬出來自成一行** —— 它現在可能很長
         //     （學院／學系／單位＋校區），跟來源、最後登入擠在一起會讀不出來。
         var meta = [];
@@ -673,38 +719,40 @@
             + '<div class="pcard__line">' + esc(T('pp_org', '組織')) + '：'
             + esc(orgLine(u) || T('pp_org_none', '—（未設定）')) + '</div>'
             + '<div class="pcard__line">' + esc(meta.join(' · ')) + '</div>'
-            + '<div class="pcard__id mono">' + esc(u.id) + '</div>'
+            // ZH: v4.45 UUID 搬進「較少用」收合區 —— 排查問題時才需要它。
             + '</div>'
             // ZH: v4.4b 停用/刪除搬到名片右側（擁有者裁定 2026-09-03）——
             //     確認在按下去之後用小彈窗問（v4.10 起是打出目標帳號，
             //     見 targetConfirm），所以這裡只是兩顆入口鈕。
+            // ZH: v4.45 刪除帳號**留在原位**（擁有者待決事項 4 的 A 案），
+            //     改成紅字的輕量按鈕：位置不變、仍要打帳號確認，只是不再跟停用一樣重。
             + '<div class="pcard__acts">'
             + '<button class="btn btn--minor" type="button" id="toggle-active">'
             + esc(u.is_active ? T('pp_disable', '停用帳號') : T('pp_enable', '啟用帳號')) + '</button>'
-            + '<button class="btn btn--minor pcard__del" type="button" id="del">'
+            + '<button class="btn--quiet btn--danger" type="button" id="del">'
             + esc(T('pp_delete', '刪除帳號')) + '</button>'
             + '</div></div>';
     }
 
     function basicCard(u) {
-        var head = '<section class="adm-card">'
-            + '<div class="adm-card__title">' + esc(T('pp_basic', '基本資料')) + '</div>';
+        // ZH: v4.45 「編輯」放進標題列右半（與頁面上的區塊同一個位置）；
+        //     進入編輯時不另寫一句說明，改由 renderDetail 掛「編輯中」標示（AdminEditMark）。
+        var open = '<section class="adm-card pp-blk" id="basic-box">';
 
         if (!EDIT_BASIC) {
             // ZH: v4.4 身分資訊都在上面的名片頭 —— 這張卡只剩「編輯」入口，
             //     重複列一次只會讓彈窗更長。
-            return head
+            return open
+                + blkHead(T('pp_basic', '基本資料'),
+                    '<button class="btn btn--minor" type="button" id="b-edit">'
+                    + esc(T('pp_edit', '編輯')) + '</button>')
                 + '<p class="footnote">' + esc(T('pp_ro_hint2',
                     'Email、角色、學系、密碼與管理權限都在這裡改。')) + '</p>'
-                + '<div class="ds__actions">'
-                + '<button class="btn btn--minor" type="button" id="b-edit">'
-                + esc(T('pp_edit', '編輯')) + '</button>'
-                + '</div>'
                 + '<div class="inline-error" id="save-msg" hidden></div>'
                 + '</section>';
         }
 
-        return head
+        return open + blkHead(T('pp_basic', '基本資料'))
             + field('f-email', 'Email', u.email, 'email')
             + field('f-dept', T('pp_c_dept', '學系'), u.department)
             + '<label class="field"><span class="field__label" for="f-role">'
@@ -775,11 +823,12 @@
             + esc(T('pp_confirm_type', '請輸入「{n}」以確認。').replace('{n}', expect))
             + '</p>'
             + field('pwc-in', label || T('pp_confirm_label', '帳號'), '', 'text')
-            + '<div class="adm-inline rmod__foot">'
-            + '<button class="btn btn--primary" type="button" id="pwc-go">'
-            + esc(T('pp_pwc_go', '確認')) + '</button>'
+            // ZH: v4.45 頁腳靠右、確認在最右邊（理由見 openTempForm）。
+            + '<div class="adm-inline rmod__foot rmod__foot--end">'
             + '<button class="btn btn--minor" type="button" id="pwc-cancel">'
             + esc(T('tmp_cancel', '取消')) + '</button>'
+            + '<button class="btn btn--primary" type="button" id="pwc-go">'
+            + esc(T('pp_pwc_go', '確認')) + '</button>'
             + '</div>'
             + '<div class="inline-error" id="pwc-msg" hidden></div>';
         dlg.showModal();
@@ -917,35 +966,58 @@
             + esc(T('pp_close', '關閉')) + '">✕</button></span>'
             + pcardHtml(u)
 
-            + '<div class="adm-cols">'
-            + basicCard(u)
-
-            // ZH: v4.4c 一次性解鎖移到第二順位（擁有者裁定 2026-09-03）——
-            //     它跟「編輯基本資料」是同一類事（改這個人的資料），排在一起。
-            + '<section class="adm-card" id="unlock-box">'
-            + '<div class="adm-card__title">' + esc(T('pp_unlock', '修改個人資料的授權')) + '</div>'
-            + '<span class="skeleton skeleton--line"></span></section>'
-
-            // 額度 / 實驗室（非同步填）
-            + '<section class="adm-card" id="quota-box">'
-            + '<div class="adm-card__title">' + esc(T('pp_quota', '磁碟配額')) + '</div>'
-            + '<span class="skeleton skeleton--line"></span></section>'
-
-            + '<section class="adm-card" id="lab-box">'
-            + '<div class="adm-card__title">' + esc(T('pp_lab', '程式實驗室')) + '</div>'
-            + '<span class="skeleton skeleton--line"></span></section>'
+            // ZH: v4.45 單欄一疊、照使用頻率（見 blkHead 上面那段）。
+            + '<div class="pp-stack">'
 
             // ZH: 外部 AI 的綁定與消耗。放在這裡而不是「數據」那一頁 ——
             //     那一頁是看趨勢的，要查某一個人就該在人這一頁查完。
-            // ZH: v4.4d 外部 AI 佔滿整列（擁有者裁定 2026-09-03）——
-            //     左半是綁定資訊、右半是消耗統計（extRo 的 .ext-cols）。
-            + '<section class="adm-card adm-card--wide" id="ext-box">'
-            + '<div class="adm-card__title">' + esc(T('pp_ext', '外部 AI（MYAI）')) + '</div>'
+            // ZH: v4.4d 左半是綁定資訊、右半是消耗統計（extRo 的 .ext-cols）。
+            // ZH: v4.45 排到第一個 —— 加點／回收點數是這個對話框最常做的事。
+            + '<section class="adm-card pp-blk" id="ext-box">'
+            + blkHead(T('pp_ext', '外部 AI（MYAI）'))
             + '<span class="skeleton skeleton--line"></span></section>'
+
+            + basicCard(u)
+
             // ZH: 只有臨時帳號才出現這張卡。一般帳號看到一個「延期」欄位
             //     只會困惑（他沒有到期日可以延）。
             + (u.expires_at ? tempCard(u) : '')
+
+            // ZH: v4.45 很少用的三樣收進「較少用」（擁有者已接受的做法：CSV 匯入就是這樣收的）。
+            //     內容照樣一打開對話框就載入 —— 名片上的「生效中」藥丸要靠它們的資料，
+            //     而且 API 呼叫與原本一模一樣，只是表單先收著。
+            // ZH: 用 AdminFold.html()：每次換人／進出編輯都會整段重畫，
+            //     它會照記住的開合狀態畫，使用者剛點開的不會被收回去。
+            + AdminFold.html({
+                id: 'pp-rare', key: 'dz_pp_rare', zh: '較少用', tag: 'h3', cls: 'pp-rare',
+                body:
+                    // ZH: v4.4c 一次性解鎖（擁有者裁定 2026-09-03）；v4.45 排在收合區第一個。
+                    '<section class="adm-card pp-blk" id="unlock-box">'
+                    + blkHead(T('pp_unlock', '修改個人資料的授權'))
+                    + '<span class="skeleton skeleton--line"></span></section>'
+
+                    // 額度 / 實驗室（非同步填）
+                    + '<section class="adm-card pp-blk" id="quota-box">'
+                    + blkHead(T('pp_quota', '磁碟配額'))
+                    + '<span class="skeleton skeleton--line"></span></section>'
+
+                    + '<section class="adm-card pp-blk" id="lab-box">'
+                    + blkHead(T('pp_lab', '程式實驗室'))
+                    + '<span class="skeleton skeleton--line"></span></section>'
+
+                    // ZH: UUID：排查問題（看日誌、對資料庫）時才用得到，放最後。
+                    + '<section class="adm-card pp-blk">'
+                    + '<div class="kv"><span class="kv__k">UUID</span>'
+                    + '<span class="kv__v mono">' + esc(u.id) + '</span></div></section>',
+            })
             + '</div>';
+
+        // ZH: 換一個人（或重畫）就從 0 算起 —— 上一個人的「生效中」不能留在這個人身上。
+        LIVE = { unl: 0, q: 0 };
+        RARE = AdminFold.wire($('detail').querySelector('[data-fold="pp-rare"]'));
+        // ZH: 編輯中的標示（色條＋「編輯中」藥丸）取代原本「目前是唯讀」那類句子：
+        //     唯讀是平常狀態，只標出例外。
+        if (EDIT_BASIC) AdminEditMark('basic-box', true);
 
         $('user-close').addEventListener('click', closeUserDialog);
         wireDetail(u);
@@ -1122,7 +1194,9 @@
         //     左＝綁定資訊、右＝消耗統計，並排一眼看完。
         // ZH: 左欄也給小標 —— 右欄有「用了多少」而左欄沒有的話，
         //     兩欄的列從不同高度開始，分隔線對不齊，看起來就是亂。
-        var left = '<div class="adm-card__title">'
+        // ZH: v4.45 兩欄的小標改成 .pp-sub（小一號的灰字）—— 區塊標題已經是 h3，
+        //     同一塊裡再放兩個同樣份量的標題，就分不出哪一層是哪一層。
+        var left = '<div class="pp-sub">'
             + esc(T('pp_ext_binding', '綁定資訊')) + '</div>'
             + kv(T('pp_ext_vendor', '廠商帳號'), b.myai_email || '—')
             + kv(T('pp_ext_sn', '序號'), b.myai_vendor_sn || '—');
@@ -1136,7 +1210,7 @@
         left += kv(T('pp_ext_status', '狀態'),
                    b.status ? T('st_' + b.status, b.status) : '—');
 
-        var right = '<div class="adm-card__title">'
+        var right = '<div class="pp-sub">'
             + esc(T('pp_ext_used', '用了多少（全部期間）')) + '</div>';
         if (c && c.summary && c.summary.tx_count) {
             var s2 = c.summary, p = c.peer || {};
@@ -1171,8 +1245,11 @@
 
     async function loadExtAi(u) {
         var box = $('ext-box');
-        var title = '<div class="adm-card__title">' + esc(T('pp_ext', '外部 AI（MYAI）')) + '</div>';
+        var title = blkHead(T('pp_ext', '外部 AI（MYAI）'));
         var b = null, c = null;
+        // ZH: 這個 <section> 在重讀之間是同一個元素（只換 innerHTML），
+        //     「編輯中」的色條掛在它身上 —— 每一條出口都要明確設一次，不然取消編輯後色條還在。
+        AdminEditMark(box, false);
         try {
             var all = await api('/external-ai/admin/bindings');
             b = (all.bindings || []).filter(function (x) { return x.user_id === u.id; })[0] || null;
@@ -1202,27 +1279,36 @@
             return;
         }
 
-        box.innerHTML = title
+        // ZH: v4.45 標題列右半只留最常用的兩顆：加點、回收點數。
+        //     「編輯綁定」與「解除綁定」收進「更多▾」—— 解除是破壞性的，原本跟加點並排一樣重；
+        //     AdminMenu 會把 danger 項排到最底下、紅字、上面一條線。
+        //     選單項保留原本的 id（e-edit / e-unbind），下面綁事件的地方不用改。
+        // ZH: 編輯中時標題列不放按鈕：儲存／取消在表單底下，旁邊再擺加點會讓人以為能一起存。
+        var acts = EXT_EDIT ? '' :
+            '<button class="btn btn--minor" type="button" id="e-grant">'
+            + esc(T('pp_ext_grant', '加點')) + '</button>'
+            // ZH: v4.43 回收（擁有者 2026-10-30）。緊鄰加點 —— 它們是同一件事的兩個方向。
+            + '<button class="btn btn--minor" type="button" id="e-reclaim">'
+            + esc(T('pp_ext_reclaim', '回收點數')) + '</button>'
+            + AdminMenu.html({ id: 'e-more', items: [
+                { id: 'e-edit', key: 'dz_pp_ext_edit', zh: '編輯綁定' },
+                { id: 'e-unbind', key: 'pp_ext_unbind', zh: '解除綁定', danger: true },
+            ] });
+
+        box.innerHTML = blkHead(T('pp_ext', '外部 AI（MYAI）'), acts)
             + (EXT_EDIT ? extForm(b) : extRo(b, c))
-            + '<div class="ds__actions">'
             + (EXT_EDIT
-                ? '<button class="btn btn--primary" type="button" id="e-save">'
+                ? '<div class="ds__actions">'
+                    + '<button class="btn btn--primary" type="button" id="e-save">'
                     + esc(T('pp_save', '儲存')) + '</button>'
                     + '<button class="btn btn--minor" type="button" id="e-cancel">'
                     + esc(T('pp_cancel', '取消變更')) + '</button>'
-                : '<button class="btn btn--minor" type="button" id="e-edit">'
-                    + esc(T('pp_edit', '編輯')) + '</button>'
-                    + '<button class="btn btn--minor" type="button" id="e-grant">'
-                    + esc(T('pp_ext_grant', '加點')) + '</button>'
-                    // ZH: v4.43 回收（擁有者 2026-10-30）。緊鄰加點 —— 它們是同一件事的兩個方向。
-                    + '<button class="btn btn--minor" type="button" id="e-reclaim">'
-                    + esc(T('pp_ext_reclaim', '回收點數')) + '</button>'
-                    + '<button class="btn btn--minor" type="button" id="e-unbind">'
-                    + esc(T('pp_ext_unbind', '解除綁定')) + '</button>')
-            + '</div>'
+                    + '</div>'
+                : '')
             + '<div id="e-grant-box" hidden></div>'
             + '<div id="e-reclaim-box" hidden></div>'
             + '<div class="inline-error" id="e-msg" hidden></div>';
+        AdminEditMark(box, EXT_EDIT);
 
         if (EXT_EDIT) {
             $('e-save').addEventListener('click', function () { saveExtAi(u, b); });
@@ -1238,6 +1324,7 @@
             $('e-unbind').addEventListener('click', function () { unbindExt(u, b); });
             $('e-grant').addEventListener('click', function () { toggleGrant(u, b); });
             $('e-reclaim').addEventListener('click', function () { toggleReclaim(u, b); });
+            AdminMenu.wire('e-more');
         }
     }
 
@@ -1495,11 +1582,18 @@
 
     async function loadUnlock(u) {
         var box = $('unlock-box');
+        var liveSlot = $('pc-live-unl');      // ZH: await 之前抓（見 setLive）
         try {
             var d = await api('/admin/users/' + encodeURIComponent(u.id) + '/profile-unlock');
             var a = d.active;
+            // ZH: v4.45 生效中就掛到名片上（收合區收著也看得到）。
+            //     用 pp-pill-live（外框、不填色）而不是 adm-pill--ok：後者與「臨時帳號」同一個
+            //     --accent-soft 底色，並排在名片上會讀成同一類標籤（見 admin.css 的 .pp-pill-live）。
+            setLive(liveSlot, 'unl', a ? 1 : 0,
+                    '<span class="adm-pill pp-pill-live">'
+                    + esc(T('dz_pp_live_unl', '開放修改中')) + '</span>');
             box.innerHTML =
-                '<div class="adm-card__title">' + esc(T('pp_unlock', '修改個人資料的授權')) + '</div>'
+                blkHead(T('pp_unlock', '修改個人資料的授權'))
                 + (a
                     // ZH: 已開放時把**範圍**列出來 —— 只說「已開放」的話,
                     //     管理者不知道他能改哪幾項,而範圍是核可時就決定好的。
@@ -1511,7 +1605,7 @@
                             }).join('、')))
                       + '　<span class="footnote">' + esc(TW.date(a.granted_at))
                       + (a.reason ? '　' + esc(a.reason) : '') + '</span></span>'
-                      + '<button class="btn btn--minor" type="button" id="unl-cancel">'
+                      + '<button class="btn--quiet" type="button" id="unl-cancel">'
                       + esc(T('pp_unl_cancel', '收回')) + '</button></div>'
                     : '<p class="footnote">' + esc(T('pp_unl_locked', '目前鎖定中。')) + '</p>')
                 + (d.last_used
@@ -1519,14 +1613,17 @@
                       + esc(T('pp_unl_last', '上次修改：{d}').replace('{d}', TW.date(d.last_used.used_at)))
                       + '</p>'
                     : '')
-                // ZH: 核可表單常駐（不收進 fold）—— 使用者是用「問題回報」來申請的,
-                //     管理者看到申請時人已經在這一頁上了,再多一次展開只是多一步。
+                // ZH: v4.45 核可表單（連同整個 #unlock-box）收進「較少用」的 fold（計畫第 4 節）——
+                //     原本常駐，理由是「看到申請時人已經在這一頁上了，再多一次展開只是多一步」；
+                //     但它一年幾次，常駐的代價是每次打開對話框都多一整塊。fold 收著時，
+                //     名片上的「開放修改中」標籤（上面的 setLive）照樣顯示目前的狀態。
                 // ZH: v4.4c 範圍**依身分自動決定**（擁有者裁定 2026-09-03）：
                 //     不再逐項勾選 —— 老師/學生＝校區＋學系、職員＝校區＋單位、
                 //     訪客＝僅校區，一次全給。逐項挑的需求從沒出現過，
                 //     挑錯反而會讓對方改到一半發現差一項、再跑一次申請。
-                + '<div class="adm-card__title" style="margin-top:1rem">'
-                + esc(T('pp_unl_grant', '開放一次修改')) + '</div>'
+                // ZH: v4.45 拿掉第二個小標（原本寫一次「開放一次修改」當小標、
+                //     按鈕又寫一次，還帶 inline 的 margin）；按鈕從 primary 降成 minor ——
+                //     它是一年幾次、有人來申請才做的事，不該是整個對話框最醒目的按鈕。
                 + '<p class="footnote">'
                 + esc(T('pp_unl_scope', '會開放：{f}（依他的身分決定）').replace('{f}',
                     unlockFieldsFor(u).map(function (f) {
@@ -1535,7 +1632,7 @@
                     }).join('、'))) + '</p>'
                 + field('unl-reason', T('pp_unl_reason', '原因（會寫進稽核）'), '')
                 + '<div class="ds__actions">'
-                + '<button class="btn btn--primary" type="button" id="unl-go">'
+                + '<button class="btn btn--minor" type="button" id="unl-go">'
                 + esc(T('pp_unl_do', '開放一次修改')) + '</button></div>'
                 + '<div class="inline-error" id="unl-msg" hidden></div>';
 
@@ -1545,8 +1642,7 @@
             // ZH: 「收回」＝把還沒用掉的那筆標成已用掉。不刪紀錄 —— 稽核要看得出開過。
             if (cancel) cancel.addEventListener('click', function () { grantUnlock(u, true); });
         } catch (e) {
-            box.innerHTML = '<div class="adm-card__title">'
-                + esc(T('pp_unlock', '修改個人資料的授權')) + '</div>'
+            box.innerHTML = blkHead(T('pp_unlock', '修改個人資料的授權'))
                 + '<p class="footnote">' + esc(e.message) + '</p>';
         }
     }
@@ -1560,10 +1656,22 @@
         return out;
     }
 
-    // ZH: v4.10b 核可要確認（等於放行那個人改自己的組織資料）；
-    //     **收回不必** —— 撤銷是把權限收回來，收錯了再核可一次就好。
+    // ZH: v4.10b 核可要確認（等於放行那個人改自己的組織資料）。
+    // ZH: v4.45 **收回也要確認**（版面整理計畫第 4 節，擁有者核可）。v4.10b 當時的理由是
+    //     「收錯了再核可一次就好」—— 但收回之後對方正在填的那一次就作廢了，
+    //     而且這顆鈕現在跟磁碟加碼的「收回」在同一個收合區裡，兩個意思不同的「收回」
+    //     沒有一道確認就很容易點錯。確認方式與其他操作相同（打出目標帳號）。
+    // ZH: 🔴 只是前端多一道門 —— 送出的 API 與原本**完全相同**（revoke 端點不收
+    //     confirm_username，這裡也不送），後端的行為沒有任何改變。
     async function grantUnlock(u, revoke) {
-        if (revoke) return sendUnlock(u, true, null);
+        if (revoke) {
+            targetConfirm(T('dz_pp_unl_rv_title', '確認收回修改授權'),
+                          T('dz_pp_unl_rv_hint', '收回之後 {n} 就不能再改，要改得重新開放一次。')
+                              .replace('{n}', u.username),
+                          u.username,
+                          async function () { await sendUnlock(u, true, null); });
+            return;
+        }
         targetConfirm(T('unl_confirm_title', '確認開放修改'), null, u.username,
                       async function (name) { await sendUnlock(u, false, name); });
     }
@@ -1587,18 +1695,26 @@
             loadUnlock(u);          // ZH: 重讀 —— 狀態由後端決定,不要在前端自己推
         } catch (e) {
             if (msg) { msg.textContent = e.message; msg.hidden = false; }
-            // ZH: 核可那條是從彈窗來的 —— 丟回去讓彈窗顯示、彈窗不關。
-            if (!revoke) throw e;
+            // ZH: 兩條都是從確認彈窗來的（v4.45 起收回也是）——
+            //     丟回去讓彈窗顯示、彈窗不關，不用重打。
+            throw e;
         }
     }
 
     async function loadQuota(u) {
         var box = $('quota-box');
+        var liveSlot = $('pc-live-q');        // ZH: await 之前抓（見 setLive）
         try {
             var q = await api('/admin/quota/' + encodeURIComponent(u.id));
             var live = (q.grants || []).filter(function (g) { return !g.revoked_at; });
+            // ZH: v4.45 有加碼就掛到名片上（收合區收著也看得到）。寫**總共加了幾 GB**，
+            //     不是「有加碼」—— 數字才回答得了「他現在到底有多少」。
+            var extra = live.reduce(function (s, g) { return s + (Number(g.extra_quota_gb) || 0); }, 0);
+            setLive(liveSlot, 'q', live.length,
+                    '<span class="adm-pill pp-pill-live">'
+                    + esc(T('dz_pp_live_q', '磁碟 +{g} GB').replace('{g}', extra)) + '</span>');
             box.innerHTML =
-                '<div class="adm-card__title">' + esc(T('pp_quota', '磁碟配額')) + '</div>'
+                blkHead(T('pp_quota', '磁碟配額'))
                 + '<div class="kv"><span class="kv__k">' + esc(T('pp_q_base', '基本')) + '</span>'
                 + '<span class="kv__v">' + esc(q.base_quota_gb) + ' GB</span></div>'
                 + '<div class="kv"><span class="kv__k">' + esc(T('pp_q_effective', '實際可用')) + '</span>'
@@ -1615,44 +1731,54 @@
                         ? ' ' + esc(T('pp_q_over', '（超出配額）')) : ''))
                 + '</span></div>'
 
-                + '<div class="adm-card__title" style="margin-top:1rem">'
-                + esc(T('pp_q_grants', '額外授與')) + '</div>'
+                // ZH: v4.45 小標從「與區塊標題同樣份量、帶 inline margin 的 div」改成 .pp-sub。
+                + '<div class="pp-sub">' + esc(T('pp_q_grants', '額外授與')) + '</div>'
                 + (live.length
                     ? live.map(function (g) {
                         return '<div class="adm-alert">'
                             + '<span>+' + esc(g.extra_quota_gb) + ' GB　'
                             + '<span class="footnote">' + esc(g.reason || '')
                             + (g.expires_at ? '　→ ' + esc(TW.date(g.expires_at)) : '') + '</span></span>'
-                            + '<button class="btn btn--minor" type="button" data-revoke="' + esc(g.id) + '">'
+                            + '<button class="btn--quiet" type="button" data-revoke="' + esc(g.id) + '"'
+                            + ' data-gb="' + esc(g.extra_quota_gb) + '">'
                             + esc(T('pp_q_revoke', '收回')) + '</button></div>';
                     }).join('')
                     : '<p class="footnote">' + esc(T('pp_q_none', '沒有額外授與。')) + '</p>')
 
-                + '<div class="adm-inline">'
-                // ZH: placeholder 不算可及的名稱 —— 一填字就消失了，
-                //     而讀螢幕的人本來就聽不到它。要另外給 aria-label。
-                + '<input class="field__input" id="g-gb" type="number" min="1" placeholder="GB"'
-                + ' aria-label="' + esc(T('pp_q_add_gb', '要加幾 GB')) + '">'
-                + '<input class="field__input" id="g-why" type="text" placeholder="'
-                + esc(T('pp_q_reason', '原因（必填）')) + '"'
-                + ' aria-label="' + esc(T('pp_q_reason', '原因（必填）')) + '">'
-                // ZH: 日期欄位一定要有標示 —— 一個空的 date 框看不出是「到期日」
-                //     還是「起始日」，而填錯的後果是額度提早消失。
-                + '<input class="field__input" id="g-exp" type="date" title="'
-                + esc(T('pp_q_expires', '到期日（可留空）')) + '" aria-label="'
-                + esc(T('pp_q_expires', '到期日（可留空）')) + '">'
+                // ZH: v4.45 三個欄位各自帶**看得見的標籤**，寬度照內容分級（GB 數字、原因文字、日期）。
+                //     原本是三個只有 placeholder 的框擠在 428px 的卡片裡，換成兩三行，
+                //     而日期框完全看不出是「到期日」還是「起始日」—— 填錯的後果是額度提早消失。
+                //     欄位 id（g-gb / g-why / g-exp）不變。
+                + '<div class="adm-inline pp-qrow">'
+                + '<label class="field pp-qrow__gb">'
+                + '<span class="field__label">' + esc(T('pp_q_add_gb', '要加幾 GB')) + '</span>'
+                + '<input class="field__input" id="g-gb" type="number" min="1" placeholder="GB"></label>'
+                + '<label class="field pp-qrow__why">'
+                + '<span class="field__label">' + esc(T('pp_q_reason', '原因（必填）')) + '</span>'
+                + '<input class="field__input" id="g-why" type="text"></label>'
+                + '<label class="field pp-qrow__exp">'
+                + '<span class="field__label">' + esc(T('pp_q_expires', '到期日（可留空）')) + '</span>'
+                + '<input class="field__input" id="g-exp" type="date"></label>'
                 + '<button class="btn btn--minor" type="button" id="g-add">'
                 + esc(T('pp_q_add', '加額度')) + '</button>'
                 + '</div>'
                 + '<div class="inline-error" id="q-msg" hidden></div>';
 
+            // ZH: v4.45 收回加碼要確認（計畫第 4 節「兩種收回補上確認步驟」）。
+            //     確認句寫出**收回幾 GB**（數字留在確認框裡，與加點、回收同一條理由）。
+            //     送出的 API 與原本完全相同（DELETE，不帶任何確認欄位）；
+            //     失敗時丟回確認彈窗顯示，彈窗不關。
             box.querySelectorAll('[data-revoke]').forEach(function (b) {
-                b.addEventListener('click', async function () {
-                    try {
-                        await api('/admin/quota/grant/' + encodeURIComponent(b.dataset.revoke),
-                                  { method: 'DELETE' });
-                        loadQuota(u);
-                    } catch (e) { say('q-msg', e.message); }
+                b.addEventListener('click', function () {
+                    targetConfirm(T('dz_pp_q_rv_title', '確認收回磁碟加碼'),
+                        T('dz_pp_q_rv_hint', '要收回 {n} 的 +{g} GB 額外授與嗎？實際可用的配額會跟著變小。')
+                            .replace('{n}', u.username).replace('{g}', b.dataset.gb || '?'),
+                        u.username,
+                        async function () {
+                            await api('/admin/quota/grant/' + encodeURIComponent(b.dataset.revoke),
+                                      { method: 'DELETE' });
+                            loadQuota(u);
+                        });
                 });
             });
 
@@ -1676,7 +1802,7 @@
                 } catch (e) { say('q-msg', e.message); }
             });
         } catch (e) {
-            box.innerHTML = '<div class="adm-card__title">' + esc(T('pp_quota', '磁碟配額')) + '</div>'
+            box.innerHTML = blkHead(T('pp_quota', '磁碟配額'))
                 + '<p class="footnote">' + esc(T('ov_fail_part', '這一段暫時讀不到（{w}）')
                     .replace('{w}', e.message)) + '</p>';
         }
@@ -1690,7 +1816,7 @@
             var list = (all.sessions || all || []).filter(function (s) {
                 return s.user_id === u.id;
             });
-            box.innerHTML = '<div class="adm-card__title">' + esc(T('pp_lab', '程式實驗室')) + '</div>'
+            box.innerHTML = blkHead(T('pp_lab', '程式實驗室'))
                 + (list.length
                     ? list.map(function (s) {
                         // ZH: 顯示**使用者取的名字**，容器名放在後面當佐證。
@@ -1710,29 +1836,36 @@
                             //     第二份存檔的按鈕會**看得到但按不動**。
                             //     （目前一次只開一份，所以這是預防性的；但約束在別處，
                             //       這裡不該建立在「那邊不會改」之上。）
-                            + '<button class="btn btn--minor" type="button" data-stop="'
+                            // ZH: v4.45 列內動作用輕量按鈕、紅字（強制關閉會丟掉他沒存的東西）。
+                            + '<button class="btn--quiet btn--danger" type="button" data-stop="'
                             + esc(s.session_name || '') + '">'
                             + esc(T('pp_lab_stop', '強制關閉')) + '</button></div>';
                     }).join('')
-                    : '<p class="footnote">' + esc(T('pp_lab_none', '目前沒有執行中的實驗室。')) + '</p>')
-                + '<div class="inline-error" id="lab-msg" hidden></div>';
+                    : '<p class="footnote">' + esc(T('pp_lab_none', '目前沒有執行中的實驗室。')) + '</p>');
+            // ZH: v4.45 拿掉原本的 #lab-msg —— 強制關閉的錯誤改在確認彈窗裡顯示（見下面），
+            //     這一塊已經沒有人寫，留著只是一個永遠空著的元素。
 
             box.querySelectorAll('[data-stop]').forEach(function (btn) {
-                btn.addEventListener('click', async function () {
-                    if (!confirm(T('pp_lab_confirm', '要強制關閉「{n}」的實驗室嗎？')
-                        .replace('{n}', u.username))) return;
-                    try {
-                        // ZH: 明確指名要關哪一份。留空時後端會關「正在跑的那一份」，
-                        //     但既然畫面上就是按著某一列，指名比較不會有意外。
-                        var q = btn.dataset.stop ? '?session=' + encodeURIComponent(btn.dataset.stop) : '';
-                        await api('/admin/lab/sessions/' + encodeURIComponent(u.id) + '/force-stop' + q,
-                                  { method: 'POST' });
-                        loadLab(u);
-                    } catch (e) { say('lab-msg', e.message); }
+                // ZH: v4.45 確認從原生 confirm() 改成 targetConfirm（打出目標帳號）——
+                //     這頁其他會影響到人的操作都是這一套，只有這裡是一顆按 Enter 就過的原生框。
+                //     原本那句「要強制關閉 X 的實驗室嗎？」留在確認框的說明裡。
+                // ZH: 送出的 API 與原本完全相同；失敗時丟回確認彈窗顯示（彈窗不關，不用重打）。
+                btn.addEventListener('click', function () {
+                    targetConfirm(T('dz_pp_lab_title', '確認強制關閉實驗室'),
+                        T('pp_lab_confirm', '要強制關閉「{n}」的實驗室嗎？').replace('{n}', u.username),
+                        u.username,
+                        async function () {
+                            // ZH: 明確指名要關哪一份。留空時後端會關「正在跑的那一份」，
+                            //     但既然畫面上就是按著某一列，指名比較不會有意外。
+                            var q = btn.dataset.stop ? '?session=' + encodeURIComponent(btn.dataset.stop) : '';
+                            await api('/admin/lab/sessions/' + encodeURIComponent(u.id) + '/force-stop' + q,
+                                      { method: 'POST' });
+                            loadLab(u);
+                        });
                 });
             });
         } catch (e) {
-            box.innerHTML = '<div class="adm-card__title">' + esc(T('pp_lab', '程式實驗室')) + '</div>'
+            box.innerHTML = blkHead(T('pp_lab', '程式實驗室'))
                 + '<p class="footnote">' + esc(T('ov_fail_part', '這一段暫時讀不到（{w}）')
                     .replace('{w}', e.message)) + '</p>';
         }
@@ -1783,7 +1916,7 @@
             + field('ti-why', T('tmp_purpose', '用途（必填）'), '')
             // ZH: v4.20 —— 勾了的話**每一列都要有 Email**，否則預覽就會擋下來
             //     （後端驗，理由：沒 Email 會在廠商端留下救不回密碼的垃圾帳號）。
-            + '<label class="adm-inline" style="margin:.25rem 0 .5rem">'
+            + '<label class="adm-inline">'
             +   '<input type="checkbox" id="ti-myai"> '
             +   '<span>' + esc(T('tmpi_myai', '同時開通 MYAI 帳號（每一列都要有 Email；密碼與該列同一組）')) + '</span>'
             + '</label>'
@@ -1811,13 +1944,14 @@
             + esc(T('tmpi_pick', '選擇檔案（CSV / Excel）')) + '</button>'
             + '<span class="footnote" id="ti-fname">' + esc(T('tmpi_nofile', '尚未選擇')) + '</span>'
             + '</div>'
-            + '<div class="adm-inline rmod__foot">'
+            // ZH: v4.45 頁腳順序：［取消］［預覽］［確認建立］—— 確認在最右邊（見 openTempForm）。
+            + '<div class="adm-inline rmod__foot rmod__foot--end">'
+            + '<button class="btn btn--minor" type="button" id="ti-cancel">'
+            + esc(T('tmp_cancel', '取消')) + '</button>'
             + '<button class="btn btn--minor" type="button" id="ti-preview">'
             + esc(T('tmpi_preview', '預覽')) + '</button>'
             + '<button class="btn btn--primary" type="button" id="ti-apply" hidden>'
             + esc(T('tmpi_apply', '確認建立')) + '</button>'
-            + '<button class="btn btn--minor" type="button" id="ti-cancel">'
-            + esc(T('tmp_cancel', '取消')) + '</button>'
             + '</div>'
             + '<div id="ti-result" aria-live="polite"></div>'
             + '<div class="inline-error" id="ti-msg" hidden></div>';
@@ -1968,13 +2102,13 @@
                   }).join('')
                   + '</tbody></table></div>'
                 : '')
-            + '<div class="adm-inline rmod__foot">'
+            + '<div class="adm-inline rmod__foot rmod__foot--end">'
+            + '<button class="btn btn--minor" type="button" id="ti-close">'
+            + esc(T('tmp_close', '知道了')) + '</button>'
             + (gen.length
                 ? '<button class="btn btn--primary" type="button" id="ti-copy">'
                   + esc(T('tmpi_copy', '複製全部帳密')) + '</button>'
                 : '')
-            + '<button class="btn btn--minor" type="button" id="ti-close">'
-            + esc(T('tmp_close', '知道了')) + '</button>'
             + '</div>'
             + '<div class="inline-error" id="ti-msg" hidden></div>';
         if (gen.length) {
@@ -2006,7 +2140,8 @@
             + esc(T('pf_close', '關閉')) + '">✕</button></form>'
             + '<h2 class="rmod__title">' + esc(T('alma_title', 'Alma 身分回填')) + '</h2>'
             + inner
-            + '<div class="adm-inline rmod__foot">' + foot + '</div>'
+            // ZH: v4.45 頁腳靠右；呼叫端把確認鍵放在最後（最右邊），見 openAlma。
+            + '<div class="adm-inline rmod__foot rmod__foot--end">' + foot + '</div>'
             + '<div class="inline-error" id="alma-msg" hidden></div>';
     }
 
@@ -2051,12 +2186,12 @@
             + esc(T('alma_checked', '檢查了 {n} 人，{c} 人有欄位可以補。')
                 .replace('{n}', num(r.checked)).replace('{c}', num(r.changed))) + '</p>'
             + almaTable(r.details || []),
-            (r.changed
+            '<button class="btn btn--minor" type="button" id="alma-close">'
+            + esc(r.changed ? T('tmp_cancel', '取消') : T('tmp_close', '知道了')) + '</button>'
+            + (r.changed
                 ? '<button class="btn btn--primary" type="button" id="alma-go">'
                   + esc(T('alma_apply', '確認回填')) + '</button>'
-                : '')
-            + '<button class="btn btn--minor" type="button" id="alma-close">'
-            + esc(r.changed ? T('tmp_cancel', '取消') : T('tmp_close', '知道了')) + '</button>');
+                : ''));
         $('alma-close').addEventListener('click', function () { dlg.close(); });
         if (r.changed) {
             $('alma-go').addEventListener('click', function () { applyAlma(dlg); });
@@ -2151,9 +2286,11 @@
         renderBatch();
     }
 
-    function renderBatch() {
+    // ZH: `focus` = { key, which }：只有某張子表的分頁器換頁時才給（見 blockTable）。
+    function renderBatch(focus) {
         if (!BX) return;
         var m = BX.myai, un = BX.un, pv = BX.prov;
+        BX_PAGERS = [];
 
         // ZH: 同步時間一定要講 —— 一份三天前的帳號清單看起來跟今天的一模一樣。
         $('bx-sum').textContent = m.synced_at
@@ -2168,7 +2305,8 @@
         var C_ACC = ['pp_bx_c_acc', '帳號'];
         // ZH: 中英一樣，不需要 key。（給了 key 反而會被 check_i18n 報成
         //     「沒有人用」—— 它的判準是 key 後面緊接一個**含中文**的 fallback。）
-        var C_MAIL = ['', 'Email'];
+        // ZH: v4.45 Email 是 grow 欄：吃掉剩下的寬度，其他欄只佔內容需要的寬度。
+        var C_MAIL = ['', 'Email', 'grow'];
         var C_TAG = ['pp_bx_c_tag', '狀況'];
 
         $('bx-body').innerHTML =
@@ -2193,7 +2331,9 @@
                               pill: true },
                             { t: num(r.points), cls: 'num' },
                             // ZH: 切換鈕。vendor_sn 進 data 屬性要 esc —— 它是後端來的值。
-                            { html: '<button class="btn btn--minor" type="button"'
+                            // ZH: v4.45 列內動作改用輕量按鈕（最多 20 列，每列一顆外框鈕太吵）；
+                            //     點擊範圍照樣 44px。
+                            { html: '<button class="btn--quiet" type="button"'
                                 + ' data-excl="' + esc(r.vendor_sn) + '"'
                                 + ' data-on="' + (r.excluded ? '1' : '0') + '">'
                                 + esc(r.excluded ? T('pp_bx_incl_do', '列入計算')
@@ -2227,6 +2367,12 @@
             + (total === 0
                 ? '<p class="footnote">' + esc(T('pp_bx_allgood', '兩邊都對上了，也沒有人在等開通。')) + '</p>'
                 : '');
+
+        // ZH: 分頁器要等標記進了 DOM 才接得上。剛換頁的那一張把焦點放回同一顆鈕。
+        BX_PAGERS.forEach(function (o) {
+            if (focus && focus.key === o.key) o.focus = focus.which;
+            AdminPager.wire(o);
+        });
     }
 
     // ZH: 每一塊：標題（含筆數）+ 一句說明 + 表格。**空的就整塊不畫** ——
@@ -2235,13 +2381,38 @@
     // ZH: 🔴 用表格不用清單。原本是 flex 的 space-between，於是名字在最左、
     //     點數在最右，中間空了 1138px（實測）—— 要把一列讀完得橫掃整個螢幕。
     //     表格的欄位會對齊，而且**有欄位標題**告訴你右邊那個數字是什麼。
-    var BX_MAX = 20;
+    // ZH: v4.45 超過 20 筆改成**分頁**（AdminPager），取代原本的「還有 N 筆。」——
+    //     那句話是死路：知道還有 37 筆，卻沒有任何辦法看到它們。
+    //     每張子表各記自己的頁碼（以標題 key 為鍵）；#bx-body 每次整段重畫，
+    //     頁碼不能放在 DOM 上，所以放在這裡。重讀資料（同步、配對、切換列入計算）後
+    //     列數可能變少，畫的時候會把頁碼夾回範圍內。
+    // ZH: 分頁器的 id 前綴是 'bx-' + key（按鈕是 #bx-<key>-prev / -next），五張表不會撞 id。
+    var BX_PER_PAGE = 20;
+    var BX_PAGE = {};
+    var BX_PAGERS = [];           // ZH: 這一輪畫出來的分頁器，renderBatch 畫完再一起接上
+    // ZH: 「要處理」的兩張（對不上的）數量用警示色；其他三張是名單，用中性灰 ——
+    //     全部上色等於沒有一個被凸顯。
+    var BX_WARN = { pp_bx_un_users: true, pp_bx_un_myai: true };
+
     function blockTable(key, zh, whyKey, whyZh, cols, rows) {
         if (!rows.length) return '';
-        var shown = rows.slice(0, BX_MAX);
+        var pages = Math.max(1, Math.ceil(rows.length / BX_PER_PAGE));
+        var page = Math.min(Math.max(1, BX_PAGE[key] || 1), pages);
+        BX_PAGE[key] = page;
+        var shown = rows.slice((page - 1) * BX_PER_PAGE, page * BX_PER_PAGE);
+        var pg = {
+            id: 'bx-' + key, key: key, page: page, pages: pages, total: rows.length,
+            onGo: function (p, which) { BX_PAGE[key] = p; renderBatch({ key: key, which: which }); },
+        };
+        BX_PAGERS.push(pg);
+        // ZH: v4.45 子表標題改用共用的 .adm-head（h3），數量藥丸放在標題**裡面**、緊貼著字。
         return '<section class="adm-block">'
-            + '<div class="adm-block__head">'
-            + '<h3 class="adm-block__title">' + esc(T(key, zh))
+            + '<div class="adm-head"><div class="adm-head__what">'
+            + '<h3 class="adm-head__title">' + esc(T(key, zh))
+            // ZH: 筆數緊跟著標題。原本靠 space-between 推到最右邊，
+            //     離標題 1246px —— 那個數字是在講誰，完全看不出來。
+            + ' <span class="adm-head__count' + (BX_WARN[key] ? ' adm-head__count--warn' : '') + '">'
+            + esc(num(rows.length)) + '</span>'
             // ZH: v3.9 說明收進標題旁的 icon（擁有者裁定 2026-08-30）——
             //     三張小表各掛一段兩行說明，加起來比表格本身還長。
             // ZH: ⚠ 泡泡的 id 用 key 推出來（'tip-' + key）。三張表共用這支，
@@ -2255,11 +2426,7 @@
             + esc(T(whyKey, whyZh)) + '</span>'
             + '</span>'
             + '</h3>'
-            // ZH: 筆數緊跟著標題。原本靠 space-between 推到最右邊，
-            //     離標題 1246px —— 那個數字是在講誰，完全看不出來。
-            + '<span class="adm-block__n">' + esc(rows.length) + '</span>'
-            + '<span class="topbar__spacer"></span>'
-            + '</div>'
+            + '</div></div>'
             + '<div class="adm-tablewrap adm-tablewrap--narrow">'
             + '<table class="adm-table"><thead><tr>'
             + cols.map(function (c) {
@@ -2268,7 +2435,7 @@
             }).join('')
             + '</tr></thead><tbody>'
             + shown.map(function (r) {
-                return '<tr>' + r.map(function (cell) {
+                return '<tr>' + r.map(function (cell, ci) {
                     // ZH: v4.5 `html` 型儲存格 —— 放按鈕用。**只給這支自己組的
                     //     字串**，不接任何後端資料（後端來的值一律走 esc）。
                     if (cell.html != null) {
@@ -2280,15 +2447,17 @@
                             ? '<span class="adm-pill adm-pill--temp">' + esc(cell.t) + '</span>'
                             : '<span class="footnote">—</span>') + '</td>';
                     }
-                    return '<td' + (cell.cls ? ' class="' + esc(cell.cls) + '"' : '') + '>'
+                    // ZH: v4.45 一般文字格沒指定 class 時沿用欄位的 class（例如 Email 欄的 grow），
+                    //     表頭與內容才會是同一種欄寬規則。
+                    var cls = cell.cls || (cols[ci] && cols[ci][2]) || '';
+                    return '<td' + (cls ? ' class="' + esc(cls) + '"' : '') + '>'
                         + esc(cell.t) + '</td>';
                 }).join('') + '</tr>';
             }).join('')
             + '</tbody></table></div>'
-            + (rows.length > shown.length
-                ? '<p class="footnote">' + esc(T('pp_bx_more', '還有 {n} 筆。')
-                    .replace('{n}', rows.length - shown.length)) + '</p>'
-                : '')
+            // ZH: 只有一頁時 AdminPager 只寫「共 N 筆」—— 但標題旁已經有數量藥丸，
+            //     再寫一次是重複，所以一頁的表不畫分頁器。
+            + (pages > 1 ? AdminPager.html(pg) : '')
             + '</section>';
     }
 
@@ -2427,6 +2596,12 @@
         function btns() {
             $('tu-apply').hidden = !PREVIEWED;
             $('tu-cancel').hidden = !PREVIEWED;
+            // ZH: v4.45 確認鍵直接寫出人數與點數（計畫第 4 節）——「確認補齊」四個字
+            //     擋不住「多打一個 0」，「確認補齊 87 人，共 4,350 點」擋得住。
+            //     數字是預覽那一刻後端算的（TU_LAST）；送出時後端會再算一次，
+            //     確認框也會再寫一次（見 apply）。按鈕沒有預覽時是藏著的，所以不必給無數字的版本。
+            $('tu-apply').textContent = T('dz_pp_tu_apply_n', '確認補齊 {n} 人，共 {p} 點')
+                .replace('{n}', num(TU_LAST.count)).replace('{p}', num(TU_LAST.points));
             // ZH: 有預覽在畫面上時，再按一次是拿**現在的**餘額重算 ——
             //     字樣跟著改（預覽→重算），不然看起來像同一件事按兩次。
             $('tu-preview').textContent = PREVIEWED
@@ -2499,7 +2674,8 @@
 
         // ZH: 10 人一頁（擁有者裁定 2026-09-03：整班補點時名單太長）。
         //     只是**顯示**分頁 —— 送出的仍是整批（後端本來就重新算，見上面 🔴）。
-        function renderPreviewPage(r, page) {
+        // ZH: `focus`（'prev' / 'next'）只在分頁器換頁時給，重畫後焦點回到同一顆鈕。
+        function renderPreviewPage(r, page, focus) {
             var list = filtered(r);
             if (!list.length) {
                 $('tu-result').innerHTML = '<p class="footnote">'
@@ -2509,40 +2685,30 @@
             var pages = Math.max(1, Math.ceil(list.length / TU_PAGE_SIZE));
             page = Math.min(Math.max(1, page), pages);
             var slice = list.slice((page - 1) * TU_PAGE_SIZE, page * TU_PAGE_SIZE);
+            // ZH: v4.45 分頁器改用共用的 AdminPager（id 前綴 tu，按鈕仍是 #tu-prev / #tu-next），
+            //     並一直顯示總筆數（篩選後的筆數 —— 那是這張表現在有幾列）。
+            var pg = { id: 'tu', page: page, pages: pages, total: list.length, focus: focus,
+                       onGo: function (p, which) { renderPreviewPage(r, p, which); } };
             // ZH: .adm-tablewrap 是必要的（橫向捲動）—— 自己組光溜溜的 <table>，
             //     窄畫面會把整頁撐寬。與本頁其他表格同一套。
+            // ZH: v4.45 帳號欄是 grow 欄；「移除」改成列內的輕量按鈕。
             $('tu-result').innerHTML =
                 '<div class="adm-tablewrap"><table class="adm-table"><thead><tr>'
-                + '<th>' + esc(T('pf_topup_who', '帳號')) + '</th>'
+                + '<th class="grow">' + esc(T('pf_topup_who', '帳號')) + '</th>'
                 + '<th class="num">' + esc(T('pf_topup_add', '要補')) + '</th>'
                 + '<th><span class="sr-only">' + esc(T('pf_topup_act', '操作')) + '</span></th>'
                 + '</tr></thead><tbody>'
                 + slice.map(function (x) {
-                    return '<tr><td>' + esc(x.email) + '</td>'
+                    return '<tr><td class="grow">' + esc(x.email) + '</td>'
                          + '<td class="num">' + num(x.points) + '</td>'
-                         + '<td class="tu-act"><button class="btn btn--minor" type="button"'
+                         + '<td class="tu-act"><button class="btn--quiet" type="button"'
                          + ' data-rm="' + esc(x.email) + '"'
                          + ' aria-label="' + esc(T('pf_topup_rm_aria', '這次不補給 {e}').replace('{e}', x.email)) + '">'
                          + esc(T('pf_topup_remove', '移除')) + '</button></td></tr>';
                 }).join('')
                 + '</tbody></table></div>'
-                + (pages > 1
-                    ? '<div class="adm-inline tu-pager">'
-                      + '<button class="btn btn--minor" type="button" id="tu-prev"'
-                      + (page <= 1 ? ' disabled' : '') + '>'
-                      + esc(T('pf_pg_prev', '上一頁')) + '</button>'
-                      + '<span class="footnote">'
-                      + esc(T('pf_pg_of', '第 {a} / {b} 頁').replace('{a}', page).replace('{b}', pages))
-                      + '</span>'
-                      + '<button class="btn btn--minor" type="button" id="tu-next"'
-                      + (page >= pages ? ' disabled' : '') + '>'
-                      + esc(T('pf_pg_next', '下一頁')) + '</button>'
-                      + '</div>'
-                    : '');
-            if (pages > 1) {
-                $('tu-prev').addEventListener('click', function () { renderPreviewPage(r, page - 1); });
-                $('tu-next').addEventListener('click', function () { renderPreviewPage(r, page + 1); });
-            }
+                + AdminPager.html(pg);
+            AdminPager.wire(pg);
             // ZH: 移除 = 加進排除名單 → **請後端重算**（不是前端自己扣）：
             //     合計點數與確認框裡的數字都要是後端算的那一份。
             $('tu-result').querySelectorAll('[data-rm]').forEach(function (b) {
@@ -2640,6 +2806,8 @@
         $('tu-search').addEventListener('input', function () {
             if (TU_ROWS && TU_ROWS.count) renderPreviewPage(TU_ROWS, 1);
         });
+        // ZH: v4.45 確認鍵的字是這裡組的（含數字、不掛 data-i18n），切換語言時要自己重寫一次。
+        document.addEventListener('prefs:langchanged', btns);
         btns();
     })();
 
@@ -2662,6 +2830,9 @@
         function btns() {
             $('rc-apply').hidden = !PREVIEWED;
             $('rc-cancel').hidden = !PREVIEWED;
+            // ZH: v4.45 確認鍵寫出人數與點數（理由同補齊的 btns）。
+            $('rc-apply').textContent = T('dz_pp_rc_apply_n', '確認回收 {n} 人，共 {p} 點')
+                .replace('{n}', num(RC_LAST.count)).replace('{p}', num(RC_LAST.points));
             $('rc-preview').textContent = PREVIEWED
                 ? T('pf_topup_recalc', '重算') : T('pf_topup_preview', '預覽');
         }
@@ -2727,7 +2898,8 @@
                 .replace('{n}', num(r.count)).replace('{p}', num(r.points)));
         }
 
-        function renderPage(r, page) {
+        // ZH: `focus` 同補齊的 renderPreviewPage。
+        function renderPage(r, page, focus) {
             var list = filtered(r);
             if (!list.length) {
                 $('rc-result').innerHTML = '<p class="footnote">'
@@ -2737,36 +2909,26 @@
             var pages = Math.max(1, Math.ceil(list.length / RC_PAGE_SIZE));
             page = Math.min(Math.max(1, page), pages);
             var slice = list.slice((page - 1) * RC_PAGE_SIZE, page * RC_PAGE_SIZE);
+            // ZH: v4.45 共用分頁器（id 前綴 rc，按鈕仍是 #rc-prev / #rc-next）；表格同補齊。
+            var pg = { id: 'rc', page: page, pages: pages, total: list.length, focus: focus,
+                       onGo: function (p, which) { renderPage(r, p, which); } };
             $('rc-result').innerHTML =
                 '<div class="adm-tablewrap"><table class="adm-table"><thead><tr>'
-                + '<th>' + esc(T('pf_topup_who', '帳號')) + '</th>'
+                + '<th class="grow">' + esc(T('pf_topup_who', '帳號')) + '</th>'
                 + '<th class="num">' + esc(T('pf_rec_take', '要收回')) + '</th>'
                 + '<th><span class="sr-only">' + esc(T('pf_topup_act', '操作')) + '</span></th>'
                 + '</tr></thead><tbody>'
                 + slice.map(function (x) {
-                    return '<tr><td>' + esc(x.email) + '</td>'
+                    return '<tr><td class="grow">' + esc(x.email) + '</td>'
                          + '<td class="num">' + num(x.points) + '</td>'
-                         + '<td class="tu-act"><button class="btn btn--minor" type="button"'
+                         + '<td class="tu-act"><button class="btn--quiet" type="button"'
                          + ' data-rm="' + esc(x.email) + '"'
                          + ' aria-label="' + esc(T('pf_rec_rm_aria', '這次不收 {e}').replace('{e}', x.email)) + '">'
                          + esc(T('pf_topup_remove', '移除')) + '</button></td></tr>';
                 }).join('')
                 + '</tbody></table></div>'
-                + (pages > 1
-                    ? '<div class="adm-inline tu-pager">'
-                      + '<button class="btn btn--minor" type="button" id="rc-prev"'
-                      + (page <= 1 ? ' disabled' : '') + '>' + esc(T('pf_pg_prev', '上一頁')) + '</button>'
-                      + '<span class="footnote">'
-                      + esc(T('pf_pg_of', '第 {a} / {b} 頁').replace('{a}', page).replace('{b}', pages))
-                      + '</span>'
-                      + '<button class="btn btn--minor" type="button" id="rc-next"'
-                      + (page >= pages ? ' disabled' : '') + '>' + esc(T('pf_pg_next', '下一頁')) + '</button>'
-                      + '</div>'
-                    : '');
-            if (pages > 1) {
-                $('rc-prev').addEventListener('click', function () { renderPage(r, page - 1); });
-                $('rc-next').addEventListener('click', function () { renderPage(r, page + 1); });
-            }
+                + AdminPager.html(pg);
+            AdminPager.wire(pg);
             $('rc-result').querySelectorAll('[data-rm]').forEach(function (b) {
                 b.addEventListener('click', function () {
                     var who = b.dataset.rm.toLowerCase();
@@ -2847,6 +3009,7 @@
         $('rc-search').addEventListener('input', function () {
             if (RC_ROWS && RC_ROWS.count) renderPage(RC_ROWS, 1);
         });
+        document.addEventListener('prefs:langchanged', btns);
         btns();
     })();
 

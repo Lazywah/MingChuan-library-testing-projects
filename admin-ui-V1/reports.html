@@ -11,7 +11,7 @@
 
     <link rel="stylesheet" href="tokens.css?v=ff9cecda">
     <link rel="stylesheet" href="styles.css?v=d4d21ce8">
-    <link rel="stylesheet" href="admin.css?v=99d53e72">
+    <link rel="stylesheet" href="admin.css?v=dccae4c3">
 </head>
 <body>
 
@@ -19,8 +19,13 @@
 
 <main class="page page--admin">
 
-    <div class="adm-sec__head">
-        <h1 class="hero__title" data-i18n="adm_nav_msg">訊息</h1>
+    <!-- ZH: v4.45 頁首改用共用的 .adm-head（計畫第 3 節）：與其他五頁同一個樣子，
+             h1 換成 .adm-head__title —— 原本的 .hero__title 是使用者端的大標，
+             在管理端只是一個字卻佔掉 36px 以上。 -->
+    <div class="adm-head">
+        <div class="adm-head__what">
+            <h1 class="adm-head__title" data-i18n="adm_nav_msg">訊息</h1>
+        </div>
     </div>
 
     <!-- ZH: 這一頁的三段都是為了同一件事：**有人問了問題，你要回答他**。
@@ -29,23 +34,33 @@
 
     <!-- ZH: 公告放在最前面。這一頁是「跟使用者之間的訊息」——
              公告是往外廣播、回報是往內收，往外的那半要先看到，
-             因為它是你主動要做的事，不是等著被觸發的。 -->
+             因為它是你主動要做的事，不是等著被觸發的。
+         ZH: v4.45 只列最近 5 則（計畫第 4 節「訊息」）—— 順序不動，但它的**高度**原本沒有上限，
+             公告一多就把每天要處理的回報推到畫面外。其餘的收在「全部 N 則」後面。 -->
     <section class="adm-sec" aria-labelledby="h-news">
-        <div class="adm-sec__head">
-            <h2>
-                <span id="h-news" data-i18n="rp_news">公告</span>
-                <span class="tip">
-                    <button type="button" class="tip__btn" aria-expanded="false"
-                            aria-controls="tip-news" data-i18n-aria="tip_more" aria-label="這是什麼">i</button>
-                    <span class="tip__body" id="tip-news" role="tooltip" hidden>
-                    <span data-i18n="rp_news_why">公告會出現在使用者的首頁與「最新消息」。置頂的排在最前面；沒有勾公開的只有你看得到，可以當草稿用。</span>
+        <div class="adm-head">
+            <div class="adm-head__what">
+                <h2 class="adm-head__title">
+                    <span id="h-news" data-i18n="rp_news">公告</span>
+                    <span class="adm-head__count" id="news-count"></span>
+                    <span class="tip">
+                        <button type="button" class="tip__btn" aria-expanded="false"
+                                aria-controls="tip-news" data-i18n-aria="tip_more" aria-label="這是什麼">i</button>
+                        <span class="tip__body" id="tip-news" role="tooltip" hidden>
+                        <span data-i18n="rp_news_why">公告會出現在使用者的首頁與「最新消息」。置頂的排在最前面；沒有勾公開的只有你看得到，可以當草稿用。</span>
+                        </span>
                     </span>
-                </span>
-            </h2>
-            <span class="topbar__spacer"></span>
-            <span class="footnote" id="news-sum"></span>
-            <button class="btn btn--minor" type="button" id="news-new" data-i18n="rp_news_new">寫一則公告</button>
+                </h2>
+            </div>
+            <div class="adm-head__do">
+                <!-- ZH: 「其中幾則公開中」是狀態，放右半的狀態文字；總數已經在標題旁的數量徽章上。 -->
+                <span class="adm-head__meta" id="news-sum"></span>
+                <button class="btn btn--minor" type="button" id="news-new" data-i18n="rp_news_new">寫一則公告</button>
+            </div>
         </div>
+        <!-- ZH: v4.45 回饋訊息從表格**下面**搬到標題列正下方 —— 觸發它的「寫一則公告」在標題列，
+                 訊息卻在整張表的另一頭，公告一多就落在畫面外，按完看不到結果。 -->
+        <div class="inline-error" id="news-msg" hidden></div>
         <!-- ZH: v3.9 公告表單改成彈窗（擁有者裁定 2026-08-30：減少頁面滑動）。
                  原本是展開在清單上方的一張卡，公告一多就得捲很久才回得到表單。
              ZH: 與問題回報那個同一套：原生 <dialog> + showModal()，
@@ -54,23 +69,31 @@
                  一百則公告就有一百份隱藏的表單掛在 DOM 上。 -->
         <dialog class="rmod" id="news-dialog"></dialog>
         <div id="news" aria-live="polite"><span class="skeleton skeleton--line"></span></div>
-        <div class="inline-error" id="news-msg" hidden></div>
     </section>
 
+    <!-- ZH: v4.45 待處理數量與兩個篩選搬進標題列（計畫第 3 節：標題列左半是「在看什麼」）。
+             原本篩選另起一排、數量藏在 <option> 文字裡 —— 眼睛要在每一區不同的地方找控制項。
+         ZH: ⚠ id="h-reports" 留在 <h2> 上（不是內層 span）：總覽的回報提醒會連到這個錨點，
+             錨點落在 h2 上才吃得到下面 CSS 給的 scroll-margin（不被固定頂部列蓋住）。 -->
     <section class="adm-sec" aria-labelledby="h-reports">
-        <div class="adm-sec__head"><h2 id="h-reports" data-i18n="adm_nav_reports">回報</h2></div>
-        <!-- ZH: v4.41 兩排按鈕改成兩個下拉（擁有者 2026-10-11）：手機上兩排按鈕折成四、五行，
-                 回報本身被推到畫面外。選項由 reports.js 的 renderFilters 填；
-                 狀態的每一項仍帶數量 —— 不帶的話你得逐一切過才知道哪裡有事。 -->
-        <div class="adm-inline rp-filters">
-            <label class="rp-filter">
-                <span data-i18n="rp_f_status">狀態</span>
-                <select class="field__input" id="filters"></select>
-            </label>
-            <label class="rp-filter">
-                <span data-i18n="rp_f_cat">類別</span>
-                <select class="field__input" id="cat-filters"></select>
-            </label>
+        <div class="adm-head">
+            <div class="adm-head__what">
+                <h2 class="adm-head__title" id="h-reports">
+                    <span data-i18n="adm_nav_reports">回報</span>
+                    <span class="adm-head__count adm-head__count--warn" id="rp-open-n"></span>
+                </h2>
+                <!-- ZH: v4.41 兩排按鈕改成兩個下拉（擁有者 2026-10-11）：手機上兩排按鈕折成四、五行，
+                         回報本身被推到畫面外。選項由 reports.js 的 renderFilters 填；
+                         狀態的每一項仍帶數量 —— 不帶的話你得逐一切過才知道哪裡有事。 -->
+                <label class="adm-head__filter">
+                    <span data-i18n="rp_f_status">狀態</span>
+                    <select class="field__input" id="filters"></select>
+                </label>
+                <label class="adm-head__filter">
+                    <span data-i18n="rp_f_cat">類別</span>
+                    <select class="field__input" id="cat-filters"></select>
+                </label>
+            </div>
         </div>
         <div id="list" aria-live="polite"><span class="skeleton skeleton--line"></span></div>
         <!-- ZH: 單則回報的彈窗。**只有一個**，每次填內容 ——
@@ -79,39 +102,44 @@
         <dialog class="rmod" id="rp-dialog"></dialog>
     </section>
 
-    <section class="adm-sec" aria-labelledby="h-mail">
-        <div class="adm-sec__head">
-            <!-- ZH: ⚠ id 在內層 span 上（section 用 aria-labelledby 指著它）——
-                     留在 h2 上的話，可及名稱會把 icon 的 aria-label 一起唸進去。 -->
-            <h2>
-                <span id="h-mail" data-i18n="rp_mail">寄信紀錄</span>
-                <span class="tip" id="mail-tip" hidden>
-                    <button type="button" class="tip__btn" aria-expanded="false"
-                            aria-controls="mail-tip-body" data-i18n-aria="tip_more" aria-label="這是什麼">i</button>
-                    <!-- ZH: 內容由 reports.js 填（設定值是後端來的，不是固定文案）。
-                             ⚠ 這裡**不要**掛 data-i18n —— 掛了的話，切語言時
-                             prefs.js 會用字典把 JS 填進去的值整段蓋掉。 -->
-                    <span class="tip__body" id="mail-tip-body" role="tooltip" hidden></span>
-                </span>
-            </h2>
-        </div>
-        <div id="mail" aria-live="polite"><span class="skeleton skeleton--line"></span></div>
-    </section>
+    <!-- ZH: v4.45 兩張紀錄表預設收起，點開才載入（擁有者待決事項 3，A 案）。
+             它們只在回答某一則回報時才用得到，卻每次都攤開佔掉下半頁、每次都載入。
+         ZH: 收起來時標題列上仍看得到**筆數**（收起來而看不出裡面有多少，等於藏起來），
+             寄信紀錄還看得到**退信回收的狀態** —— 「退信回收：未啟用」要一直看得到，
+             因為「已交付」靠它才會被更新（理由見 reports.js 的 bounceText）。
+         ZH: 展開區裡先放一條骨架 —— 第一次點開才打 API，回來之前那一塊是空的，
+             空白的展開區看起來像「沒有紀錄」或壞掉了。資料回來時 loadMail / loadAudit 整塊覆寫。
+         ZH: ⚠ <summary> 裡只放標題、數量與純文字狀態，不放按鈕 ——
+             它整列就是「點一下展開」，裡面再放按鈕會搶點擊（AdminFold 的規則）。
+             原本標題旁的 ⓘ（退信回收的設定值）因此移到展開後的第一行。 -->
+    <details class="adm-fold adm-sec" data-fold="msg-mail" id="mail-fold">
+        <summary class="adm-fold__head">
+            <h2 class="adm-head__title"><span id="h-mail" data-i18n="rp_mail">寄信紀錄</span></h2>
+            <span class="adm-head__count" data-fold-count></span>
+            <!-- ZH: 內容由 reports.js 填（後端回來的狀態）。⚠ 不掛 data-i18n ——
+                     掛了的話切語言時 prefs.js 會用字典把 JS 填進去的值整段蓋掉。 -->
+            <span class="footnote" id="mail-bounce"></span>
+        </summary>
+        <div class="adm-fold__body" id="mail" aria-live="polite"><span class="skeleton skeleton--line"></span></div>
+    </details>
 
-    <section class="adm-sec" aria-labelledby="h-audit">
-        <div class="adm-sec__head"><h2 id="h-audit" data-i18n="rp_audit">管理動作紀錄</h2></div>
-        <div id="audit" aria-live="polite"><span class="skeleton skeleton--line"></span></div>
-    </section>
+    <details class="adm-fold adm-sec" data-fold="msg-audit" id="audit-fold">
+        <summary class="adm-fold__head">
+            <h2 class="adm-head__title"><span id="h-audit" data-i18n="rp_audit">管理動作紀錄</span></h2>
+            <span class="adm-head__count" data-fold-count></span>
+        </summary>
+        <div class="adm-fold__body" id="audit" aria-live="polite"><span class="skeleton skeleton--line"></span></div>
+    </details>
 
 </main>
 
 <script src="tz.js?v=2e214a8b"></script>
 <!-- ⚠ ZH: 順序不能動 —— i18n-admin 在 i18n 之後、prefs 之前。 -->
 <script src="i18n.js?v=6de7dc28"></script>
-<script src="i18n-admin.js?v=6f9d8d31"></script>
+<script src="i18n-admin.js?v=5c61b49c"></script>
 <script src="tip.js?v=0699f4a2"></script>
 <script src="prefs.js?v=e71609e5"></script>
-<script src="admin-chrome.js?v=066f0374"></script>
-<script src="reports.js?v=8f86dfff"></script>
+<script src="admin-chrome.js?v=978b50d5"></script>
+<script src="reports.js?v=c4e4d1c9"></script>
 </body>
 </html>

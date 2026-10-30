@@ -200,12 +200,6 @@
        「這張卡掉線了」與「這台機器被拆掉了」就分不出來。 */
 .adm-card.is-offline { opacity: 0.5; }
 
-.adm-card__title {
-    font-weight: 600;
-    color: var(--text-strong);
-    margin-bottom: var(--space-3);
-}
-
 /* ── 量表 ─────────────────────────────────────────────────────────────────── */
 .adm-meter {
     display: grid;
@@ -698,7 +692,10 @@ textarea.field__input {
  *     .adm-block__head 要拿它當 min-height,`.adm-seg` 也用它當 height。
  *     兩邊各自寫死的話會漂開,而漂開的表現是「有滑條的區塊比隔壁矮 10px,
  *     底下的圖跟著錯開」—— 沒有人會把那兩件事聯想在一起。 */
-:root { --seg-h: 35px; }
+/* ZH: v4.45 從 35px 改成 var(--tap-min)（44px）。35px 比同一列的按鈕矮 9px，
+ *     也低於這個設計系統自己定的 44px 可點下限 —— 標題列上的控制項一律 44px，
+ *     每個區塊的內容才會從同一個高度開始。 */
+:root { --seg-h: var(--tap-min); }
 
 .adm-block__head {
     display: flex;
@@ -728,14 +725,20 @@ textarea.field__input {
     grid-auto-flow: column;
     grid-auto-columns: 1fr;
     flex: none;
-    padding: 2px;
+    /* ZH: v4.45 上下不留 padding、外框改畫成 inset 陰影 —— 選項本身才有完整的 44px 可點高度。
+     *     原本 2px padding ＋ 1px 外框吃掉 6px，容器 44px、每個選項卻只有 38px，
+     *     仍然低於可點下限（點在滑條的上下緣會落空）。
+     *     左右的 2px 留著：滑塊寬度 calc((100% - 4px) / n) 與 left:2px 都靠它，選項的格子才對得準滑塊。 */
+    padding: 0 2px;
     /* ZH: 高度與 .adm-block__head 的 min-height 同源,見上面 --seg-h 的說明。 */
     height: var(--seg-h);
     background-color: var(--surface-2);
     /* ZH: 2026-08-27 從 var(--border) 改成 var(--hairline) ——
      *     `--border` 這個變數**沒有定義**,所以這條外框一直是隱形的。
-     *     CSS 用未定義變數會靜默失效,畫面上看不出是拼錯。 */
-    border: 1px solid var(--hairline);
+     *     CSS 用未定義變數會靜默失效,畫面上看不出是拼錯。
+     * ZH: v4.45 同一條線改用 inset box-shadow 畫（不佔版面），理由見上面的 padding。 */
+    border: 0;
+    box-shadow: inset 0 0 0 1px var(--hairline);
     border-radius: var(--radius-pill);
 }
 .adm-seg__thumb {
@@ -745,8 +748,9 @@ textarea.field__input {
     left: 2px;
     /* ZH: 🔴 原本寫死 `/ 2` —— 那是假設**只有兩個選項**。
      *     三個選項時滑塊會是軌道的 1/2 寬,再 translateX(200%) 就整個衝出右邊。
-     *     改成由選項數量決定：容器用 inline style 設 --seg-n（見 orgToggle）。
-     *     預設仍是 2,所以既有的兩選項滑條完全不用改。 */
+     *     改成由選項數量決定：容器用 inline style 設 --seg-n。
+     *     預設仍是 2,所以既有的兩選項滑條完全不用改。
+     *     （原本唯一的四格滑條「依組織」v4.45 改成下拉了，機制保留給之後的多格滑條。） */
     width: calc((100% - 4px) / var(--seg-n, 2));
     border-radius: var(--radius-pill);
     background-color: var(--surface);
@@ -851,7 +855,9 @@ textarea.field__input {
 .adm-line__plot {
     position: relative;
     height: 180px;
-    border-bottom: 1px solid var(--border);
+    /* ZH: v4.45 從 var(--border) 改成 var(--hairline) —— `--border` 沒有定義，
+     *     這條基線一直是隱形的（CSS 用未定義變數會靜默失效）。同 .adm-seg 那次。 */
+    border-bottom: 1px solid var(--hairline);
 }
 .adm-line__plot > svg {
     position: absolute;
@@ -888,7 +894,7 @@ textarea.field__input {
     top: 0;
     bottom: 0;
     width: 1px;
-    background-color: var(--border);
+    background-color: var(--hairline);   /* ZH: v4.45 原本是未定義的 --border，指到的那條線畫不出來 */
     opacity: 0;
 }
 .adm-line__hit:hover::before {
@@ -937,7 +943,7 @@ textarea.field__input {
     gap: 1px;
     padding: var(--space-2) var(--space-3);
     background-color: var(--surface);
-    border: 1px solid var(--border);
+    border: 1px solid var(--hairline);   /* ZH: v4.45 原本是未定義的 --border */
     border-radius: var(--radius-sm);
     box-shadow: var(--shadow-2);
     white-space: nowrap;
@@ -1064,61 +1070,11 @@ textarea.field__input {
     .adm-setting__sub { grid-column: 1; }
 }
 
-/* ── 四象限 ───────────────────────────────────────────────────────────
-   ZH: 三欄：列標題 + 兩個格子。格子的**位置本身**說明它是哪兩個條件的
-       組合，所以軸標題不能省 —— 省了就只剩四個名字，讀者得自己推。 */
-.adm-quad {
-    display: grid;
-    grid-template-columns: auto 1fr 1fr;
-    gap: var(--space-2) var(--space-3);
-    align-items: stretch;
-}
-.adm-quad__col,
-.adm-quad__row {
-    font-size: 0.75rem;
-    color: var(--text-muted);
-    align-self: center;
-}
-.adm-quad__row {
-    /* ZH: 直排會太窄，讓它靠右貼著格子。 */
-    text-align: right;
-    white-space: nowrap;
-}
-.adm-quad__cell,
-.adm-quad__aside {
-    border: 1px solid var(--border);
-    border-radius: var(--radius-sm);
-    background-color: var(--surface);
-    padding: var(--space-3);
-}
-/* ZH: 空著的那一格畫成虛線 —— 一眼看出「這裡本來就沒有內容」，
-       而不是「內容還沒載進來」。 */
-.adm-quad__cell--void {
-    border-style: dashed;
-    background-color: transparent;
-    /* ZH: 這一格會被同列的鄰居拉高。說明文字若貼在最上緣，
-           下面那一大片空白看起來像「還沒載完」——置中才讀得出是刻意留白。 */
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    text-align: center;
-}
-.adm-quad__cell--void .footnote {
-    margin: 0;
-    max-width: 28em;
-}
-.adm-quad__head {
-    display: flex;
-    align-items: baseline;
-    gap: var(--space-2);
-    margin-bottom: var(--space-2);
-}
-.adm-quad__n {
-    font-size: 1.25rem;
-    font-weight: 600;
-    color: var(--text-strong);
-    font-variant-numeric: tabular-nums;
-}
+/* ── 名單（總覽「外部 AI」點開後的名字清單）─────────────────────────────
+   ZH: v4.45 總覽不再畫四象限的格子（計畫第 4 節：三格縮成人數、名單點開才看），
+       原本的 .adm-quad 格線、格子、軸標題、空格虛線、旁註與窄畫面堆疊的規則一起刪了 ——
+       沒有任何頁面再用到它們，留著只會讓人以為那個版面還活著。
+       剩下的這三條是 overview.js nameList() 還在用的（配 .dz-ov-names，見檔尾總覽那一段）。 */
 .adm-quad__list {
     list-style: none;
     margin: 0;
@@ -1140,19 +1096,6 @@ textarea.field__input {
     color: var(--text-muted);
     font-variant-numeric: tabular-nums;
     white-space: nowrap;
-}
-.adm-quad__aside {
-    margin-top: var(--space-3);
-}
-
-/* ZH: 視窗窄的時候軸標題會擠掉格子，改成上下堆疊；
-       堆疊之後位置不再說明組合，所以藥丸上的名字要自己講得清楚
-       （「在平台沒動 AI」而不是「閒置」）。 */
-@media (max-width: 760px) {
-    .adm-quad { grid-template-columns: 1fr; }
-    .adm-quad__corner,
-    .adm-quad__col,
-    .adm-quad__row { display: none; }
 }
 
 /* ZH: 標記為「要刪」的列。**還沒真的刪掉** —— 按儲存才送出，
@@ -1432,23 +1375,10 @@ textarea.field__input {
     background: none;
 }
 
-/* ZH: 類別色。🔴 每一組都實際算過對比（小字要 4.5:1）：
- *       quota   5c warn-600 / warn-050    4.87
- *       train      blue-600 / slate-050   6.15
- *       lab        slate-600 / slate-050  5.71
- *       account    ink / yellow-050      14.65
- *       other      grey-400 / grey-050    4.65
- *     不發明新色 —— tokens.css 每一個顏色都標了對比值，那是算過的。
- * ZH: 顏色只是**次要**線索：類別文字本身就寫在上面（WCAG 1.4.1，
- *     不能只靠顏色傳達資訊）。色盲的人照樣讀得到「AI 額度」四個字。 */
-.rp__cat--quota   { color: var(--mcu-warn-600);  background: var(--mcu-warn-050);   border-color: transparent; }
-.rp__cat--train   { color: var(--mcu-blue-600);  background: var(--mcu-slate-050);  border-color: transparent; }
-.rp__cat--lab     { color: var(--mcu-slate-600); background: var(--mcu-slate-050);  border-color: transparent; }
-.rp__cat--account { color: var(--mcu-ink);       background: var(--mcu-yellow-050); border-color: transparent; }
-.rp__cat--other   { color: var(--mcu-grey-400);  background: var(--mcu-grey-050);   border-color: transparent; }
-
 /* ZH: v4.41 類別篩選從一排按鈕改成下拉（擁有者 2026-10-11），原本的 .btn--cat-* 上色規則跟著刪了。
- *     清單上的類別標籤（.rp__cat--*）照舊上色。 */
+ * ZH: v4.45 清單與對話框上的類別標籤也改成中性的 .rp__cat（計畫第 4 節：顏色只留給狀態），
+ *     各類別的配色（.rp__cat--quota / train / lab / account / other）跟著刪了。
+ *     那五組的對比都算過（4.65～14.65），要加回來時見 git 歷史，不必重算。 */
 
 /* ── 彈窗 ────────────────────────────────────────────────────────── */
 /* ZH: <dialog> 的預設值會蓋掉 max-width，所以三個都要寫。 */
@@ -1795,7 +1725,6 @@ textarea.field__input {
     gap: var(--space-2);
     padding-right: 2.75rem;            /* ZH: 讓出右上角 ✕ */
 }
-.pcard__del:hover { border-color: var(--error); color: var(--error); }
 .rmod--pw { width: min(420px, calc(100vw - 2 * var(--space-5))); }
 
 /* ZH: v4.4d 外部 AI 卡佔滿整列＋內部左右分欄（左=綁定、右=消耗）。 */
@@ -1916,12 +1845,7 @@ textarea.field__input {
 .ai-form .ai-q { flex: 1; resize: vertical; min-height: 3em; }
 /* ZH: styles.css 讓表單裡的主按鈕撐滿（登入頁那種）—— 這裡跟輸入框並排，要縮回內容寬。 */
 .ai-form .btn { width: auto; flex: none; }
-.ai-chips {
-    display: flex;
-    flex-wrap: wrap;
-    gap: var(--space-2);
-    margin-top: var(--space-2);
-}
+/* ZH: v4.45 八顆預設問題（.ai-chips）收成「常用問題▾」，樣式在檔尾的 .ai-ex。 */
 .ai-item {
     border: 1px solid var(--hairline);
     border-radius: var(--radius-md, 8px);
@@ -1939,21 +1863,8 @@ textarea.field__input {
     .ai-form { flex-direction: column; align-items: stretch; }
 }
 
-/* ZH: v4.41 回報的篩選改成兩個下拉（擁有者 2026-10-11）。桌機並排；
- *     窄畫面各佔一整行（flex-basis 12rem 撐不下兩個就自然換行），標籤在左、下拉吃剩下的寬。 */
-.rp-filters { gap: var(--space-3); margin-bottom: var(--space-3); }
-.rp-filter {
-    display: flex;
-    flex: 1 1 12rem;
-    align-items: center;
-    gap: var(--space-2);
-    max-width: 22rem;
-}
-.rp-filter > span { flex: 0 0 auto; font-size: 0.875rem; color: var(--text-muted); }
-.rp-filter > select { flex: 1 1 auto; min-width: 0; }
-@media (max-width: 640px) {
-    .rp-filter { max-width: none; }
-}
+/* ZH: v4.41 回報的兩個篩選下拉原本自成一列（.rp-filters / .rp-filter）。
+ *     v4.45 搬進標題列（.adm-head__filter，計畫第 4 節），那一列的規則跟著刪了。 */
 
 /* ZH: v4.41 手動補齊名單的搜尋與「這次不補」（擁有者 2026-10-13）。 */
 #tu-tools { margin: var(--space-3) 0 var(--space-2); }
@@ -1982,3 +1893,934 @@ textarea.field__input {
  *     （帳號選單在頁面右上角）。放在左邊的按鈕要改成往左對齊，否則選單會
  *     伸出左緣 —— 在對話框裡就是被 overflow 切掉。 */
 .adm-dd--left .account__menu { left: 0; right: auto; }
+
+/* ==========================================================================
+ * v4.45 版面整理（DEMO，計畫第 3 節「共用的版面規則」＋第 5 節第 1 步）
+ *
+ * ZH: 這一整段是**一起加、一起刪**的：要還原第 1 步，刪掉從這裡到檔尾即可
+ *     （上面只另外改了兩件真的是 bug 的事：四處未定義的 --border、--seg-h 35→44）。
+ *     所以新的規則全部寫在這裡，不散進上面各頁的段落。
+ *
+ * ZH: 範圍一律限定在 `.page--admin`（六頁的 <main>）或 `.rmod`（對話框）底下 ——
+ *     styles.css / tokens.css 是與學生端逐位元組相同的副本，一個字都不能動，
+ *     而登入頁沒有 .page--admin，這裡的規則碰不到它。
+ * ========================================================================== */
+
+/* ── 間距的層級 ────────────────────────────────────────────────────────────
+ * ZH: 原本的毛病是**層級倒置**：數據頁區段內的圖與圖隔 48px，區段之間卻只有 32px，
+ *     於是三段讀起來像同一段。改成四級，而且一級比一級大：
+ *       group 8   同一組（標籤和欄位、表格和它底下那句說明）
+ *       in    16  同一個區塊內的元素之間
+ *       sub   24  區塊內的小段：上 24 ＋ 一條細線 ＋ 下 24
+ *       sec   64  區塊與區塊之間（沒有線，所以空白要比 sub 的整段 48 還大）
+ * ZH: 寫成變數而不是數字：加框模式（.adm-framed）只要改 --adm-gap-sec 一個值，
+ *     面板的框本身就在分段，空白可以縮回 24。
+ * ZH: 欄位寬三級（數字／日期與下拉／文字與搜尋）。用 ch 是因為它跟著字級縮放；
+ *     加上左右 padding（.field__input 各 12px）與框線才是外框寬，不然 10 位數會被切掉。 */
+.page--admin,
+.rmod {
+    --adm-gap-group: var(--space-2);
+    --adm-gap-in:    var(--space-4);
+    --adm-gap-sub:   var(--space-5);
+    --adm-gap-sec:   var(--space-8);
+    --adm-fw-s: calc(10ch + 2 * var(--space-3) + 2px);
+    --adm-fw-m: calc(16ch + 2 * var(--space-3) + 2px);
+    --adm-fw-l: calc(30ch + 2 * var(--space-3) + 2px);
+}
+
+.page--admin .adm-sec { margin-top: var(--adm-gap-sec); }
+/* ZH: 頁首那一列（h1）和第一個區塊之間只隔 16 —— 頁首是這一頁的標題，
+ *     跟第一段隔 64 會像中間漏了一段東西。 */
+.page--admin > :is(.adm-sec__head, .adm-head) + .adm-sec { margin-top: var(--adm-gap-in); }
+
+/* ZH: 區塊內一律 16。⚠ 用「相鄰兄弟」而不是給每個元件各自的 margin ——
+ *     各自帶外距正是原本 12／24／36 混用的來源。標題列的下外距也改成 16，
+ *     與下一個元素的上外距重疊（margin collapse）後剛好是 16，不會變成 32。 */
+.page--admin .adm-sec > * + * { margin-top: var(--adm-gap-in); }
+.page--admin .adm-sec > :is(.adm-sec__head, .adm-head) { margin-bottom: var(--adm-gap-in); }
+
+/* ZH: 區塊內的小段（數據頁的每一張圖）：細線分段，上下各 24。
+ *     原本是 48 的純空白 —— 比區塊之間還大，所以讀者分不出哪條界線比較重要。
+ * ZH: 並排在 .adm-duo／.adm-cols 裡的那幾塊不畫線（欄與欄之間交給 grid 的 gap），
+ *     緊接在標題列下面的第一段也不畫（標題列本身就是分段）。 */
+.page--admin .adm-sec :is(.adm-block, .adm-duo, .adm-cols) {
+    margin-top: var(--adm-gap-sub);
+    padding-top: var(--adm-gap-sub);
+    border-top: 1px solid var(--hairline);
+}
+.page--admin .adm-sec :is(.adm-duo, .adm-cols) > .adm-block,
+.page--admin .adm-sec :is(.adm-block, .adm-duo, .adm-cols):first-child {
+    margin-top: 0;
+    padding-top: 0;
+    border-top: 0;
+}
+/* ZH: 對話框裡的多卡版面（個人對話框）原本頂著 48px 的上外距 —— 那是數據頁的值，
+ *     在對話框裡就是名片下面一大片空白。 */
+.rmod :is(.adm-cols, .adm-duo) { margin-top: var(--adm-gap-in); }
+
+/* ── 灰色小字不再自帶上邊距 ────────────────────────────────────────────────
+ * ZH: 共用的 `.footnote` 帶 `margin-top: 24px`（學生端是一段段的說明文，那樣是對的）。
+ *     管理端用了上百次，而且多半放在**一列裡**（時間戳、分頁器的「第 a / b 頁」、
+ *     標題旁的狀態）—— 在 flex 列裡那 24px 會把它整個往下推，所以分頁器的頁碼
+ *     永遠比兩邊的按鈕低一截。原本是一處一處各自歸零（.ds__actions、.adm-quad、
+ *     .rmod__meta 還為此另寫一份樣式），這裡一次歸零。
+ * ZH: 在一般的直排文流裡、跟在別的東西後面時，給 8（group）：它幾乎都是在補充
+ *     上面那一個東西，該貼著它。放在一列裡的則一律 0（下面那條）。 */
+.page--admin .footnote,
+.rmod .footnote { margin-top: 0; }
+:is(.page--admin, .rmod) :is(p, div).footnote:not(:first-child) { margin-top: var(--adm-gap-group); }
+:is(.page--admin, .rmod) :is(.adm-inline, .adm-sec__head, .adm-head, .adm-head__what, .adm-head__do,
+    .adm-block__head, .adm-pager, .ds__actions, .rmod__head, .cr-switch, .adm-sec__tool,
+    .adm-fold__head) > :is(p, div, span).footnote { margin-top: 0; }
+
+/* ── 標題列一律 44px 高 ─────────────────────────────────────────────────────
+ * ZH: 有按鈕的標題列 44px、沒按鈕的 25px —— 每個區塊的內容就從不同的高度開始，
+ *     並排的兩塊看起來沒對齊。給最小高度，不管裡面有沒有控制項都一樣。 */
+.page--admin .adm-sec__head { min-height: var(--tap-min); }
+
+/* ==========================================================================
+ * 區塊標題列（新的唯一樣式）：左邊「在看什麼」、右邊「能做什麼」
+ *
+ * ZH: 結構：
+ *   <div class="adm-head">
+ *     <div class="adm-head__what">  標題 → 數量（緊貼標題）→ ⓘ → 篩選下拉／分段切換
+ *     <div class="adm-head__do">    狀態文字 → 最多兩顆按鈕 → 更多▾（AdminMenu）
+ * ZH: 為什麼分兩半而不是一排 flex + spacer：數量原本被 space-between 推到最右邊
+ *     （GPU 節點的台數離標題 1246px，看不出在講誰）。分成兩個容器之後，
+ *     數量**構造上**就只能貼在標題旁。
+ * ZH: 裡面的按鈕、下拉、分段切換一律 44px —— 見上面「標題列一律 44px 高」。
+ * ========================================================================== */
+.adm-head {
+    display: flex;
+    flex-wrap: wrap;               /* ZH: 窄畫面時「做什麼」整組換到下一行，不擠壞標題 */
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-2) var(--space-4);
+    min-height: var(--tap-min);
+    margin: 0 0 var(--space-4);
+    /* ZH: 錨點跳轉時讓出固定頂部列的高度（與 .adm-sec__head 同一條理由）。 */
+    scroll-margin-top: calc(var(--tap-min) + var(--space-4));
+}
+.adm-head > *,
+.adm-head__what > *,
+.adm-head__do > * { margin-block: 0; }   /* ZH: 外距會讓 align-items:center 對不齊，理由同 .adm-sec__head > * */
+
+.adm-head__what,
+.adm-head__do {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-2);
+    min-width: 0;
+}
+/* ZH: 「做什麼」永遠靠右，換行之後也靠右 —— 主要按鈕的位置不因為標題長短而移動。 */
+.adm-head__do { margin-left: auto; justify-content: flex-end; }
+
+/* ZH: 標題是 inline-flex：數量、ⓘ 放在 <h2> 裡面也一樣垂直置中
+ *     （放在裡面的好處是 aria-labelledby 指著標題時會一起唸出數量）。 */
+.adm-head__title {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
+    margin: 0;
+    font-size: 1.125rem;
+    font-weight: 700;
+    color: var(--text-strong);
+    white-space: nowrap;
+}
+h1.adm-head__title { font-size: 1.5rem; }
+h3.adm-head__title { font-size: 1rem; font-weight: 600; }
+/* ZH: 篩選和標題群之間多留 8 —— 「標題＋數量＋ⓘ」是一個詞，篩選是另一件事。 */
+.adm-head__what > :is(.adm-head__filter, .adm-seg, select) { margin-left: var(--space-2); }
+
+/* ZH: 數量徽章。中性灰 —— 只有「要處理」的數量才上色（.adm-head__count--warn），
+ *     全部上色等於沒有一個被凸顯（與 .adm-pill 同一條原則）。 */
+.adm-head__count {
+    display: inline-flex;
+    align-items: center;
+    min-height: 1.5rem;
+    padding: 0 var(--space-2);
+    border: 1px solid var(--hairline);
+    border-radius: var(--radius-pill);
+    background-color: var(--surface-2);
+    color: var(--text);
+    font-size: 0.8125rem;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;   /* ZH: 每 10 秒重畫的頁面，不等寬會左右跳 */
+    white-space: nowrap;
+}
+.adm-head__count:empty { display: none; }   /* ZH: 還沒載到數字時不要留一顆空藥丸 */
+.adm-head__count--warn { background-color: var(--warn-soft); border-color: var(--warn); color: var(--warn); }
+
+/* ZH: 右半的狀態文字（「最後更新 14:05」「上次同步 …」）。 */
+.adm-head__meta {
+    color: var(--text-muted);
+    font-size: 0.8125rem;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+}
+
+/* ZH: 篩選：<label class="adm-head__filter"><span>狀態</span><select class="field__input">…
+ *     與 .adm-sec__tool 同一個做法，換一個屬於這套的名字。 */
+.adm-head__filter {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
+    white-space: nowrap;
+    font-size: 0.8125rem;
+    color: var(--text-muted);
+}
+
+/* ZH: 標題列裡的控制項一律 44px，按鈕不撐滿（共用 .btn--primary 是 width:100%）。 */
+:is(.adm-head, .adm-pager, .adm-fold__head) .btn { width: auto; margin-top: 0; }
+:is(.adm-head, .adm-sec__head) .btn--primary { font-size: inherit; }
+.adm-head .field__input {
+    width: auto;
+    height: var(--tap-min);
+    padding-block: 0;
+    font-size: 0.875rem;
+}
+
+/* ── 編輯中 ────────────────────────────────────────────────────────────────
+ * ZH: 唯讀是平常的狀態，不必每段都寫一句「目前是唯讀」—— **只標出例外**。
+ *     進入編輯時：區塊左側一條色條 + 標題旁「編輯中」藥丸（AdminEditMark 會掛）。
+ *     色條不只靠顏色：藥丸上有字（WCAG 1.4.1）。 */
+.page--admin .adm-sec.is-editing {
+    border-left: 3px solid var(--accent);
+    padding-left: var(--space-4);
+}
+.adm-pill--editing {
+    background-color: var(--accent-soft);
+    border-color: var(--accent);
+    color: var(--text-strong);
+    font-weight: 600;
+}
+
+/* ==========================================================================
+ * 按鈕三層
+ *
+ * ZH: 實心 .btn--primary：一個畫面最多一顆，只給「現在要做的那件事」。
+ *     外框 .btn--minor：次要動作（共用 styles.css 已有）。
+ *     文字 .btn--quiet：分頁器、列內的次要動作。**看起來輕，點擊範圍照樣 44px** ——
+ *     純文字連結實測 18–23px，那是全站最難點的東西（styles.css 層級 3 那段的教訓）。
+ * ZH: 危險動作：.btn--danger 只改顏色（紅字），搭配 quiet 或 minor 用；
+ *     不和一般按鈕並排，放在選單最底下或對話框頁腳最左邊。
+ * ========================================================================== */
+.btn--quiet {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-1);
+    min-height: var(--tap-min);
+    padding: 0 var(--space-2);
+    border: 1px solid transparent;
+    border-radius: var(--radius-md);
+    background: transparent;
+    color: var(--link);
+    font: inherit;
+    font-size: 0.875rem;
+    font-weight: 600;
+    text-decoration: none;
+    cursor: pointer;
+}
+/* ZH: hover 用底線而不是底色：quiet 會出現在灰底（頁面）與白底（對話框、加框面板）上，
+ *     任何一種底色都會在其中一邊看不出來（.btn--minor 就是這樣踩到的，見下）。 */
+.btn--quiet:hover:not(:disabled) { text-decoration: underline; text-underline-offset: 3px; }
+.btn--quiet:disabled { color: var(--text-muted); cursor: not-allowed; }
+
+.btn--danger { color: var(--error); }
+.btn--minor.btn--danger:hover { border-color: var(--error); color: var(--error); }
+
+/* ZH: 共用 .btn--minor 的 hover 底色是 --surface（白）—— 它原本假設自己坐在灰底上。
+ *     放在白色的對話框或加框面板上，hover 就完全看不出來。只在那兩種白底上改成灰。 */
+:is(.rmod, .adm-framed .adm-sec) .btn--minor:hover:not(:disabled) { background-color: var(--surface-2); }
+
+/* ── 下拉選單裡的分組與危險項 ───────────────────────────────────────────────
+ * ZH: 危險項（解除綁定、刪除…）永遠在選單最底下，紅字，上面隔一條線。
+ *     線用「非危險項後面的第一個危險項」自動畫 —— 不必記得手動插分隔線，
+ *     AdminMenu.html() 也會自動把危險項排到最後。
+ * ZH: ⚠ 要 `.account__menu` 前綴：共用樣式的 `.account__menu button { border:0; color… }`
+ *     權重是 (0,1,1)，少了前綴會被它蓋掉。 */
+.account__menu .adm-menu__danger { color: var(--error); }
+.account__menu > :not(.adm-menu__danger, .adm-menu__sep, .adm-menu__label) + .adm-menu__danger {
+    position: relative;
+    margin-top: var(--space-2);
+}
+.account__menu > :not(.adm-menu__danger, .adm-menu__sep, .adm-menu__label) + .adm-menu__danger::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: calc(-1 * var(--space-1) - 1px);
+    height: 1px;
+    background-color: var(--hairline);
+}
+/* ZH: 一般的分組線與組名（例如 AI 查詢的「直接查」／「先填入」兩組）。 */
+.account__menu .adm-menu__sep {
+    height: 1px;
+    margin: var(--space-1) 0;
+    background-color: var(--hairline);
+}
+.account__menu .adm-menu__label {
+    padding: var(--space-2) var(--space-3) var(--space-1);
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: var(--text-muted);
+}
+
+/* ==========================================================================
+ * 欄位寬度三級
+ *
+ * ZH: `.field__input` 是 width:100% —— 學生端的表單是一欄一欄直排，那樣是對的。
+ *     管理端放在一列裡時就會被拉到 1370px（帳號頁的搜尋框、「補到的點數」），
+ *     而作用在它上面的按鈕遠在另一端。
+ * ZH: 🔴 上限寫在 `:where()` 裡（權重 0）：已經有自己寬度的欄位（.cr-num、.tu-search、
+ *     .tsw__num…）一律照它自己的，這裡只管「沒人管」的那些。
+ *     日期與下拉要改 width（不只 max-width），所以權重要贏過 styles.css 的
+ *     `.field__input { width:100% }`（同為一個類別，本檔較晚載入所以贏）。
+ * ZH: 下拉用「至少 16ch、內容多長就多長」而不是釘死 16ch：選項文字比 16ch 長時
+ *     釘死會把它切掉（例如「AI 額度（4）」這種帶數字的選項）。
+ * ========================================================================== */
+:where(.page--admin, .rmod) select.field__input {
+    width: auto;
+    min-width: min(var(--adm-fw-m), 100%);
+    max-width: 100%;
+}
+/* ZH: 日期的上限也要寫在 max-width —— 放在 .adm-inline 裡時那一列的
+ *     `flex: 1 1 8em` 會把它撐開，只寫 width 擋不住（實測撐到 430px）。 */
+:where(.page--admin, .rmod) input[type="date"].field__input {
+    width: var(--adm-fw-m);
+    max-width: min(var(--adm-fw-m), 100%);
+}
+:where(.page--admin input[type="number"].field__input,
+       .rmod input[type="number"].field__input) { max-width: var(--adm-fw-s); }
+:where(.page--admin input.field__input:is([type="text"], [type="search"], [type="email"], [type="url"], :not([type]))) {
+    max-width: var(--adm-fw-l);
+}
+/* ZH: 對話框裡的文字欄位不設上限 —— 對話框本身最寬 720／920px，標題、信箱這類
+ *     欄位在那個寬度裡撐滿才是對的；收到 30ch 反而像沒做完。 */
+:where(.rmod input.field__input:is([type="text"], [type="search"], [type="email"], [type="url"], :not([type]))) {
+    max-width: none;
+}
+/* ZH: 明寫寬度用的工具類別（同一級的欄位要上下對齊時用）。 */
+.field__input.adm-fw-s { width: 100%; max-width: var(--adm-fw-s); }
+.field__input.adm-fw-m { width: 100%; max-width: var(--adm-fw-m); }
+.field__input.adm-fw-l { width: 100%; max-width: var(--adm-fw-l); }
+.field__input.adm-fw-full { width: 100%; max-width: none; }
+
+/* ==========================================================================
+ * 表格欄寬：一欄吃剩下的寬度，其他欄只佔內容需要的寬度
+ *
+ * ZH: 1440px 的頁面上，九欄平均分寬度的結果是每一欄都被拉開 —— 短欄之間隔
+ *     幾百 px，視線要左右跳。指定一欄 `.grow`（名稱、標題、說明），其餘欄寬 1%
+ *     （配上 nowrap 就是「剛好裝得下內容」），剩下的寬度全給那一欄。
+ * ZH: 只對有 `.grow` 的表格生效（:has）—— 還沒改的表格維持原樣，不會一起被收窄。
+ *     數字欄靠右（.num，上面已有）。
+ * ========================================================================== */
+.page--admin .adm-table :is(th, td).grow {
+    width: 100%;
+    white-space: normal;
+    overflow-wrap: anywhere;
+}
+.page--admin .adm-table:has(.grow) :is(th, td):not(.grow) { width: 1%; }
+
+/* ZH: 表格列一律至少 44px —— 有按鈕的列 60px、沒按鈕的 37px 混在一起，
+ *     一整張表的節奏是亂的。有按鈕的格子拿掉上下 padding，按鈕本身就是 44px。 */
+.page--admin .adm-table tbody td { height: var(--tap-min); }
+.page--admin .adm-table tbody td:has(> :is(.btn, .btn--quiet, .btn--minor, .adm-dd, .tsw)) { padding-block: 0; }
+
+/* ==========================================================================
+ * 分頁器（AdminPager，admin-chrome.js）
+ *
+ * ZH: 原本四份複製貼上的 `.adm-inline.tu-pager` 沒有自己的樣式，靠繼承剛好落在現在的
+ *     位置：靠左、頁碼比按鈕低一截（.footnote 的 24px 上邊距）。
+ *     統一成：放在表格**右下**，右端對齊表格最後一欄；按鈕用 quiet。
+ * ========================================================================== */
+.adm-pager {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: flex-end;
+    gap: var(--space-1) var(--space-2);
+    margin-top: var(--space-2);
+}
+.adm-pager__at {
+    color: var(--text-muted);
+    font-size: 0.85rem;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+}
+
+/* ==========================================================================
+ * 收合區塊（AdminFold，admin-chrome.js）
+ *
+ * ZH: 用原生 <details>：鍵盤、螢幕閱讀器的展開狀態、Ctrl+F 找到收起來的字時
+ *     自動展開，全部免費（與回報清單 v3.9 同一個理由）。
+ * ZH: 🔴 收起來的時候標題列上**要看得到數字**（「共 32 筆」）——
+ *     收起來而看不出裡面有多少東西，等於藏起來。
+ * ========================================================================== */
+.adm-fold > .adm-fold__head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-2);
+    min-height: var(--tap-min);
+    cursor: pointer;
+    list-style: none;                     /* ZH: 拿掉原生三角，改用下面那個（大小與顏色可控） */
+    border-radius: var(--radius-sm);
+}
+.adm-fold > .adm-fold__head::-webkit-details-marker { display: none; }
+.adm-fold > .adm-fold__head::before {
+    content: '▸';
+    flex: none;
+    width: 1em;
+    color: var(--text-muted);
+    transition: transform 0.15s ease;
+}
+.adm-fold[open] > .adm-fold__head::before { transform: rotate(90deg); }
+/* ZH: hover 只改標題顏色，不給底色 —— 收合區可能在灰底也可能在白底上（理由同 .btn--quiet）。 */
+.adm-fold > .adm-fold__head:hover :is(.adm-head__title, .adm-fold__title) { color: var(--link); }
+.adm-fold__title {
+    margin: 0;
+    font-size: 1rem;
+    font-weight: 600;
+    color: var(--text-strong);
+}
+.adm-fold__body { margin-top: var(--adm-gap-in, var(--space-4)); }
+@media (prefers-reduced-motion: reduce) {
+    .adm-fold > .adm-fold__head::before { transition: none; }
+}
+
+/* ==========================================================================
+ * 加框模式（.adm-framed，擁有者待決事項 1 的 B 案）
+ *
+ * ZH: 預設不加框（A 案，計畫建議）：只靠間距和細線分段。這個模式讓擁有者在
+ *     DEMO 橫幅上一鍵切過去比較 —— 每個區塊變成一張白底面板，左右邊緣全部對齊。
+ * ZH: 面板之間只隔 24：框本身就在分段，不需要再靠 64 的空白。
+ * ========================================================================== */
+.adm-framed .page--admin { --adm-gap-sec: var(--space-5); }
+.adm-framed .page--admin .adm-sec {
+    background-color: var(--surface);
+    border: 1px solid var(--hairline);
+    border-radius: var(--radius-md);
+    padding: var(--space-4) var(--space-5) var(--space-5);
+}
+/* ZH: 編輯中的色條吃掉 2px 的框寬差，內容不左右跳。 */
+.adm-framed .page--admin .adm-sec.is-editing {
+    border-left: 3px solid var(--accent);
+    padding-left: calc(var(--space-5) - 2px);
+}
+/* ZH: 萬一有區塊套區塊，裡面那層不要再畫一次框（框套框就是「亂」本身）。 */
+.adm-framed .page--admin .adm-sec .adm-sec {
+    background: none;
+    border: 0;
+    border-radius: 0;
+    padding: 0;
+}
+
+/* ==========================================================================
+ * DEMO 橫幅（只在 /_demo/ 底下出現，admin-chrome.js 產生）
+ *
+ * ZH: 用警示色、放在頂部列**上面**：這份 DEMO 接的是真的後端，按了會真的送出 ——
+ *     要讓人一眼分得出「我現在在 DEMO」，而不是以為在試玩假資料。
+ * ========================================================================== */
+.adm-demo {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0 var(--space-4);
+    padding: 0 var(--space-4);
+    background-color: var(--warn-soft);
+    border-bottom: 1px solid var(--warn);
+    color: var(--text-strong);
+    font-size: 0.875rem;
+}
+.adm-demo__note { flex: 1 1 auto; font-weight: 600; padding-block: var(--space-2); }
+.adm-demo__frame {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
+    min-height: var(--tap-min);
+    padding: 0 var(--space-2);
+    border: 0;
+    background: none;
+    color: inherit;
+    font: inherit;
+    cursor: pointer;
+}
+/* ZH: 開關外觀沿用 .tsw，但狀態寫在外層按鈕（role=switch）上，所以這裡另接一次。 */
+.adm-demo__frame[aria-checked="true"] .tsw { background-color: var(--accent); border-color: var(--accent); }
+.adm-demo__frame[aria-checked="true"] .tsw__knob { transform: translateX(20px); }
+
+/* ==========================================================================
+ * 總覽（v4.45 DEMO，計畫第 4 節「總覽」＋第 5 節第 4 步）
+ *
+ * ZH: 範圍一律掛在 `main.dz-ov` 底下（只有 index.html 掛這個 class），
+ *     別頁的 .adm-stats／.adm-grid／.adm-alert 不受影響。
+ * ZH: 這一頁原本五個區塊五種排法（提醒列、GPU 卡、節點表、四格、任務表）。
+ *     現在：數字格 → 提醒 → 一台機器一張卡 → 外部 AI（一塊攤開＋三個收合）→ 任務表。
+ * ========================================================================== */
+
+/* ZH: 錨點跳轉時讓出固定頂部列的高度。數字格與提醒的「查看」都是同頁錨點，
+ *     目標是標題裡的 <span id="h-…">（section 用 aria-labelledby 指著它）——
+ *     .adm-head 自己有 scroll-margin，但跳轉的對象是裡面那個 span，要另外給。 */
+.dz-ov [id^="h-"],
+.dz-ov .dz-ov-hot { scroll-margin-top: calc(var(--tap-min) + var(--space-4)); }
+/* ZH: 跨頁的也一樣：總覽連去 reports.html#h-reports，那個 id 掛在 <h2> 上，
+ *     h2 本身沒有 scroll-margin（有的是它的父層 .adm-sec__head）—— 標題會被頂部列蓋住。 */
+.page--admin .adm-sec :is(h2, h3)[id^="h-"] { scroll-margin-top: calc(var(--tap-min) + var(--space-4)); }
+
+/* ── 數字格 ──────────────────────────────────────────────────────────────
+ * ZH: 沿用數據頁的 .adm-stats／.adm-stat（同一種「大數字」只有一個樣子），
+ *     改成 <a>：每一格點下去落在講那件事的地方。
+ * ZH: 和第一個區塊之間 24（sub）而不是 64：數字格是頁首的延伸、下面那段的摘要，
+ *     隔 64 會讀成兩件不相干的事；頁首到數字格則照頁首規則的 16。 */
+.dz-ov .dz-ov-tiles {
+    margin: var(--adm-gap-in) 0 0;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 10rem), 1fr));
+}
+.dz-ov > .dz-ov-tiles + .adm-sec { margin-top: var(--adm-gap-sub); }
+
+.dz-ov-tile {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: var(--space-1);
+    min-height: var(--tap-min);
+    color: inherit;
+    text-decoration: none;
+    transition: border-color 0.15s;
+}
+.dz-ov-tile:hover { border-color: var(--link); }
+.dz-ov-tile:hover .adm-stat__label { color: var(--link); }
+/* ZH: --focus-ring 是一個顏色，不是完整的 outline 值 —— 單寫 `outline: var(--focus-ring)`
+ *     樣式會是 none，等於沒有焦點框。 */
+.dz-ov-tile:focus-visible { outline: 3px solid var(--focus-ring); outline-offset: 2px; }
+/* ZH: 要處理的數字（待處理、掉線、待處理回報、不在平台）才上色。
+ *     用 inset 陰影畫左側色條而不是 border-left —— 框線變粗會把數字往右推 3px，
+ *     每 10 秒狀態一變，整排數字就左右跳。 */
+.dz-ov-tile.is-warn { box-shadow: inset 4px 0 0 var(--warn); }
+.dz-ov-tile.is-warn .adm-stat__value { color: var(--warn); }
+@media (prefers-reduced-motion: reduce) {
+    .dz-ov-tile { transition: none; }
+}
+
+/* ── 需要你處理的：每一列等高、動作欄寬度固定 ──────────────────────────────
+ * ZH: 原本有「查看」的列 68px、沒有的 48px（任務失敗、排隊那兩種沒有連結）。
+ *     沒有連結的列照樣留一個空的動作欄，**而且它也是 44 高** —— 高度由動作欄撐，
+ *     不另外算 min-height（算的話還得把框線 2px 加進去，差 2px 就又是兩種高度）。
+ *     上下 padding 收成 8：44 的按鈕再加原本的 12 會讓一疊提醒太鬆。 */
+.dz-ov-alerts .adm-alert { padding-block: var(--space-2); }
+.dz-ov-alert__go {
+    flex: none;
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    min-width: 6rem;
+    min-height: var(--tap-min);
+}
+.dz-ov-alert__go > .btn { width: auto; margin: 0; }
+
+/* ── 機器卡（GPU 卡＋節點表合併）────────────────────────────────────────
+ * ZH: 一台機器可能有好幾張 GPU，比原本一張 GPU 一張卡寬 —— 最小 22rem。
+ *     min(100%, …)：手機寬度時不撐出橫向捲軸。 */
+.dz-ov-machines { grid-template-columns: repeat(auto-fill, minmax(min(100%, 22rem), 1fr)); }
+
+.dz-ov-mach {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+}
+.dz-ov-mach__head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-2);
+}
+.dz-ov-mach__name {
+    font-weight: 600;
+    color: var(--text-strong);
+    overflow-wrap: anywhere;
+}
+/* ZH: 原本節點表的四欄（池別、執行中、下次變化、最後心跳）收成卡頭下的一行小字。 */
+.dz-ov-mach__facts {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-1) var(--space-4);
+    margin: 0;
+    font-size: 0.8125rem;
+}
+.dz-ov-mach__facts > div { display: flex; gap: var(--space-1); }
+.dz-ov-mach__facts dt { color: var(--text-muted); }
+.dz-ov-mach__facts dd {
+    margin: 0;
+    color: var(--text);
+    font-variant-numeric: tabular-nums;
+}
+
+/* ZH: 🔴 量表共用**整張卡一個 grid**：每一條 .adm-meter 與每張 GPU 的外層都是
+ *     display:contents，三個欄位直接落在這個 grid 上。原本每條自己一個 grid、數值欄
+ *     各自 auto，於是「12034 / 24576 MB」那條的長條比「45 %」那條短一截。 */
+.dz-ov-meters {
+    display: grid;
+    grid-template-columns: 4.5em minmax(0, 1fr) max-content;
+    align-items: center;
+    gap: var(--space-2);
+    font-size: 0.8125rem;
+}
+.dz-ov-meters > .dz-ov-gpu,
+.dz-ov-gpu > .adm-meter { display: contents; }
+.dz-ov-gpu .adm-meter__val { text-align: right; }
+.dz-ov-gpu__name {
+    grid-column: 1 / -1;
+    font-weight: 600;
+    color: var(--text-strong);
+}
+/* ZH: 同一台的第二張以後的 GPU 用細線隔開（與「區塊內小段」同一種分法）。 */
+.dz-ov-gpu + .dz-ov-gpu > .dz-ov-gpu__name {
+    margin-top: var(--space-1);
+    padding-top: var(--space-2);
+    border-top: 1px solid var(--hairline);
+}
+/* ZH: 單張 GPU 掉線（整台沒掉）。外層是 display:contents、沒有方塊，opacity 掛不上去，
+ *     所以掛在它的子項上。 */
+.dz-ov-gpu--off > .dz-ov-gpu__name,
+.dz-ov-gpu--off .adm-meter > * { opacity: 0.5; }
+
+/* ── 外部 AI ──────────────────────────────────────────────────────────────
+ * ZH: 要處理的那一格（有用量 × 不在平台）攤開，左側色條與提醒列同一種語言；
+ *     0 人時色條是中性的 hairline —— 區塊仍在，「0」本身就是答案。 */
+.dz-ov-hot {
+    padding-left: var(--space-4);
+    border-left: 4px solid var(--hairline);
+}
+.dz-ov-hot.is-hot { border-left-color: var(--warn); }
+.dz-ov-hot__head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-2);
+    min-height: var(--tap-min);
+}
+.dz-ov-hot__head > * { margin: 0; }
+.dz-ov-hot > .dz-ov-names { margin-top: var(--space-2); }
+
+/* ZH: 名單限寬：滿版的話名字在最左、時間在 1000px 外的最右，對不起來是誰的時間。 */
+.dz-ov-names { max-width: 36rem; }
+/* ZH: 時間與點數之間原本塞全形空白，寬度跟著字體變。改用 gap。 */
+.dz-ov-names .adm-quad__meta {
+    display: inline-flex;
+    gap: var(--space-3);
+}
+
+/* ==========================================================================
+ * v4.45 帳號頁（people.html / people.js）— 版面整理 DEMO
+ * ZH: 只在帳號頁與個人對話框用到；類別名一律 pp- 開頭（rmod__foot--end 例外，見下）。
+ * ========================================================================== */
+
+/* ZH: 搜尋框＋人數同一列。欄位寬度交給欄位寬三級（搜尋＝30ch 那一級），
+ *     人數藥丸緊貼在框的右邊。藥丸 1.5rem 高、欄位 44px —— 往上推半個差距，對齊欄位中線。 */
+.pp-find {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    gap: var(--space-2) var(--space-3);
+}
+.pp-find > .field { flex: 0 1 var(--adm-fw-l); min-width: 0; }
+.pp-find > .adm-head__count { margin-bottom: calc((var(--tap-min) - 1.5rem) / 2); }
+
+/* ZH: 名片上「正在生效的授權／加碼」（開放修改中、磁碟 +N GB）。外框、不填色 ——
+ *     .adm-pill--ok 與 .adm-pill--temp 都是 --accent-soft，掛 --ok 的話跟「臨時帳號」並排時
+ *     看起來是同一類；它們也不是「狀態好」的意思，只是「目前有一項例外在生效」。
+ *     邊框用 --text-muted：淡灰的 --hairline 在白底上幾乎看不出是外框標籤。 */
+.pp-pill-live {
+    background-color: transparent;
+    border-color: var(--text-muted);
+    color: var(--text-strong);
+}
+
+/* ZH: MYAI 檢視時第一個 MYAI 區塊才是頁首下的第一塊（平台那塊 data-view-off 還在 DOM 裡，
+ *     相鄰兄弟選擇器看不穿它），上外距收回 16，與平台檢視一致。 */
+.page--admin .adm-sec.pp-myai-first { margin-top: var(--adm-gap-in); }
+
+/* ZH: 對應表子表的標題可能很長（「信箱看起來是教職員，角色還是學生」），窄畫面要能換行。 */
+#bx-body .adm-head__title { white-space: normal; }
+
+/* ZH: 「補到 [__] 點 ［預覽］」一列。欄位寬固定在數字級（10ch），按鈕緊貼欄位。 */
+.pp-tgt { align-items: center; }
+.pp-tgt__field {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
+    color: var(--text);
+}
+.pp-tgt__field > .field__input { flex: none; width: var(--adm-fw-s); }
+
+/* ZH: 對話框頁腳：靠右，［取消］［下一步］［確認］—— 確認鍵永遠在右下角（計畫第 3 節）。
+ *     通用修飾類別，其他頁的對話框要統一時可以直接套。 */
+.rmod__foot--end { justify-content: flex-end; }
+
+/* ── 個人對話框（.rmod--person）────────────────────────────────────────── */
+/* ZH: .pcard 已經用 padding-right 讓出 ✕ 的位置，.pcard__acts 再讓一次就是兩倍 ——
+ *     停用／刪除離右緣 92px，對不齊下面的區塊。 */
+.rmod--person .pcard__acts { padding-right: 0; }
+
+/* ZH: 區塊仍掛 .adm-card（勾選框等既有樣式掛在它底下），這裡拿掉外框：
+ *     單欄一疊，只靠細線分段。⚠ 這條要寫在 .pp-stack 那條**前面**（同權重，後者蓋前者的 border-top）。 */
+.rmod--person .pp-blk {
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    background: none;
+}
+.rmod--person .pp-stack > * + *,
+.rmod--person .pp-rare > .adm-fold__body > * + * {
+    margin-top: var(--adm-gap-sub);
+    padding-top: var(--adm-gap-sub);
+    border-top: 1px solid var(--hairline);
+}
+/* ZH: 編輯中（AdminEditMark）：左側色條，與頁面上的 .adm-sec.is-editing 同一個樣子。 */
+.rmod--person .pp-blk.is-editing {
+    border-left: 3px solid var(--accent);
+    padding-left: var(--space-4);
+}
+/* ZH: 臨時帳號區塊保留左側粗邊（「這是例外用途」的標示，原 .adm-card--temp）。 */
+.rmod--person .adm-card--temp.pp-blk {
+    border-left: 4px solid var(--accent);
+    padding-left: var(--space-4);
+}
+
+/* ZH: 區塊內的小標（綁定資訊／用了多少／額外授與）：比區塊標題（h3）低一層。 */
+.rmod--person .pp-sub {
+    margin: 0 0 var(--space-2);
+    font-size: 0.8125rem;
+    font-weight: 600;
+    color: var(--text-muted);
+}
+.rmod--person .pp-blk > .pp-sub { margin-top: var(--space-4); }
+
+/* ZH: 磁碟加碼的三個欄位：各帶看得見的標籤，寬度照內容分級。 */
+.rmod--person .pp-qrow { align-items: flex-end; }
+.rmod--person .pp-qrow > .field { flex: 0 0 auto; }
+.rmod--person .pp-qrow > .pp-qrow__gb { width: var(--adm-fw-s); }
+.rmod--person .pp-qrow > .pp-qrow__why { flex: 1 1 14rem; max-width: var(--adm-fw-l); }
+.rmod--person .pp-qrow > .pp-qrow__exp { width: var(--adm-fw-m); }
+
+/* ==========================================================================
+ * 平台設定（v4.45 版面整理，platform.html／platform.js）
+ * ========================================================================== */
+
+/* ZH: 營運設定的三張表（平台營運／小基／寄信）用**同一組欄寬**。
+ *     原本每張表各自 auto 排版，「值／預設／範圍」在三張表裡落在三個不同的 x 位置，
+ *     上下疊著看就是歪的。table-layout:fixed ＋ platform.js 每張表都給同一份 <colgroup>，
+ *     名稱欄吃剩下的寬度。
+ * ZH: fixed 之後欄寬不再跟著內容撐，所以這幾張表的格子要**可以換行**（共用的 .adm-table 是
+ *     nowrap）—— 後端的標籤很長（「MYAI 開通通知信(1=寄, 0=不寄; …)」），預設值也可能是一串主機名。
+ *     半開關那格（滑條＋數字欄）不換行，兩個控制項要待在同一行。
+ * ZH: min-width：窄畫面時讓 .adm-tablewrap 自己橫捲，不要把名稱欄擠成一個字一行。 */
+#settings .pf-set { table-layout: fixed; min-width: 48rem; }
+#settings .pf-set .pf-set__val { width: 20rem; }
+#settings .pf-set .pf-set__def { width: 11rem; }
+#settings .pf-set .pf-set__rng { width: 7rem; }
+#settings .pf-set .pf-set__act { width: 10rem; }
+#settings .pf-set :is(th, td) { white-space: normal; overflow-wrap: anywhere; }
+#settings .pf-set .tsw-cell { white-space: nowrap; }
+
+/* ZH: 校外供應商的警語列（緊接在「小基模型」那一列下面，整列跨欄）。
+ *     警語自己的下外距在表格裡會變成一條多出來的空白，歸零；滑過不變色 —— 它不是一列設定。 */
+#settings .pf-warn-row > td { padding-block: var(--space-2); }
+#settings .pf-warn-row .adm-alert { margin: 0; }
+#settings .adm-table tbody tr.pf-warn-row:hover { background-color: transparent; }
+
+/* ZH: 外部 AI 區塊裡的兩個小段（連線設定、廠商模型代碼對應）各自有編輯／儲存，
+ *     「編輯中」要標在**那一小段**上（AdminEditMark 對 .adm-block 掛 .is-editing）——
+ *     共用規則只畫 .adm-sec.is-editing，這裡給小段同一條色條。
+ * ZH: 小段裡的元素之間 16（與 .adm-sec > * + * 同一級；.adm-block 本身沒有這條規則）。 */
+.page--admin .pf-sub > * + * { margin-top: var(--adm-gap-in); }
+.page--admin .pf-sub.is-editing {
+    border-left: 3px solid var(--accent);
+    padding-left: var(--space-4);
+}
+
+/* ==========================================================================
+ * v4.45 訊息頁（reports.html / reports.js）—— 版面整理 DEMO，計畫第 4 節「訊息」
+ *
+ * ZH: 只有這一頁用到的幾條。共用的標題列、分頁器、收合區、表格欄寬都在上面那一段。
+ * ========================================================================== */
+
+/* ZH: 總覽的回報提醒連到 #h-reports（標題本身，不是標題列）。
+ *     .adm-head 有 scroll-margin，但錨點落在裡面的 h2 上，要另外給 ——
+ *     不然跳過來時標題被固定的頂部列蓋住。 */
+.page--admin #h-reports { scroll-margin-top: calc(var(--tap-min) + var(--space-4)); }
+
+/* ZH: 回報清單：一列仍是一顆 <button>，但改成**固定欄寬**的 grid。
+ *     原本是 flex，狀態、類別、名字的寬度跟著內容走，主旨與時間在每一列的起點都不同
+ *     （英文的 Open / In progress 差更多）。
+ * ZH: 每一列是**各自的** grid（不是同一張表），所以除了主旨以外每一欄都要寫死寬度 ——
+ *     寫 auto 的話每一列各算各的，又對不齊了。
+ * ZH: 欄：狀態｜類別｜回報者｜主旨（吃剩下的寬度）｜時間｜已回覆。
+ *     類別 9rem 裝得下最長的英文類別的大半，再長的截斷（彈窗裡有完整的）。 */
+.page--admin .rp__row.dz-rp-row {
+    display: grid;
+    grid-template-columns: 7rem 9rem minmax(0, 10rem) minmax(0, 1fr) 9.5rem 4.5rem;
+    align-items: center;
+    column-gap: var(--space-3);
+}
+/* ZH: grid 的格子預設會把內容撐滿整格 —— 藥丸會被拉成 9rem 寬。靠左、照內容寬。 */
+.dz-rp-row > * { min-width: 0; max-width: 100%; justify-self: start; }
+.dz-rp-row > .rp__snip { justify-self: stretch; }
+.dz-rp-row > .rp__who,
+.dz-rp-row > .rp__cat {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+/* ZH: 時間靠右、等寬數字 —— 「已回覆」那一欄不論有沒有字，時間的右緣都在同一條線上。 */
+.dz-rp-row > .rp__when { justify-self: end; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.dz-rp-row > .rp__done { justify-self: end; min-width: 0; }
+
+/* ZH: 窄畫面：共用段落已經把摘要、時間、類別收掉（.rp__snip / .rp__when / .rp__cat），
+ *     沒類別時的空佔位也要一起收，不然它會佔掉「回報者」那一格。
+ *     剩下三欄：狀態｜回報者｜已回覆。 */
+@media (max-width: 640px) {
+    .page--admin .rp__row.dz-rp-row { grid-template-columns: auto minmax(0, 1fr) auto; }
+    .dz-rp-nocat { display: none; }
+}
+
+/* ZH: 「全部公告」時的表尾：左邊「只看最前面 5 則」、右邊分頁器（右端對齊表格最後一欄）。 */
+.dz-rp-newsfoot {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-2);
+    margin-top: var(--space-2);
+}
+.dz-rp-newsfoot > .adm-pager { margin-top: 0; margin-left: auto; }
+
+/* ZH: 對話框頁腳（計畫第 3 節）：確認鍵永遠在右下角，危險動作（刪除公告）在左下。 */
+.rmod .dz-rp-foot { justify-content: flex-end; }
+.rmod .dz-rp-foot__danger { margin-right: auto; }
+/* ZH: 頁腳裡的下拉（回報對話框的「改狀態」）與旁邊的［取消］［送出］同高 44px。
+ *     .field__input 自帶 12px 上下 padding，算出來 50px —— 跟 44px 的按鈕並排就是上下各凸 3px
+ *     （同 .adm-head .field__input、.an-range__d 的處理：padding-block 歸零 + 固定高度）。 */
+.rmod .dz-rp-foot > select.field__input {
+    height: var(--tap-min);
+    padding-block: 0;
+}
+
+/* ==========================================================================
+ * 數據 · AI 查詢（v4.45 版面整理 DEMO，計畫第 4 節）
+ * ========================================================================== */
+
+/* ZH: 期間下拉的最小寬度要贏過共用的 `:where(.page--admin) select.field__input { min-width: min(16ch, 100%) }`。
+ *     那條的權重 (0,1,1) 比 .an-range__d (0,1,0) 高，而它的 100% 在「量內容寬度」時算成 0 ——
+ *     .adm-head__do 依那個寬度排版，排完 select 又長回 154px，於是匯出▾ 被擠到第二行（實測頁首 96px 高）。
+ *     這裡把 9.5rem 用更高的權重放回來（放得下 YYYY-MM-DD 與日曆圖示，見 .an-range__d 原註解）。 */
+.page--admin .an-range__d { min-width: 9.5rem; }
+
+/* ZH: 四個圓餅並排的那一列（analytics.js 的 .an-pies）。擁有者：這一頁是截圖交報告用的，四個要並排。
+ *     共用的 .adm-cols 是 auto-fit minmax(300px)，1280px 寬的螢幕只排得下三個 → 變成 3＋1，
+ *     最後那一個獨占一行，正是「底邊參差」最嚴重的樣子。寫死四欄；窄一點時 2×2，手機一欄 —— 不會出現 3＋1。
+ * ZH: 四欄等高（stretch）：圖例上限 8 列（PIE_MAX）之後各欄差距已經很小，等高再把每一欄的外框拉齊。 */
+.page--admin .adm-cols.an-pies {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    align-items: stretch;
+}
+@media (max-width: 1000px) {
+    .page--admin .adm-cols.an-pies { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 600px) {
+    .page--admin .adm-cols.an-pies { grid-template-columns: minmax(0, 1fr); }
+}
+/* ZH: 🔴 四欄之後每欄只剩 ~290px（1280 寬）／~220px（1024 寬），「依組織」的標題＋切換放不下。
+ *     第一版是四格滑條：等寬的四格每格只分到 56–72px，英文 Department／Campus 被 … 切掉，
+ *     而且換行後那一欄的標題列 77px、標題停在跟另外三欄不同的高度。
+ *     v4.45 改成下拉（analytics.js orgToggle）—— 寬度跟著最長的選項，不必等分。三件事一起處理：
+ *       1. 標題不准被擠（nowrap、不縮），標題列放不下時下拉**整個換到下一行**；
+ *       2. 標題列一律**靠上**（flex-start）：subgrid 讓四個標題列等高，置中的話
+ *          沒換行的三欄標題會掉到 77px 的正中間、跟換了行的那欄錯開 26px。靠上就共用同一條頂線；
+ *       3. 四個區塊用 subgrid 共用「標題列／內容」兩條列 —— 依組織換行變高時，
+ *          同一排的另外三個標題列一起變高，四張圖的頂邊仍然在同一條線上。
+ *     每個區塊佔兩列（span 2），2×2 與手機一欄時照樣成立（每一排各自對齊）。
+ * ZH: row-gap: 0 —— subgrid 預設沿用外層 .adm-cols 的 gap，標題與圖之間會多出一段欄距。 */
+.page--admin .an-pies > .adm-block {
+    display: grid;
+    grid-row: span 2;
+    grid-template-rows: subgrid;
+    row-gap: 0;
+    min-width: 0;
+}
+.an-pies .adm-block__head { flex-wrap: wrap; row-gap: var(--space-2); align-items: flex-start; }
+/* ZH: 標題靠上之後，單行標題要撐到 44px 行高 —— 不然它貼在列頂，旁邊 44px 高的下拉的
+ *     文字在 22px 處，兩者差半行。行高拉到 --tap-min，標題字的中線就跟下拉的字對齊。 */
+.an-pies .adm-block__title { flex: 0 0 auto; white-space: nowrap; line-height: var(--tap-min); }
+/* ZH: 下拉高度對齊標題列的 44px（.field__input 自帶 12px 上下 padding，原本算出來 50px，
+ *     同 .adm-head .field__input 的處理）。max-width 讓它在 220px 的窄欄裡也不撐出欄外。 */
+.an-pies .an-org-pick {
+    height: var(--tap-min);
+    padding-block: 0;
+    font-size: 0.875rem;
+    max-width: 100%;
+}
+
+/* ZH: 「其他 N 項」的明細（圓餅圖例下面的 <details>）。
+ *     摘要列是文字連結的樣子，但點擊範圍照樣 44px（與 .btn--quiet 同一條規則）。
+ *     用 line-height 撐高而不是 display:flex —— flex 會讓瀏覽器拿掉 <summary> 自己的 ▸。 */
+.an-pie-more { margin-top: var(--space-1); font-size: 0.8125rem; }
+.an-pie-more > summary {
+    width: max-content;
+    max-width: 100%;
+    line-height: var(--tap-min);
+    padding-inline: var(--space-1);
+    color: var(--link);
+    font-weight: 600;
+    cursor: pointer;
+}
+.an-pie-more > summary:hover { text-decoration: underline; text-underline-offset: 3px; }
+/* ZH: 明細列的色塊留位不畫 —— 它們全在「其他」那一片裡，畫出各自的深淺會讓人以為圓裡有那一片。
+ *     留位是為了名稱、數值、百分比三欄與上面的圖例對齊。 */
+.an-pie-more__key { visibility: hidden; }
+
+/* ZH: AI 查詢是閱讀頁（輸入一句、讀一段答案），不是 9 欄的表 ——
+ *     .page--admin 為了寬表放到 1440px，答案的一行字就會拉到一千多 px。
+ *     限在區塊上而不是 <main>：<main> 收窄的話頁首的左緣會跟頂部列對不齊。 */
+.ai-page > .adm-sec { max-width: 56rem; }
+.ai-form .ai-ex { flex: none; }
+/* ZH: 手機寬時 .ai-form 改直排並 stretch（上面 ≤640px 那條），.ai-ex 跟著被拉成整行寬；
+ *     按鈕仍是內容寬、貼在左邊，選單卻是 right:0 對齊外殼的右緣 —— 展開後落在螢幕另一頭，
+ *     看不出是哪顆按鈕叫出來的。讓外殼維持內容寬，選單就貼在按鈕底下。
+ * ZH: 只縮外殼還不夠：按鈕這時在螢幕**左緣**，選單照舊 right:0 往左長，會長出螢幕外
+ *     （實測 375 寬時左緣 -94px）。所以窄畫面也改成往右長（與 .adm-dd--left 同一條規則；
+ *     桌機不改 —— 那裡按鈕在表單右側，往左長才不會蓋出區塊）。 */
+@media (max-width: 640px) {
+    .ai-form .ai-ex { align-self: flex-start; }
+    .ai-form .ai-ex .account__menu { left: 0; right: auto; }
+}
+
+/* ==========================================================================
+ * 小控制項的可點範圍（v4.45 DEMO，計畫第 3 節「44px」）
+ * ZH: 外觀不變、只把**點得到的範圍**往外擴到 44px（透明的 ::before）。
+ *     ⓘ 刻意畫成 24px（styles.css 的註解：放在標題文字旁，做成 44px 會把行高撐開）——
+ *     那個理由講的是外觀，可點範圍不必跟著小。styles.css 是共用檔，不動；這裡只對管理端。
+ * ========================================================================== */
+.page--admin .tip__btn { position: relative; }
+/* ZH: -11 不是 -10：ⓘ 有 1px 外框，::before 從 padding 邊算起（22px），-10 只到 42。 */
+.page--admin .tip__btn::before {
+    content: '';
+    position: absolute;
+    inset: -11px;
+}
+/* ZH: MYAI 點數的兩個開關（44×24）與它們那一列：列高給到 44，開關的可點範圍上下各擴 11px
+ *     （.tsw 本身有 1px 外框，::before 從 padding 邊算起，所以是 11 不是 10）。 */
+.cr-switch { min-height: var(--tap-min); }
+.cr-switch > .tsw::before {
+    content: '';
+    position: absolute;
+    inset: -11px -1px;
+}
+/* ZH: 「改成永久有效」那一列勾選框（延期對話框）：整個 label 都可點，給它 44px 高。 */
+.pp-check { min-height: var(--tap-min); }
+/* ZH: 結果卡裡的小標（程式算出的判斷、原始資料各表）原本 1rem，跟頁面的 h2 差不多大，
+ *     會跟卡片最上面那句粗體的問題搶。降一級。 */
+.ai-item .ai-sub { font-size: 0.875rem; }

@@ -222,6 +222,64 @@
             + esc(marked ? T('pf_mm_undel', '不刪了') : T('pf_m_del', '刪除')) + '</button></td>';
     }
 
+    // ── 編輯中標示與「儲存 N 項變更」（v4.45 版面整理）────────────────────
+    //
+    // ZH: 原本每一區開頭都掛一句「目前是唯讀。要改請按『編輯設定』」，六句一模一樣。
+    //     唯讀是平常的狀態 —— 改成**只標例外**：進入編輯時區塊左側一條色條、
+    //     標題旁一顆「編輯中」（共用的 AdminEditMark，見 admin-chrome.js）。
+    // ZH: 找不到 AdminEditMark 就什麼都不做 —— 瀏覽器快取了舊版 admin-chrome.js 時，
+    //     少一條色條比整頁炸掉好（與 renderCredit 的「舊版 HTML 還在快取」同一個理由）。
+    function editMark(secId, on) {
+        if (window.AdminEditMark) window.AdminEditMark(secId, on);
+    }
+
+    // ZH: 儲存鈕寫出「這次會改幾項」。理由與確認框寫數字相同（擁有者的偏好）：
+    //     按下去之前就知道自己改了幾個地方 —— 改了三項卻顯示 1，表示有一格打錯了位置；
+    //     顯示 0，表示剛才的修改其實沒有生效（例如打完沒離開欄位）。
+    // ZH: 🔴 數字**只是顯示**，不改變送出的內容 —— 各區的儲存照舊各走各的契約
+    //     （營運設定送整張字典、模型與代碼對應只送改過的列…），這裡一行都沒動。
+    //     所以 0 項時也照樣可以按（原本就可以：按了等於確認一次、回到唯讀）。
+    // ZH: 0 項時寫回 data-i18n 的 span，語言切換才會跟著換；有數字時是 JS 自己組的字，
+    //     不帶 data-i18n —— 不然切語言時 i18n 會把「儲存 3 項變更」蓋回「儲存設定」。
+    function paintSave(btnId, n) {
+        var b = $(btnId);
+        if (!b) return;
+        if (n > 0) {
+            b.textContent = T('dz_pf_save_n', '儲存 {n} 項變更').replace('{n}', num(n));
+        } else {
+            b.innerHTML = '<span data-i18n="pf_save">' + esc(T('pf_save', '儲存設定')) + '</span>';
+        }
+    }
+
+    // ZH: 每一區一筆：[區塊 id, 儲存鈕 id, 算改了幾項的函式]。由 liveCount() 登記（見檔尾「啟動」）。
+    //     算法放在各區自己那一段 —— 各區「什麼叫改過」的定義不同，要跟它們各自的儲存契約一致。
+    var SAVE_COUNTERS = [];
+
+    function recount(secId) {
+        SAVE_COUNTERS.forEach(function (c) {
+            if (secId && c[0] !== secId) return;
+            var b = $(c[1]);
+            if (!b || b.hidden) return;          // ZH: 不在編輯中就不必算
+            paintSave(c[1], c[2]());
+        });
+    }
+
+    // ZH: 監聽掛在**區塊本身**（不會被重畫的那一層），用事件委派 ——
+    //     表格每次重畫都是整段 innerHTML，掛在列上的監聽會跟著不見。
+    // ZH: setTimeout 0：讓同一次點擊裡各區自己的處理（撥開關、標記刪除、重畫）先跑完再算。
+    //     keyup／focusout 是給告警信那一格：Backspace 刪 chip、離開欄位才收進 chip，
+    //     這兩件事都不會觸發 input／change。
+    function liveCount(secId, btnId, fn) {
+        SAVE_COUNTERS.push([secId, btnId, fn]);
+        var sec = $(secId);
+        if (!sec) return;
+        ['input', 'change', 'click', 'keyup', 'focusout'].forEach(function (ev) {
+            sec.addEventListener(ev, function () {
+                setTimeout(function () { recount(secId); }, 0);
+            });
+        });
+    }
+
     // ── 營運設定 ──────────────────────────────────────────────────────────
     // ZH: 預設**唯讀**，按「編輯設定」才變成可填的欄位。
     //
@@ -443,6 +501,7 @@
         $('cr-edit').hidden = CR_EDITING;
         $('cr-cancel').hidden = !CR_EDITING;
         $('cr-save').hidden = !CR_EDITING;
+        editMark('sec-credit', CR_EDITING);
         crDimColumns();
         if (CR_EDITING) {
             box.querySelectorAll('[data-crsw]').forEach(function (sw) {
@@ -452,6 +511,29 @@
                 });
             });
         }
+        recount('sec-credit');
+    }
+
+    // ZH: v4.45 「儲存 N 項變更」的 N：畫面上（readCredit 會送出的）與目前生效值不同的格數。
+    //     開關比「開／關」，不比字串（後端可能回 1 也可能回 '1'）；
+    //     點數比數值（readCredit 把清空的格子當 0 送，這裡也當 0 比，兩邊才一致）。
+    function countCredit() {
+        if (!CR_EDITING) return 0;
+        var p = readCredit();
+        var n = 0;
+        Object.keys(p).forEach(function (k) {
+            var was = crVal(k);
+            var now = p[k];
+            if ($('credit').querySelector('[data-crsw="' + k + '"]')) {
+                if ((now === '1') !== (Number(was) > 0)) n++;
+            } else if (now === '') {
+                // ZH: 只有補點日會送空字串（見 readCredit）—— 原本有值就算改了一項。
+                if (was != null && String(was) !== '') n++;
+            } else if (Number(now) !== Number(was == null ? 0 : was)) {
+                n++;
+            }
+        });
+        return n;
     }
 
     // ZH: 開關關著的那一欄淡化（與營運設定表的 is-dimmed 同一個意思：
@@ -604,7 +686,20 @@
         $('am-edit').hidden = AM_EDITING;
         $('am-cancel').hidden = !AM_EDITING;
         $('am-save').hidden = !AM_EDITING;
+        editMark('sec-alertmail', AM_EDITING);
         if (AM_EDITING) wireAlertMail();
+        recount('sec-alertmail');
+    }
+
+    // ZH: v4.45 N＝收件人、副本兩欄裡，跟目前生效的名單不一樣的欄數。
+    //     用 readAlertMail() 來比（含還停在輸入框裡、還沒變成 chip 的那一個）——
+    //     那正是按下儲存時會送出去的東西。
+    function countAlertMail() {
+        if (!AM_EDITING) return 0;
+        var p = readAlertMail();
+        return ALERT_MAIL_KEYS.filter(function (k) {
+            return p[k] != null && p[k] !== splitAddrs(amValue(k)).join(', ');
+        }).length;
     }
 
     function wireAlertMail() {
@@ -864,6 +959,43 @@
         //     但假如前後端版本對不上（例如瀏覽器快取了舊的 JS），
         //     漏接的旋鈕就會**安靜地消失** —— 而那是沒有人會回報的故障。
         //     所以這裡兵分兩路：有分組就按分組，剩下的一律掃進最後一區。
+        // ZH: v4.45 三張表（平台營運／小基／寄信）**同一組欄寬**。
+        //     原本每一組是各自 auto 排版的 <table>，「值／預設／範圍」三欄在三張表裡
+        //     落在三個不同的 x 位置 —— 上下疊著看就是歪的；進編輯多一欄時又全部再移一次。
+        //     改成 table-layout:fixed ＋ 同一份 <colgroup>（寬度在 admin.css 的 .pf-set），
+        //     名稱那一欄吃剩下的寬度並且可以換行（後端的標籤很長）。
+        function setTable(rowsHtml) {
+            return '<div class="adm-tablewrap"><table class="adm-table pf-set"><colgroup>'
+                + '<col class="pf-set__name"><col class="pf-set__val">'
+                + '<col class="pf-set__def"><col class="pf-set__rng">'
+                + (EDITING ? '<col class="pf-set__act">' : '')
+                + '</colgroup><thead><tr>'
+                + cols.map(function (c) {
+                    return '<th>' + esc(c[0] ? T(c[0], c[1]) : '') + '</th>';
+                }).join('')
+                + '</tr></thead><tbody>' + rowsHtml + '</tbody></table></div>';
+        }
+
+        // ZH: v4.45 校外供應商的警語緊接在「小基模型」那一列下面（原本在整區最上方，
+        //     跟它講的那一列隔著平台營運的十五列）。整列跨欄、預設藏著，
+        //     由 wireExternalWarning() 依選到的供應商決定要不要顯示 —— 規則一個字都沒改。
+        // ZH: 警語本身只寫一份（列內版與下面的頂端版共用），兩處的字才不會漂開。
+        function extWarnAlert(idAttr) {
+            return '<div class="adm-alert adm-alert--warn"' + idAttr + '><span>'
+                + esc(T('pf_external_warn', '⚠ 選了校外供應商（Claude / Gemini）之後，使用者問小基的內容會送到那家廠商；小基的程式家教模式還會讀使用者自己的檔案。而且本機模型是直連的，選外部就會多依賴一層 gateway——它掛掉小基也會跟著不能用。'))
+                + '</span></div>';
+        }
+        var warnInRow = false;
+        function rowsWithWarn(list) {
+            return list.map(function (s2) {
+                var tr = rowHtml(s2);
+                if (s2.key !== 'rag_chat_model') return tr;
+                warnInRow = true;
+                return tr + '<tr class="pf-warn-row" id="ext-warn" hidden><td colspan="' + cols.length + '">'
+                    + extWarnAlert('') + '</td></tr>';
+            }).join('');
+        }
+
         var known = {};
         GROUPS.forEach(function (g) { known[g.key] = true; });
 
@@ -886,18 +1018,26 @@
             //     這裡排一次會把父開關從它的子參數旁邊抽走。
             if (!rows.length) return '';        // 空的分組不畫標題
             return '<h3 class="adm-subhead">' + esc(labelOf(g)) + '</h3>'
-                 + tableHtml(cols, rows.map(rowHtml).join(''));
+                 + setTable(rowsWithWarn(rows));
         });
 
         if (leftover.length) {
             blocks.push('<h3 class="adm-subhead">'
                 + esc(T('pf_group_other', '其他')) + '</h3>'
-                + tableHtml(cols, leftover.map(rowHtml).join('')));
+                + setTable(rowsWithWarn(leftover)));
         }
 
+        // ZH: 🔴 警語在「小基模型」那一列旁邊 —— 但那一列屬於平台檢視的分組，**MYAI 檢視不畫它**。
+        //     原本警語是常駐在營運設定（data-view="both"）裡的 div，兩個檢視都看得到；
+        //     搬進列裡之後，MYAI 檢視就整個看不到了，而 wireExternalWarning 的規則是「唯讀時也要顯示」。
+        //     所以列沒畫出來、但後端有這個旋鈕時，把同一句警語放在整區最上方（同一個 id，
+        //     顯示與否照舊由 wireExternalWarning 依供應商決定）。
+        var warnTop = (!warnInRow && SETTINGS.some(function (x) { return x.key === 'rag_chat_model'; }))
+            ? extWarnAlert(' id="ext-warn" hidden') : '';
+
         // ZH: 一個都沒有的話講清楚，不要留一塊空白讓人以為還在載入。
-        $('settings').innerHTML = blocks.join('')
-            || '<p class="footnote">' + esc(T('pf_no_settings', '目前沒有可調的設定。')) + '</p>';
+        $('settings').innerHTML = warnTop + (blocks.join('')
+            || '<p class="footnote">' + esc(T('pf_no_settings', '目前沒有可調的設定。')) + '</p>');
 
         wireExternalWarning();
 
@@ -963,6 +1103,23 @@
         });
 
         refreshDeps();
+        recount('sec-settings');
+    }
+
+    // ZH: v4.45 N＝畫面上與「進編輯時的樣子」不同的旋鈕數。進編輯時只有「已覆寫」的格子有值
+    //     （其餘空白＝跟預設走，見 rowHtml 的 🔴），所以基準就是 overridden ? value : ''。
+    //     按「回到預設」把一個已覆寫的清空，也算一項 —— 存下去它就不再是覆寫了。
+    function countSettings() {
+        if (!EDITING) return 0;
+        var n = 0;
+        $('settings').querySelectorAll('tr[data-key]').forEach(function (tr) {
+            var el = tr.querySelector('[data-f="v"]');
+            var s = settingByKey(tr.dataset.key);
+            if (!el || !s) return;
+            var was = s.overridden ? String(s.value == null ? '' : s.value) : '';
+            if (String(el.value) !== was) n++;
+        });
+        return n;
     }
 
     // ZH: v4.2 依賴淡化 —— 父開關關著時，子參數列整列淡化（仍可編輯：
@@ -1000,15 +1157,21 @@
     // ZH: ⚠ **唯讀時也要顯示**。這條提示講的是「平台現在把使用者的問題送到哪裡」——
     //     那件事在你沒有在編輯的時候同樣成立，而且正是你最需要看到它的時候。
     //     （只在編輯時顯示的話，它就變成一句沒有人會再看到的話。）
+    // ZH: v4.45 警語那一列跟著「小基模型」那一列畫（見 renderSettings 的 rowsWithWarn）。
+    //     MYAI 檢視不畫小基那一組 —— 那時 renderSettings 改把同一句放在整區最上方（同一個 id）。
+    //     🔴 它仍然**可能不存在**：後端沒有這個旋鈕時兩種都不畫。
+    //     原本它是 HTML 裡常駐的 div，永遠拿得到；現在找不到就直接收工，不要對 null 設 hidden。
     function wireExternalWarning() {
+        var warn = $('ext-warn');
+        if (!warn) return;
         var row = SETTINGS.filter(function (x) { return x.key === 'rag_chat_model'; })[0];
-        if (!row) { $('ext-warn').hidden = true; return; }
+        if (!row) { warn.hidden = true; return; }
 
         var paint = function (value) {
             var pick = (row.choices || []).filter(function (c) {
                 return String(c.value) === String(value);
             })[0];
-            $('ext-warn').hidden = !(pick && pick.provider && pick.provider !== 'ollama');
+            warn.hidden = !(pick && pick.provider && pick.provider !== 'ollama');
         };
 
         // ZH: 表格化之後欄位沒有 id 了，靠列上的 data-key 找。
@@ -1028,7 +1191,7 @@
         $('s-edit').hidden = EDITING;
         $('s-save').hidden = !EDITING;
         $('s-cancel').hidden = !EDITING;
-        $('s-ro-hint').hidden = EDITING;
+        editMark('sec-settings', EDITING);
         // ZH: 「空白＝跟著預設」這條規則要講出來 ——
         //     不講的話，看到一排空欄位的人第一個反應是「資料沒載到」。
         $('s-edit-hint').hidden = !EDITING;
@@ -1087,8 +1250,34 @@
         $('m-save').hidden = !MODELS_EDIT;
         $('m-cancel').hidden = !MODELS_EDIT;
         $('m-add').hidden = !MODELS_EDIT;
-        $('m-ro-hint').hidden = MODELS_EDIT;
         $('m-edit-hint').hidden = !MODELS_EDIT;
+        editMark('sec-models', MODELS_EDIT);
+    }
+
+    // ZH: v4.45 N＝按下儲存時**真的會送出**的請求數：標記刪除的列＋改過的列＋有填名字的新列。
+    //     判準與 saveModels 逐字相同（沒填名字的略過、五個欄位與「公開」都沒變的略過）——
+    //     兩邊不一致的話，按鈕說「儲存 3 項」、存完卻回報「改了 2 列」。
+    // ZH: 讀畫面時寫進**副本**，不動 MODELS.items（那是 modelsKeep 的工作，只在重畫前做）。
+    function countModels() {
+        if (!MODELS_EDIT || !MODELS) return 0;
+        var base = MODELS.__base || {};
+        var n = Object.keys(MODELS_DEL).length;
+        $('models').querySelectorAll('[data-row]').forEach(function (tr) {
+            var id = tr.dataset.row;
+            if (MODELS_DEL[id]) return;
+            var src = (MODELS.items || []).filter(function (x) { return String(x.id) === id; })[0]
+                || MODELS_NEW.filter(function (x) { return x.id === id; })[0];
+            if (!src) return;
+            var m = Object.assign({}, src);
+            readRow(tr, m);
+            if (!(m.name || '').trim()) return;
+            var was = base[m.id];
+            if (was && MODEL_FIELDS.every(function (f) {
+                    return (was[f] || '') === (m[f] || '');
+                }) && isPub(was.is_public) === isPub(m.is_public)) return;
+            n++;
+        });
+        return n;
     }
 
     function modelsExitEdit() {
@@ -1106,6 +1295,7 @@
             $('models').innerHTML = '<p class="footnote">'
                 + esc(T('pf_m_none', '還沒有任何模型。')) + '</p>';
             wireModelRows();
+            recount('sec-models');
             return;
         }
 
@@ -1117,6 +1307,7 @@
         $('models').innerHTML = tableHtml(cols,
             rows.map(MODELS_EDIT ? modelRowEdit : modelRowRo).join(''));
         wireModelRows();
+        recount('sec-models');
     }
 
     function modelRowRo(m) {
@@ -1362,15 +1553,13 @@
         } catch (e) {
             $('nodes').innerHTML = '<p class="footnote">'
                 + esc(T('ov_fail_part', '這一段暫時讀不到（{w}）').replace('{w}', e.message)) + '</p>';
-            $('node-card').hidden = true;
-            $('n-count').textContent = '';
+            nodeCardGone();
             return;
         }
         if (!NODES.length) {
             $('nodes').innerHTML = '<p class="footnote">'
                 + esc(T('pf_n_none', '沒有任何節點回報過心跳。')) + '</p>';
-            $('node-card').hidden = true;
-            $('n-count').textContent = '';
+            nodeCardGone();
             return;
         }
         $('nodes').innerHTML = '';        // ZH: 清掉骨架／錯誤訊息
@@ -1384,6 +1573,17 @@
         renderNodePicker(want);
         renderNodeForm(want);
 
+    }
+
+    // ZH: 卡片藏起來（讀取失敗、沒有節點）時一併退出編輯。
+    // ZH: 🔴 v4.45 儲存鈕搬到常駐的標題列之後，這一步變成必要：原本 n-save 在 #node-card 裡，
+    //     卡片一藏它也跟著藏；現在它在標題列上，編輯中重讀失敗（例如切語言觸發 loadAll）的話，
+    //     「取消／儲存這個節點」會留在畫面上，按下去送的是一張看不見的表單。
+    function nodeCardGone() {
+        $('node-card').hidden = true;
+        $('n-count').textContent = '';
+        NODE_EDIT = false;
+        paintNodeButtons();
     }
 
     function hashNodeId() {
@@ -1412,7 +1612,9 @@
     function paintNodeButtons() {
         $('n-edit').hidden = NODE_EDIT;
         $('n-cancel').hidden = !NODE_EDIT;
-        $('n-ro-hint').hidden = NODE_EDIT;
+        // ZH: v4.45 儲存鈕在標題列（HTML 裡固定一顆），不再跟著 #node-body 重畫。
+        $('n-save').hidden = !NODE_EDIT;
+        editMark('sec-nodes', NODE_EDIT);
     }
 
     // ZH: 唯讀時把設定用「名稱 / 值」列出來，跟營運設定那區同一個長相。
@@ -1525,10 +1727,7 @@
             + '</div>'
             + '</div>'
 
-            + '<div class="ds__actions">'
-            + '<button class="btn btn--primary" type="button" id="n-save">'
-            + esc(T('pf_n_save', '儲存這個節點')) + '</button>'
-            + '</div>'
+            // ZH: v4.45 「儲存這個節點」搬到標題列（#n-save，HTML 固定），這裡只留訊息格。
             + '<div class="inline-error" id="n-msg" hidden></div>';
 
         // ZH: 切「依時段」才顯示七天的輸入 —— 選「全天」時那七格是誤導。
@@ -1594,7 +1793,6 @@
             on.addEventListener('change', refresh);
             refresh();
         });
-        $('n-save').addEventListener('click', function () { saveNode(n); });
     }
 
     function fieldRow(id, label, value, type) {
@@ -1758,6 +1956,8 @@
         mapKeep();
         MAP_NEW.push({ id: 'new-' + (++MAP_SEQ), __new: true,
                        code: '', display_name: '', provider: '', category: '' });
+        // ZH: v4.45 新的一列排在最後面 —— 分頁之後它在最後一頁，跳過去才看得到。
+        MAP_PAGE = Math.ceil((((MAP && MAP.items) || []).length + MAP_NEW.length) / MAP_PER);
         renderMap();
         // ZH: 新的一列出現在最後面，焦點直接進去 —— 不然使用者要自己捲下去找。
         var last = $('mm-list').querySelector('tr:last-child [data-f="code"]');
@@ -1782,6 +1982,17 @@
         // ZH: 取消要丟掉改動。NODES 是上次從後端讀回來的，重畫即可。
         NODE_EDIT = false;
         renderNodeForm($('node-pick').value);
+    });
+    // ZH: v4.45 儲存鈕固定在標題列，所以這裡只接一次；存的是**下拉目前選的那一台**
+    //     —— 與原本「畫哪一台就存哪一台」同一件事：換一台一定會重畫並退出編輯（見 node-pick）。
+    //     🔴 編輯表單不在畫面上（讀取失敗、沒有節點）就不送：saveNode 要讀表單裡的欄位，
+    //     少了它們會在半路拋錯，而且看起來像按了沒反應。
+    $('n-save').addEventListener('click', function () {
+        var id = $('node-pick').value;
+        var n = NODES.filter(function (x) { return x.node_id === id; })[0];
+        // ZH: !hidden 是第二道保險（第一道是 nodeCardGone 退出編輯）：卡片藏著時，
+        //     表單欄位仍留在 DOM 裡（$('n-mode') 拿得到），只檢查它擋不住。
+        if (n && NODE_EDIT && $('n-mode') && !$('node-card').hidden) saveNode(n);
     });
 
     // ZH: 🔴 從總覽的 GPU 卡片連過來時要**捲到 GPU 節點那一區**。
@@ -1826,7 +2037,8 @@
         $('x-edit').hidden = EXT_EDIT;
         $('x-save').hidden = !EXT_EDIT;
         $('x-cancel').hidden = !EXT_EDIT;
-        $('x-ro-hint').hidden = EXT_EDIT;
+        // ZH: 標在「連線設定」這一小段上，不是整個外部 AI 區塊 —— 下面的代碼對應有自己的編輯。
+        editMark('ext-conn-block', EXT_EDIT);
     }
 
     function renderExt() {
@@ -1842,6 +2054,19 @@
                 + (EDIT_OFF(f, v))
                 + note + '</tr>';
         }).join(''));
+        recount('ext-conn-block');
+    }
+
+    // ZH: v4.45 N＝欄位值（去頭尾空白，與 saveExt 讀的方式相同）跟後端給的不一樣的欄數。
+    function countExt() {
+        if (!EXT_EDIT || !EXT) return 0;
+        return EXT_FIELDS.filter(function (f) {
+            var tr = $('ext-conn').querySelector('[data-key="' + f[0] + '"]');
+            var el = tr && tr.querySelector('[data-f="v"]');
+            if (!el) return false;
+            var was = EXT[f[0]] == null ? '' : String(EXT[f[0]]);
+            return el.value.trim() !== was.trim();
+        }).length;
     }
 
     // ZH: 唯讀時空值要明講「沒有設定」—— 一片空白看起來像沒載到。
@@ -1926,8 +2151,42 @@
         $('mm-save').hidden = !MAP_EDIT;
         $('mm-cancel').hidden = !MAP_EDIT;
         $('mm-add').hidden = !MAP_EDIT;
-        $('mm-ro-hint').hidden = MAP_EDIT;
         $('mm-edit-hint').hidden = !MAP_EDIT;
+        editMark('mm-block', MAP_EDIT);
+    }
+
+    // ZH: v4.45 每頁 20 筆（與帳號清單同一個數）。三十幾列在編輯模式是上百個輸入框，
+    //     一次攤開會把 MYAI 檢視撐成三個螢幕長。
+    // ZH: 🔴 換頁**不會丟掉還沒存的修改**：這張表本來就是「畫面 → MAP.items」的模型
+    //     （mapKeep，原本是給「按刪除會重畫」用的），換頁前先 mapKeep 一次就好；
+    //     saveMap 讀的是 MAP.items＋MAP_NEW，不是畫面，所以別頁的改動照樣會送出。
+    var MAP_PER = 20;
+    var MAP_PAGE = 1;        // ZH: 從 1 算（AdminPager 的慣例，也是畫面上顯示的數字）
+
+    function mapGo(p, which) {
+        mapKeep();
+        MAP_PAGE = p;
+        renderMap(which);
+    }
+
+    // ZH: v4.45 N＝按下儲存時真的會送出的請求數（刪除＋有改的列＋有填代碼的新列），
+    //     判準與 saveMap 逐字相同。先 mapKeep 把這一頁畫面上的值收進 MAP.items ——
+    //     別頁的修改早在換頁時就收進去了。
+    function countMap() {
+        if (!MAP_EDIT || !MAP) return 0;
+        mapKeep();
+        var base = MAP.__base || {};
+        var n = Object.keys(MAP_DEL).length;
+        (MAP.items || []).filter(function (r) { return !MAP_DEL[r.id]; })
+            .concat(MAP_NEW).forEach(function (r) {
+                if (!(r.code || '').trim()) return;
+                var was = base[r.id];
+                if (was && was.display_name === (r.display_name || '')
+                    && was.provider === (r.provider || '')
+                    && was.category === (r.category || '')) return;
+                n++;
+            });
+        return n;
     }
 
     // ZH: ⚠ 這裡**不清訊息**。存檔成功時是先 flash 再呼叫它 ——
@@ -1939,9 +2198,11 @@
         MAP_NEW = [];
     }
 
-    function renderMap() {
+    // ZH: focus：從分頁器換頁時是 'prev' / 'next'，重畫後把焦點放回同一顆（見 AdminPager）。
+    function renderMap(focus) {
         if (!MAP) return;
         paintMapButtons();
+        $('mm-count').textContent = num((MAP.items || []).length);
 
         // ZH: 沒對應到的先講 —— 數據那一頁會用原始代碼顯示，
         //     那看起來像壞掉，其實是這裡少一列。
@@ -1971,8 +2232,14 @@
             $('mm-list').innerHTML = '<p class="footnote">'
                 + esc(T('pf_mm_empty', '還沒有任何對應。')) + '</p>';
             wireMapRows();
+            recount('mm-block');
             return;
         }
+
+        // ZH: 列少了（例如刪掉之後重讀）頁碼要夾回來，不然會停在一頁空白。
+        var pages = Math.max(1, Math.ceil(rows.length / MAP_PER));
+        if (MAP_PAGE > pages) MAP_PAGE = pages;
+        var start = (MAP_PAGE - 1) * MAP_PER;
 
         var cols = [['pf_mm_code', '廠商原始代碼'], ['pf_mm_name', '顯示名稱'],
                     ['pf_m_provider', '供應者'], ['pf_mm_cat', '類別'],
@@ -1982,10 +2249,13 @@
             + cols.map(function (h) { return '<th>' + esc(T(h[0], h[1])) + '</th>'; }).join('')
             + (MAP_EDIT ? '<th></th>' : '')
             + '</tr></thead><tbody>'
-            + rows.map(MAP_EDIT ? mapRowEdit : mapRowRo).join('')
-            + '</tbody></table></div>';
+            + rows.slice(start, start + MAP_PER).map(MAP_EDIT ? mapRowEdit : mapRowRo).join('')
+            + '</tbody></table></div>'
+            + AdminPager.html({ id: 'mm', page: MAP_PAGE, pages: pages, total: rows.length });
+        AdminPager.wire({ id: 'mm', page: MAP_PAGE, pages: pages, onGo: mapGo, focus: focus });
 
         wireMapRows();
+        recount('mm-block');
     }
 
     function mapRowRo(r) {
@@ -2170,6 +2440,10 @@
         if ((location.hash || '').indexOf('#node-') !== 0) return;
         var el = $('h-nodes');
         if (!el) return;
+        // ZH: v4.45 #h-nodes 變成標題裡的一個 span（台數要放進同一個 h2）。捲的目標改成整條
+        //     標題列 —— .adm-head 有 scroll-margin-top 讓出固定頂部列，span 沒有，
+        //     直接捲 span 的話標題會被頂部列蓋住。
+        el = el.closest('.adm-head') || el;
         scrolled = true;
 
         // ZH: 🔴 原本是「等一次 rAF 再捲」—— 實測**完全不會捲**（scrollY 全程 0）。
@@ -2211,21 +2485,109 @@
     var ORG_TAB = 'dept';        // dept | unit
     var ORG_EDIT = false;
     var ORG = { dept: null, unit: null };
-    var ORG_NEW = [];            // ZH: 這次新增、還沒存的列
+
+    // ZH: v4.45 每頁 20 筆（51 個系、97 個單位原本一次全攤開，編輯時每列再變成 6–7 個欄位）。
+    //
+    // ZH: 🔴 分頁之後**換頁不能丟掉還沒存的修改**，而且儲存要送**整張表**（不是只有這一頁）——
+    //     原本 collectOrg 是「從畫面上的每一列讀」，畫面上只剩 20 列的話，
+    //     別頁的列就不會被送出。所以編輯中改成一份工作副本 ORG_DRAFT：
+    //       進編輯   → 從 ORG[ORG_TAB].rows 抄一份（每個欄位都是**畫面上會讀到的字串**）
+    //       換頁／新增／存檔前 → orgKeep() 把這一頁畫面上的值寫回副本
+    //       存檔     → 從副本組 payload，欄位與順序跟原本從畫面讀的一模一樣
+    //     ORG_BASE 是進編輯時那一份的原樣，只拿來算「儲存 N 項變更」的 N。
+    // ZH: 順手修掉一個舊問題：原本按「新增一列」會整張表重畫，**已經打在別列的字會不見**
+    //     （ORG_NEW 只存新列、沒有收畫面上的值）。現在新增前也會先 orgKeep()。
+    var ORG_DRAFT = null;
+    var ORG_BASE = null;
+    var ORG_PER = 20;
+    var ORG_PAGE = 1;            // ZH: 從 1 算（AdminPager 的慣例）
 
     function orgBtns() {
         $('og-add').hidden = !ORG_EDIT;
         $('og-edit').hidden = ORG_EDIT;
         $('og-cancel').hidden = !ORG_EDIT;
         $('og-save').hidden = !ORG_EDIT;
-        $('og-ro-hint').hidden = ORG_EDIT;
         $('og-edit-hint').hidden = !ORG_EDIT;
+        editMark('sec-org', ORG_EDIT);
+    }
+
+    // ZH: 一列 → 編輯中的樣子。每個欄位都存成「畫面上的輸入框會讀出來的那個字串」，
+    //     這樣不管那一列有沒有被畫出來過，存檔時組出來的東西都跟原本從畫面讀的相同。
+    // ZH: 🔴 校區：原本的下拉只在值**出現在 d.campuses 裡**時才選中它，
+    //     不在清單裡的會落到第一個選項「（不指定）」，存檔就送出空字串。
+    //     這裡照原樣保留（版面整理不改送出的內容）—— 要改這個行為是另一件事。
+    function orgDraftRow(r, isDept, d) {
+        var campus = r.campus || '';
+        if ((d.campuses || []).indexOf(campus) < 0) campus = '';
+        return {
+            key: isDept ? (r.name || '') : (r.path || ''),
+            name: r.name || '', name_en: r.name_en || '',
+            college: r.college || '', college_en: r.college_en || '', parent: r.parent || '',
+            campus: campus, active: r.active ? '1' : '0',
+            source: r.source, users: r.users, __new: false,
+        };
+    }
+
+    function orgNewRow() {
+        return { key: '', name: '', name_en: '', college: '', college_en: '', parent: '',
+                 campus: '', active: '1', users: 0, __new: true };
+    }
+
+    // ZH: keepNew：重讀資料時（語言切換、Alma 重建完、匯入套用後）仍在編輯中的話，
+    //     既有的列跟著新資料走（與原本「重讀就用新資料重畫」相同），還沒存的新列留著
+    //     （與原本 ORG_NEW 跨重讀保留相同）。
+    function orgStartDraft(d, keepNew) {
+        var isDept = ORG_TAB === 'dept';
+        ORG_DRAFT = (d.rows || []).map(function (r) { return orgDraftRow(r, isDept, d); });
+        ORG_BASE = ORG_DRAFT.map(function (r) { return Object.assign({}, r); });
+        if (keepNew && keepNew.length) ORG_DRAFT = ORG_DRAFT.concat(keepNew);
+    }
+
+    // ZH: 把這一頁畫面上的值寫回 ORG_DRAFT（data-i 是在整份副本裡的位置，不是這一頁的第幾列）。
+    function orgKeep() {
+        if (!ORG_EDIT || !ORG_DRAFT) return;
+        $('og-list').querySelectorAll('[data-row]').forEach(function (tr) {
+            var r = ORG_DRAFT[+tr.dataset.i];
+            if (!r) return;
+            tr.querySelectorAll('[data-f]').forEach(function (el) {
+                r[el.dataset.f] = el.value;
+            });
+        });
+    }
+
+    function orgGo(p, which) {
+        orgKeep();
+        ORG_PAGE = p;
+        renderOrg(which);
+    }
+
+    // ZH: v4.45 N＝存檔時名字不是空的、而且跟進編輯時不一樣的列數（新列有填名字就算一項）。
+    //     名字空白的列 saveOrg 本來就會丟掉，這裡也不算 —— 兩邊對得上。
+    var ORG_FIELDS = ['name', 'name_en', 'college', 'college_en', 'parent', 'campus', 'active'];
+
+    function countOrg() {
+        if (!ORG_EDIT || !ORG_DRAFT) return 0;
+        orgKeep();
+        var n = 0;
+        ORG_DRAFT.forEach(function (r, i) {
+            if (!String(r.name || '').trim()) return;
+            if (r.__new) { n++; return; }
+            var b = ORG_BASE && ORG_BASE[i];
+            if (!b) return;
+            if (ORG_FIELDS.some(function (f) {
+                return String(r[f] || '').trim() !== String(b[f] || '').trim();
+            })) n++;
+        });
+        return n;
     }
 
     async function loadOrg() {
         try {
             var path = ORG_TAB === 'dept' ? '/admin/org/departments' : '/admin/org/units';
             ORG[ORG_TAB] = await api(path);
+            if (ORG_EDIT) {
+                orgStartDraft(ORG[ORG_TAB], (ORG_DRAFT || []).filter(function (r) { return r.__new; }));
+            }
             renderOrg();
         } catch (e) {
             $('og-list').innerHTML = '<p class="footnote">'
@@ -2233,8 +2595,11 @@
         }
     }
 
-    function orgCampusSelect(cur, campuses) {
-        return '<select data-f="campus">'
+    // ZH: v4.45 欄位加上 .field__input（與模型、代碼對應表同一款，44px 高）——
+    //     原本這張表的編輯欄位是裸的 <input>／<select>，高度與樣式跟這一頁其他可編的表都不一樣。
+    function orgCampusSelect(cur, campuses, label) {
+        return '<select class="field__input" data-f="campus"'
+            + (label ? ' aria-label="' + esc(label) + '"' : '') + '>'
             + '<option value="">' + esc(T('pf_org_blank', '（不指定）')) + '</option>'
             + (campuses || []).map(function (c) {
                 return '<option value="' + esc(c) + '"' + (c === cur ? ' selected' : '')
@@ -2242,11 +2607,20 @@
             }).join('') + '</select>';
     }
 
-    function renderOrg() {
+    // ZH: focus：從分頁器換頁時是 'prev' / 'next'，重畫後把焦點放回同一顆（見 AdminPager）。
+    function renderOrg(focus) {
         var d = ORG[ORG_TAB];
         if (!d) return;
         var isDept = ORG_TAB === 'dept';
-        var rows = (d.rows || []).concat(ORG_NEW);
+        // ZH: 按「編輯設定」時資料還沒到的話，等資料到了這裡才抄副本。
+        if (ORG_EDIT && !ORG_DRAFT) orgStartDraft(d);
+        var rows = ORG_EDIT ? ORG_DRAFT : (d.rows || []);
+        $('og-count').textContent = num((d.rows || []).length);
+
+        // ZH: 列少了（重讀之後）頁碼要夾回來，不然會停在一頁空白。
+        var pages = Math.max(1, Math.ceil(rows.length / ORG_PER));
+        if (ORG_PAGE > pages) ORG_PAGE = pages;
+        var start = (ORG_PAGE - 1) * ORG_PER;
 
         // ZH: v3.9 英文名欄。緊接在中文名後面 —— 填的人是逐列對照著填的，
         //     擺到最右邊的話眼睛要橫跨整張表，51 列填下來很容易錯行。
@@ -2263,12 +2637,24 @@
                ['pf_org_c_campus', '校區'], ['pf_org_c_src', '來源'],
                ['pf_org_c_on', '啟用'], ['pf_org_c_users', '人數']];
 
+        // ZH: v4.45 唯讀時「英文名」那一欄（第二欄）是 grow 欄（admin.css 的「表格欄寬」）：
+        //     官方英文名動輒五六十個字母，原本整欄 nowrap，1280 寬時整張表 1536px、要橫向捲動。
+        //     讓它吃剩下的寬度並換行，其餘欄只佔內容需要的寬度。
+        // ZH: 🔴 **編輯時不掛**：其餘欄會變成 width:1%，而格子裡的輸入框是 width:100% ——
+        //     百分比寬的輸入框放在「依內容決定寬度」的欄裡，欄寬會塌成幾乎 0。
         $('og-list').innerHTML =
             '<div class="adm-tablewrap"><table class="adm-table"><thead><tr>'
-            + cols.map(function (h) { return '<th>' + esc(T(h[0], h[1])) + '</th>'; }).join('')
+            + cols.map(function (h, k) {
+                return '<th' + (!ORG_EDIT && k === 1 ? ' class="grow"' : '') + '>' + esc(T(h[0], h[1])) + '</th>';
+            }).join('')
             + '</tr></thead><tbody>'
-            + rows.map(function (r, i) { return orgRow(r, i, isDept, d); }).join('')
-            + '</tbody></table></div>';
+            + rows.slice(start, start + ORG_PER).map(function (r, k) {
+                return ORG_EDIT ? orgRowEdit(r, start + k, isDept, d) : orgRowRo(r, isDept);
+            }).join('')
+            + '</tbody></table></div>'
+            + AdminPager.html({ id: 'og', page: ORG_PAGE, pages: pages, total: rows.length });
+        AdminPager.wire({ id: 'og', page: ORG_PAGE, pages: pages, onGo: orgGo, focus: focus });
+        recount('sec-org');
     }
 
     // ZH: 新增而還沒存的列沒有來源（存下去才會標 admin）——顯示「—」，
@@ -2416,76 +2802,83 @@
             : esc(T('pf_org_src_admin', '人工'));
     }
 
-    function orgRow(r, i, isDept, d) {
-        var key = isDept ? (r.name || '') : (r.path || '');
-        var isNew = !!r.__new;
-        // ZH: 人數 0 與「新增的列」要分得出來 —— 新列還沒有人，不是「沒人用」。
-        var users = isNew ? '<span class="footnote">—</span>' : esc(num(r.users || 0));
+    // ZH: 人數 0 與「新增的列」要分得出來 —— 新列還沒有人，不是「沒人用」。
+    function orgUsers(r) {
+        return r.__new ? '<span class="footnote">—</span>' : esc(num(r.users || 0));
+    }
 
-        if (!ORG_EDIT) {
-            // ZH: 沒填英文就顯示「—」，一眼看得出哪幾列還沒填。
-            return '<tr>'
-                + '<td>' + esc(r.name || '') + '</td>'
-                + '<td>' + (r.name_en ? esc(r.name_en)
-                    : '<span class="footnote">—</span>') + '</td>'
-                + (isDept
-                    ? '<td>' + esc(r.college || '—') + '</td>'
-                      + '<td>' + (r.college_en ? esc(r.college_en)
-                          : '<span class="footnote">—</span>') + '</td>'
-                    : '<td>' + esc(r.parent || '—') + '</td>')
-                + '<td>' + esc(r.campus || '—') + '</td>'
-                + '<td>' + orgSrc(r) + '</td>'
-                + '<td>' + (r.active ? esc(T('pf_org_on', '啟用'))
-                    : '<span class="footnote">' + esc(T('pf_org_off', '停用')) + '</span>') + '</td>'
-                + '<td class="num">' + users + '</td>'
-                + '</tr>';
-        }
-
-        var second = isDept
-            ? '<input type="text" data-f="college" value="' + esc(r.college || '') + '">'
-            : '<input type="text" data-f="parent" value="' + esc(r.parent || '') + '">';
-
-        return '<tr data-row data-key="' + esc(isNew ? '' : key) + '" data-i="' + i + '">'
-            + '<td><input type="text" data-f="name" value="' + esc(r.name || '') + '"></td>'
-            + '<td><input type="text" data-f="name_en" value="' + esc(r.name_en || '')
-            + '" placeholder="' + esc(T('pf_org_en_ph', '官方英文名')) + '"></td>'
-            + '<td>' + second + '</td>'
+    // ZH: v4.45 唯讀與編輯拆成兩支：唯讀畫的是後端給的列，編輯畫的是 ORG_DRAFT 的列
+    //     （欄位都已經是字串，見 orgDraftRow）。
+    function orgRowRo(r, isDept) {
+        // ZH: 沒填英文就顯示「—」，一眼看得出哪幾列還沒填。
+        return '<tr>'
+            + '<td>' + esc(r.name || '') + '</td>'
+            + '<td class="grow">' + (r.name_en ? esc(r.name_en)        // ZH: grow 的理由見 renderOrg 的表頭
+                : '<span class="footnote">—</span>') + '</td>'
             + (isDept
-                ? '<td><input type="text" data-f="college_en" value="'
-                  + esc(r.college_en || '') + '" placeholder="'
-                  + esc(T('pf_org_en_ph', '官方英文名')) + '"></td>'
-                : '')
-            + '<td>' + orgCampusSelect(r.campus || '', d.campuses) + '</td>'
-            // ZH: 來源不可編輯 —— 它記的是「這一列哪來的」，不是一個偏好設定。
+                ? '<td>' + esc(r.college || '—') + '</td>'
+                  + '<td>' + (r.college_en ? esc(r.college_en)
+                      : '<span class="footnote">—</span>') + '</td>'
+                : '<td>' + esc(r.parent || '—') + '</td>')
+            + '<td>' + esc(r.campus || '—') + '</td>'
             + '<td>' + orgSrc(r) + '</td>'
-            + '<td><select data-f="active">'
-            + '<option value="1"' + (r.active ? ' selected' : '') + '>' + esc(T('pf_org_on', '啟用')) + '</option>'
-            + '<option value="0"' + (r.active ? '' : ' selected') + '>' + esc(T('pf_org_off', '停用')) + '</option>'
-            + '</select></td>'
-            + '<td class="num">' + users + '</td>'
+            + '<td>' + (r.active ? esc(T('pf_org_on', '啟用'))
+                : '<span class="footnote">' + esc(T('pf_org_off', '停用')) + '</span>') + '</td>'
+            + '<td class="num">' + orgUsers(r) + '</td>'
             + '</tr>';
     }
 
+    // ZH: i 是這一列在 ORG_DRAFT 裡的位置（orgKeep 靠它寫回去），不是這一頁的第幾列。
+    // ZH: v4.45 每個欄位補上 aria-label（「欄名：這一列是誰」）—— 表格裡的欄位沒有 <label>，
+    //     沒有它的話讀螢幕的人聽到的是一整排沒有名字的編輯方塊（理由同 cellInput 的 🔴）。
+    function orgRowEdit(r, i, isDept, d) {
+        var who = r.name || T('pf_m_new_row', '新的一列');
+        var lab = function (key, zh) { return esc(T(key, zh) + '：' + who); };
+        var txt = function (f, key, zh, ph) {
+            return '<input class="field__input" type="text" data-f="' + f + '" value="' + esc(r[f] || '') + '"'
+                + ' aria-label="' + lab(key, zh) + '"'
+                + (ph ? ' placeholder="' + esc(T('pf_org_en_ph', '官方英文名')) + '"' : '') + '>';
+        };
+        var second = isDept
+            ? txt('college', 'pf_org_c_college', '學院')
+            : txt('parent', 'pf_org_c_parent', '上層');
+
+        return '<tr data-row data-key="' + esc(r.__new ? '' : r.key) + '" data-i="' + i + '">'
+            + '<td>' + (isDept ? txt('name', 'pf_org_c_dept', '學系') : txt('name', 'pf_org_c_unit', '單位')) + '</td>'
+            + '<td>' + (isDept ? txt('name_en', 'pf_org_c_dept_en', '學系（英）', true)
+                               : txt('name_en', 'pf_org_c_unit_en', '單位（英）', true)) + '</td>'
+            + '<td>' + second + '</td>'
+            + (isDept ? '<td>' + txt('college_en', 'pf_org_c_college_en', '學院（英）', true) + '</td>' : '')
+            + '<td>' + orgCampusSelect(r.campus || '', d.campuses,
+                                       T('pf_org_c_campus', '校區') + '：' + who) + '</td>'
+            // ZH: 來源不可編輯 —— 它記的是「這一列哪來的」，不是一個偏好設定。
+            + '<td>' + orgSrc(r) + '</td>'
+            + '<td><select class="field__input" data-f="active" aria-label="' + lab('pf_org_c_on', '啟用') + '">'
+            + '<option value="1"' + (r.active === '1' ? ' selected' : '') + '>' + esc(T('pf_org_on', '啟用')) + '</option>'
+            + '<option value="0"' + (r.active === '1' ? '' : ' selected') + '>' + esc(T('pf_org_off', '停用')) + '</option>'
+            + '</select></td>'
+            + '<td class="num">' + orgUsers(r) + '</td>'
+            + '</tr>';
+    }
+
+    // ZH: v4.45 從 ORG_DRAFT 組（不是從畫面）—— 分頁之後畫面上只有 20 列。
+    //     欄位、去空白的方式、列的順序都與原本「從畫面上每一列讀」相同：
+    //     key 空字串送 null（新列）、校區與啟用不去空白、其餘去頭尾空白。
     function collectOrg() {
+        orgKeep();
         var isDept = ORG_TAB === 'dept';
-        var out = [];
-        $('og-list').querySelectorAll('[data-row]').forEach(function (tr) {
-            var g = function (f) {
-                var el = tr.querySelector('[data-f="' + f + '"]');
-                return el ? el.value : '';
-            };
-            var row = { key: tr.dataset.key || null, name: g('name').trim(),
-                        name_en: g('name_en').trim(),
-                        campus: g('campus'), active: g('active') };
+        return (ORG_DRAFT || []).map(function (r) {
+            var row = { key: r.key || null, name: String(r.name || '').trim(),
+                        name_en: String(r.name_en || '').trim(),
+                        campus: r.campus, active: r.active };
             if (isDept) {
-                row.college = g('college').trim();
-                row.college_en = g('college_en').trim();
+                row.college = String(r.college || '').trim();
+                row.college_en = String(r.college_en || '').trim();
             } else {
-                row.parent = g('parent').trim();
+                row.parent = String(r.parent || '').trim();
             }
-            out.push(row);
+            return row;
         });
-        return out;
     }
 
     async function saveOrg() {
@@ -2500,7 +2893,8 @@
                 body: JSON.stringify({ rows: rows }),
             });
             ORG_EDIT = false;
-            ORG_NEW = [];
+            ORG_DRAFT = null;
+            ORG_BASE = null;
             orgBtns();
             await loadOrg();
             // ZH: 「搬了幾個人」一定要講出來 —— 改名會動到使用者，
@@ -2533,16 +2927,23 @@
     // ZH: 🔴 檔名**以伺服器給的 Content-Disposition 為準**，不要在前端另外拼一份 ——
     //     csv/xlsx 的檔名帶時間戳（同一天匯出兩次不會互相覆蓋），
     //     前端自己拼的話那個時間戳就不見了，而且兩邊遲早對不上。
+    // ZH: v4.45 btn 現在是「匯出▾」那顆（三個格式收進同一個下拉）。
+    //     存回原樣用 innerHTML 不用 textContent —— 它裡面有帶 data-i18n 的字與 ▾，
+    //     用 textContent 還原會把兩者壓成一串純文字，之後切語言就不會跟著換。
     async function exportOrg(btn, fmt) {
-        var old = btn.textContent;
+        var old = btn.innerHTML;
         btn.disabled = true;
         btn.textContent = T('pf_org_exporting', '匯出中…');
         try {
             // ZH: v4.24 收斂到 AdminDownload（唯一真相，見 admin-chrome.js）
             await AdminDownload('/admin/org/export?fmt=' + (fmt || 'json'),
                                 'org-mapping.' + (fmt || 'json'));
+            // ZH: v4.45 修：{f} 原本填的是一個沒有宣告的 `name` —— 實際拿到的是 window.name
+            //     （通常是空字串），訊息變成「已匯出 。」。檔名以伺服器為準（見上），
+            //     這裡只寫格式。
             flash('og-msg', (fmt && fmt !== 'json')
-                ? T('pf_org_exported_sheet', '已匯出 {f}。這一份是給人看的 —— 改完**不能**匯回，要匯回請用「匯出 JSON」那一份。').replace('{f}', name)
+                ? T('pf_org_exported_sheet', '已匯出 {f}。這一份是給人看的 —— 改完**不能**匯回，要匯回請用「匯出 JSON」那一份。')
+                    .replace('{f}', fmt === 'xlsx' ? 'Excel' : 'CSV')
                 : T('pf_org_exported', '已匯出 org-mapping.json。可以把它放進版控，換機器時匯回來。'), 8000);
         } catch (e) {
             // ZH: 失敗要講 —— 下載沒發生時畫面上完全沒有痕跡，
@@ -2550,7 +2951,7 @@
             say('og-msg', T('pf_org_export_fail', '匯出失敗（{w}）').replace('{w}', e.message));
         } finally {
             btn.disabled = false;
-            btn.textContent = old;
+            btn.innerHTML = old;
         }
     }
 
@@ -2618,11 +3019,16 @@
         var ex = $('og-export'), pick = $('og-pick'), f = $('og-file'), ap = $('og-apply');
         var exX = $('og-export-xlsx'), exC = $('og-export-csv');
         var alma = $('og-alma');
+        // ZH: v4.45 兩個下拉（匯出▾、更多▾）。開合、Esc、點外面關、方向鍵都在 AdminMenu
+        //     （＝AdminDropdown）裡；項目的事件照舊在下面各自接。
+        var dd = $('og-export-dd');
+        if (window.AdminMenu) { AdminMenu.wire('og-export-dd'); AdminMenu.wire('og-more'); }
         if (alma) alma.addEventListener('click', openOrgAlma);
-        if (!ex || !pick || !f || !ap) return;
-        ex.addEventListener('click', function () { exportOrg(ex, 'json'); });
-        exX.addEventListener('click', function () { exportOrg(exX, 'xlsx'); });
-        exC.addEventListener('click', function () { exportOrg(exC, 'csv'); });
+        if (!ex || !pick || !f || !ap || !dd) return;
+        // ZH: 「匯出中…」寫在下拉鈕上 —— 選單一點就收起來，寫在項目上沒人看得到。
+        ex.addEventListener('click', function () { exportOrg(dd, 'json'); });
+        exX.addEventListener('click', function () { exportOrg(dd, 'xlsx'); });
+        exC.addEventListener('click', function () { exportOrg(dd, 'csv'); });
         pick.addEventListener('click', function () { f.click(); });
         f.addEventListener('change', function () {
             if (f.files && f.files[0]) previewImport(f.files[0]);
@@ -2633,28 +3039,58 @@
     (function wireOrg() {
         var tabs = $('og-tabs');
         if (!tabs) return;
-        tabs.querySelectorAll('[data-og]').forEach(function (b) {
-            b.addEventListener('click', function () {
-                // ZH: 編輯中換分頁會丟掉還沒存的東西，所以直接不給換。
-                if (ORG_EDIT) return;
-                ORG_TAB = b.dataset.og;
-                tabs.querySelectorAll('[data-og]').forEach(function (x) {
-                    x.setAttribute('aria-checked', String(x === b));
-                });
-                say('og-msg', '');
-                if (ORG[ORG_TAB]) renderOrg(); else loadOrg();
+        // ZH: v4.45 學系／行政單位改用 .adm-seg（與頁首「平台／MYAI」同一款）：
+        //     選中的那一格由滑塊與 .is-current 標出來，鍵盤用左右鍵換（radiogroup 的慣例，
+        //     整組只佔一個 Tab 位）。滑塊位置寫 inline transform，與 wireViewSeg 同一個做法。
+        var opts = [].slice.call(tabs.querySelectorAll('[data-og]'));
+        var thumb = tabs.querySelector('.adm-seg__thumb');
+
+        function pick(i, focus) {
+            // ZH: 編輯中換分頁會丟掉還沒存的東西，所以直接不給換。
+            if (ORG_EDIT) return;
+            var b = opts[i];
+            if (!b) return;
+            ORG_TAB = b.dataset.og;
+            ORG_PAGE = 1;           // ZH: 換一份清單從第 1 頁看起
+            if (thumb) thumb.style.transform = 'translateX(' + (i * 100) + '%)';
+            opts.forEach(function (x, k) {
+                var on = k === i;
+                x.classList.toggle('is-current', on);
+                x.setAttribute('aria-checked', String(on));
+                x.setAttribute('tabindex', on ? '0' : '-1');
             });
+            if (focus) b.focus();
+            say('og-msg', '');
+            if (ORG[ORG_TAB]) renderOrg();
+            else { $('og-count').textContent = ''; loadOrg(); }   // ZH: 別讓上一份的數字掛在這一份上
+        }
+
+        opts.forEach(function (b, i) {
+            b.addEventListener('click', function () { pick(i, false); });
         });
+        tabs.addEventListener('keydown', function (e) {
+            var d = e.key === 'ArrowRight' ? 1 : e.key === 'ArrowLeft' ? -1 : 0;
+            if (!d) return;
+            e.preventDefault();
+            var cur = opts.map(function (x) { return x.dataset.og; }).indexOf(ORG_TAB);
+            pick((cur + d + opts.length) % opts.length, true);
+        });
+
         $('og-edit').addEventListener('click', function () {
-            ORG_EDIT = true; ORG_NEW = []; orgBtns(); renderOrg();
+            // ZH: 副本在 renderOrg 裡抄（資料可能還沒到）；這裡只把舊的清掉。
+            ORG_EDIT = true; ORG_DRAFT = null; ORG_BASE = null; orgBtns(); renderOrg();
         });
         $('og-cancel').addEventListener('click', function () {
-            ORG_EDIT = false; ORG_NEW = []; orgBtns(); say('og-msg', ''); renderOrg();
+            // ZH: 取消＝丟掉副本，從後端那一份重畫（ORG[ORG_TAB] 沒有被編輯動過）。
+            ORG_EDIT = false; ORG_DRAFT = null; ORG_BASE = null;
+            orgBtns(); say('og-msg', ''); renderOrg();
         });
         $('og-add').addEventListener('click', function () {
-            ORG_NEW.push({ __new: true, name: '', name_en: '',
-                           college: '', college_en: '', parent: '',
-                           campus: '', active: 1, users: 0 });
+            orgKeep();              // ZH: 先收這一頁畫面上的值，重畫才不會把剛打的字洗掉
+            if (!ORG_DRAFT) return; // ZH: 資料還沒到，沒有表可以加
+            ORG_DRAFT.push(orgNewRow());
+            // ZH: 新列排在最後面 —— 分頁之後它在最後一頁，跳過去才看得到。
+            ORG_PAGE = Math.ceil(ORG_DRAFT.length / ORG_PER);
             renderOrg();
             var last = $('og-list').querySelector('tr:last-child [data-f="name"]');
             if (last) last.focus();
@@ -2670,6 +3106,15 @@
                            loadOrg()]);
         scrollToHash();
     }
+
+    // ZH: v4.45 「儲存 N 項變更」：每一區登記一次（監聽掛在不會重畫的區塊上，見 liveCount）。
+    liveCount('sec-settings', 's-save', countSettings);
+    liveCount('sec-credit', 'cr-save', countCredit);
+    liveCount('sec-alertmail', 'am-save', countAlertMail);
+    liveCount('sec-models', 'm-save', countModels);
+    liveCount('ext-conn-block', 'x-save', countExt);
+    liveCount('mm-block', 'mm-save', countMap);
+    liveCount('sec-org', 'og-save', countOrg);
 
     // ZH: 滑條要先接、且**在 loadAll 之前** —— 它會把不屬於目前檢視的區塊收起來。
     //     放後面的話，畫面會先閃過「全部區塊都在」再收合。

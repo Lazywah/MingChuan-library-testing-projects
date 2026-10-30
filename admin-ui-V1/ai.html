@@ -11,16 +11,30 @@
 
     <link rel="stylesheet" href="tokens.css?v=ff9cecda">
     <link rel="stylesheet" href="styles.css?v=d4d21ce8">
-    <link rel="stylesheet" href="admin.css?v=99d53e72">
+    <link rel="stylesheet" href="admin.css?v=dccae4c3">
 </head>
 <body>
 
 <!-- ZH: 頂部列由 admin-chrome.js 產生（唯一真相來源）。 -->
 
-<main class="page page--admin">
+<main class="page page--admin ai-page">
 
-    <div class="adm-sec__head">
-        <h1 class="hero__title" data-i18n="adm_nav_ai">AI 查詢</h1>
+    <!-- ZH: v4.45 頁首改用共用的 .adm-head。前言（約 110 字、五個子句）收進 h1 旁的 ⓘ ——
+             這是每週會回來用的工具頁，同一段警語每次都橫跨整頁，第二次以後就沒人讀了
+             （數據頁把「資料哪來的」收進 ⓘ 是同一個理由）。畫面上只留下面那一行
+             「唯讀・可能出錯・以原始資料為準」：真正每次都要記得的只有這三件事。 -->
+    <div class="adm-head">
+        <div class="adm-head__what">
+            <h1 class="adm-head__title">
+                <span data-i18n="adm_nav_ai">AI 查詢</span>
+                <span class="tip">
+                    <button type="button" class="tip__btn" aria-expanded="false"
+                            aria-controls="tip-ai-intro" data-i18n-aria="tip_more" aria-label="這是什麼">i</button>
+                    <span class="tip__body tip__body--wide" id="tip-ai-intro" role="tooltip" hidden
+                          data-i18n="ai_intro">用一句話查平台狀況，例如帳號、MYAI 同步、最近的錯誤、某次訓練、寄出的信、管理操作紀錄，或在日誌裡找某個字。只能查、不能改；用的是本機模型，資料不出校。說明是模型整理的，可能有誤，以每一筆下面的原始資料為準。</span>
+                </span>
+            </h1>
+        </div>
     </div>
 
     <!-- ZH: v4.37 管理端 AI（擁有者 2026-10-04）：用一句話查平台狀況。
@@ -29,30 +43,38 @@
              管理員要能直接對照查到的東西，不是只能相信模型。 -->
     <section class="adm-sec" aria-labelledby="h-ask">
         <h2 class="sr-only" id="h-ask" data-i18n="ai_ask_h">提問</h2>
-        <p class="footnote" data-i18n="ai_intro">用一句話查平台狀況，例如帳號、MYAI 同步、最近的錯誤、某次訓練、寄出的信、管理操作紀錄，或在日誌裡找某個字。只能查、不能改；用的是本機模型，資料不出校。說明是模型整理的，可能有誤，以每一筆下面的原始資料為準。</p>
         <form class="ai-form" id="ai-form" autocomplete="off">
             <textarea class="field__input ai-q" id="ai-q" rows="2" maxlength="500"
                       data-i18n-placeholder="ai_ph" data-i18n-aria="ai_ph"
                       aria-label="例如：檢查 12361114 帳號狀態，信箱收到實驗室刪除通知"
                       placeholder="例如：檢查 12361114 帳號狀態，信箱收到實驗室刪除通知"></textarea>
             <button class="btn btn--primary" type="submit" id="ai-go" data-i18n="ai_ask">查詢</button>
+            <!-- ZH: v4.45 八顆預設問題收成「常用問題▾」（ai.js 用 AdminMenu 產生）。
+                     原本八顆全尺寸按鈕換行成兩排，份量比它們服務的那個輸入框還重；
+                     其中兩顆行為不同（只填入、不送出），唯一的提示是結尾的「…」——
+                     選單裡分成「直接查」「先填入」兩組，行為差別寫在組名上。 -->
+            <div class="ai-ex" id="ai-ex"></div>
         </form>
-        <div class="ai-chips" role="group" aria-label="常用問題" data-i18n-aria="ai_examples">
-            <button class="btn btn--minor" type="button" data-q="MYAI 同步正常嗎" data-i18n="ai_ex_myai">MYAI 同步正常嗎</button>
-            <button class="btn btn--minor" type="button" data-q="最近 24 小時有什麼錯誤" data-i18n="ai_ex_err">最近 24 小時有什麼錯誤</button>
-            <button class="btn btn--minor" type="button" data-q="系統狀態" data-i18n="ai_ex_sys">系統狀態</button>
-            <button class="btn btn--minor" type="button" data-q="最近 7 天寄出的信" data-i18n="ai_ex_mail">最近 7 天寄出的信</button>
-            <button class="btn btn--minor" type="button" data-q="最近寄給管理員的告警信" data-i18n="ai_ex_alert">最近的告警信</button>
-            <button class="btn btn--minor" type="button" data-q="最近 30 天的管理操作紀錄" data-i18n="ai_ex_audit">最近的管理操作</button>
-            <button class="btn btn--minor" type="button" data-fill="在日誌裡找「」" data-i18n="ai_ex_log">在日誌裡找…</button>
-            <button class="btn btn--minor" type="button" data-fill="查帳號 " data-i18n="ai_ex_user">查帳號（輸入學號）</button>
-        </div>
+        <p class="footnote" data-i18n="dz_an_ai_note">唯讀・可能出錯・以原始資料為準</p>
         <div class="inline-error" id="ai-err" hidden></div>
     </section>
 
-    <section class="adm-sec" aria-labelledby="h-ans" aria-live="polite">
-        <h2 class="sr-only" id="h-ans" data-i18n="ai_ans_h">查詢結果</h2>
-        <div id="ai-list"><p class="footnote" id="ai-empty" data-i18n="ai_empty">還沒有查詢。</p></div>
+    <!-- ZH: v4.45 結果區的標題改成看得見（原本是 sr-only）：數量貼在標題旁，
+             右邊一顆「清除紀錄」。紀錄只留最近 AI_KEEP 筆（ai.js）—— 原本沒有上限，
+             每筆展開後又有好幾張表，查幾次之後整頁就是一疊長得一樣的框。 -->
+    <section class="adm-sec" aria-labelledby="h-ans">
+        <div class="adm-head">
+            <div class="adm-head__what">
+                <h2 class="adm-head__title"><span id="h-ans" data-i18n="ai_ans_h">查詢結果</span>
+                    <span class="adm-head__count" id="ai-count"></span></h2>
+                <span class="adm-head__meta" id="ai-keep" hidden></span>
+            </div>
+            <div class="adm-head__do">
+                <button class="btn btn--minor" type="button" id="ai-clear" hidden
+                        data-i18n="dz_an_ai_clear">清除紀錄</button>
+            </div>
+        </div>
+        <div id="ai-list" aria-live="polite"><p class="footnote" id="ai-empty" data-i18n="ai_empty">還沒有查詢。</p></div>
     </section>
 
 </main>
@@ -60,10 +82,10 @@
 <script src="tz.js?v=2e214a8b"></script>
 <!-- ⚠ ZH: 順序不能動 —— i18n-admin 在 i18n 之後、prefs 之前。 -->
 <script src="i18n.js?v=6de7dc28"></script>
-<script src="i18n-admin.js?v=6f9d8d31"></script>
+<script src="i18n-admin.js?v=5c61b49c"></script>
 <script src="tip.js?v=0699f4a2"></script>
 <script src="prefs.js?v=e71609e5"></script>
-<script src="admin-chrome.js?v=066f0374"></script>
-<script src="ai.js?v=4f40a8d0"></script>
+<script src="admin-chrome.js?v=978b50d5"></script>
+<script src="ai.js?v=de1de8f7"></script>
 </body>
 </html>

@@ -11,41 +11,91 @@
 
     <link rel="stylesheet" href="tokens.css?v=ff9cecda">
     <link rel="stylesheet" href="styles.css?v=d4d21ce8">
-    <link rel="stylesheet" href="admin.css?v=99d53e72">
+    <link rel="stylesheet" href="admin.css?v=dccae4c3">
 </head>
 <body>
 
 <!-- ZH: 頂部列由 admin-chrome.js 產生（唯一真相來源）。 -->
 
-<main class="page page--admin">
+<!-- ZH: `dz-ov` 是這一頁專屬的樣式範圍（admin.css 的「總覽」段）。
+         其他頁不掛它，所以這裡的數字格、機器卡規則不會漏到別頁去。 -->
+<main class="page page--admin dz-ov">
 
     <!-- ZH: 這一頁要回答的問題只有一個：**現在有沒有需要我處理的事？**
-             所以「需要你處理的」在最上面，而且沒事時會明確說沒事。 -->
-    <div class="adm-sec__head">
-        <h1 class="hero__title" data-i18n="adm_nav_overview">總覽</h1>
-        <span class="topbar__spacer"></span>
-        <!-- ZH: 時間戳是「這一頁還活著」的唯一證據 ——
-                 沒有它的話，「資料沒變」與「更新卡住了」長得一模一樣。 -->
-        <span class="footnote" id="updated"></span>
-        <button class="btn btn--minor" type="button" id="refresh" data-i18n="ov_refresh">重新整理</button>
+             所以最上面是一排數字格（一眼得到答案），接著是「需要你處理的」，
+             而且沒事時會明確說沒事。 -->
+    <div class="adm-head">
+        <div class="adm-head__what">
+            <h1 class="adm-head__title" data-i18n="adm_nav_overview">總覽</h1>
+        </div>
+        <div class="adm-head__do">
+            <!-- ZH: 時間戳是「這一頁還活著」的唯一證據 ——
+                     沒有它的話，「資料沒變」與「更新卡住了」長得一模一樣。 -->
+            <span class="adm-head__meta" id="updated"></span>
+            <!-- ZH: 降成 quiet：頁面每 10 秒自己更新、切回分頁也會補一次，
+                     這顆只是「我不想等那 10 秒」的捷徑，不該是這一列最顯眼的東西。 -->
+            <button class="btn--quiet" type="button" id="refresh" data-i18n="ov_refresh">重新整理</button>
+        </div>
     </div>
 
+    <!-- ZH: 數字格。**每一格都是連結**，點下去落在講那件事的地方。
+         ZH: 結構寫在 HTML、數字由 overview.js 只改文字 —— 每 10 秒整排重畫的話，
+             用鍵盤停在某一格上的人每 10 秒焦點就被洗掉一次。
+         ZH: 不是 .adm-sec：它是頁首的延伸（整頁的摘要），不是一個區塊；
+             加框模式下也不該被包成一張面板。 -->
+    <nav class="adm-stats dz-ov-tiles" aria-label="摘要" data-i18n-aria="dz_ov_tiles">
+        <a class="adm-stat dz-ov-tile" id="tile-todo" href="#h-alerts">
+            <span class="adm-stat__label" data-i18n="dz_ov_t_todo">待處理</span>
+            <span class="adm-stat__value" id="tv-todo">—</span>
+        </a>
+        <a class="adm-stat dz-ov-tile" id="tile-nodes" href="#h-nodes">
+            <span class="adm-stat__label" data-i18n="dz_ov_t_nodes">節點在線</span>
+            <span class="adm-stat__value" id="tv-nodes">—</span>
+        </a>
+        <a class="adm-stat dz-ov-tile" id="tile-gpu" href="#h-nodes">
+            <span class="adm-stat__label" data-i18n="dz_ov_t_gpu">GPU 忙碌</span>
+            <span class="adm-stat__value" id="tv-gpu">—</span>
+        </a>
+        <!-- ZH: 連到回報區（#h-reports），不是訊息頁頂端 —— 頂端是公告，
+                 從這裡點過去的人要的是「那幾則還沒處理的回報」。 -->
+        <a class="adm-stat dz-ov-tile" id="tile-reports" href="reports.html#h-reports">
+            <span class="adm-stat__label" data-i18n="dz_ov_t_reports">待處理回報</span>
+            <span class="adm-stat__value" id="tv-reports">—</span>
+        </a>
+        <a class="adm-stat dz-ov-tile" id="tile-offplat" href="#dz-ov-offplat">
+            <span class="adm-stat__label" data-i18n="dz_ov_t_offplat">不在平台</span>
+            <span class="adm-stat__value" id="tv-offplat">—</span>
+        </a>
+    </nav>
+
     <section class="adm-sec" aria-labelledby="h-alerts">
-        <div class="adm-sec__head"><h2 id="h-alerts" data-i18n="ov_alerts">需要你處理的</h2></div>
-        <div id="alerts" aria-live="polite">
+        <div class="adm-head">
+            <div class="adm-head__what">
+                <h2 class="adm-head__title">
+                    <span id="h-alerts" data-i18n="ov_alerts">需要你處理的</span>
+                    <span class="adm-head__count" id="alerts-count"></span>
+                </h2>
+            </div>
+        </div>
+        <div class="dz-ov-alerts" id="alerts" aria-live="polite">
             <span class="skeleton skeleton--line"></span>
         </div>
     </section>
 
-    <section class="adm-sec" aria-labelledby="h-gpus">
-        <div class="adm-sec__head"><h2 id="h-gpus" data-i18n="ov_gpu">GPU 現況</h2></div>
-        <div class="adm-grid" id="gpus">
-            <span class="skeleton skeleton--line"></span>
-        </div>
-    </section>
-
+    <!-- ZH: 原本「GPU 現況」卡片與「節點」表是兩個區塊，講的是同一批機器 ——
+             節點狀態在提醒、GPU 卡、節點表各出現一次。合成「一台機器一張卡」：
+             卡頭是節點的狀態與心跳，卡身是這台的每張 GPU。
+         ZH: 🔴 仍然**每一台都列出來**（platform.html 的裁定：總覽是一眼看全部節點的地方），
+             掉線的變淡、不隱藏。 -->
     <section class="adm-sec" aria-labelledby="h-nodes">
-        <div class="adm-sec__head"><h2 id="h-nodes" data-i18n="ov_nodes">節點</h2></div>
+        <div class="adm-head">
+            <div class="adm-head__what">
+                <h2 class="adm-head__title">
+                    <span id="h-nodes" data-i18n="ov_nodes">節點</span>
+                    <span class="adm-head__count" id="nodes-count"></span>
+                </h2>
+            </div>
+        </div>
         <div id="nodes">
             <span class="skeleton skeleton--line"></span>
         </div>
@@ -53,16 +103,49 @@
 
     <!-- ZH: 刻意**不叫「即時」** —— 用量那半是定期向廠商同步來的，
              最舊可能是幾小時前。標題若寫「即時」，看到的人會拿它當現在的事實。
-             真正的資料時間寫在下面那句話裡。 -->
+             真正的資料時間寫在標題列右邊（#ext-sync）。
+         ZH: 原本一直掛著的四句說明（同步與窗口、空格子為什麼空、未綁定是誰）收進 ⓘ ——
+             那是第一次看才需要讀的；每天開、每 10 秒重畫的頁面上，它們讓這一區像說明文件。 -->
     <section class="adm-sec" aria-labelledby="h-ext">
-        <div class="adm-sec__head"><h2 id="h-ext" data-i18n="ov_ext">外部 AI 使用狀況</h2></div>
+        <div class="adm-head">
+            <div class="adm-head__what">
+                <h2 class="adm-head__title">
+                    <span id="h-ext" data-i18n="ov_ext">外部 AI 使用狀況</span>
+                    <span class="tip">
+                        <button type="button" class="tip__btn" aria-expanded="false"
+                                aria-controls="tip-ext" data-i18n-aria="tip_more" aria-label="這是什麼">i</button>
+                        <span class="tip__body" id="tip-ext" role="tooltip" hidden>
+                            <span data-i18n="dz_ov_ext_live">平台在線是即時的；用量是定期向廠商同步來的。</span>
+                            <!-- ZH: 窗口分鐘數來自後端，由 overview.js 填。 -->
+                            <span id="ext-window"></span>
+                            <span data-i18n="ov_ext_void">沒用量也不在線的人不列出——那是常態，不是待辦事項。</span>
+                            <span data-i18n="ov_ext_unlinked_why">廠商那邊有用量，但對不到平台帳號——多半是老師，或還沒綁定的學生。</span>
+                        </span>
+                    </span>
+                </h2>
+            </div>
+            <div class="adm-head__do">
+                <!-- ZH: 同步時間**一定要看得到**（後端 docstring 的要求）——
+                         沒有它的話，一份幾小時前的名單看起來像現在的名單。 -->
+                <span class="adm-head__meta" id="ext-sync"></span>
+            </div>
+        </div>
         <div id="ext" aria-live="polite">
             <span class="skeleton skeleton--line"></span>
         </div>
     </section>
 
     <section class="adm-sec" aria-labelledby="h-jobs">
-        <div class="adm-sec__head"><h2 id="h-jobs" data-i18n="ov_jobs">最近的任務</h2></div>
+        <div class="adm-head">
+            <div class="adm-head__what">
+                <h2 class="adm-head__title"><span id="h-jobs" data-i18n="ov_jobs">最近的任務</span></h2>
+            </div>
+            <div class="adm-head__do">
+                <!-- ZH: 原本這張表是整個管理端唯一「到底就沒路了」的清單。
+                         數據頁的訓練任務區看的是全部任務（依狀態分桶）。 -->
+                <a class="btn--quiet" href="analytics.html#h-jobs" data-i18n="dz_ov_j_all">全部 →</a>
+            </div>
+        </div>
         <div id="jobs">
             <span class="skeleton skeleton--line"></span>
         </div>
@@ -74,9 +157,11 @@
 <!-- ⚠ ZH: 順序不能動 —— i18n-admin 要在 i18n 之後（它 assign 到 I18N 上）、
          prefs 之前（不然字典還沒併好就先套用一次，畫面會閃一下原文）。 -->
 <script src="i18n.js?v=6de7dc28"></script>
-<script src="i18n-admin.js?v=6f9d8d31"></script>
+<script src="i18n-admin.js?v=5c61b49c"></script>
 <script src="prefs.js?v=e71609e5"></script>
-<script src="admin-chrome.js?v=066f0374"></script>
-<script src="overview.js?v=5e608c03"></script>
+<script src="admin-chrome.js?v=978b50d5"></script>
+<!-- ZH: ⓘ 泡泡（外部 AI 的說明）。委派在 document 上，所以放在哪個 script 之前都可以。 -->
+<script src="tip.js?v=0699f4a2"></script>
+<script src="overview.js?v=69ce84f1"></script>
 </body>
 </html>

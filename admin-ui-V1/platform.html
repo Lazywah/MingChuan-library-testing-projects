@@ -11,7 +11,7 @@
 
     <link rel="stylesheet" href="tokens.css?v=ff9cecda">
     <link rel="stylesheet" href="styles.css?v=d4d21ce8">
-    <link rel="stylesheet" href="admin.css?v=99d53e72">
+    <link rel="stylesheet" href="admin.css?v=dccae4c3">
 </head>
 <body>
 
@@ -19,9 +19,11 @@
 
 <main class="page page--admin">
 
-    <div class="adm-sec__head">
-        <h1 class="hero__title" data-i18n="adm_nav_platform">平台設定</h1>
-        <span class="topbar__spacer"></span>
+    <!-- ZH: v4.45 頁首改用 .adm-head：檢視切換**緊貼頁名**（計畫第 3 節）。
+             原本被 spacer 推到最右邊，離它要篩的那一頁內容的標題一整個畫面寬。 -->
+    <div class="adm-head">
+        <div class="adm-head__what">
+        <h1 class="adm-head__title" data-i18n="adm_nav_platform">平台設定</h1>
 
         <!-- ZH: 檢視切換。沒有「全部」那一格 —— 這一頁本來就太長，
                  多一個「全部」只會讓它回到改之前的樣子。
@@ -39,16 +41,27 @@
                     aria-checked="false" tabindex="-1" data-view-opt="myai"
                     data-i18n="pf_view_myai">MYAI</button>
         </div>
+        </div>
     </div>
 
     <!-- ZH: 都是「調完就走」的東西。
              ZH: 外部 AI 的 23 個端點只有這裡收下的 8 個是**設定**；
                  帳號對應與同步那 12 個是營運動作，在「人」那一頁。 -->
 
+    <!-- ZH: v4.45 版面整理（計畫第 4 節「平台設定」）——這一頁每一區都同一個樣子：
+             標題列左半是「標題（＋數量）＋ⓘ」，右半是「編輯設定」或「取消／儲存 N 項變更」。
+             原本每區開頭都有一句「目前是唯讀。要改請按『編輯設定』」，六句一模一樣 ——
+             唯讀是平常的狀態，那顆「編輯設定」本身就在講這件事。改成**只標例外**：
+             進入編輯時區塊左側一條色條＋標題旁「編輯中」（AdminEditMark，platform.js 掛）。
+         ZH: 儲存鈕的字由 platform.js 依改動數重寫（「儲存 3 項變更」），
+             所以裡面包一層 span 帶 data-i18n —— JS 換掉內容時就連 span 一起換掉，
+             語言切換不會把「儲存 3 項變更」蓋回「儲存設定」。 -->
+
     <!-- ZH: 營運設定兩個檢視都要出現，裡面顯示哪幾組由 platform.js 決定。 -->
-    <section class="adm-sec" data-view="both" aria-labelledby="h-settings">
-        <div class="adm-sec__head">
-            <h2>
+    <section class="adm-sec" id="sec-settings" data-view="both" aria-labelledby="h-settings">
+        <div class="adm-head">
+            <div class="adm-head__what">
+            <h2 class="adm-head__title">
                 <span id="h-settings" data-i18n="pf_settings">營運設定</span>
                 <span class="tip">
                     <button type="button" class="tip__btn" aria-expanded="false"
@@ -58,41 +71,36 @@
                     </span>
                 </span>
             </h2>
-            <span class="topbar__spacer"></span>
+            </div>
+            <div class="adm-head__do">
             <!-- ZH: 預設唯讀。要改才按「編輯設定」——
                      15 個輸入框常駐會把這一區撐得很長，而且捲頁時滑鼠停在數字欄位上
                      滾輪就會把值改掉，**完全沒有痕跡**。 -->
             <button class="btn btn--minor" type="button" id="s-edit" data-i18n="pf_edit">編輯設定</button>
             <button class="btn btn--minor" type="button" id="s-cancel" data-i18n="pf_cancel" hidden>取消</button>
-            <button class="btn btn--primary" type="button" id="s-save" data-i18n="pf_save" hidden>儲存設定</button>
+            <button class="btn btn--primary" type="button" id="s-save" hidden><span data-i18n="pf_save">儲存設定</span></button>
+            </div>
         </div>
-        <p class="footnote" id="s-ro-hint" data-i18n="pf_readonly_hint">目前是唯讀。要改請按「編輯設定」。</p>
         <!-- ZH: 星號的圖例。常駐而不是只靠 tooltip ——
                  tooltip 要滑上去才看得到，而這件事是「你在改之前就該知道」。 -->
         <p class="footnote"><span class="pf-star">★</span>
             <span data-i18n="pf_star_legend">標星號的：這個值使用者看得到，或者改之前應該先發公告。</span></p>
         <!-- ZH: 編輯時才出現。空欄位在沒有這句話的時候看起來像「資料沒載到」。 -->
         <p class="footnote" id="s-edit-hint" data-i18n="pf_edit_hint" hidden>空白＝跟著 .env 的預設走。填了值才會變成覆寫。</p>
-        <!-- ZH: 只在選到校外供應商時才出現。常駐一條警語會被當成背景而看不見。 -->
-        <div class="adm-alert adm-alert--warn" id="ext-warn" hidden>
-            <span data-i18n="pf_external_warn">⚠ 選了校外供應商（Claude / Gemini）之後，使用者問小基的內容會送到那家廠商；小基的程式家教模式還會讀使用者自己的檔案。而且本機模型是直連的，選外部就會多依賴一層 gateway——它掛掉小基也會跟著不能用。</span>
-        </div>
+        <!-- ZH: v4.45 校外供應商的警語（#ext-warn）搬進表格，緊接在「小基模型」那一列下面
+                 —— 原本掛在整區最上面，跟它講的那一列中間隔著平台營運的十五列。
+                 由 platform.js 的 renderSettings 產生。 -->
         <div id="settings" aria-live="polite"><span class="skeleton skeleton--line"></span></div>
         <div class="inline-error" id="s-msg" hidden></div>
     </section>
 
-    <!-- ZH: 告警信的收件人。刻意**不放在營運設定那張表裡** ——
-             那張表是「設定／值／預設／範圍」四欄的統一格式，
-             而收件人要回答的是「這封信會從哪寄、寄給誰」，那是一封信的樣子，不是一個值。
-         ZH: 這一格同時就是**預覽**：寄件人是誰、主旨長什麼樣，都在這裡看得到。
-             寄件人現在是從 SMTP 設定來的（可能還是個人信箱），
-             把它放在最上面一行，改設定的人才會注意到。 -->
     <!-- ZH: v4.35 MYAI 點數（擁有者 2026-10-02）。原本是營運設定表裡的 12 列：
              兩個「開關＋數字」的總旋鈕各帶五個子列，而總旋鈕上的數字在五格都設了之後
              **沒有任何人會拿到**。這件事本質上是一張「身分 × 點數」的表，就畫成表。 -->
-    <section class="adm-sec" data-view="myai" aria-labelledby="h-credit">
-        <div class="adm-sec__head">
-            <h2>
+    <section class="adm-sec" id="sec-credit" data-view="myai" aria-labelledby="h-credit">
+        <div class="adm-head">
+            <div class="adm-head__what">
+            <h2 class="adm-head__title">
                 <span id="h-credit" data-i18n="pf_cr_title">MYAI 點數</span>
                 <span class="tip">
                     <button type="button" class="tip__btn" aria-expanded="false"
@@ -102,18 +110,28 @@
                     </span>
                 </span>
             </h2>
-            <span class="topbar__spacer"></span>
+            </div>
+            <div class="adm-head__do">
             <button class="btn btn--minor" type="button" id="cr-edit" data-i18n="pf_edit">編輯設定</button>
             <button class="btn btn--minor" type="button" id="cr-cancel" data-i18n="pf_cancel" hidden>取消</button>
-            <button class="btn btn--primary" type="button" id="cr-save" data-i18n="pf_save" hidden>儲存設定</button>
+            <button class="btn btn--primary" type="button" id="cr-save" hidden><span data-i18n="pf_save">儲存設定</span></button>
+            </div>
         </div>
         <div id="credit" aria-live="polite"><span class="skeleton skeleton--line"></span></div>
         <div class="inline-error" id="cr-msg" hidden></div>
     </section>
 
-    <section class="adm-sec" data-view="platform" aria-labelledby="h-alertmail">
-        <div class="adm-sec__head">
-            <h2>
+    <!-- ZH: 告警信的收件人。刻意**不放在營運設定那張表裡** ——
+             那張表是「設定／值／預設／範圍」四欄的統一格式，
+             而收件人要回答的是「這封信會從哪寄、寄給誰」，那是一封信的樣子，不是一個值。
+         ZH: 這一格同時就是**預覽**：寄件人是誰、主旨長什麼樣，都在這裡看得到。
+             寄件人現在是從 SMTP 設定來的（可能還是個人信箱），
+             把它放在最上面一行，改設定的人才會注意到。
+         ZH: v4.45 這段註解原本錯掛在「MYAI 點數」上面，搬回它講的這一區。 -->
+    <section class="adm-sec" id="sec-alertmail" data-view="platform" aria-labelledby="h-alertmail">
+        <div class="adm-head">
+            <div class="adm-head__what">
+            <h2 class="adm-head__title">
                 <span id="h-alertmail" data-i18n="pf_am_title">告警信</span>
                 <span class="tip">
                     <button type="button" class="tip__btn" aria-expanded="false"
@@ -123,44 +141,59 @@
                     </span>
                 </span>
             </h2>
-            <span class="topbar__spacer"></span>
+            </div>
+            <div class="adm-head__do">
             <button class="btn btn--minor" type="button" id="am-edit" data-i18n="pf_edit">編輯設定</button>
             <button class="btn btn--minor" type="button" id="am-cancel" data-i18n="pf_cancel" hidden>取消</button>
-            <button class="btn btn--primary" type="button" id="am-save" data-i18n="pf_save" hidden>儲存設定</button>
+            <button class="btn btn--primary" type="button" id="am-save" hidden><span data-i18n="pf_save">儲存設定</span></button>
+            </div>
         </div>
         <div id="alertmail" aria-live="polite"><span class="skeleton skeleton--line"></span></div>
         <div class="inline-error" id="am-msg" hidden></div>
     </section>
 
-    <section class="adm-sec" data-view="platform" aria-labelledby="h-models">
-        <div class="adm-sec__head">
-            <h2 id="h-models" data-i18n="pf_models">模型</h2>
-            <span class="topbar__spacer"></span>
+    <section class="adm-sec" id="sec-models" data-view="platform" aria-labelledby="h-models">
+        <div class="adm-head">
+            <div class="adm-head__what">
+            <h2 class="adm-head__title" id="h-models" data-i18n="pf_models">模型</h2>
+            </div>
+            <div class="adm-head__do">
             <!-- ZH: 跟這一頁其他區同一套：唯讀 → 編輯 → 表格內直接改 → 一次儲存。 -->
             <button class="btn btn--minor" type="button" id="m-add" data-i18n="pf_m_add" hidden>新增一列</button>
             <button class="btn btn--minor" type="button" id="m-edit" data-i18n="pf_edit">編輯設定</button>
             <button class="btn btn--minor" type="button" id="m-cancel" data-i18n="pf_cancel" hidden>取消</button>
-            <button class="btn btn--primary" type="button" id="m-save" data-i18n="pf_save" hidden>儲存設定</button>
+            <button class="btn btn--primary" type="button" id="m-save" hidden><span data-i18n="pf_save">儲存設定</span></button>
+            </div>
         </div>
-        <p class="footnote" id="m-ro-hint" data-i18n="pf_readonly_hint">目前是唯讀。要改請按「編輯設定」。</p>
-        <p class="footnote" id="m-edit-hint" data-i18n="pf_mm_edit_hint" hidden>改完按「儲存設定」才會送出。只有真的改過的列會被寫入。</p>
+        <p class="footnote" id="m-edit-hint" data-i18n="pf_mm_edit_hint" hidden>改完按儲存鈕才會送出。只有真的改過的列會被寫入。</p>
         <div id="models" aria-live="polite"><span class="skeleton skeleton--line"></span></div>
         <div class="inline-error" id="m-msg" hidden></div>
     </section>
 
-    <section class="adm-sec" data-view="platform" aria-labelledby="h-nodes">
-        <div class="adm-sec__head">
-            <h2 id="h-nodes" data-i18n="pf_nodes">GPU 節點</h2>
-            <span class="topbar__spacer"></span>
-            <!-- ZH: 一台機器一塊（不是一張 GPU 一塊）。這裡數的是機器。 -->
-            <span class="footnote" id="n-count"></span>
+    <section class="adm-sec" id="sec-nodes" data-view="platform" aria-labelledby="h-nodes">
+        <div class="adm-head">
+            <div class="adm-head__what">
+            <!-- ZH: 一台機器一塊（不是一張 GPU 一塊）。這裡數的是機器。
+                 ZH: v4.45 台數放進標題裡、緊貼「GPU 節點」—— 原本在 spacer 後面，
+                     被推到最右邊跟「編輯設定」擠在一起，看不出在數誰。
+                     id 放在內層 span 上：h2 本身若帶 data-i18n，語言切換會把台數一起洗掉。 -->
+            <h2 class="adm-head__title">
+                <span id="h-nodes" data-i18n="pf_nodes">GPU 節點</span>
+                <span class="adm-head__count" id="n-count"></span>
+            </h2>
+            </div>
+            <div class="adm-head__do">
             <!-- ZH: 跟這一頁其他區一樣：預設唯讀，按「編輯設定」才變成可填。
                      這一區尤其需要——七天的時段輸入框常駐，捲頁時滑鼠停在上面
                      打字或滾輪都可能改到，而改錯的後果是機器整天不派任務。 -->
             <button class="btn btn--minor" type="button" id="n-edit" data-i18n="pf_edit">編輯設定</button>
             <button class="btn btn--minor" type="button" id="n-cancel" data-i18n="pf_cancel" hidden>取消</button>
+            <!-- ZH: v4.45 儲存鈕搬回標題列（原本在卡片左下角，每一區都是「取消／儲存」並排在
+                     標題列，只有這一區不一樣）。字維持「儲存這個節點」—— 一次只存下拉選的那一台，
+                     寫出來才不會被以為是存全部。 -->
+            <button class="btn btn--primary" type="button" id="n-save" data-i18n="pf_n_save" hidden>儲存這個節點</button>
+            </div>
         </div>
-        <p class="footnote" id="n-ro-hint" data-i18n="pf_readonly_hint">目前是唯讀。要改請按「編輯設定」。</p>
         <!-- ZH: 選一台來調。**不列出全部** —— 總覽已經是「一眼看完所有節點狀態」的地方，
                  在這裡重複只會讓人不確定該信哪一邊，而且會讓這一區隨機器數變長。
 
@@ -181,25 +214,38 @@
              ⚠ 「模型」（上面那區）是平台自己的模型註冊表，
                這裡的「廠商模型代碼對應」是把廠商的原始代碼翻成看得懂的名字，
                兩者不同 —— 刻意隔開放，名稱也刻意不同。 -->
+    <!-- ZH: v4.45 兩個小段各自包成 .adm-block.pf-sub：段與段之間一條細線（admin.css 共用規則），
+             而且「編輯中」的色條與藥丸要標在**正在編輯的那一段**上 —— 兩段各有自己的
+             編輯／儲存，標在整個區塊上會分不出是哪一段在編輯。 -->
     <section class="adm-sec" data-view="myai" aria-labelledby="h-ext">
-        <div class="adm-sec__head">
-            <h2 id="h-ext" data-i18n="pf_ext">外部 AI（MYAI）</h2>
+        <div class="adm-head">
+            <div class="adm-head__what">
+            <h2 class="adm-head__title" id="h-ext" data-i18n="pf_ext">外部 AI（MYAI）</h2>
+            </div>
         </div>
 
-        <div class="adm-sec__head">
-            <h3 id="h-ext-conn" data-i18n="pf_ext_conn">連線設定</h3>
-            <span class="topbar__spacer"></span>
+        <div class="adm-block pf-sub" id="ext-conn-block">
+        <div class="adm-head">
+            <div class="adm-head__what">
+            <h3 class="adm-head__title" id="h-ext-conn" data-i18n="pf_ext_conn">連線設定</h3>
+            </div>
+            <div class="adm-head__do">
             <button class="btn btn--minor" type="button" id="x-edit" data-i18n="pf_edit">編輯設定</button>
             <button class="btn btn--minor" type="button" id="x-cancel" data-i18n="pf_cancel" hidden>取消</button>
-            <button class="btn btn--primary" type="button" id="x-save" data-i18n="pf_save" hidden>儲存設定</button>
+            <button class="btn btn--primary" type="button" id="x-save" hidden><span data-i18n="pf_save">儲存設定</span></button>
+            </div>
         </div>
-        <p class="footnote" id="x-ro-hint" data-i18n="pf_readonly_hint">目前是唯讀。要改請按「編輯設定」。</p>
         <div id="ext-conn" aria-live="polite"><span class="skeleton skeleton--line"></span></div>
         <div class="inline-error" id="x-msg" hidden></div>
+        </div>
 
-        <div class="adm-sec__head">
-            <h3>
+        <div class="adm-block pf-sub" id="mm-block">
+        <div class="adm-head">
+            <div class="adm-head__what">
+            <h3 class="adm-head__title">
                 <span id="h-ext-map" data-i18n="pf_mm">廠商模型代碼對應</span>
+                <!-- ZH: v4.45 對應了幾筆，貼在標題旁（表格改成每頁 20 筆之後，總數只看得到這裡與分頁器）。 -->
+                <span class="adm-head__count" id="mm-count"></span>
                 <span class="tip">
                     <button type="button" class="tip__btn" aria-expanded="false"
                             aria-controls="tip-mm" data-i18n-aria="tip_more" aria-label="這是什麼">i</button>
@@ -208,19 +254,21 @@
                     </span>
                 </span>
             </h3>
-            <span class="topbar__spacer"></span>
+            </div>
+            <div class="adm-head__do">
             <!-- ZH: 跟營運設定同一套：預設唯讀，按「編輯設定」才變成可填的欄位。
                      這裡的理由更強 —— 三十幾列各有三個欄位，常駐等於上百個輸入框。 -->
             <button class="btn btn--minor" type="button" id="mm-add" data-i18n="pf_mm_add" hidden>新增一列</button>
             <button class="btn btn--minor" type="button" id="mm-edit" data-i18n="pf_edit">編輯設定</button>
             <button class="btn btn--minor" type="button" id="mm-cancel" data-i18n="pf_cancel" hidden>取消</button>
-            <button class="btn btn--primary" type="button" id="mm-save" data-i18n="pf_save" hidden>儲存設定</button>
+            <button class="btn btn--primary" type="button" id="mm-save" hidden><span data-i18n="pf_save">儲存設定</span></button>
+            </div>
         </div>
-        <p class="footnote" id="mm-ro-hint" data-i18n="pf_readonly_hint">目前是唯讀。要改請按「編輯設定」。</p>
-        <p class="footnote" id="mm-edit-hint" data-i18n="pf_mm_edit_hint" hidden>改完按「儲存設定」才會送出。只有真的改過的列會被寫入。</p>
+        <p class="footnote" id="mm-edit-hint" data-i18n="pf_mm_edit_hint" hidden>改完按儲存鈕才會送出。只有真的改過的列會被寫入。</p>
         <div id="mm-unmapped" aria-live="polite"></div>
         <div id="mm-list" aria-live="polite"><span class="skeleton skeleton--line"></span></div>
         <div class="inline-error" id="mm-msg" hidden></div>
+        </div>
 
         <!-- ZH: v4.2 —— 「手動補齊點數」搬到「帳號」頁的 MYAI 檢視
                  （擁有者裁定 2026-09-02）：它是對帳號的維運動作，
@@ -230,10 +278,19 @@
 
     <!-- ZH: 組織對照表是**平台層**的東西，不屬於 MYAI 檢視。
              （第一版誤接在 MYAI 區塊尾端，於是只有切到 MYAI 才看得到。） -->
-    <section class="adm-sec" data-view="platform" aria-labelledby="h-org">
-        <div class="adm-sec__head">
-            <h3>
+    <!-- ZH: v4.45 標題從 h3 升成 h2 —— 它是頂層區塊，原本的 h3 讓它看起來像
+             上面「GPU 節點」的一個小段。
+         ZH: 標題列原本預設 6 顆鈕、編輯中 9 顆（Alma 重建、三顆匯出、匯入、編輯…）。
+             收成「匯出▾」「更多▾」「編輯設定」三個：三種匯出格式是同一件事的三個選項，
+             Alma 重建與匯入一年用不到幾次。與帳號頁的「匯出▾」同一個做法。 -->
+    <section class="adm-sec" id="sec-org" data-view="platform" aria-labelledby="h-org">
+        <div class="adm-head">
+            <div class="adm-head__what">
+            <h2 class="adm-head__title">
                 <span id="h-org" data-i18n="pf_org">組織對照表</span>
+                <!-- ZH: 目前這份清單（學系或行政單位）有幾列。改成每頁 20 筆之後，
+                         沒有這個數字就看不出整張表多大。 -->
+                <span class="adm-head__count" id="og-count"></span>
                 <span class="tip">
                     <button type="button" class="tip__btn" aria-expanded="false"
                             aria-controls="tip-org" data-i18n-aria="tip_more" aria-label="這是什麼">i</button>
@@ -241,46 +298,70 @@
                     <span data-i18n="pf_org_why">「數據」那一頁依學院／學系／行政單位分群，靠的就是這張表。學院不存在使用者身上，改這裡全站立刻生效，不必回填任何人。</span>
                     </span>
                 </span>
-            </h3>
-            <span class="topbar__spacer"></span>
-            <!-- ZH: v4.9 用 Alma 重建（擁有者裁定 2026-09-07）。這張表的內容
-                     以 Alma 為準，這顆是「現在去對一次」。要跑約 20 分鐘，
-                     所以是背景任務＋進度，不是按了就等。 -->
-            <button class="btn btn--minor" type="button" id="og-alma"
-                    data-i18n="pf_org_alma">用 Alma 重建</button>
-            <!-- ZH: 三種格式都匯得回來，差別在給誰看：Excel／CSV 是給人開的
-                     （中文欄名、啟用寫「是／否」、多一欄來源）；JSON 是給版控的
-                     （欄位是原始值，可以 diff）。常用的放前面。 -->
-            <button class="btn btn--minor" type="button" id="og-export-xlsx"
-                    data-i18n="pf_org_export_xlsx">匯出 Excel</button>
-            <button class="btn btn--minor" type="button" id="og-export-csv"
-                    data-i18n="pf_org_export_csv">匯出 CSV</button>
-            <button class="btn btn--minor" type="button" id="og-export"
-                    data-i18n="pf_org_export">匯出 JSON</button>
-            <!-- ZH: file input 藏起來，用按鈕代按 —— 原生的檔案選擇器樣式無法與其他鈕一致。 -->
+            </h2>
+            <!-- ZH: 兩份清單切換 —— 51 個系加 97 個單位放在同一張表會找不到東西。
+                 ZH: v4.45 改用跟頁首「平台／MYAI」同一款分段切換（.adm-seg）。
+                     原本借用學生端的 .seg，它只認 aria-pressed，而這裡設的是 aria-checked ——
+                     **選中的那一個根本不會變色**，看不出現在是哪一份。
+                     它是篩選（同一張表的兩份清單），放在標題列左半「在看什麼」那一邊。 -->
+            <div class="adm-seg" role="radiogroup" aria-labelledby="h-org" id="og-tabs">
+                <span class="adm-seg__thumb" aria-hidden="true" style="transform:translateX(0%)"></span>
+                <button class="adm-seg__opt is-current" type="button" role="radio" aria-checked="true"
+                        tabindex="0" data-og="dept" data-i18n="pf_org_dept">學系</button>
+                <button class="adm-seg__opt" type="button" role="radio" aria-checked="false"
+                        tabindex="-1" data-og="unit" data-i18n="pf_org_unit">行政單位</button>
+            </div>
+            </div>
+            <div class="adm-head__do">
+            <!-- ZH: file input 藏起來，用選單項目代按 —— 原生的檔案選擇器樣式無法與其他鈕一致。 -->
             <!-- ZH: 三種格式都收，後端依副檔名決定怎麼解析。
                      ⚠ 匯入**不會清空欄位** —— 試算表的空格一律當「別動」，
                      否則一份沒填英文名的 Excel 會把全校的英文名洗掉。 -->
             <input type="file" id="og-file"
                    accept=".xlsx,.csv,.json,application/json" hidden>
-            <button class="btn btn--minor" type="button" id="og-pick" data-i18n="pf_org_import">匯入</button>
+            <!-- ZH: 預覽過的匯入等著套用時才出現。它是「現在要做的那件事」，所以是主要按鈕、放在選單外面。 -->
             <button class="btn btn--primary" type="button" id="og-apply" data-i18n="pf_org_apply" hidden>套用匯入</button>
+            <!-- ZH: 三種格式都匯得回來，差別在給誰看：Excel／CSV 是給人開的
+                     （中文欄名、啟用寫「是／否」、多一欄來源）；JSON 是給版控的
+                     （欄位是原始值，可以 diff）。常用的放前面。
+                 ZH: 項目的字沿用帳號頁「匯出▾」那一套（Excel（.xlsx）／CSV（.csv）），
+                     同一個動作在兩頁寫成兩種樣子，會讓人以為是兩種東西。 -->
+            <div class="account adm-dd">
+                <button class="btn btn--minor" type="button" id="og-export-dd"
+                        aria-haspopup="menu" aria-expanded="false" aria-controls="og-export-dd-menu"><span data-i18n="pp_export">匯出</span> <span class="account__caret" aria-hidden="true">▾</span></button>
+                <div class="account__menu" role="menu" hidden id="og-export-dd-menu">
+                    <button type="button" role="menuitem" id="og-export-xlsx"
+                            data-i18n="pp_export_xlsx">Excel（.xlsx）</button>
+                    <button type="button" role="menuitem" id="og-export-csv"
+                            data-i18n="pp_export_csv">CSV（.csv）</button>
+                    <button type="button" role="menuitem" id="og-export"
+                            data-i18n="dz_pf_export_json">JSON（.json）</button>
+                </div>
+            </div>
+            <!-- ZH: v4.9 用 Alma 重建（擁有者裁定 2026-09-07）。這張表的內容
+                     以 Alma 為準，這顆是「現在去對一次」。要跑約 20 分鐘，
+                     所以是背景任務＋進度，不是按了就等。
+                 ZH: v4.45 收進「更多▾」：重建與匯入都是一年幾次的事，而且兩者都先給預覽才寫入，
+                     收起來不會讓人誤按。 -->
+            <div class="account adm-dd">
+                <button class="btn btn--minor" type="button" id="og-more"
+                        aria-haspopup="menu" aria-expanded="false" aria-controls="og-more-menu"><span data-i18n="adm_more">更多</span> <span class="account__caret" aria-hidden="true">▾</span></button>
+                <div class="account__menu" role="menu" hidden id="og-more-menu">
+                    <button type="button" role="menuitem" id="og-alma"
+                            data-i18n="pf_org_alma">用 Alma 重建</button>
+                    <button type="button" role="menuitem" id="og-pick"
+                            data-i18n="pf_org_import">匯入</button>
+                </div>
+            </div>
             <button class="btn btn--minor" type="button" id="og-add" data-i18n="pf_org_add" hidden>新增一列</button>
             <button class="btn btn--minor" type="button" id="og-edit" data-i18n="pf_edit">編輯設定</button>
             <button class="btn btn--minor" type="button" id="og-cancel" data-i18n="pf_cancel" hidden>取消</button>
-            <button class="btn btn--primary" type="button" id="og-save" data-i18n="pf_save" hidden>儲存設定</button>
+            <button class="btn btn--primary" type="button" id="og-save" hidden><span data-i18n="pf_save">儲存設定</span></button>
+            </div>
         </div>
-        <!-- ZH: 兩份清單分頁切換 —— 51 個系加 97 個單位放在同一張表會找不到東西。 -->
-        <div class="seg" role="radiogroup" aria-labelledby="h-org" id="og-tabs">
-            <button class="seg__opt" type="button" role="radio" aria-checked="true"
-                    data-og="dept" data-i18n="pf_org_dept">學系</button>
-            <button class="seg__opt" type="button" role="radio" aria-checked="false"
-                    data-og="unit" data-i18n="pf_org_unit">行政單位</button>
-        </div>
-        <p class="footnote" id="og-ro-hint" data-i18n="pf_readonly_hint">目前是唯讀。要改請按「編輯設定」。</p>
         <!-- ZH: 這兩句是這一區最重要的說明 —— 停用與改名的後果不寫出來，
                  管理者按下去之前無從判斷。 -->
-        <p class="footnote" id="og-edit-hint" hidden data-i18n="pf_org_edit_hint">改完按「儲存設定」才會送出。停用只是不進下拉，既有的人仍然對得上；改名會把填過舊名的人一起搬過去，存檔後會告訴你搬了幾個。沒有刪除。</p>
+        <p class="footnote" id="og-edit-hint" hidden data-i18n="pf_org_edit_hint">改完按儲存鈕才會送出。停用只是不進下拉，既有的人仍然對得上；改名會把填過舊名的人一起搬過去，存檔後會告訴你搬了幾個。沒有刪除。</p>
         <div id="og-list" aria-live="polite"><span class="skeleton skeleton--line"></span></div>
         <div class="inline-error" id="og-msg" hidden></div>
     </section>
@@ -293,10 +374,10 @@
 <script src="tz.js?v=2e214a8b"></script>
 <!-- ⚠ ZH: 順序不能動 —— i18n-admin 在 i18n 之後、prefs 之前。 -->
 <script src="i18n.js?v=6de7dc28"></script>
-<script src="i18n-admin.js?v=6f9d8d31"></script>
+<script src="i18n-admin.js?v=5c61b49c"></script>
 <script src="tip.js?v=0699f4a2"></script>
 <script src="prefs.js?v=e71609e5"></script>
-<script src="admin-chrome.js?v=066f0374"></script>
-<script src="platform.js?v=694245d3"></script>
+<script src="admin-chrome.js?v=978b50d5"></script>
+<script src="platform.js?v=c425b60f"></script>
 </body>
 </html>

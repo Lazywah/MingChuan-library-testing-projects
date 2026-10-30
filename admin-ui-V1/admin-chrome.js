@@ -169,7 +169,69 @@
             + '</div>';
 
         document.body.insertBefore(bar, document.body.firstChild);
+        demoBanner();
         wire();
+    }
+
+    /* ── DEMO 橫幅（v4.45 版面整理）────────────────────────────────────────────
+     * @node demoBanner
+     * ZH: 版面 DEMO 是把整套管理端複製到 `admin-ui-V1/_demo/` 底下給擁有者比較。
+     *     🔴 它接的是**真的後端**（同一個 origin、同一個 token），按了會真的送出 ——
+     *     所以要一條醒目的橫幅講清楚，免得有人以為在試玩假資料。
+     * ZH: 只看路徑有沒有 `/_demo/`：正式版的路徑裡不會有這一段，橫幅構造上就不會出現在那裡。
+     * ZH: 「區塊加框」是擁有者待決事項 1 的 A／B 對照：切 body 的 `adm-framed`
+     *     （樣式在 admin.css 的「加框模式」）。記在 localStorage，存取被擋就只記這一次 ——
+     *     這只是看版面用的偏好，不能讓它擋住頁面。
+     * ──────────────────────────────────────────────────────────────────────── */
+    var DEMO_FRAME_KEY = 'adm_demo_framed';
+
+    function demoBanner() {
+        if (location.pathname.indexOf('/_demo/') < 0) return;
+
+        var framed = false;
+        try { framed = localStorage.getItem(DEMO_FRAME_KEY) === '1'; } catch (e) { /* 當作沒設過 */ }
+        document.body.classList.toggle('adm-framed', framed);
+
+        var box = document.createElement('div');
+        box.className = 'adm-demo';
+
+        var note = document.createElement('span');
+        note.className = 'adm-demo__note';
+        note.setAttribute('data-i18n', 'adm_demo_note');
+        note.textContent = T('adm_demo_note', '版面 DEMO —— 功能都是真的（按了會真的送出）');
+        box.appendChild(note);
+
+        // ZH: 開關：外觀沿用滑條開關 .tsw（營運設定那一套），狀態用 role=switch + aria-checked。
+        var sw = document.createElement('button');
+        sw.type = 'button';
+        sw.className = 'adm-demo__frame';
+        sw.setAttribute('role', 'switch');
+        sw.setAttribute('aria-checked', String(framed));
+        sw.innerHTML = '<span class="tsw" aria-hidden="true"><span class="tsw__knob"></span></span>';
+        var swText = document.createElement('span');
+        swText.setAttribute('data-i18n', 'adm_demo_frame');
+        swText.textContent = T('adm_demo_frame', '區塊加框');
+        sw.appendChild(swText);
+        sw.addEventListener('click', function () {
+            framed = !framed;
+            sw.setAttribute('aria-checked', String(framed));
+            document.body.classList.toggle('adm-framed', framed);
+            try { localStorage.setItem(DEMO_FRAME_KEY, framed ? '1' : '0'); } catch (e) { /* 同上 */ }
+        });
+        box.appendChild(sw);
+
+        // ZH: 回到正式版：同一頁、同樣的查詢字串與錨點，只拿掉路徑裡的 `_demo/`。
+        //     用 .btn--quiet：看起來是一條連結，點擊範圍仍是 44px。
+        var back = document.createElement('a');
+        back.className = 'btn--quiet';
+        back.href = location.pathname.replace('/_demo/', '/') + location.search + location.hash;
+        back.setAttribute('data-i18n', 'adm_demo_back');
+        back.textContent = T('adm_demo_back', '回到正式版');
+        box.appendChild(back);
+
+        // ZH: 放在頂部列**上面**：頂部列是 sticky，橫幅捲走之後不佔畫面，
+        //     但一打開頁面第一眼一定看得到。
+        document.body.insertBefore(box, document.body.firstChild);
     }
 
     // ZH: 取文案。字典裡沒有就用 fallback，**不清空**。
@@ -573,6 +635,298 @@
     }
 
     window.AdminDropdown = wireDropdown;
+
+    /* ==========================================================================
+     * v4.45 共用版面元件（版面整理 DEMO，計畫第 3 節）
+     *
+     * ZH: 放在這支的理由與 AdminDownload / AdminDropdown 相同：每一頁都載它，
+     *     而這幾樣東西原本是**各頁各抄一份**（分頁器有四份），抄寫會漂開。
+     *     樣式在 admin.css 的「v4.45 版面整理」那一段。
+     * ========================================================================== */
+
+    /* ── 分頁器 ────────────────────────────────────────────────────────────────
+     * @node AdminPager
+     * ZH: 取代 people.js（帳號清單、補齊預覽、回收預覽）與 reports.js（寄信／管理動作紀錄）
+     *     裡四份一模一樣的 `.adm-inline.tu-pager` 標記。四份都只差在 id 前綴。
+     *
+     * ZH: 用法（頁碼一律**從 1 算**，那是畫面上顯示的數字）：
+     *       box.innerHTML = '<table>…</table>' + AdminPager.html({ id: 'mail', page: 2, pages: 5, total: 47 });
+     *       AdminPager.wire({ id: 'mail', onGo: function (p, which) { …重畫第 p 頁… } });
+     *     或一步到位（容器裡只放分頁器時）：
+     *       AdminPager.render(el, { id, page, pages | perPage, total, onGo, focus });
+     *
+     * ZH: 產生的按鈕 id 是 `<id>-prev` / `<id>-next` —— 與四份舊碼的 id 相同
+     *     （pp-、tu-、rc-、mail-、audit-），呼叫端換過來時不必改其他地方。
+     *
+     * ZH: 🔴 換頁通常是整段 innerHTML 重畫，原本按的那顆鈕就不在了，焦點掉回 <body>
+     *     —— 用鍵盤的人得從頁首重新 Tab 過來（reports.js 原本就為此補過一次）。
+     *     所以 onGo 的第二個參數告訴你是哪一顆（'prev' / 'next'），重畫後把它傳回
+     *     wire / render 的 `focus`，焦點就回到同一顆；那顆到頭變成 disabled 時改放另一顆。
+     *
+     * ZH: 只有一頁時：有給 total 就只顯示「共 N 筆」（計畫：分頁器一直顯示總筆數），
+     *     沒給 total 就回空字串（與舊碼「一頁就不畫」相同）。
+     * ──────────────────────────────────────────────────────────────────────── */
+    function pagerPages(o) {
+        if (o.pages != null) return Math.max(1, o.pages | 0);
+        if (o.perPage) return Math.max(1, Math.ceil((o.total || 0) / o.perPage));
+        return 1;
+    }
+
+    function pagerHtml(o) {
+        var pages = pagerPages(o);
+        var at = Math.min(pages, Math.max(1, o.page | 0 || 1));
+        var hasTotal = o.total != null;
+        var id = esc(o.id);
+        if (pages <= 1) {
+            if (!hasTotal) return '';
+            return '<div class="adm-pager" id="' + id + '-pager"><span class="adm-pager__at">'
+                + esc(T('adm_pg_total', '共 {n} 筆').replace('{n}', o.total)) + '</span></div>';
+        }
+        // ZH: 「第 a / b 頁（共 N 筆）」—— 沿用既有的 pf_pg_of + rp_pg_total，
+        //     與舊的四份分頁器同一句話，換過來畫面上的字不變。
+        var label = T('pf_pg_of', '第 {a} / {b} 頁').replace('{a}', at).replace('{b}', pages)
+            + (hasTotal ? T('rp_pg_total', '（共 {n} 筆）').replace('{n}', o.total) : '');
+        return '<nav class="adm-pager" id="' + id + '-pager" aria-label="'
+            + esc(T('adm_pg_nav', '分頁')) + '">'
+            + '<button class="btn--quiet" type="button" id="' + id + '-prev"'
+            + (at <= 1 ? ' disabled' : '') + '><span aria-hidden="true">‹</span> '
+            + '<span data-i18n="pf_pg_prev">' + esc(T('pf_pg_prev', '上一頁')) + '</span></button>'
+            + '<span class="adm-pager__at">' + esc(label) + '</span>'
+            + '<button class="btn--quiet" type="button" id="' + id + '-next"'
+            + (at >= pages ? ' disabled' : '') + '>'
+            + '<span data-i18n="pf_pg_next">' + esc(T('pf_pg_next', '下一頁')) + '</span>'
+            + ' <span aria-hidden="true">›</span></button>'
+            + '</nav>';
+    }
+
+    function pagerWire(o) {
+        var prev = document.getElementById(o.id + '-prev');
+        var next = document.getElementById(o.id + '-next');
+        // ZH: 目前頁碼從畫出來的標記讀不到，所以由呼叫端給（與 html() 同一個 o 即可）。
+        var at = Math.max(1, o.page | 0 || 1);
+        if (prev && o.onGo) prev.addEventListener('click', function () { o.onGo(at - 1, 'prev'); });
+        if (next && o.onGo) next.addEventListener('click', function () { o.onGo(at + 1, 'next'); });
+        if (o.focus) {
+            var el = o.focus === 'prev' ? prev : next;
+            if (el && el.disabled) el = (el === prev) ? next : prev;
+            if (el && !el.disabled) el.focus();
+        }
+    }
+
+    window.AdminPager = {
+        html: pagerHtml,
+        wire: pagerWire,
+        render: function (el, o) {
+            if (typeof el === 'string') el = document.getElementById(el);
+            if (!el) return;
+            el.innerHTML = pagerHtml(o);
+            pagerWire(o);
+        },
+    };
+
+    /* ── 收合區塊 ──────────────────────────────────────────────────────────────
+     * @node AdminFold
+     * ZH: 原生 <details class="adm-fold">。收起來時標題列上看得到數量（setCount），
+     *     第一次點開才載入（onFirstOpen）—— 訊息頁的寄信紀錄／管理動作紀錄就是這樣用。
+     *
+     * ZH: 標記（HTML 裡直接寫，或用 AdminFold.html() 產生）：
+     *       <details class="adm-fold adm-sec" data-fold="msg-mail">
+     *         <summary class="adm-fold__head">
+     *           <h2 class="adm-head__title" id="h-mail">寄信紀錄</h2>
+     *           <span class="adm-head__count" data-fold-count></span>
+     *         </summary>
+     *         <div class="adm-fold__body" id="mail">…</div>
+     *       </details>
+     *     ⚠ <summary> 裡只放標題與數量，**不放按鈕** —— 按鈕要在收起來時也按得到，
+     *       而收起來的 <details> 只剩 summary；把動作放在 summary 裡又會跟「點一下展開」搶。
+     *
+     * ZH: 開合狀態記在記憶體（以 data-fold 為鍵）。總覽每 10 秒整段重畫，
+     *     沒有這一層的話使用者剛點開的名單 10 秒後就被收回去（計畫第 5 節第 4 步點名的事）。
+     *     重畫時用 AdminFold.html({ id, … }) 產生，它會照記住的狀態帶上 open。
+     *     加 `data-fold-persist` 的才另外存 localStorage（跨次造訪也記得）；
+     *     存不了（私密視窗、被擋）就只記這一次 —— 不影響功能。
+     *
+     * ZH: 'toggle' 事件不冒泡，但**捕獲階段**照樣經過 document，所以一個監聽就涵蓋
+     *     之後才長出來的每一個收合區（不必每次重畫都重新接）。
+     * ──────────────────────────────────────────────────────────────────────── */
+    var FOLD_LS = 'adm_fold:';
+    var _foldOpen = {};
+
+    function foldRemembered(id) {
+        if (!id) return null;
+        if (Object.prototype.hasOwnProperty.call(_foldOpen, id)) return _foldOpen[id];
+        try {
+            var v = localStorage.getItem(FOLD_LS + id);
+            if (v === '1' || v === '0') return v === '1';
+        } catch (e) { /* ZH: 存取被擋就當作沒記過 */ }
+        return null;
+    }
+
+    document.addEventListener('toggle', function (ev) {
+        var d = ev.target;
+        if (!d || !d.classList || !d.classList.contains('adm-fold')) return;
+        var id = d.getAttribute('data-fold');
+        if (!id) return;
+        _foldOpen[id] = d.open;
+        if (d.hasAttribute('data-fold-persist')) {
+            try { localStorage.setItem(FOLD_LS + id, d.open ? '1' : '0'); } catch (e) { /* 同上 */ }
+        }
+    }, true);
+
+    // ZH: o = { id, key, zh, tag:'h2'|'h3', titleId, count, body, open, persist, cls }
+    //     標題用 key + zh（與導覽表同一個寫法，翻譯檢查掃得到），切換語言時靠 data-i18n 重畫。
+    //     body 是**已經組好的 HTML**（呼叫端負責跳脫），其餘欄位這裡跳脫。
+    function foldHtml(o) {
+        var mem = foldRemembered(o.id);
+        var open = mem == null ? !!o.open : mem;
+        var tag = o.tag === 'h3' ? 'h3' : 'h2';
+        return '<details class="adm-fold' + (o.cls ? ' ' + esc(o.cls) : '') + '"'
+            + (o.id ? ' data-fold="' + esc(o.id) + '"' : '')
+            + (o.persist ? ' data-fold-persist' : '')
+            + (open ? ' open' : '') + '>'
+            + '<summary class="adm-fold__head">'
+            + '<' + tag + ' class="adm-head__title"' + (o.titleId ? ' id="' + esc(o.titleId) + '"' : '')
+            + (o.key ? ' data-i18n="' + esc(o.key) + '"' : '') + '>'
+            + esc(o.key ? T(o.key, o.zh) : (o.zh || '')) + '</' + tag + '>'
+            + '<span class="adm-head__count" data-fold-count>' + (o.count == null ? '' : esc(o.count)) + '</span>'
+            + '</summary>'
+            + '<div class="adm-fold__body">' + (o.body || '') + '</div>'
+            + '</details>';
+    }
+
+    // ZH: 接上一個收合區。o = { onFirstOpen(body, el), onToggle(open, el) }
+    //     onFirstOpen 只跑一次；它回傳的 Promise 若失敗，下次點開會**再試一次** ——
+    //     載入失敗後永遠停在錯誤訊息、而且重新點開也沒用，那看起來像壞掉。
+    //     回傳一個控制物件：{ el, body, open(), close(), isOpen(), setCount(text) }。
+    function foldWire(el, o) {
+        if (typeof el === 'string') el = document.getElementById(el);
+        if (!el) return null;
+        o = o || {};
+        var body = el.querySelector('.adm-fold__body') || el;
+        var loaded = false;
+
+        function first() {
+            if (loaded || !o.onFirstOpen) return;
+            loaded = true;
+            var r;
+            try { r = o.onFirstOpen(body, el); } catch (e) { loaded = false; throw e; }
+            if (r && typeof r.then === 'function') {
+                r.then(null, function () { loaded = false; });
+            }
+        }
+        el.addEventListener('toggle', function () {
+            if (el.open) first();
+            if (o.onToggle) o.onToggle(el.open, el);
+        });
+
+        // ZH: 記住的狀態優先於 HTML 寫死的 open（換頁回來、或重畫之後要維持使用者剛才的選擇）。
+        var mem = foldRemembered(el.getAttribute('data-fold'));
+        if (mem != null && mem !== el.open) el.open = mem;   // ZH: 會觸發 toggle → first()
+        else if (el.open) first();
+
+        return {
+            el: el,
+            body: body,
+            open: function () { el.open = true; },
+            close: function () { el.open = false; },
+            isOpen: function () { return el.open; },
+            // ZH: 收起來時標題列上顯示的數字／摘要。空字串＝不顯示（.adm-head__count:empty）。
+            setCount: function (text) {
+                var c = el.querySelector('[data-fold-count]');
+                if (c) c.textContent = text == null ? '' : String(text);
+            },
+        };
+    }
+
+    window.AdminFold = {
+        html: foldHtml,
+        wire: foldWire,
+        // ZH: 不另外提供「用 id 查記住的狀態」—— AdminFold.html() 畫的時候已經還原了，
+        //     沒有任何頁需要自己查；單個收合區開著沒有，問 wire() 回傳的 isOpen()。
+    };
+
+    /* ── 「更多▾」選單 ─────────────────────────────────────────────────────────
+     * @node AdminMenu
+     * ZH: 區塊標題列右半「最多兩顆按鈕＋更多▾」的那個 ▾。外觀與行為就是 AdminDropdown，
+     *     這裡只負責產生標記，並強制一條規則：**危險項一律排到最底下**（紅字、上面一條線，
+     *     樣式見 admin.css 的 .adm-menu__danger）。靠每個呼叫端自己記得排，總有一處會漏。
+     *
+     * ZH: 用法：
+     *       head.innerHTML += AdminMenu.html({ id: 'org-more', items: [
+     *           { id: 'org-alma',   key: <翻譯 key>, zh: '用 Alma 重建' },
+     *           { id: 'org-import', key: <翻譯 key>, zh: '匯入' },
+     *           { id: 'org-wipe',   key: <翻譯 key>, zh: '清空', danger: true },
+     *       ] });
+     *     ⚠ 範例刻意不寫真的 key 字面值 —— check_i18n.py 連註解一起掃，
+     *       寫了不存在的 key 會被報成「有人用但字典沒有」。
+     *       AdminMenu.wire('org-more');            // ← 等同 AdminDropdown(toggle, menu)
+     *       $('org-alma').addEventListener('click', …);   // 項目的事件照舊各自接
+     *     項目也可以是 { sep: true }（分組線）或 { label: true, key, zh }（組名）。
+     *     label 不給時按鈕寫「更多」；要具名的下拉（匯出▾）就給 { key, zh }。
+     *     left: true → 選單往左對齊（按鈕在容器左緣時，見 .adm-dd--left）。
+     * ──────────────────────────────────────────────────────────────────────── */
+    function menuHtml(o) {
+        var items = (o.items || []).slice();
+        // ZH: 穩定排序：危險項移到最後，其餘保持原順序。
+        var safe = items.filter(function (it) { return !it.danger; });
+        var bad = items.filter(function (it) { return it.danger; });
+        var lab = o.label || { key: 'adm_more', zh: '更多' };
+        var id = esc(o.id);
+        return '<div class="account adm-dd' + (o.left ? ' adm-dd--left' : '') + '">'
+            + '<button class="btn btn--minor" type="button" id="' + id + '"'
+            + ' aria-haspopup="menu" aria-expanded="false" aria-controls="' + id + '-menu">'
+            + '<span data-i18n="' + esc(lab.key) + '">' + esc(T(lab.key, lab.zh)) + '</span>'
+            + ' <span class="account__caret" aria-hidden="true">▾</span></button>'
+            + '<div class="account__menu" role="menu" hidden id="' + id + '-menu">'
+            + safe.concat(bad).map(function (it) {
+                if (it.sep) return '<div class="adm-menu__sep" role="separator"></div>';
+                if (it.label) {
+                    return '<div class="adm-menu__label" role="presentation" data-i18n="' + esc(it.key) + '">'
+                        + esc(T(it.key, it.zh)) + '</div>';
+                }
+                return '<button type="button" role="menuitem"'
+                    + (it.id ? ' id="' + esc(it.id) + '"' : '')
+                    + (it.danger ? ' class="adm-menu__danger"' : '')
+                    + (it.hidden ? ' hidden' : '')
+                    + ' data-i18n="' + esc(it.key) + '">' + esc(T(it.key, it.zh)) + '</button>';
+            }).join('')
+            + '</div></div>';
+    }
+
+    window.AdminMenu = {
+        html: menuHtml,
+        wire: function (id) {
+            wireDropdown(document.getElementById(id), document.getElementById(id + '-menu'));
+        },
+    };
+
+    /* ── 編輯中標示 ────────────────────────────────────────────────────────────
+     * @node AdminEditMark
+     * ZH: 平台設定原本有 6 句「目前是唯讀」—— 唯讀是平常的狀態，每段都講一次等於沒講。
+     *     改成**只標例外**：進入編輯時區塊左側一條色條（.adm-sec.is-editing），
+     *     標題旁一顆「編輯中」藥丸；離開編輯就拿掉。
+     * ZH: 用法：AdminEditMark(sectionEl 或 id, true / false)。
+     *     藥丸放在標題後面（.adm-head__title／h2／h3），找不到標題就放在標題列最後。
+     * ──────────────────────────────────────────────────────────────────────── */
+    function editMark(sec, on) {
+        if (typeof sec === 'string') sec = document.getElementById(sec);
+        if (!sec) return;
+        sec.classList.toggle('is-editing', !!on);
+        var head = sec.querySelector('.adm-head__what') || sec.querySelector('.adm-head')
+            || sec.querySelector('.adm-sec__head') || sec;
+        var pill = head.querySelector('.adm-pill--editing');
+        if (!on) { if (pill) pill.remove(); return; }
+        if (pill) return;
+        pill = document.createElement('span');
+        pill.className = 'adm-pill adm-pill--editing';
+        pill.setAttribute('data-i18n', 'adm_editing');
+        pill.textContent = T('adm_editing', '編輯中');
+        var title = head.querySelector('.adm-head__title, h2, h3');
+        if (title && title.parentNode === head) title.insertAdjacentElement('afterend', pill);
+        else head.appendChild(pill);
+    }
+
+    window.AdminEditMark = editMark;
 
     window.AdminMe = function () { return _me; };
 

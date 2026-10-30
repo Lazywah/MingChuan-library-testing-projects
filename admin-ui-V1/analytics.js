@@ -336,6 +336,10 @@
         });
     }
 
+    // ZH: 圓餅最多幾列圖例（含「其他 N 項」那一列）。8 是計畫定的數字：
+    //     依類別／供應者／身分平常都在 8 以內，只有依組織會超過 —— 所以只有那一張會折。
+    var PIE_MAX = 8;
+
     // ── 圓餅圖（完整切分專用）─────────────────────────────────────────────
     //
     // ZH: 只用在「每一筆都屬於其中一類、加起來就是全部」的資料。
@@ -361,6 +365,23 @@
                     //     但寫成 total 的話，日後這個分支若放寬就會對不起來。
                     .replace('{v}', num(Number(data[0][valueKey])) + ' ' + unit))
                 + '</p>';
+        }
+
+        // ZH: v4.45 圖例最多 PIE_MAX 列，超過的併成最後一片「其他 N 項」（計畫第 4 節）。
+        //     原本「依組織 · 學系」一張就幾十列，四張並排時那一欄拖得比另外三欄長好幾倍，
+        //     整排的底邊參差；而且同一色的深淺分成幾十階，相鄰的片根本分不開。
+        // ZH: 🔴 併的是**資料**，不是只藏圖例 —— 片與圖例列靠 data-i 一對一連動（wirePie），
+        //     只砍圖例的話後面那幾片滑過去會亮錯列。被併掉的那幾項不丟：
+        //     圖例下面一個 <details> 列出名字與數字（見 pieMore）。
+        // ZH: 先依值由大到小排（後端已經排好，這裡不假設）—— 併掉的才會是最小的那幾項。
+        data = data.slice().sort(function (a, b) { return Number(b[valueKey]) - Number(a[valueKey]); });
+        var rest = [];
+        if (data.length > PIE_MAX) {
+            rest = data.slice(PIE_MAX - 1);
+            var restSum = rest.reduce(function (a, r) { return a + Number(r[valueKey]); }, 0);
+            var other = { __label: T('dz_an_pie_other', '其他 {n} 項').replace('{n}', rest.length) };
+            other[valueKey] = restSum;
+            data = data.slice(0, PIE_MAX - 1).concat([other]);
         }
 
         // ZH: 從 12 點鐘開始順時針 —— 一般人讀圓餅就是從那裡開始。
@@ -422,7 +443,29 @@
             + '<div class="adm-tip" hidden></div>'
             + '</div>'
             + '<ul class="adm-pie__legend">' + legend + '</ul>'
-            + '</div>';
+            + '</div>'
+            + pieMore(rest, labelKey, valueKey, unit, total);
+    }
+
+    // ZH: 「其他 N 項」的明細。用原生 <details>：預設收著，點開才列（鍵盤、Ctrl+F 都免費）。
+    // ZH: 🔴 放在 .adm-pie **外面** —— wirePie 用 `.adm-pie__row` 的順序對應片的 data-i，
+    //     明細列放進去的話，滑到第 9 列會去亮一片不存在的扇形。
+    //     明細列借用圖例的 class 只為了同一個欄寬與字級；色塊留位但不畫
+    //     （它們全都在「其他」那一片裡，畫出各自的色塊會讓人以為圓裡有那一片）。
+    function pieMore(rest, labelKey, valueKey, unit, total) {
+        if (!rest.length) return '';
+        return '<details class="an-pie-more">'
+            + '<summary>' + esc(T('dz_an_pie_more', '列出這 {n} 項').replace('{n}', rest.length)) + '</summary>'
+            + '<ul class="adm-pie__legend">' + rest.map(function (r) {
+                var v = Number(r[valueKey]);
+                return '<li class="adm-pie__row">'
+                    + '<span class="adm-pie__key an-pie-more__key" aria-hidden="true"></span>'
+                    + '<span class="adm-pie__name">' + esc((r.__label != null ? r.__label : r[labelKey]) || '—') + '</span>'
+                    + '<span class="adm-pie__val">' + esc(num(v) + ' ' + unit) + '</span>'
+                    + '<span class="adm-pie__pct">' + esc(Math.round(v / total * 100) + '%') + '</span>'
+                    + '</li>';
+            }).join('') + '</ul>'
+            + '</details>';
     }
 
     // ZH: 圓餅的互動 —— 跟折線圖一樣：滑鼠移過或鍵盤聚焦顯示提示框，
@@ -613,10 +656,17 @@
                     mHtml && '<div id="an-models">' + mHtml + '</div>',
                     metricToggle())
             + '</div>'
-            + '<div class="adm-cols">'
-            + block('an_by_category', '依類別', pie(d.by_category, 'category', 'consumed', pts))
-            + block('an_by_provider', '依供應者', pie(d.by_provider, 'provider', 'consumed', pts))
-            + block('an_by_role', '依身分', pie(byRole, 'role', 'consumed', pts))
+            // ZH: v4.45 四個圓餅維持並排（擁有者：這一頁是截圖交報告用的，並排才比得了）。
+            //     .an-pies 讓四欄等高（admin.css）；圖例上限 PIE_MAX 列 —— 兩者一起，
+            //     底邊才不會一欄拖得比另外三欄長好幾倍。
+            // ZH: 每張圖的內容包成**單一個** .an-pies__body —— admin.css 用 subgrid 讓四個標題列
+            //     共用同一列高（依組織的下拉換到第二行時，另外三張的圖也跟著往下，四張的圖頂照樣對齊）。
+            //     subgrid 只有兩列（標題、內容），pie() 卻可能回兩個兄弟（圖＋「其他 N 項」明細），
+            //     不包的話第三個子元素沒有列可放、會疊在圖上。依組織那張本來就包在 #an-org 裡。
+            + '<div class="adm-cols an-pies">'
+            + block('an_by_category', '依類別', pieBody(pie(d.by_category, 'category', 'consumed', pts)))
+            + block('an_by_provider', '依供應者', pieBody(pie(d.by_provider, 'provider', 'consumed', pts)))
+            + block('an_by_role', '依身分', pieBody(pie(byRole, 'role', 'consumed', pts)))
             // ZH: v3.8 #13 —— 學系／學院／單位共用一張圖 + 滑條。
             //     學院由後端查對照表推導,前端不自己推（自己推的話對照表改了這裡還是舊的）。
             //     行政單位只有職員有值,所以學生會全落在「未設定」—— 那是正確的。
@@ -628,6 +678,11 @@
         wireMetric($('myai'));
         wireOrg($('myai'));
         wirePie($('myai'));
+    }
+
+    // ZH: 空字串照樣回空字串 —— block() 靠「內容是空的」決定整塊不畫（沒有資料的圓餅不留空框）。
+    function pieBody(html) {
+        return html ? '<div class="an-pies__body">' + html + '</div>' : '';
     }
 
     function block(key, zh, inner, actions) {
@@ -654,7 +709,7 @@
     //     但 `document.visibilityState === 'hidden'` 才是原因。
     //     要量就用 `el.getAnimations()[0].finish()` 讓它跳到終點再量。
     // ZH: v3.8 #13 —— 學系／學院／單位是**同一批人的三種切法**,
-    //     並排成三張圓餅會讓人以為是三組不同的資料。改成一張圖 + 滑條。
+    //     並排成三張圓餅會讓人以為是三組不同的資料。改成一張圖 + 滑條（v4.45 起是下拉，見 orgToggle）。
     //     三份資料後端一次都給了,切換不必重打 API。
     // ZH: 滑條的選項不加「依」—— 區塊標題已經是「依組織」,
     //     選項再寫「依學系」會變成「依組織：依學系」。
@@ -685,61 +740,36 @@
         return pie(map[0], map[1], 'consumed', T('an_points', '點'));
     }
 
+    // ZH: v4.45 從四格滑條改成下拉（▾）。四個圓餅並排後每欄只剩 ~290px（1280 寬）、
+    //     1024 寬時 ~220px：四格等寬的滑條（等寬是滑塊對得準的前提，見 admin.css .adm-seg）
+    //     每格只分到 56–72px，英文的 Department／Campus 一定被 … 切掉，
+    //     中英兩種字長也逼得標題列一個 44px、一個 77px。
+    //     下拉的寬度跟著**最長的選項**走、不必等分，任何欄寬都放得下完整名稱；
+    //     放不下標題旁邊時整個換到下一行（admin.css .an-pies），也不會被切。
+    // ZH: 行為不變：同樣四個維度、同一份 LAST 資料、只重畫 #an-org 那張圖、不重打 API。
+    //     鍵盤操作改由原生 <select> 提供（上下鍵／首字跳選），不用再自己接方向鍵。
     function orgToggle() {
-        var at = 0;
-        ORGS.forEach(function (o, i) { if (o[0] === ORG) at = i; });
-        // ZH: `--seg-n` 告訴 CSS 這個滑條有幾格 —— 滑塊寬度由它算。
-        //     不設的話會沿用預設的 2,滑塊過寬而且切到第三格會衝出邊界。
-        return '<div class="adm-seg" role="radiogroup" style="--seg-n:' + ORGS.length + '"'
+        return '<select class="field__input an-org-pick" data-org-pick'
             + ' aria-label="' + esc(T('an_org_group', '要依哪一種組織分群')) + '">'
-            + '<span class="adm-seg__thumb" aria-hidden="true"'
-            + ' style="transform:translateX(' + (at * 100) + '%)"></span>'
             + ORGS.map(function (o) {
-                var on = ORG === o[0];
-                return '<button type="button" class="adm-seg__opt' + (on ? ' is-current' : '') + '"'
-                    + ' role="radio" aria-checked="' + (on ? 'true' : 'false') + '"'
-                    + ' tabindex="' + (on ? '0' : '-1') + '" data-org="' + o[0] + '">'
-                    + esc(T(o[1], o[2])) + '</button>';
+                return '<option value="' + o[0] + '"' + (ORG === o[0] ? ' selected' : '') + '>'
+                    + esc(T(o[1], o[2])) + '</option>';
             }).join('')
-            + '</div>';
+            + '</select>';
     }
 
     function wireOrg(root) {
-        var first = root.querySelector('[data-org]');
-        var seg = first && first.closest('.adm-seg');
-        if (!seg) return;
-        var thumb = seg.querySelector('.adm-seg__thumb');
-        var opts = [].slice.call(seg.querySelectorAll('[data-org]'));
-
-        function pick(i, focus) {
-            if (i < 0 || i >= opts.length || opts[i].dataset.org === ORG) return;
-            ORG = opts[i].dataset.org;
-            thumb.style.transform = 'translateX(' + (i * 100) + '%)';
-            opts.forEach(function (o, k) {
-                var on = k === i;
-                o.classList.toggle('is-current', on);
-                o.setAttribute('aria-checked', on ? 'true' : 'false');
-                o.setAttribute('tabindex', on ? '0' : '-1');
-            });
-            if (focus) opts[i].focus();
+        var pick = root.querySelector('[data-org-pick]');
+        if (!pick) return;
+        pick.addEventListener('change', function () {
+            if (pick.value === ORG) return;
+            ORG = pick.value;
             // ZH: 只換那張圖 —— 整個 renderMyai 重畫會把指標滑條也重設回預設。
             var host = root.querySelector('#an-org');
             if (host) {
                 host.innerHTML = orgPie(LAST);
                 wirePie(host);      // ZH: 重畫過的圖要重新接互動,不然滑過去沒反應
             }
-        }
-
-        opts.forEach(function (o, i) {
-            o.addEventListener('click', function () { pick(i, false); });
-        });
-        seg.addEventListener('keydown', function (e) {
-            var d = e.key === 'ArrowRight' ? 1 : e.key === 'ArrowLeft' ? -1 : 0;
-            if (!d) return;
-            e.preventDefault();
-            var cur = 0;
-            opts.forEach(function (o, k) { if (o.dataset.org === ORG) cur = k; });
-            pick((cur + d + opts.length) % opts.length, true);
         });
     }
 
@@ -776,7 +806,8 @@
     //     於是「滑動」變成瞬移。
     function wireMetric(root) {
         // ZH: 🔴 用 `[data-metric]` 反查它所屬的滑條,不要抓 `.adm-seg` 的第一個 ——
-        //     這一頁現在有兩個滑條（指標、組織維度）,抓第一個會接錯。
+        //     這一頁曾經有兩個滑條（指標、組織維度）,抓第一個會接錯。
+        //     v4.45 組織維度改成下拉了,這個反查照樣留著 —— 之後再加滑條也不會接錯。
         var first = root.querySelector('[data-metric]');
         var seg = first && first.closest('.adm-seg');
         if (!seg) return;
@@ -902,12 +933,21 @@
         //     把欄位分成「這一組的人」與「用了多少」兩塊，一眼看得出
         //     哪幾欄是同一件事的不同切面。
         //
-        // ZH: 第三個欄位是 tip：難懂的欄位掛一顆資訊 icon（tip.js）。
+        // ZH: 第二個欄位是 tip：難懂的欄位掛一顆資訊 icon（tip.js）。
         //     ⚠ 只掛在**真的會誤解**的欄位上。每一欄都掛的話，
         //     icon 就變成背景，需要它的那幾欄反而不顯眼了。
-        var head = [
-            [groupHeadKey(), null],
-            [['an_users', '人數'], null],
+        // ZH: v4.45 從 6 顆收成 3 顆（計畫第 4 節：表頭的 ⓘ 只留 2–3 個）。原本的註解
+        //     自己就警告過上面那件事，結果 11 欄掛了 6 顆。**說明一句都沒刪**，是併進
+        //     同一顆裡分段（每段一個小標，tip.js 的 .tip__item）：
+        //       · 「有用的人」併進「滲透率」—— 滲透率的分子就是它，兩句本來就要一起讀。
+        //       · MYAI 次數／點數／Lab 三句併到群組表頭「用了多少」—— 都在講「這個數字算了什麼」。
+        //       · Token 單獨留著 —— 它與 MYAI 點數**完全無關**，是這張表最容易被拿去亂比的一欄。
+        // ZH: 每段的形狀是 [[小標 key, 中文], [說明 key, 中文]]；小標給 null 就只印說明。
+        //     key 與中文**成對寫在一起**，check_i18n 才認得出它們有人在用（見 JOB_BUCKETS 的說明）。
+        // ZH: Lab·GPU / Lab·CPU 中英一樣，**不給 key** —— 給了會被
+        //     check_i18n 報成「字典有但沒人用」（它的判準是 key 後面
+        //     緊接一個含中文的 fallback）。與 Token 那欄同一個處理。
+        var TIP_PEOPLE = [
             [['an_active', '有用的人'],
              ['an_tip_active',
               '這段期間內，至少做過一件事的人數：跳去 MYAI、開實驗室、或送出訓練。'
@@ -919,6 +959,8 @@
               + '與旁邊的佔比不同，它不會因為系大就比較高。'
               + '⚠ 分母是**登入過平台**的人，不是全系人數：完全沒來過的人不在分母裡，'
               + '所以這個數字偏高。']],
+        ];
+        var TIP_USAGE = [
             [['an_c_visits', 'MYAI 次數'],
              ['an_tip_visits',
               '從平台按「前往 MYAI」的次數。'
@@ -928,36 +970,50 @@
              ['an_tip_points',
               '這段期間**用掉**的點數。管理員補的點不算在內 ——'
               + '算進去的話，補過點的系會看起來用得特別多，而那正好是用得少才要補的那些。']],
-            // ZH: Lab·GPU / Lab·CPU 中英一樣，**不給 key** —— 給了會被
-            //     check_i18n 報成「字典有但沒人用」（它的判準是 key 後面
-            //     緊接一個含中文的 fallback）。與 Token 那欄同一個處理。
-            [['an_c_jobs', '訓練'], null],
-            [['', 'Lab·GPU'],
+            [['', 'Lab·GPU / Lab·CPU'],
              ['an_tip_lab',
               '開實驗室的次數，依**當次有沒有勾 GPU** 分成兩欄。'
               + '⚠ 這兩欄自 v3.9 才開始記，在那之前的 0 是「還沒開始記」。']],
-            [['', 'Lab·CPU'], null],
-            [['an_dept_logins', '登入次數'], null],
-            [['', 'Token'],
+        ];
+        var TIP_TOKEN = [
+            [null,
              ['an_tip_token',
               '平台**自己的** Token 額度用量，與 MYAI 點數完全無關 ——'
               + '兩者是不同的東西，不要拿來互相比較。']],
         ];
-        // ZH: 分隔線落在「有用的人」與「MYAI 次數」之前 —— 那是兩塊的交界。
-        var SEP = { 2: 1, 4: 1 };
+        var head = [
+            [groupHeadKey(), null],
+            [['an_users', '人數'], null],
+            [['an_active', '有用的人'], null],
+            [['an_adoption', '滲透率'], ['tip-an-people', TIP_PEOPLE]],
+            [['an_c_visits', 'MYAI 次數'], null],
+            [['an_c_points', 'MYAI 點數'], null],
+            [['an_c_jobs', '訓練'], null],
+            [['', 'Lab·GPU'], null],
+            [['', 'Lab·CPU'], null],
+            [['an_dept_logins', '登入次數'], null],
+            [['', 'Token'], ['tip-an-token', TIP_TOKEN]],
+        ];
+        // ZH: 分隔線對齊上面那一列群組表頭的邊界：「這一組的人」從「人數」開始（colspan 3），
+        //     「用了多少」從「MYAI 次數」開始（colspan 7）。
+        // ZH: v4.45 原本是 {2, 4} —— 第一條畫在「有用的人」前面，正好從「這一組的人」
+        //     那塊的**中間**切過去，表頭說三欄是一組、線卻說是一欄加兩欄。
+        var SEP = { 1: 1, 4: 1 };
         $('platform').innerHTML =
             trackingNote(a)
             + '<div class="adm-tablewrap"><table class="adm-table">'
             + '<thead>'
             + '<tr class="an-grouphead">'
             +   '<th></th>'
-            +   '<th colspan="3">' + esc(T('an_g_people', '這一組的人')) + '</th>'
-            +   '<th colspan="7" class="an-sep">' + esc(T('an_g_usage', '用了多少')) + '</th>'
+            +   '<th colspan="3" class="an-sep">' + esc(T('an_g_people', '這一組的人')) + '</th>'
+            +   '<th colspan="7" class="an-sep">' + esc(T('an_g_usage', '用了多少'))
+            +     tipHtml('tip-an-usage', TIP_USAGE) + '</th>'
             + '</tr>'
             + '<tr>'
             + head.map(function (h, i) {
                 var cls = SEP[i] ? ' class="an-sep"' : '';
-                return '<th' + cls + '>' + esc(T(h[0][0], h[0][1])) + tipHtml(h[1]) + '</th>';
+                return '<th' + cls + '>' + esc(T(h[0][0], h[0][1]))
+                    + (h[1] ? tipHtml(h[1][0], h[1][1]) : '') + '</th>';
             }).join('')
             + '</tr></thead><tbody>'
             + rows.map(function (r) {
@@ -969,11 +1025,11 @@
                     + '<td>'
                     + esc(orgName(r.group, r.group_en) || T('an_unclassified', '未分類'))
                     + '</td>'
-                    + '<td class="num">' + esc(num(r.user_count)) + '</td>'
+                    // ZH: 分隔線在每一列都要畫，只畫表頭的話中間就斷了（位置見上面 SEP）。
+                    + '<td class="num an-sep">' + esc(num(r.user_count)) + '</td>'
                     // ZH: 「有用的人」寫成 45/52 而不是只寫 45 ——
                     //     分母就在旁邊，讀的人不必自己去對上一欄。
-                    // ZH: 分隔線在每一列都要畫，只畫表頭的話中間就斷了。
-                    + '<td class="num an-sep">' + esc(num(r.active_users_min))
+                    + '<td class="num">' + esc(num(r.active_users_min))
                     +     ' / ' + esc(num(r.user_count)) + '</td>'
                     + '<td class="num">' + esc(pct(r.adoption)) + '</td>'
                     + cell(r.myai_visits, r.share_visits, true)
@@ -1002,20 +1058,33 @@
     }
 
     /* ZH: 表頭上的資訊 icon。用共用的 tip.js（行為、樣式都在那邊）。
-     * ZH: 泡泡的 id 由 key 推出來 —— 表頭有好幾顆，寫死一個 id 的話
+     * ZH: 泡泡的 id 由呼叫端給 —— 表頭有好幾顆，寫死一個 id 的話
      *     只有第一顆打得開（aria-controls 只會指到第一個相同的 id）。
-     * ZH: 傳 null 就不掛 —— 只有真的會誤解的欄位才需要。
+     * ZH: v4.45 一顆可以裝好幾段（見 renderPlatform 的 TIP_*）。有小標的段落用
+     *     共用的 .tip__item（小標一行、說明一行、段與段之間一條細線）。
      */
-    function tipHtml(spec) {
-        if (!spec) return '';
-        var id = 'tip-' + spec[0];
+    function tipHtml(id, parts) {
+        if (!parts || !parts.length) return '';
+        var body = parts.map(function (p) {
+            var text = tipText(T(p[1][0], p[1][1]));
+            if (!p[0]) return text;
+            return '<span class="tip__item"><b>' + esc(T(p[0][0], p[0][1])) + '</b>' + text + '</span>';
+        }).join('');
         return '<span class="tip">'
             + '<button type="button" class="tip__btn" aria-expanded="false"'
             + ' aria-controls="' + esc(id) + '"'
             + ' aria-label="' + esc(T('tip_more', '這是什麼')) + '">i</button>'
             + '<span class="tip__body tip__body--wide" id="' + esc(id) + '"'
-            + ' role="tooltip" hidden>' + esc(T(spec[0], spec[1])) + '</span>'
+            + ' role="tooltip" hidden>' + body + '</span>'
             + '</span>';
+    }
+
+    // ZH: 說明文字裡的 **粗體**。原本整句 esc 之後直接印，畫面上就是字面的兩顆星號。
+    //     先 esc 再換標記（反過來的話資料裡的 < 會變成真的標籤）。
+    // ZH: 用 <strong> 不用 <b> —— 共用的 `.tip__item b` 是段落小標（display:block），
+    //     用 <b> 的話句子中間的強調會被拆成獨立的一行。
+    function tipText(s) {
+        return esc(s).replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
     }
 
     function pct(v) {
