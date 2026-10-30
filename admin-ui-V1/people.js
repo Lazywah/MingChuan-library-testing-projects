@@ -1258,6 +1258,7 @@
     function toggleGrant(u, b) {
         var box = $('e-grant-box');
         if (!box.hidden) { closeGrant(); return; }
+        closeReclaim();               // ZH: 與回收互斥 —— 一次只開一張，方向不會看錯。
         box.innerHTML =
             '<p class="footnote">' + esc(T('pp_grant_why',
                 '直接加給這個人，不是補到某個水位。點數從平台的廠商管理帳號轉出，不可逆。'))
@@ -1312,13 +1313,20 @@
             + '<button class="btn btn--minor" type="button" id="e-rec-cancel">'
             + esc(T('pp_grant_cancel', '取消')) + '</button></div>';
         box.hidden = false;
-        // ZH: 勾了全部就把數字欄鎖起來 —— 兩個都有值是矛盾的輸入。
-        $('e-rec-all').addEventListener('change', function () {
+        // ZH: 勾了全部就把數字欄鎖起來，並**填入他目前有多少**（擁有者 2026-10-30）——
+        //     空著的格子看不出「全部」是多少。讀不到就不填數字，改寫說明。
+        function syncAll() {
             var all = $('e-rec-all').checked;
-            $('e-rec-pts').disabled = all;
-            if (all) $('e-rec-pts').value = '';
-            else $('e-rec-pts').focus();
-        });
+            var inp = $('e-rec-pts');
+            var have = currentPoints(b);
+            inp.disabled = all;
+            inp.value = (all && have !== null) ? String(have) : '';
+            inp.placeholder = (all && have === null)
+                ? T('pp_rec_pts_unknown', '讀不到目前點數，送出時以廠商為準') : '';
+            if (!all) inp.focus();
+        }
+        $('e-rec-all').addEventListener('change', syncAll);
+        syncAll();
         $('e-rec-go').addEventListener('click', function () { doReclaim(u, b); });
         $('e-rec-cancel').addEventListener('click', closeReclaim);
     }
