@@ -1982,3 +1982,11 @@ textarea.field__input {
     font-size: 0.875rem;
 }
 .tu-act { width: 1%; white-space: nowrap; text-align: right; }
+
+/* ZH: v4.44 下拉按鈕（帳號頁工具列、匯入對話框的「下載範例」）。
+ *     選單樣式沿用共用 styles.css 的 .account__menu；那一套預設**往右對齊**
+ *     （帳號選單在頁面右上角）。放在左邊的按鈕要改成往左對齊，否則選單會
+ *     伸出左緣 —— 在對話框裡就是被 overflow 切掉。 */
+.adm-dd--left .account__menu { left: 0; right: auto; }
+/* ZH: 下方放不下時往上開（people.js 的 wireDropdown 量過之後加 is-up）。 */
+.adm-dd .account__menu.is-up { top: auto; bottom: calc(100% + var(--space-2)); }

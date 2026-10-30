@@ -1800,13 +1800,22 @@
             +   '<span>' + esc(T('tmpi_forever',
                 '整批永久有效（不設到期日，與一般帳號一樣）')) + '</span>'
             + '</label>'
+            // ZH: v4.44 範例兩種格式收成一個下拉（擁有者 2026-10-30，與頁首工具列同一個做法），
+            //     跟「選擇檔案」排在同一列：先拿範例、再選檔案，是同一件事的前後兩步。
+            //     選單往**左**對齊（adm-dd--left）—— 按鈕在對話框左緣，往右對齊會被切掉。
             + '<div class="adm-inline">'
-            + '<button class="btn btn--minor" type="button" id="ti-tpl-csv">'
-            + esc(T('tmpi_tpl_csv', '下載範例 CSV')) + '</button>'
-            + '<button class="btn btn--minor" type="button" id="ti-tpl-xlsx">'
-            + esc(T('tmpi_tpl_xlsx', '下載範例 Excel')) + '</button>'
+            + '<div class="account adm-dd adm-dd--left">'
+            +   '<button class="btn btn--minor" type="button" id="ti-tpl"'
+            +   ' aria-haspopup="menu" aria-expanded="false" aria-controls="ti-tpl-menu">'
+            +   esc(T('tmpi_tpl', '下載範例'))
+            +   ' <span class="account__caret" aria-hidden="true">▾</span></button>'
+            +   '<div class="account__menu" role="menu" hidden id="ti-tpl-menu">'
+            +     '<button type="button" role="menuitem" id="ti-tpl-xlsx">'
+            +     esc(T('tmpi_tpl_xlsx', 'Excel（.xlsx）')) + '</button>'
+            +     '<button type="button" role="menuitem" id="ti-tpl-csv">'
+            +     esc(T('tmpi_tpl_csv', 'CSV（.csv）')) + '</button>'
+            +   '</div>'
             + '</div>'
-            + '<div class="adm-inline">'
             + '<input type="file" id="ti-file" accept=".csv,.xlsx" hidden>'
             + '<button class="btn btn--minor" type="button" id="ti-pick">'
             + esc(T('tmpi_pick', '選擇檔案（CSV / Excel）')) + '</button>'
@@ -1830,6 +1839,7 @@
         $('ti-apply').addEventListener('click', applyTempImport);
         $('ti-tpl-csv').addEventListener('click', function () { downloadTemplate('csv'); });
         $('ti-tpl-xlsx').addEventListener('click', function () { downloadTemplate('xlsx'); });
+        wireDropdown($('ti-tpl'), $('ti-tpl-menu'));
         $('ti-pick').addEventListener('click', function () { $('ti-file').click(); });
         $('ti-file').addEventListener('change', function () {
             TI_FILE = ($('ti-file').files || [])[0] || null;
@@ -2108,6 +2118,14 @@
         function setOpen(open) {
             menu.hidden = !open;
             toggle.setAttribute('aria-expanded', String(open));
+            if (!open) return;
+            // ZH: 下方放不下就往上開。匯入對話框的「下載範例」在對話框下半部，
+            //     往下開會伸出對話框底（實測 28px）而被 overflow 切掉 —— 要捲才看得到。
+            //     邊界是所在的 <dialog>（沒有就是視窗）。
+            menu.classList.remove('is-up');
+            var box = toggle.closest('dialog');
+            var limit = box ? box.getBoundingClientRect().bottom : window.innerHeight;
+            if (menu.getBoundingClientRect().bottom > limit) menu.classList.add('is-up');
         }
         toggle.addEventListener('click', function () { setOpen(menu.hidden); });
         toggle.addEventListener('keydown', function (ev) {
@@ -2127,21 +2145,38 @@
                 var n = ev.key === 'ArrowDown' ? i + 1 : i - 1;
                 list[(n + list.length) % list.length].focus();
             } else if (ev.key === 'Escape') {
+                // ZH: 在 <dialog> 裡時 Esc 預設會把整個對話框關掉 —— 這一下只該關選單。
+                ev.preventDefault();
+                ev.stopPropagation();
                 setOpen(false);
                 toggle.focus();
             } else if (ev.key === 'Tab') {
                 setOpen(false);
             }
         });
+        // ZH: 匯入對話框每開一次就重畫一次，舊的選單會離開 DOM ——
+        //     掛在 document 上的監聽發現自己的選單不在了就自己拆掉，不然會越積越多。
         var inside = false;
-        document.addEventListener('click', function (ev) {
+        function onCapture(ev) {
+            if (!menu.isConnected) { detach(); return; }
             inside = menu.contains(ev.target) || toggle.contains(ev.target);
-        }, true);
-        document.addEventListener('click', function () {
+        }
+        function onBubble() {
+            if (!menu.isConnected) { detach(); return; }
             if (!menu.hidden && !inside) setOpen(false);
-        });
+        }
+        function detach() {
+            document.removeEventListener('click', onCapture, true);
+            document.removeEventListener('click', onBubble);
+        }
+        document.addEventListener('click', onCapture, true);
+        document.addEventListener('click', onBubble);
         toggle.addEventListener('keydown', function (ev) {
-            if (ev.key === 'Escape' && !menu.hidden) setOpen(false);
+            if (ev.key === 'Escape' && !menu.hidden) {
+                ev.preventDefault();      // ZH: 同上 —— 選單開著時 Esc 只關選單
+                ev.stopPropagation();
+                setOpen(false);
+            }
         });
     }
 
