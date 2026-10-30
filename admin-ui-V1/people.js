@@ -2098,10 +2098,58 @@
     //
     // ZH: 成功不另外給訊息 —— 檔案下載本身就是回饋。失敗**一定要講**：
     //     下載沒發生時畫面上完全沒有痕跡，使用者只會以為自己沒按到。
-    async function exportUsers(fmt, btn) {
-        var old = btn.textContent;
+    // ZH: v4.44 工具列的下拉（擁有者 2026-10-30）。樣式沿用帳號選單的 .account__menu。
+    //     點選單項之後就收起來（項目自己的事件先跑，這裡在冒泡時才收）；
+    //     點外面、按 Esc、Tab 離開也收。上下鍵在項目間移動。
+    // ZH: 「點在裡面嗎」在捕獲階段先記 —— 與 admin-chrome.js 的 wireToggle 同一個理由。
+    function wireDropdown(toggle, menu) {
+        if (!toggle || !menu) return;
+        function items() { return [].slice.call(menu.querySelectorAll('[role="menuitem"]')); }
+        function setOpen(open) {
+            menu.hidden = !open;
+            toggle.setAttribute('aria-expanded', String(open));
+        }
+        toggle.addEventListener('click', function () { setOpen(menu.hidden); });
+        toggle.addEventListener('keydown', function (ev) {
+            if (ev.key === 'ArrowDown') {
+                ev.preventDefault();
+                setOpen(true);
+                items()[0].focus();
+            }
+        });
+        menu.addEventListener('click', function (ev) {
+            if (ev.target.closest('[role="menuitem"]')) setOpen(false);
+        });
+        menu.addEventListener('keydown', function (ev) {
+            var list = items(), i = list.indexOf(document.activeElement);
+            if (ev.key === 'ArrowDown' || ev.key === 'ArrowUp') {
+                ev.preventDefault();
+                var n = ev.key === 'ArrowDown' ? i + 1 : i - 1;
+                list[(n + list.length) % list.length].focus();
+            } else if (ev.key === 'Escape') {
+                setOpen(false);
+                toggle.focus();
+            } else if (ev.key === 'Tab') {
+                setOpen(false);
+            }
+        });
+        var inside = false;
+        document.addEventListener('click', function (ev) {
+            inside = menu.contains(ev.target) || toggle.contains(ev.target);
+        }, true);
+        document.addEventListener('click', function () {
+            if (!menu.hidden && !inside) setOpen(false);
+        });
+        toggle.addEventListener('keydown', function (ev) {
+            if (ev.key === 'Escape' && !menu.hidden) setOpen(false);
+        });
+    }
+
+    async function exportUsers(fmt, btn, label) {
+        var lab = label || btn;       // ZH: 下拉按鈕裡還有 ▾，只換文字那一段
+        var old = lab.textContent;
         btn.disabled = true;
-        btn.textContent = T('pp_exporting', '匯出中…');
+        lab.textContent = T('pp_exporting', '匯出中…');
         try {
             // ZH: v4.24 收斂到 AdminDownload（唯一真相，見 admin-chrome.js）
             await AdminDownload('/admin/users/export?scope=all&fmt=' + fmt,
@@ -2110,11 +2158,15 @@
             alert(T('pp_export_fail', '匯出失敗（{w}）').replace('{w}', e.message));
         } finally {
             btn.disabled = false;
-            btn.textContent = old;
+            lab.textContent = old;
         }
     }
-    $('ux-xlsx').addEventListener('click', function () { exportUsers('xlsx', $('ux-xlsx')); });
-    $('ux-csv').addEventListener('click', function () { exportUsers('csv', $('ux-csv')); });
+    // ZH: v4.44 匯出收進下拉後，「匯出中…」寫在**下拉按鈕**上 ——
+    //     選單項一點就收起來了，寫在它身上沒有人看得到。
+    $('ux-xlsx').addEventListener('click', function () { exportUsers('xlsx', $('ux-btn'), $('ux-label')); });
+    $('ux-csv').addEventListener('click', function () { exportUsers('csv', $('ux-btn'), $('ux-label')); });
+    wireDropdown($('tmp-btn'), $('tmp-btn-menu'));
+    wireDropdown($('ux-btn'), $('ux-btn-menu'));
 
     // ── 廠商帳號對應（維運）───────────────────────────────────────────────
     //

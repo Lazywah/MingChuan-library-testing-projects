@@ -181,8 +181,9 @@
         // ── 人 ───────────────────────────────────────────────
         pp_search: '搜尋帳號、Email、學系…',
         pp_search_label: '搜尋',
-        pp_export_xlsx: '匯出 Excel',
-        pp_export_csv: '匯出 CSV',
+        pp_export: '匯出',
+        pp_export_xlsx: 'Excel（.xlsx）',
+        pp_export_csv: 'CSV（.csv）',
         pp_exporting: '匯出中…',
         pp_export_fail: '匯出失敗（{w}）',
         pp_no_email: '—（無信箱）',
@@ -331,8 +332,9 @@
 
         // ── 臨時帳號 ─────────────────────────────────────────
         tmp_new: '建立臨時帳號',
-        tmpi_new: '匯入臨時帳號',
-        alma_btn: 'Alma 身分回填',
+        tmp_menu_one: '逐一建立',
+        tmp_menu_import: '從 Excel 匯入',
+        alma_btn: '身分回填',
         alma_title: 'Alma 身分回填',
         alma_loading: '正在跟 Alma 對資料…',
         alma_why: '只補空著的欄位（校區／學系／單位／常用信箱），以及當初用信箱猜出來的角色。人工設定過或本人確認過的一律不動，主信箱永遠不動。',
@@ -960,8 +962,9 @@
 
         pp_search: 'Search username, email, department…',
         pp_search_label: 'Search',
-        pp_export_xlsx: 'Export Excel',
-        pp_export_csv: 'Export CSV',
+        pp_export: 'Export',
+        pp_export_xlsx: 'Excel (.xlsx)',
+        pp_export_csv: 'CSV (.csv)',
         pp_exporting: 'Exporting…',
         pp_export_fail: 'Export failed ({w})',
         pp_no_email: '— (no email)',
@@ -1108,8 +1111,9 @@
         adm_handoff_fail: 'Automatic sign-in did not go through (the ticket may have expired). Sign in below, or go back and try again.',
 
         tmp_new: 'New temporary account',
-        tmpi_new: 'Import temp accounts',
-        alma_btn: 'Alma backfill',
+        tmp_menu_one: 'Create one',
+        tmp_menu_import: 'Import from Excel',
+        alma_btn: 'Identity backfill',
         alma_title: 'Alma identity backfill',
         alma_loading: 'Checking against Alma\u2026',
         alma_why: 'Fills only empty fields (campus, department, office, preferred email) and roles that were originally guessed from the mailbox. Anything set by an admin or confirmed by the person is left alone, and the primary mailbox is never touched.',

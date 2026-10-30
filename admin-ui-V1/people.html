@@ -25,28 +25,40 @@
         <h1 class="hero__title" data-i18n="adm_nav_people">帳號</h1>
         <span class="topbar__spacer"></span>
         <span class="footnote" id="count" data-view="platform"></span>
-        <!-- ZH: 建立臨時帳號放在這一頁而不是另開一頁 ——
-                 它跟「處理某一個人」是同一件事的兩端（開帳號 / 管帳號）。 -->
-        <button class="btn btn--minor" type="button" id="new-temp" data-view="platform"
-                data-i18n="tmp_new">建立臨時帳號</button>
-        <!-- ZH: v4.2 批次匯入（擁有者需求 2026-09-02）：整班/整團一次開。
-                 同一個 <dialog> 重複用，內容由 people.js 的 openTempImport() 產生。 -->
-        <button class="btn btn--minor" type="button" id="import-temp" data-view="platform"
-                data-i18n="tmpi_new">匯入臨時帳號</button>
-        <!-- ZH: v4.6 Alma 身分回填（擁有者需求 2026-09-07）：排程每天自己跑，
-                 這顆是「現在就跑一次」。兩段式（預覽 → 確認），因為它會改身分。 -->
+        <!-- ZH: v4.44 工具列收成三個下拉（擁有者 2026-10-30）：原本五顆按鈕排一排，
+                 跟右邊的檢視滑條擠在一起。分組照「要做的事」而不是照功能數量 ——
+                 開帳號（逐一／匯入）、身分回填、匯出（兩種格式）。
+             ZH: 選單項保留原本的 id，people.js 綁事件的地方完全不用改；
+                 開關與 Esc／點外面關閉由 people.js 的 wireDropdown() 處理。
+             ZH: 建立臨時帳號放在這一頁而不是另開一頁 ——
+                 它跟「處理某一個人」是同一件事的兩端（開帳號 / 管帳號）。
+                 批次匯入（v4.2）同一個 <dialog> 重複用，內容由 openTempImport() 產生。 -->
+        <div class="account adm-dd" data-view="platform">
+            <button class="btn btn--minor" type="button" id="tmp-btn"
+                    aria-haspopup="menu" aria-expanded="false" aria-controls="tmp-btn-menu"><span id="tmp-label" data-i18n="tmp_new">建立臨時帳號</span> <span class="account__caret" aria-hidden="true">▾</span></button>
+            <div class="account__menu" role="menu" hidden id="tmp-btn-menu">
+                <button type="button" role="menuitem" id="new-temp"
+                        data-i18n="tmp_menu_one">逐一建立</button>
+                <button type="button" role="menuitem" id="import-temp"
+                        data-i18n="tmp_menu_import">從 Excel 匯入</button>
+            </div>
+        </div>
+        <!-- ZH: v4.6 Alma 身分回填：排程每天自己跑，這顆是「現在就跑一次」。
+                 兩段式（預覽 → 確認），因為它會改身分。只有一個動作，所以不是下拉。 -->
         <button class="btn btn--minor" type="button" id="alma-sync" data-view="platform"
-                data-i18n="alma_btn">Alma 身分回填</button>
-        <!-- ZH: v4.12 帳號匯出（擁有者裁定 2026-09-15）。後端 /users/export 一直都在，
-                 V0／V0.5 有接、**V1 漏掉了** —— 換到這一版之後這個功能就從畫面上
-                 消失了，而端點還活著所以測不出來。
-             ZH: 匯出的是**全部帳號**與預設欄位（帳號／Email／角色／登入來源／啟用／
-                 學系／最後登入／Token 已用與配額）。上面那個搜尋框是前端的，
-                 端點只認 auth_source 篩選 —— 把它接成「跟著搜尋框」會是假的。 -->
-        <button class="btn btn--minor" type="button" id="ux-xlsx" data-view="platform"
-                data-i18n="pp_export_xlsx">匯出 Excel</button>
-        <button class="btn btn--minor" type="button" id="ux-csv" data-view="platform"
-                data-i18n="pp_export_csv">匯出 CSV</button>
+                data-i18n="alma_btn">身分回填</button>
+        <!-- ZH: v4.12 帳號匯出。匯出的是**全部帳號**與預設欄位 —— 上面的搜尋框是前端的，
+                 端點只認 auth_source 篩選，把它接成「跟著搜尋框」會是假的。 -->
+        <div class="account adm-dd" data-view="platform">
+            <button class="btn btn--minor" type="button" id="ux-btn"
+                    aria-haspopup="menu" aria-expanded="false" aria-controls="ux-btn-menu"><span id="ux-label" data-i18n="pp_export">匯出</span> <span class="account__caret" aria-hidden="true">▾</span></button>
+            <div class="account__menu" role="menu" hidden id="ux-btn-menu">
+                <button type="button" role="menuitem" id="ux-xlsx"
+                        data-i18n="pp_export_xlsx">Excel（.xlsx）</button>
+                <button type="button" role="menuitem" id="ux-csv"
+                        data-i18n="pp_export_csv">CSV（.csv）</button>
+            </div>
+        </div>
         <!-- ZH: 檢視滑條。與「平台設定」「數據」同一個元件 ——
                  它是**篩選**不是分頁：兩邊講的都是同一批帳號,
                  只是「平台這邊的資料」與「廠商那邊的對應」。
@@ -226,10 +238,10 @@
 <script src="tz.js?v=2e214a8b"></script>
 <!-- ⚠ ZH: 順序不能動 —— i18n-admin 在 i18n 之後、prefs 之前。 -->
 <script src="i18n.js?v=6de7dc28"></script>
-<script src="i18n-admin.js?v=c7a3d044"></script>
+<script src="i18n-admin.js?v=7f3b93df"></script>
 <script src="tip.js?v=0699f4a2"></script>
 <script src="prefs.js?v=e71609e5"></script>
 <script src="admin-chrome.js?v=1dc21458"></script>
-<script src="people.js?v=41902511"></script>
+<script src="people.js?v=2273e9fe"></script>
 </body>
 </html>
