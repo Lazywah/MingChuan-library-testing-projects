@@ -1214,10 +1214,14 @@
                     + esc(T('pp_edit', '編輯')) + '</button>'
                     + '<button class="btn btn--minor" type="button" id="e-grant">'
                     + esc(T('pp_ext_grant', '加點')) + '</button>'
+                    // ZH: v4.43 回收（擁有者 2026-10-30）。緊鄰加點 —— 它們是同一件事的兩個方向。
+                    + '<button class="btn btn--minor" type="button" id="e-reclaim">'
+                    + esc(T('pp_ext_reclaim', '回收點數')) + '</button>'
                     + '<button class="btn btn--minor" type="button" id="e-unbind">'
                     + esc(T('pp_ext_unbind', '解除綁定')) + '</button>')
             + '</div>'
             + '<div id="e-grant-box" hidden></div>'
+            + '<div id="e-reclaim-box" hidden></div>'
             + '<div class="inline-error" id="e-msg" hidden></div>';
 
         if (EXT_EDIT) {
@@ -1233,6 +1237,7 @@
             });
             $('e-unbind').addEventListener('click', function () { unbindExt(u, b); });
             $('e-grant').addEventListener('click', function () { toggleGrant(u, b); });
+            $('e-reclaim').addEventListener('click', function () { toggleReclaim(u, b); });
         }
     }
 
@@ -1269,6 +1274,117 @@
         $('e-grant-go').addEventListener('click', function () { doGrant(u, b); });
         $('e-grant-cancel').addEventListener('click', closeGrant);
         $('e-grant-pts').focus();
+    }
+
+    // ══════════════════════════════════════════════════════════════════
+    // ZH: v4.43 回收點數（擁有者 2026-10-30）
+    // ══════════════════════════════════════════════════════════════════
+    // ZH: 🔴 **方向與加點相反，而且更難救。** 加多了可以收回來；收錯了只能再發，
+    //     而發回去的是新的點，他用掉的歷史對不回來。所以：
+    //       · 預設是「全部收回」（最常見：課上完了、人走了），要收一部分才打數字
+    //       · 確認框一律寫出**會從幾點變成幾點**
+    function closeReclaim() {
+        var box = $('e-reclaim-box');
+        if (!box) return;
+        box.hidden = true;
+        box.innerHTML = '';
+        say('e-msg', '');
+    }
+
+    function toggleReclaim(u, b) {
+        var box = $('e-reclaim-box');
+        if (!box.hidden) { closeReclaim(); return; }
+        closeGrant();                 // ZH: 兩張表單不要同時開著 —— 送錯方向的機會。
+        box.innerHTML =
+            '<p class="footnote">' + esc(T('pp_rec_why',
+                '把這個人的點數收回平台的廠商管理帳號。送出後收不回來，要還只能重新加點。'))
+            + '</p>'
+            + '<label class="adm-inline">'
+            +   '<input type="checkbox" id="e-rec-all" checked> '
+            +   '<span>' + esc(T('pp_rec_all', '全部收回')) + '</span>'
+            + '</label>'
+            + field('e-rec-pts', T('pp_rec_pts', '要收回的點數'), '', 'number',
+                    ' min="1" step="1" inputmode="numeric" disabled')
+            + field('e-rec-why', T('pp_grant_reason', '原因（會寫進紀錄）'), '')
+            + '<div class="ds__actions">'
+            + '<button class="btn btn--primary" type="button" id="e-rec-go">'
+            + esc(T('pp_rec_go', '送出回收')) + '</button>'
+            + '<button class="btn btn--minor" type="button" id="e-rec-cancel">'
+            + esc(T('pp_grant_cancel', '取消')) + '</button></div>';
+        box.hidden = false;
+        // ZH: 勾了全部就把數字欄鎖起來 —— 兩個都有值是矛盾的輸入。
+        $('e-rec-all').addEventListener('change', function () {
+            var all = $('e-rec-all').checked;
+            $('e-rec-pts').disabled = all;
+            if (all) $('e-rec-pts').value = '';
+            else $('e-rec-pts').focus();
+        });
+        $('e-rec-go').addEventListener('click', function () { doReclaim(u, b); });
+        $('e-rec-cancel').addEventListener('click', closeReclaim);
+    }
+
+    // ZH: 目前點數。拿來把確認框寫成「從 X 變成 Y」——
+    //     只講「要收 500 點」的話，看的人算不出收完剩多少。
+    // ZH: 🔴 來源是綁定物件的 `b.points`，而且**要 b.synced 才算數** ——
+    //     同步不到那個廠商帳號時 points 是過期的（畫面上那一格也是寫
+    //     「同步不到這個帳號」而不是數字）。拿過期的數字去算「收完剩多少」
+    //     會寫出一個看起來很篤定、實際上是錯的句子。
+    function currentPoints(b) {
+        return (b && b.synced && typeof b.points === 'number') ? b.points : null;
+    }
+
+    async function doReclaim(u, b) {
+        var all = $('e-rec-all').checked;
+        var pts = parseInt($('e-rec-pts').value, 10);
+        if (!all && (!isFinite(pts) || pts <= 0)) {
+            say('e-msg', T('pp_rec_need', '請填一個大於 0 的點數，或勾「全部收回」。'));
+            return;
+        }
+        var have = currentPoints(b);
+        var why = $('e-rec-why').value.trim();
+        var take = all ? have : pts;
+        // ZH: 🔴 數字留在說明裡 —— 與加點同一個理由，那是擋得住手滑的唯一地方。
+        //     讀不到目前點數時（廠商查詢失敗）就不要編一個數字出來，講得保守一點。
+        var hint = (take === null || have === null)
+            ? T('pp_rec_confirm_unknown', '要把 {n} 的點數{w}收回嗎？送出後收不回來。')
+                .replace('{n}', b.myai_email || u.username)
+                .replace('{w}', all ? T('pp_rec_all_word', '全部') : (' ' + num(pts) + ' 點'))
+            : T('pp_rec_confirm', '要從 {n} 收回 {p} 點嗎？收完會從 {a} 點變成 {z} 點，送出後收不回來。')
+                .replace('{n}', b.myai_email || u.username)
+                .replace('{p}', num(take)).replace('{a}', num(have))
+                .replace('{z}', num(Math.max(0, have - take)));
+        targetConfirm(T('pp_rec_title', '確認回收點數'), hint, u.username,
+            async function (name) { await sendReclaim(u, all, pts, why, name); });
+    }
+
+    async function sendReclaim(u, all, pts, why, name) {
+        var btn = $('e-rec-go');
+        btn.disabled = true;            // ZH: 防連點 —— 這一支不冪等
+        try {
+            var r = await api('/admin/users/' + encodeURIComponent(u.id) + '/myai/reclaim', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(all
+                    ? { all_points: true, reason: why, confirm_username: name }
+                    : { points: pts, reason: why, confirm_username: name }),
+            });
+            closeReclaim();
+            if (r.status === 'unknown') {
+                // ZH: 送出後廠商沒回報成功 —— 點數**可能已經扣了**。
+                //     這一則要留在畫面上，不能用會消失的提示（同加點）。
+                say('e-msg', T('pp_rec_unknown',
+                    '送出了，但廠商沒有回報成功。點數可能已經扣了 —— '
+                    + '請到廠商後台對帳，不要再送一次。'));
+            } else {
+                say('e-msg', '');
+                loadExtAi(u);          // ZH: 重讀，讓點數欄顯示新的值
+            }
+        } catch (e) {
+            btn.disabled = false;
+            throw new Error(String(e.message || e));
+        } finally {
+            btn.disabled = false;
+        }
     }
 
     async function doGrant(u, b) {
@@ -2509,6 +2625,213 @@
         // ZH: 搜尋只篩**顯示**，不影響送出（送出的名單永遠是後端算的，扣掉排除的人）。
         $('tu-search').addEventListener('input', function () {
             if (TU_ROWS && TU_ROWS.count) renderPreviewPage(TU_ROWS, 1);
+        });
+        btns();
+    })();
+
+    // ══════════════════════════════════════════════════════════════════
+    // ZH: v4.43 批次回收點數（擁有者 2026-10-30）
+    // ══════════════════════════════════════════════════════════════════
+    // ZH: 與上面的「手動補齊」**同一個形狀**，方向相反：兩段式、可搜尋、可移除、
+    //     送出要打自己的帳號。差別只在三件事，而那三件都是因為它扣的是使用者的點數：
+    //       · 預覽的措詞是「會收回」不是「會補」
+    //       · 收到的水位允許 0（全部收光是合理的指令），補齊則要求 > 0
+    //       · 確認框講「從他們的帳號收回」
+    // ZH: 🔴 排除名單**預覽與送出都要帶** —— 送出時後端重算名單（同補齊那一條）。
+    (function () {
+        var PREVIEWED = null;
+        var RC_LAST = { count: 0, points: 0 };
+        var RC_EXCLUDE = [];
+        var RC_ROWS = null;
+        var RC_PAGE_SIZE = 10;
+
+        function btns() {
+            $('rc-apply').hidden = !PREVIEWED;
+            $('rc-cancel').hidden = !PREVIEWED;
+            $('rc-preview').textContent = PREVIEWED
+                ? T('pf_topup_recalc', '重算') : T('pf_topup_preview', '預覽');
+        }
+
+        function reset(keepExclude) {
+            PREVIEWED = null;
+            RC_ROWS = null;
+            if (keepExclude !== true) RC_EXCLUDE = [];
+            $('rc-result').innerHTML = '';
+            $('rc-tools').hidden = true;
+            $('rc-search').value = '';
+            say('rc-msg', '');
+            btns();
+        }
+
+        // ZH: 收到的水位允許 0（把所有人收光是合理的指令）——
+        //     所以這裡的判準是「有沒有填」，不是「大不大於 0」。
+        function target() {
+            var raw = $('rc-target').value.trim();
+            if (raw === '') return null;
+            var v = parseInt(raw, 10);
+            return (isFinite(v) && v >= 0) ? v : null;
+        }
+
+        function renderRemoved(excluded) {
+            var box = $('rc-removed');
+            if (!excluded || !excluded.length) { box.hidden = true; box.innerHTML = ''; return; }
+            box.innerHTML = '<span class="footnote">'
+                + esc(T('pf_rec_removed', '這次不收：')) + '</span>'
+                + excluded.map(function (e) {
+                    return '<span class="tu-chip">' + esc(e)
+                        + ' <button class="btn btn--minor" type="button" data-undo="' + esc(e) + '"'
+                        + ' aria-label="' + esc(T('pf_topup_undo_aria', '把 {e} 加回名單').replace('{e}', e)) + '">'
+                        + esc(T('pf_topup_undo', '復原')) + '</button></span>';
+                }).join('');
+            box.hidden = false;
+            box.querySelectorAll('[data-undo]').forEach(function (b) {
+                b.addEventListener('click', function () {
+                    var who = b.dataset.undo.toLowerCase();
+                    RC_EXCLUDE = RC_EXCLUDE.filter(function (x) { return x !== who; });
+                    preview();
+                });
+            });
+        }
+
+        function filtered(r) {
+            var q = ($('rc-search').value || '').trim().toLowerCase();
+            return q ? r.rows.filter(function (x) { return (x.email || '').toLowerCase().indexOf(q) >= 0; })
+                     : r.rows;
+        }
+
+        function renderPreview(r) {
+            RC_ROWS = r;
+            renderRemoved(r.excluded);
+            $('rc-tools').hidden = !(r.count || (r.excluded && r.excluded.length));
+            if (!r.count) {
+                $('rc-result').innerHTML = '<p class="footnote">'
+                    + esc(T('pf_rec_nobody', '沒有人高於這個點數，不需要收。')) + '</p>';
+                return;
+            }
+            renderPage(r, 1);
+            note('rc-msg', T('pf_rec_sum', '{n} 個帳號，合計收回 {p} 點。按「確認回收」才會送出。')
+                .replace('{n}', num(r.count)).replace('{p}', num(r.points)));
+        }
+
+        function renderPage(r, page) {
+            var list = filtered(r);
+            if (!list.length) {
+                $('rc-result').innerHTML = '<p class="footnote">'
+                    + esc(T('pf_topup_nomatch', '沒有符合的帳號。')) + '</p>';
+                return;
+            }
+            var pages = Math.max(1, Math.ceil(list.length / RC_PAGE_SIZE));
+            page = Math.min(Math.max(1, page), pages);
+            var slice = list.slice((page - 1) * RC_PAGE_SIZE, page * RC_PAGE_SIZE);
+            $('rc-result').innerHTML =
+                '<div class="adm-tablewrap"><table class="adm-table"><thead><tr>'
+                + '<th>' + esc(T('pf_topup_who', '帳號')) + '</th>'
+                + '<th class="num">' + esc(T('pf_rec_take', '要收回')) + '</th>'
+                + '<th><span class="sr-only">' + esc(T('pf_topup_act', '操作')) + '</span></th>'
+                + '</tr></thead><tbody>'
+                + slice.map(function (x) {
+                    return '<tr><td>' + esc(x.email) + '</td>'
+                         + '<td class="num">' + num(x.points) + '</td>'
+                         + '<td class="tu-act"><button class="btn btn--minor" type="button"'
+                         + ' data-rm="' + esc(x.email) + '"'
+                         + ' aria-label="' + esc(T('pf_rec_rm_aria', '這次不收 {e}').replace('{e}', x.email)) + '">'
+                         + esc(T('pf_topup_remove', '移除')) + '</button></td></tr>';
+                }).join('')
+                + '</tbody></table></div>'
+                + (pages > 1
+                    ? '<div class="adm-inline tu-pager">'
+                      + '<button class="btn btn--minor" type="button" id="rc-prev"'
+                      + (page <= 1 ? ' disabled' : '') + '>' + esc(T('pf_pg_prev', '上一頁')) + '</button>'
+                      + '<span class="footnote">'
+                      + esc(T('pf_pg_of', '第 {a} / {b} 頁').replace('{a}', page).replace('{b}', pages))
+                      + '</span>'
+                      + '<button class="btn btn--minor" type="button" id="rc-next"'
+                      + (page >= pages ? ' disabled' : '') + '>' + esc(T('pf_pg_next', '下一頁')) + '</button>'
+                      + '</div>'
+                    : '');
+            if (pages > 1) {
+                $('rc-prev').addEventListener('click', function () { renderPage(r, page - 1); });
+                $('rc-next').addEventListener('click', function () { renderPage(r, page + 1); });
+            }
+            $('rc-result').querySelectorAll('[data-rm]').forEach(function (b) {
+                b.addEventListener('click', function () {
+                    var who = b.dataset.rm.toLowerCase();
+                    if (RC_EXCLUDE.indexOf(who) < 0) RC_EXCLUDE.push(who);
+                    preview();
+                });
+            });
+        }
+
+        async function preview() {
+            var t = target();
+            if (t === null) { say('rc-msg', T('pf_rec_need', '請填一個 0 或更大的點數。')); return; }
+            say('rc-msg', '');
+            try {
+                var r = await api('/admin/myai/reclaim', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ target: t, dry_run: true, exclude: RC_EXCLUDE }),
+                });
+                PREVIEWED = t;
+                RC_LAST = { count: r.count || 0, points: r.points || 0 };
+                renderPreview(r);
+                if (!r.count) { PREVIEWED = null; }
+                btns();
+            } catch (e) {
+                say('rc-msg', String(e.message || e));
+            }
+        }
+
+        function apply() {
+            var t = target();
+            if (t === null) return;
+            targetConfirm(T('pf_rec_title', '確認回收點數'),
+                T('pf_rec_confirm',
+                    '要把 {n} 個帳號收到 {t} 點嗎？合計從他們的帳號收回 {p} 點，送出後收不回來。')
+                    .replace('{n}', num(RC_LAST.count))
+                    .replace('{t}', num(t))
+                    .replace('{p}', num(RC_LAST.points))
+                    + (RC_EXCLUDE.length
+                        ? T('pf_topup_confirm_ex', '（已排除 {m} 個帳號）').replace('{m}', num(RC_EXCLUDE.length))
+                        : ''),
+                ((window.AdminMe && window.AdminMe()) || {}).username || '',
+                async function (name) { await send(t, name); },
+                T('pf_topup_self', '你自己的帳號'));
+        }
+
+        async function send(t, name) {
+            $('rc-apply').disabled = true;
+            try {
+                var r = await api('/admin/myai/reclaim', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ target: t, dry_run: false,
+                                           confirm_username: name, exclude: RC_EXCLUDE }),
+                });
+                reset();
+                if (r.status === 'unknown') {
+                    // ZH: 點數**可能已經扣了** —— 這一則不能用會消失的提示。
+                    say('rc-msg', T('pf_rec_unknown',
+                        '送出了，但廠商沒有回報成功。點數可能已經扣了 —— '
+                        + '請到廠商後台對帳，不要再按一次。'));
+                } else {
+                    flash('rc-msg', T('pf_rec_done', '回收完成：{n} 個帳號、合計 {p} 點。')
+                        .replace('{n}', num(r.count)).replace('{p}', num(r.points)), 8000);
+                }
+            } catch (e) {
+                $('rc-apply').disabled = false;
+                throw new Error(String(e.message || e));
+            } finally {
+                $('rc-apply').disabled = false;
+            }
+        }
+
+        $('rc-preview').addEventListener('click', preview);
+        $('rc-apply').addEventListener('click', apply);
+        $('rc-cancel').addEventListener('click', function () { reset(); });
+        $('rc-target').addEventListener('input', function () { if (PREVIEWED) reset(true); });
+        $('rc-search').addEventListener('input', function () {
+            if (RC_ROWS && RC_ROWS.count) renderPage(RC_ROWS, 1);
         });
         btns();
     })();

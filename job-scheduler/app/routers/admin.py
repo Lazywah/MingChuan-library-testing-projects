@@ -2963,6 +2963,69 @@ async def myai_manual_topup(
         raise HTTPException(status_code=400, detail=str(e))
 
 
+@router.post("/myai/reclaim", summary="批次把所有綁定帳號收到指定點數（預設先預覽）")
+async def myai_batch_reclaim(
+    target: int = Body(..., embed=True, description="要收到的點數（高於這個水位的收回超出部分）"),
+    dry_run: bool = Body(True, embed=True, description="true=只預覽不送出"),
+    confirm_username: str = Body("", embed=True,
+                                 description="操作者自己的帳號（只有 dry_run=false 時要）"),
+    exclude: list = Body([], embed=True, description="這次不收的信箱清單"),
+    db: Session = Depends(get_db),
+    admin: models.User = Depends(require_admin),
+):
+    """
+    ZH: v4.43 批次回收（擁有者 2026-10-30）。與手動補齊同一個形狀，方向相反。
+
+    ZH: 🔴 **扣的是使用者的點數**，比補齊更不可逆（補多了可以收回來，收錯了只能再發，
+        而發回去的是新的點，用掉的歷史對不回來）。所以 dry_run 預設 true，
+        真的送出一樣要操作者打出自己的帳號。
+
+    ZH: 🔴 重複按不會重複扣 —— 「收到 N」而不是「扣 N」。
+
+    @node job-scheduler/app/routers/admin.py::myai_batch_reclaim
+    """
+    from ..services import myai_sync
+    if not dry_run:
+        _require_self_confirm(confirm_username, admin)
+    try:
+        return await myai_sync.manual_reclaim(
+            db, target, admin.id, dry_run=dry_run,
+            exclude=[str(x) for x in (exclude or [])][:500])
+    except myai_sync.MyaiSyncError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.post("/users/{user_id}/myai/reclaim", summary="從單一使用者收回點數")
+async def myai_reclaim_points(
+    user_id: str,
+    points: int = Body(0, embed=True, description="要收回的點數（all_points=true 時忽略）"),
+    all_points: bool = Body(False, embed=True, description="true=把他現在的點數全部收回"),
+    reason: str = Body("", embed=True, description="原因（會寫進稽核與廠商備註）"),
+    confirm_username: str = Body("", embed=True, description="要收點的那個帳號（打錯就不送）"),
+    db: Session = Depends(get_db),
+    admin: models.User = Depends(require_admin),
+):
+    """
+    ZH: v4.43 從一個人身上收回點數（擁有者 2026-10-30）。
+
+    ZH: 🔴 **這是「收 N」不是「收到 N」，按兩次就收兩次。** 與單人加點同一個性質，
+        介面上必須先確認再送。
+
+    @node job-scheduler/app/routers/admin.py::myai_reclaim_points
+    """
+    from ..services import myai_sync
+    user = db.query(models.User).filter(models.User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="ZH: 找不到這個使用者 | EN: user not found")
+    # ZH: 與加點同一道門 —— 不可逆而且不冪等，一律要打出目標帳號。
+    _require_target_confirm(confirm_username, user)
+    try:
+        return await myai_sync.reclaim_points(db, user, points, admin.id, reason,
+                                              all_points=bool(all_points))
+    except myai_sync.MyaiSyncError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
 @router.post("/users/{user_id}/myai/grant", summary="給單一使用者加點（個別需求）")
 async def myai_grant_points(
     user_id: str,

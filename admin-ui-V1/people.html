@@ -186,15 +186,50 @@
         <div id="tu-result" aria-live="polite"></div>
     </section>
 
+    <!-- ZH: v4.43 批次回收點數（擁有者 2026-10-30）。與上面的手動補齊對稱，方向相反。
+             🔴 刻意放在補齊**下面**：兩張卡長得一樣，而這一張扣的是使用者的點數。
+             先看到補齊、再看到回收，手滑點錯的那一次比較可能是點到上面那張。 -->
+    <section class="adm-sec" data-view="myai" aria-labelledby="h-rec">
+        <div class="adm-sec__head">
+            <h2>
+                <span id="h-rec" data-i18n="pf_rec">批次回收點數</span>
+                <span class="tip">
+                    <button type="button" class="tip__btn" aria-expanded="false"
+                            aria-controls="tip-rec" data-i18n-aria="tip_more" aria-label="這是什麼">i</button>
+                    <span class="tip__body tip__body--wide" id="tip-rec" role="tooltip" hidden>
+                    <span class="tip__item" data-i18n="pf_rec_why">把所有綁定帳號收到同一個點數水位。高於這個數字的才會收，收的是超出的部分；低於的不動。重複執行不會重複扣。用在活動結束、課程結束要把沒用完的點數收回來。</span>
+                    <span class="tip__item" data-i18n="pf_rec_note">收回來的點數會進到平台的廠商管理帳號，之後可以再發出去。要還給某個人用上面的「加點」。</span>
+                    </span>
+                </span>
+            </h2>
+            <span class="topbar__spacer"></span>
+            <button class="btn btn--minor" type="button" id="rc-preview" data-i18n="pf_topup_preview">預覽</button>
+            <button class="btn btn--primary" type="button" id="rc-apply" data-i18n="pf_rec_apply" hidden>確認回收</button>
+            <button class="btn btn--minor" type="button" id="rc-cancel" data-i18n="pf_topup_cancel" hidden>取消預覽</button>
+        </div>
+        <label class="field">
+            <span class="field__label" data-i18n="pf_rec_target">收到的點數</span>
+            <input class="field__input" type="number" id="rc-target" min="0" step="1" inputmode="numeric">
+        </label>
+        <div class="inline-error" id="rc-msg" hidden></div>
+        <div id="rc-tools" hidden>
+            <input class="field__input tu-search" type="search" id="rc-search" autocomplete="off"
+                   data-i18n-placeholder="pf_topup_search" data-i18n-aria="pf_topup_search"
+                   placeholder="搜尋帳號" aria-label="搜尋帳號">
+            <div class="tu-removed" id="rc-removed" hidden></div>
+        </div>
+        <div id="rc-result" aria-live="polite"></div>
+    </section>
+
 </main>
 
 <script src="tz.js?v=2e214a8b"></script>
 <!-- ⚠ ZH: 順序不能動 —— i18n-admin 在 i18n 之後、prefs 之前。 -->
 <script src="i18n.js?v=6de7dc28"></script>
-<script src="i18n-admin.js?v=74699dac"></script>
+<script src="i18n-admin.js?v=aafd4d9f"></script>
 <script src="tip.js?v=0699f4a2"></script>
 <script src="prefs.js?v=e71609e5"></script>
 <script src="admin-chrome.js?v=1dc21458"></script>
-<script src="people.js?v=3873ff24"></script>
+<script src="people.js?v=1776974d"></script>
 </body>
 </html>

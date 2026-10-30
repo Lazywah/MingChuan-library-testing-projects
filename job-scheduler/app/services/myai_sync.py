@@ -1225,6 +1225,332 @@ async def transfer_credit_batch(rows: list[dict], confirm_grant: bool = False) -
     return {"ok": ok, "granted": ok, "count": len(echoed), "points": total}
 
 
+# ══════════════════════════════════════════════════════════════════════════
+# ZH: v4.43 回收點數（擁有者 2026-10-30）
+# ══════════════════════════════════════════════════════════════════════════
+# ZH: 廠商後台有一支與「批次轉出點數」對稱的 **「批次回收點數」**
+#     （2026-10-30 從後台選單讀到）。上傳格式完全一樣：三欄、無標題列、
+#     email / 點數（正數）/ 備註；兩段式 check → result。
+#
+# ZH: 🔴 **方向相反，誤用的後果也相反。** 轉出的最壞情況是把池子送光；
+#     回收的最壞情況是**把學生的點數扣光**，而那個沒有「再發一次」以外的救法
+#     （而且發回去的是新的點，用掉的歷史對不回來）。所以：
+#       · 自己一道閘門 `_assert_reclaim_endpoint`，**不碰**轉出那道
+#         （`_assert_transfer_endpoint` 仍然全禁 get_credit，不要為了這支鬆掉它）
+#       · 呼叫端要明確傳 `confirm_reclaim=True`
+#       · 第二段送出前一樣要與廠商預覽頁逐列對帳，對不上就中止
+# ══════════════════════════════════════════════════════════════════════════
+
+GET_CREDIT_BATCH_PATH = "/mcu/gt_sdk/admin_168/user/get_credit_batch"
+GET_CREDIT_CHECK_PATH = "/mcu/gt_sdk/admin_168/user/get_credit_batch_check"
+GET_CREDIT_CONFIRM_PATH = "/mcu/gt_sdk/admin_168/user/get_credit_batch_result"
+
+
+def _assert_reclaim_endpoint(path: str, confirm_reclaim: bool) -> None:
+    """ZH: 回收端點的硬性驗證（與 _assert_transfer_endpoint 同一個形狀，方向相反）。
+
+    ZH: 🔴 兩支**刻意分開**：轉出那支仍然把 `get_credit` 列為禁用字樣。
+        共用一支並放寬白名單的話，一個手滑的 for 迴圈就能用「轉出」的程式碼
+        打到「回收」的端點 —— 那正是當初把 get_credit 全禁要防的事。
+
+    @node job-scheduler/app/services/myai_sync.py::_assert_reclaim_endpoint
+    """
+    if not confirm_reclaim:
+        raise MyaiSyncError(
+            "拒絕送出：回收點數必須由呼叫端明確傳 confirm_reclaim=True"
+            "（這個操作會從使用者帳號扣點且不可逆）")
+    p = (path or "").lower()
+    if "get_credit_batch" not in p:
+        raise MyaiSyncError(f"拒絕送出：目標端點不是批次回收點數（{path}）")
+    for bad in ("transfer", "delete", "register", "top_up", "topup"):
+        if bad in p:
+            raise MyaiSyncError(
+                f"拒絕送出：端點含禁用字樣 '{bad}'（{path}）—— 可能誤用其他批次功能")
+
+
+# ZH: 預覽頁回吐的欄位名**自動辨認**，不寫死。
+#
+# ZH: 為什麼：轉出那支寫死 ("emails","transferPoints","remarks") 是因為我們
+#     實際送過、看過那一頁。回收這一支在上線前沒有辦法先看（要先 POST 才看得到），
+#     而猜錯欄位名的後果是第二段送出一個廠商看不懂的 body ——
+#     那時點數可能已經扣了，狀態卻是未知。
+# ZH: 自動辨認同時更耐改版：廠商哪天把欄位改名，這支照樣會把**它給的東西**原樣送回去。
+def _echoed_groups(html: str) -> dict:
+    """ZH: 抓出預覽頁所有 `name="xxx[]"` 的欄位組。回 {欄位名: [值, ...]}。
+
+    @node job-scheduler/app/services/myai_sync.py::_echoed_groups
+    """
+    import html as _html
+    out = {}
+    for name, value in re.findall(
+            r'<input[^>]*\bname="([A-Za-z_]\w*)\[\]"[^>]*\bvalue="([^"]*)"', html, re.I):
+        out.setdefault(name, []).append(_html.unescape(value))
+    return out
+
+
+def _reclaim_echo_rows(html: str, sent: list) -> tuple:
+    """ZH: 把預覽頁解析成 (欄位序, 列)，並認出哪一欄是 email、哪一欄是點數。
+
+    ZH: 判準用**內容**不用名字：含 `@` 的那一欄是 email；整欄都是數字、
+        而且與我們送出的點數完全相同的那一欄是點數。
+        名字可能被廠商改掉，內容不會。
+
+    ZH: 認不出來就拋錯 —— 寧可中止在第二段之前，也不要盲送。
+
+    @node job-scheduler/app/services/myai_sync.py::_reclaim_echo_rows
+    """
+    groups = _echoed_groups(html)
+    if not groups:
+        raise MyaiSyncError("廠商回收預覽頁找不到任何回吐欄位（版型可能改了）—— 已中止，未扣任何點數")
+    n = len(next(iter(groups.values())))
+    if any(len(v) != n for v in groups.values()):
+        raise MyaiSyncError(
+            "廠商回收預覽頁的欄位數量對不齊："
+            + "、".join(f"{f}={len(v)}" for f, v in groups.items())
+            + " —— 已中止，未扣任何點數")
+    if n != len(sent):
+        raise MyaiSyncError(
+            f"廠商回收預覽解析出 {n} 列，但我們送了 {len(sent)} 列 —— 已中止，未扣任何點數")
+
+    want_mail = [(r.get("email") or "").strip().lower() for r in sent]
+    want_pts = [int(r.get("points") or 0) for r in sent]
+    mail_col = next((f for f, v in groups.items()
+                     if [x.strip().lower() for x in v] == want_mail), None)
+    pts_col = next((f for f, v in groups.items()
+                    if all(x.strip().lstrip("-").isdigit() for x in v)
+                    and [int(x) for x in v] == want_pts), None)
+    if mail_col is None or pts_col is None:
+        raise MyaiSyncError(
+            "廠商回收預覽的名單與送出的對不起來"
+            f"（送出 {list(zip(want_mail, want_pts))}、頁面欄位 {sorted(groups)}）"
+            " —— 已中止，未扣任何點數")
+
+    fields = tuple(groups)
+    rows = [{f: groups[f][i] for f in fields} for i in range(n)]
+    return fields, rows
+
+
+async def reclaim_credit_batch(rows: list[dict], confirm_reclaim: bool = False) -> dict:
+    """
+    ZH: 對廠商送出批次**回收**點數（兩段式）。**會從使用者帳號扣點，不可逆。**
+
+    ZH: rows = [{"email", "points", "remark"}]，points 一律正數（要收回多少）。
+
+    ZH: ⚠️ **不重試。** 與轉出同一個理由：第二段失敗時點數可能已經扣了也可能沒有，
+        呼叫端必須當成「可能已扣」處理（去廠商後台對帳），絕對不要自動再送一次。
+
+    @node job-scheduler/app/services/myai_sync.py::reclaim_credit_batch
+    """
+    _assert_reclaim_endpoint(GET_CREDIT_CHECK_PATH, confirm_reclaim)
+    _assert_reclaim_endpoint(GET_CREDIT_CONFIRM_PATH, confirm_reclaim)
+    if not rows:
+        return {"ok": True, "reclaimed": False, "count": 0, "points": 0}
+
+    body = build_transfer_xlsx(rows)   # ZH: 格式與轉出完全相同（三欄、正數）
+    total = sum(int(r.get("points") or 0) for r in rows)
+    logger.warning("MYAI 批次回收點數：%d 個帳號、合計 %d 點（收回到平台的廠商管理帳號）",
+                   len(rows), total)
+
+    async def _do(client):
+        """@node job-scheduler/app/services/myai_sync.py::reclaim_credit_batch.<nested>._do"""
+        return await client.post(
+            GET_CREDIT_CHECK_PATH,
+            files={"upload_xls": ("get_credit_batch.xlsx", body,
+                                  "application/vnd.openxmlformats-officedocument."
+                                  "spreadsheetml.sheet")},
+            headers={"Referer": settings.MYAI_BASE_URL.rstrip("/") + GET_CREDIT_BATCH_PATH},
+        )
+
+    def _valid(r):
+        """@node job-scheduler/app/services/myai_sync.py::reclaim_credit_batch.<nested>._valid"""
+        return r.status_code == 200 and "Unauthorized" not in r.text[:200]
+
+    r = await _session_request(_do, _valid)
+    if not _valid(r):
+        raise MyaiSyncError(f"回收預覽回應 {r.status_code}")
+
+    fields, echoed = _reclaim_echo_rows(r.text, rows)
+    enc = _urlencoded(echoed, fields)
+
+    async def _confirm(client):
+        """@node job-scheduler/app/services/myai_sync.py::reclaim_credit_batch.<nested>._confirm"""
+        return await client.post(
+            GET_CREDIT_CONFIRM_PATH, content=enc,
+            headers={"Content-Type": "application/x-www-form-urlencoded",
+                     "Referer": settings.MYAI_BASE_URL.rstrip("/") + GET_CREDIT_CHECK_PATH},
+        )
+
+    r2 = await _session_request(_confirm, _valid)
+    ok = _valid(r2)
+    if not ok:
+        logger.error("MYAI 回收第二段失敗（回應 %s）—— **不重試**，"
+                     "點數可能已經扣了，請人工到廠商後台對帳", r2.status_code)
+    else:
+        logger.warning("MYAI 回收完成：%d 個帳號、合計 %d 點", len(echoed), total)
+    return {"ok": ok, "reclaimed": ok, "count": len(echoed), "points": total}
+
+
+def reclaim_targets(db: Session, target: int) -> list[dict]:
+    """ZH: 批次回收：所有綁定帳號**高於** target 的，把超過的部分列出來。
+
+    ZH: 與 topup_targets 對稱（那支是低於就補到），所以同樣排除轉出帳號自己 ——
+        把池子的點數「收回池子」沒有意義，廠商的行為也未知。
+
+    ZH: ⚠️ 點數的新鮮度由呼叫端負責（先跑一次 sync）—— 拿舊資料算會收過頭。
+
+    @node job-scheduler/app/services/myai_sync.py::reclaim_targets
+    """
+    target = int(target or 0)
+    rows = []
+    source = (settings.MYAI_ADMIN_EMAIL or "").strip().lower()
+    accs = (db.query(models.ExternalAiAccount)
+              .filter(models.ExternalAiAccount.status == "active").all())
+    for acc in accs:
+        row = None
+        if acc.myai_vendor_sn:
+            row = (db.query(models.MyaiAccount)
+                     .filter(models.MyaiAccount.vendor_sn == acc.myai_vendor_sn).first())
+        if row is None:
+            continue
+        email = (row.email or "").strip()
+        if not email or email.lower() == source:
+            continue
+        have = int(row.points or 0)
+        if have > target:
+            rows.append({"email": email, "points": have - target,
+                         "remark": "admin-reclaim-to-%d" % target})
+    return rows
+
+
+async def reclaim_points(db: Session, user, points: int, admin_id: str,
+                         reason: str = "", all_points: bool = False) -> dict:
+    """
+    ZH: 從**一個人**身上收回點數。`all_points=True` 就收全部（不必先查有多少）。
+
+    ZH: 🔴 與加點同樣**不是冪等的**：按兩次就收兩次。擋重複的責任在呼叫端。
+    ZH: ⚠️ 不能收轉出帳號自己 —— 那是自己收自己，廠商行為未知。
+
+    @node job-scheduler/app/services/myai_sync.py::reclaim_points
+    """
+    row = account_for_user(db, user)
+    if row is None:
+        raise MyaiSyncError(f"{user.username} 還沒有綁定廠商帳號，無法回收")
+    email = (row.email or "").strip()
+    if not email:
+        raise MyaiSyncError(f"{user.username} 的廠商帳號沒有 email，無法回收")
+    source = (settings.MYAI_ADMIN_EMAIL or "").strip().lower()
+    if source and email.lower() == source:
+        raise MyaiSyncError("不能回收轉出帳號自己（那是自己收自己）")
+
+    before = int(row.points or 0)
+    points = before if all_points else int(points or 0)
+    if points <= 0:
+        raise MyaiSyncError("回收的點數必須大於 0（這個帳號目前是 0 點）"
+                            if all_points else "回收的點數必須大於 0")
+    # ZH: 🔴 不能收超過他現在有的 —— 廠商對「扣成負的」行為未知，而且那是我們算錯。
+    if points > before:
+        raise MyaiSyncError(f"{user.username} 目前只有 {before} 點，不能收回 {points} 點")
+
+    logger.warning("MYAI 個別回收：admin=%s ← %s -%d 點（原本 %d）%s",
+                   admin_id, email, points, before, reason or "")
+
+    import json as _json
+
+    def _audit(outcome: str):
+        """ZH: 不可逆的操作一定要留下軌跡（誰、收了誰、多少、為什麼、結果）。"""
+        db.add(models.AdminAction(
+            admin_id=admin_id, target_user=user.id, action="myai_reclaim_points",
+            payload=_json.dumps({"email": email, "points": points, "before": before,
+                                 "all_points": bool(all_points),
+                                 "reason": reason or "", "outcome": outcome},
+                                ensure_ascii=False),
+            timestamp=datetime.now(timezone.utc)))
+        db.commit()
+
+    rows = [{"email": email, "points": points,
+             "remark": (reason or "admin-reclaim")[:60]}]
+    try:
+        res = await reclaim_credit_batch(rows, confirm_reclaim=True)
+    except Exception as e:  # noqa: BLE001
+        _audit(f"failed: {str(e)[:120]}")
+        logger.error("MYAI 個別回收失敗 %s：%s —— **不重試**", email, e)
+        raise
+
+    _audit("ok" if res.get("reclaimed") else "unknown")
+    if res.get("reclaimed"):
+        # ZH: 本地的點數跟著減 —— 下一輪同步會以廠商為準覆蓋，
+        #     但畫面不該等到那時候才對（管理者剛按完就會看一眼）。
+        row.points = max(0, before - points)
+        db.commit()
+    return {"status": "done" if res.get("reclaimed") else "unknown",
+            "email": email, "points": points, "before": before,
+            "after": max(0, before - points)}
+
+
+async def manual_reclaim(db: Session, target: int, admin_id: str,
+                         dry_run: bool = True, exclude=None) -> dict:
+    """
+    ZH: 批次把所有綁定帳號**收到**指定水位（高於的收回超出的部分）。
+
+    ZH: 與 manual_topup 對稱，連 `exclude` 與 `dry_run` 的語意都一樣：
+        🔴 排除名單**預覽與送出都要帶**（送出時後端重新算名單）。
+
+    ZH: 🔴 **重複按不會重複扣** —— 它是「收到 N」不是「扣 N」：
+        第一次跑完所有人都在 N，第二次算出來就是空的。
+
+    @node job-scheduler/app/services/myai_sync.py::manual_reclaim
+    """
+    target = int(target or 0)
+    if target < 0:
+        raise MyaiSyncError("收到的點數不能是負的")
+
+    # ZH: 先同步 —— 拿舊點數算差額會收過頭，而收多了只能再發回去（歷史對不回來）。
+    await sync(db)
+
+    rows = reclaim_targets(db, target)
+    skip = {str(e).strip().lower() for e in (exclude or []) if str(e).strip()}
+    excluded = [r["email"] for r in rows if (r["email"] or "").lower() in skip]
+    rows = [r for r in rows if (r["email"] or "").lower() not in skip]
+    total = sum(r["points"] for r in rows)
+    preview = {"target": target, "count": len(rows), "points": total,
+               "excluded": excluded,
+               "rows": [{"email": r["email"], "points": r["points"]} for r in rows]}
+
+    if dry_run:
+        return {"status": "preview", **preview}
+    if not rows:
+        return {"status": "nobody_above", **preview}
+
+    logger.warning("MYAI 批次回收：admin=%s 收到 %d 點，%d 人、合計 %d 點（排除 %d 人）",
+                   admin_id, target, len(rows), total, len(excluded))
+
+    import json as _json
+
+    def _audit(outcome: str):
+        """@node job-scheduler/app/services/myai_sync.py::manual_reclaim.<nested>._audit"""
+        db.add(models.AdminAction(
+            admin_id=admin_id, target_user=None, action="myai_manual_reclaim",
+            payload=_json.dumps({"target": target, "count": len(rows), "points": total,
+                                 "excluded": excluded, "outcome": outcome},
+                                ensure_ascii=False),
+            timestamp=datetime.now(timezone.utc)))
+        db.commit()
+
+    try:
+        res = await reclaim_credit_batch(rows, confirm_reclaim=True)
+    except Exception as e:  # noqa: BLE001
+        _audit(f"failed: {str(e)[:120]}")
+        logger.error("MYAI 批次回收失敗：%s —— **不重試**，請人工對帳", e)
+        raise
+
+    _audit("ok" if res.get("reclaimed") else "unknown")
+    if not res.get("reclaimed"):
+        logger.error("MYAI 批次回收狀態未知 —— 點數可能已扣，請到廠商後台對帳")
+        return {"status": "unknown", **preview}
+    logger.info("MYAI 批次回收完成：%d 人、合計 %d 點", len(rows), total)
+    return {"status": "done", **preview}
+
+
 # ==============================================================================
 # ZH: v3.9 每月補點 —— 把所有綁定帳號補到同一個水位
 # ==============================================================================
