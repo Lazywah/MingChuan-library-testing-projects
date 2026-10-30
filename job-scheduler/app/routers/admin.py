@@ -2426,7 +2426,10 @@ def get_analytics(
             那張表的 occurred_at 是**廠商當地時間**不是 UTC。
             用 UTC 的 now() 去比會差 8 小時，日界附近的筆數就會跑掉。
         """
-        now = datetime.now() if naive_vendor_time else datetime.now(timezone.utc)
+        # ZH: 🔴 原本寫 `datetime.now()`，以為那就是當地時間 —— 但容器是 UTC，
+        #     回的是 UTC 的 naive 值，差的正是這段註解要防的 8 小時（2026-10-30 修）。
+        from ..services.myai_sync import vendor_now
+        now = vendor_now() if naive_vendor_time else datetime.now(timezone.utc)
         if d_start or d_end:
             if d_start:
                 q = q.filter(col >= datetime.combine(d_start, dtime.min))

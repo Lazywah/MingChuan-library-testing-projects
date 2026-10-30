@@ -77,3 +77,42 @@ def test_usage_hours_ago_is_outside_the_window(db):
     _usage(db, email, "sn-lt2", _tw_now() - timedelta(hours=3))
     out = M.live_usage_quadrants(db, usage_minutes=15)
     assert out["using_active"] == [] and out["using_offplat"] == []
+
+
+# ── (3) 「近 N 天」與同步區間也用廠商當地時間（擁有者 2026-10-30「修」）────────
+
+def test_vendor_now_is_taipei_time():
+    want = datetime.now(timezone.utc) + timedelta(hours=8)
+    assert abs((M.vendor_now() - want.replace(tzinfo=None)).total_seconds()) < 5
+
+
+def test_vendor_since_all_is_none():
+    assert M.vendor_since(0) is None
+
+
+def test_consumption_last_day_uses_local_time(client, db):
+    """ZH: 🔴 原本起點用 UTC 的 now()：「近 1 天」會多吃進 8 小時，
+        28 小時前的交易也被算進來。"""
+    from conftest import make_user, auth_headers
+    make_user(db, username="tz-adm", email="tz-adm@example.com", role="admin")
+    h = auth_headers(client, "tz-adm", "password123")
+    now = M.vendor_now()
+    _usage(db, "x@example.com", "sn-x", now - timedelta(hours=28))   # ZH: 超過 1 天，不算
+    _usage(db, "x@example.com", "sn-x", now - timedelta(hours=20))   # ZH: 1 天內，算
+    r = client.get("/api/v1/external-ai/admin/consumption?days=1", headers=h)
+    assert r.status_code == 200, r.text
+    assert r.json()["tx_count"] == 1
+
+
+@pytest.mark.asyncio
+async def test_sync_asks_the_vendor_up_to_the_local_date(db, monkeypatch):
+    """ZH: 台灣凌晨 0–8 點時，UTC 的日期還是昨天 —— 當天凌晨的交易會晚 8 小時才進來。"""
+    asked = []
+
+    async def fake_fetch(start, end):
+        asked.append((start, end))
+        return "<html><body><table></table></body></html>"   # ZH: 沒有交易的那種頁面
+
+    monkeypatch.setattr(M, "fetch_transactions_html", fake_fetch)
+    await M.sync_transactions(db, days=3)
+    assert asked[0][1] == M.vendor_now().strftime("%Y-%m-%d")

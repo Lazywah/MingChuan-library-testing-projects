@@ -463,6 +463,26 @@ def auto_match(db: Session) -> dict:
 VENDOR_TZ = timezone(timedelta(hours=8), name="Asia/Taipei")
 
 
+def vendor_now() -> datetime:
+    """ZH: 「現在」的廠商當地時間（naive）—— 拿來跟 occurred_at 比的唯一入口。
+
+    ZH: 🔴 不要用 `datetime.now()`：容器的時區是 UTC，它回的是 UTC 的 naive 值，
+        跟台灣時間的 occurred_at 差 8 小時（2026-10-30 一次找到五處這樣用）。
+
+    @node job-scheduler/app/services/myai_sync.py::vendor_now
+    """
+    return datetime.now(timezone.utc).astimezone(VENDOR_TZ).replace(tzinfo=None)
+
+
+def vendor_since(days: int):
+    """ZH: 「近 N 天」的下界（廠商當地時間）；days<=0＝全部 → None。上限 3650 天。
+
+    @node job-scheduler/app/services/myai_sync.py::vendor_since
+    """
+    days = int(days or 0)
+    return vendor_now() - timedelta(days=min(days, 3650)) if days > 0 else None
+
+
 def _classify(note: str, pts: int) -> tuple[str, str | None]:
     """ZH: 由備註判斷事件類型與模型 | EN: classify event/model from note.
 
@@ -740,7 +760,9 @@ async def sync_transactions(db: Session, days: int = 90) -> dict:
     @node job-scheduler/app/services/myai_sync.py::sync_transactions
     """
     days = max(1, min(int(days or 90), 730))
-    end = datetime.now()
+    # ZH: 查詢區間是廠商後台的日期欄位（當地日期）。原本用 datetime.now()（容器是 UTC）——
+    #     台灣 00:00–08:00 時「到哪天」還停在昨天，當天凌晨的交易要等到 8 點後才抓得進來。
+    end = vendor_now()
     start = end - timedelta(days=days)
     html = await fetch_transactions_html(start.strftime("%Y-%m-%d"), end.strftime("%Y-%m-%d"))
     rows = parse_transactions(html)
@@ -2316,8 +2338,7 @@ def live_usage_quadrants(db: Session, usage_minutes: int = USAGE_WINDOW_MINUTES,
     # ZH: 🔴 用量的時間窗要用**廠商當地時間**算（occurred_at 是台灣時間，見 VENDOR_TZ）。
     #     原本拿 UTC 去比，時間窗實際上被放寬了 8 小時 —— 「最近 15 分鐘」
     #     等於「最近 8 小時 15 分」（擁有者 2026-10-30 回報時順著查到）。
-    usage_cut = (now.astimezone(VENDOR_TZ) - timedelta(minutes=max(1, usage_minutes))
-                 ).replace(tzinfo=None)
+    usage_cut = vendor_now() - timedelta(minutes=max(1, usage_minutes))
 
     # ZH: 近期 ai_usage 逐筆（只取扣點事件；login/transfer 不算「在使用」）
     rows = (

@@ -395,7 +395,8 @@ def get_my_consumption(
     #     會被悄悄換成 30，導致「全部」實際只看近 30 天（同頁的「個人查詢」
     #     用 `days or 0` 反而是對的，兩個面板同一個詞卻不同行為）。
     days = 30 if days is None else int(days)
-    since = datetime.now() - timedelta(days=min(days, 3650)) if days > 0 else None
+    # ZH: 廠商當地時間（occurred_at 是台灣時間）—— 見 myai_sync.vendor_now。
+    since = myai_sync.vendor_since(days)
     mmap = {m.code: m for m in db.query(models.MyaiModelMap).all()}
     own = _own_usage(db, {row.vendor_sn}, since, mmap)
     # ZH: 趨勢軸＝自己有用量的日子。對照還在的時候軸是「全體有活動的日子」
@@ -914,7 +915,9 @@ def consumption_analytics(
                          <= datetime.combine(d_end, dtime.max))
     elif days > 0:
         days = min(days, 3650)
-        since = datetime.now() - timedelta(days=days)   # ZH: occurred_at 為廠商當地時間(naive)
+        # ZH: occurred_at 為廠商當地時間(naive)。🔴 原本用 datetime.now()，而容器是 UTC ——
+        #     「近 N 天」的起點因此往前多算 8 小時（2026-10-30 修）。
+        since = myai_sync.vendor_since(days)
         q = q.filter(models.MyaiTransaction.occurred_at >= since)
     txs = q.all()
     # ZH: email → 平台身分(role) / 學系(department)，用來分群 | email → role / department
@@ -1252,7 +1255,7 @@ def user_consumption(
 
     matches = [_meta(m) for m in matched]
     days = int(days or 0)
-    since = datetime.now() - timedelta(days=min(days, 3650)) if days > 0 else None
+    since = myai_sync.vendor_since(days)     # ZH: 廠商當地時間，見 myai_sync.vendor_now
 
     # ZH: v2.9 模型對應表 —— 個人查詢也要套，否則這裡顯示 gpt_5_6_sol、上面圖表顯示 GPT-5
     # EN: apply the display-time model map here too, so names match the global charts
