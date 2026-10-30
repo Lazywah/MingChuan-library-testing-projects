@@ -456,6 +456,13 @@ def auto_match(db: Session) -> dict:
 # ZH: v2.8 交易日誌同步 —— 逐筆(全體、含模型)；不存 IP
 # EN: v2.8 transaction-log sync — per event (all users, incl. model); no IP
 # ==============================================================================
+# ZH: 廠商交易日誌的 occurred_at 是**台灣當地時間（naive）**，不是 UTC
+#     （實測：occurred_at 10:39:02 的那一筆，synced_at 是 UTC 02:39:02）。
+#     要拿它跟「現在」比、或交給前端顯示時，一律經過這個時區。台灣沒有日光節約，
+#     固定 +8 是對的（gpu_schedule.TZ_TAIPEI 同一個寫法）。
+VENDOR_TZ = timezone(timedelta(hours=8), name="Asia/Taipei")
+
+
 def _classify(note: str, pts: int) -> tuple[str, str | None]:
     """ZH: 由備註判斷事件類型與模型 | EN: classify event/model from note.
 
@@ -469,6 +476,13 @@ def _classify(note: str, pts: int) -> tuple[str, str | None]:
     #     一併改成不分大小寫：原本 startswith("Transfer") 是大小寫敏感，
     #     而上面的 login 判斷是小寫比對，同一函式兩套規則遲早出事。
     if low.startswith("transfer") or low.startswith("top up") or low.startswith("topup"):
+        return "transfer", None
+    # ZH: v4.44 回收（Recycle）也是點數搬移，不是用 AI（擁有者 2026-10-30 回報）。
+    #     原本它落到下面的 `pts < 0` → 被當成 ai_usage，備註還被當成模型名：
+    #     被收回點數的人在總覽「有用量」、數據頁多出「Recycle: delete」這種模型，
+    #     2026-08-31 起共 5 筆 801 點算錯。收回的那一方是負的、池子那一方是正的，
+    #     兩邊一起歸成 transfer（與轉點同一類：配點的反方向）。
+    if low.startswith("recycle"):
         return "transfer", None
     if pts < 0:
         return "ai_usage", note.strip() or None
@@ -2298,14 +2312,18 @@ def live_usage_quadrants(db: Session, usage_minutes: int = USAGE_WINDOW_MINUTES,
     @node job-scheduler/app/services/myai_sync.py::live_usage_quadrants
     """
     now = datetime.now(timezone.utc)
-    usage_cut = now - timedelta(minutes=max(1, usage_minutes))
     online_cut = now - timedelta(minutes=max(1, online_minutes))
+    # ZH: 🔴 用量的時間窗要用**廠商當地時間**算（occurred_at 是台灣時間，見 VENDOR_TZ）。
+    #     原本拿 UTC 去比，時間窗實際上被放寬了 8 小時 —— 「最近 15 分鐘」
+    #     等於「最近 8 小時 15 分」（擁有者 2026-10-30 回報時順著查到）。
+    usage_cut = (now.astimezone(VENDOR_TZ) - timedelta(minutes=max(1, usage_minutes))
+                 ).replace(tzinfo=None)
 
     # ZH: 近期 ai_usage 逐筆（只取扣點事件；login/transfer 不算「在使用」）
     rows = (
         db.query(models.MyaiTransaction)
         .filter(models.MyaiTransaction.event_type == "ai_usage")
-        .filter(models.MyaiTransaction.occurred_at >= usage_cut.replace(tzinfo=None))
+        .filter(models.MyaiTransaction.occurred_at >= usage_cut)
         .all()
     )
     # 依廠商帳號彙總：最後一次活動、期間內筆數與消耗點數、用過的模型
@@ -2355,7 +2373,9 @@ def live_usage_quadrants(db: Session, usage_minutes: int = USAGE_WINDOW_MINUTES,
             "vendor_sn": agg["vendor_sn"],
             "email": agg["email"],
             "vendor_name": agg["name"],
-            "last_used_at": last_at.isoformat() if last_at else None,
+            # ZH: 帶上 +08:00 —— 沒有時區標記的話前端（tz.js）會當成 UTC 再加 8 小時，
+            #     10:39 的事會顯示成 18:39（擁有者 2026-10-30 看到的就是這個）。
+            "last_used_at": last_at.replace(tzinfo=VENDOR_TZ).isoformat() if last_at else None,
             "events": agg["events"],
             "points_used": agg["points"],
             "models": sorted(agg["models"]),
