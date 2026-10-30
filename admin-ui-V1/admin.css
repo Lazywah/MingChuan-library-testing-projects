@@ -817,12 +817,6 @@ textarea.field__input {
     white-space: nowrap;
 }
 
-/* ZH: 期間選擇：只有目前選中的給底色。 */
-#periods .btn.is-current {
-    background-color: var(--accent-soft);
-    color: var(--text-strong);
-    font-weight: 600;
-}
 
 @media (max-width: 700px) {
     .adm-bar { grid-template-columns: 1fr auto; }
@@ -1988,5 +1982,3 @@ textarea.field__input {
  *     （帳號選單在頁面右上角）。放在左邊的按鈕要改成往左對齊，否則選單會
  *     伸出左緣 —— 在對話框裡就是被 overflow 切掉。 */
 .adm-dd--left .account__menu { left: 0; right: auto; }
-/* ZH: 下方放不下時往上開（people.js 的 wireDropdown 量過之後加 is-up）。 */
-.adm-dd .account__menu.is-up { top: auto; bottom: calc(100% + var(--space-2)); }

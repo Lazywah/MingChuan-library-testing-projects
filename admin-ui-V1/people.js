@@ -1753,10 +1753,6 @@
         var fd = new FormData();
         fd.append('file', TI_FILE);
         fd.append('purpose', $('ti-why').value.trim());
-        // ZH: v4.28 永久就**完全不送** expires_on（送空字串後端會當成填了但格式錯，
-        //     與單筆那條路同一個理由）。兩個都送 = 矛盾輸入，後端擋。
-        if ($('ti-forever') && $('ti-forever').checked) fd.append('never_expires', 'true');
-        else fd.append('expires_on', $('ti-expires').value);
         fd.append('dry_run', dryRun ? 'true' : 'false');
         // ZH: v4.20 整批開通 MYAI（與單筆同契約：兩平台同一組密碼）。
         if ($('ti-myai') && $('ti-myai').checked) fd.append('provision_myai', 'true');
@@ -1780,9 +1776,10 @@
             +   esc(T('pf_close', '關閉')) + '">✕</button></form>'
             + '<h2 class="rmod__title">' + esc(T('tmpi_title', '匯入臨時帳號')) + '</h2>'
             + '<p class="footnote">' + esc(T('tmpi_fmt',
-                '每行一個帳號，欄位用逗號分開：帳號名稱,信箱,密碼,身分。'
+                '每行一個帳號，欄位用逗號分開：帳號名稱,信箱,密碼,身分,到期日。'
                 + '信箱可空（不寄信）；密碼可空（系統產生，建立後顯示一次）；'
-                + '身分可空（預設學生），可用：學生/老師/職員/訪客。')) + '</p>'
+                + '身分可空（預設學生），可用：學生/老師/職員/訪客；'
+                + '到期日填日期（YYYY-MM-DD）或「永久」，不能空白。')) + '</p>'
             + field('ti-why', T('tmp_purpose', '用途（必填）'), '')
             // ZH: v4.20 —— 勾了的話**每一列都要有 Email**，否則預覽就會擋下來
             //     （後端驗，理由：沒 Email 會在廠商端留下救不回密碼的垃圾帳號）。
@@ -1790,16 +1787,9 @@
             +   '<input type="checkbox" id="ti-myai"> '
             +   '<span>' + esc(T('tmpi_myai', '同時開通 MYAI 帳號（每一列都要有 Email；密碼與該列同一組）')) + '</span>'
             + '</label>'
-            + field('ti-expires', T('tmp_expires_on', '到期日'), twDay(1), 'date',
-                    ' min="' + twDay(0) + '"')
-            // ZH: v4.28 永久有效（擁有者 2026-09-24）—— 與單筆那個勾同一個契約。
-            //     ⚠ 這是**整批**的決定：同一個檔案裡不能有些永久有些不永久
-            //     （到期日本來就是整批共用的欄位）。要混就分兩次匯入。
-            + '<label class="adm-inline" style="margin:.25rem 0 .5rem">'
-            +   '<input type="checkbox" id="ti-forever"> '
-            +   '<span>' + esc(T('tmpi_forever',
-                '整批永久有效（不設到期日，與一般帳號一樣）')) + '</span>'
-            + '</label>'
+            // ZH: v4.44 到期日搬進檔案的第 5 欄（擁有者 2026-10-30），每一列自己的 ——
+            //     這裡原本的「到期日」與「整批永久有效」都拿掉了。永久要在檔案裡明寫「永久」，
+            //     空白會在預覽被擋下（後端 _parse_row_expiry）。
             // ZH: v4.44 範例兩種格式收成一個下拉（擁有者 2026-10-30，與頁首工具列同一個做法），
             //     跟「選擇檔案」排在同一列：先拿範例、再選檔案，是同一件事的前後兩步。
             //     選單往**左**對齊（adm-dd--left）—— 按鈕在對話框左緣，往右對齊會被切掉。
@@ -1839,7 +1829,7 @@
         $('ti-apply').addEventListener('click', applyTempImport);
         $('ti-tpl-csv').addEventListener('click', function () { downloadTemplate('csv'); });
         $('ti-tpl-xlsx').addEventListener('click', function () { downloadTemplate('xlsx'); });
-        wireDropdown($('ti-tpl'), $('ti-tpl-menu'));
+        AdminDropdown($('ti-tpl'), $('ti-tpl-menu'));
         $('ti-pick').addEventListener('click', function () { $('ti-file').click(); });
         $('ti-file').addEventListener('change', function () {
             TI_FILE = ($('ti-file').files || [])[0] || null;
@@ -1850,13 +1840,7 @@
         // ZH: 內容一改，上一份預覽就不算數（同手動補齊：看 A 的預覽送出 B 很危險）。
         // ZH: 🔴 勾選也要作廢預覽 —— 預覽過的是「不開通」那一版，
         //     勾完直接按建立的話，看到的與送出的是兩件事（後端的驗證規則也不同）。
-        // ZH: 勾了永久就把日期欄灰掉（同單筆）—— 後端會擋，但按不到更好。
-        $('ti-forever').addEventListener('change', function () {
-            var d = $('ti-expires');
-            d.disabled = this.checked;
-            d.style.opacity = this.checked ? '.5' : '';
-        });
-        ['ti-why', 'ti-expires', 'ti-myai', 'ti-forever'].forEach(function (id) {
+        ['ti-why', 'ti-myai'].forEach(function (id) {
             if (!$(id)) return;
             $(id).addEventListener($(id).type === 'checkbox' ? 'change' : 'input', function () {
                 $('ti-apply').hidden = true;
@@ -1874,6 +1858,7 @@
             + '<th>' + esc(T('pp_c_user', '帳號')) + '</th>'
             + '<th>' + esc(T('pp_c_role', '角色')) + '</th>'
             + '<th>' + esc(T('tmpi_pw_col', '密碼')) + '</th>'
+            + '<th>' + esc(T('tmpi_exp_col', '到期日')) + '</th>'
             + '<th>' + esc(T('tmpi_check', '檢查')) + '</th>'
             + '</tr></thead><tbody>'
             + r.rows.map(function (x) {
@@ -1881,6 +1866,10 @@
                     + '<td>' + esc(roleName[x.role] || '—') + '</td>'
                     + '<td>' + esc(x.will_generate_pw
                         ? T('tmpi_pw_gen', '系統產生') : T('tmpi_pw_given', '檔案提供')) + '</td>'
+                    // ZH: v4.44 每一列建到哪天。永久要看得出來 —— 這是送出前最後一眼。
+                    + '<td>' + (x.expires_on ? esc(x.expires_on)
+                        : x.never_expires ? '<strong>' + esc(T('tmpi_forever_cell', '永久')) + '</strong>'
+                        : '—') + '</td>'
                     + '<td>' + (x.errors.length
                         ? '<span class="adm-pill adm-pill--temp">' + esc(x.errors.join('、')) + '</span>'
                         : '✓') + '</td></tr>';
@@ -1941,11 +1930,13 @@
             + '<h2 class="rmod__title">' + esc(T('tmpi_done', '匯入完成')) + '</h2>'
             + '<p class="footnote">' + esc(T('tmpi_done_sum', '共建立 {n} 個臨時帳號。')
                 .replace('{n}', num(r.total))
-                // ZH: 🔴 把「建到什麼時候」寫出來 —— 永久是不可逆的決定
+                // ZH: 🔴 永久的有幾個要寫出來 —— 永久是不可逆的決定
                 //     （到期日可以延，永久卻要一個一個手動改回去）。
-                + ' ' + (r.expires_at
-                    ? T('tmpi_done_until', '到期：{d}').replace('{d}', TW.dateTime(r.expires_at))
-                    : T('tmpi_done_forever', '永久有效（不會到期）'))) + '</p>'
+                //     v4.44 起到期日是每一列自己的，所以講「其中幾個」而不是一個日期。
+                + (r.never_expires_count
+                    ? ' ' + T('tmpi_done_forever_n', '其中 {n} 個永久有效（不會到期）。')
+                        .replace('{n}', num(r.never_expires_count))
+                    : '')) + '</p>'
             + (gen.length
                 ? '<div class="adm-alert adm-alert--error"><span>'
                   + esc(T('tmpi_pw_once',
@@ -2108,78 +2099,6 @@
     //
     // ZH: 成功不另外給訊息 —— 檔案下載本身就是回饋。失敗**一定要講**：
     //     下載沒發生時畫面上完全沒有痕跡，使用者只會以為自己沒按到。
-    // ZH: v4.44 工具列的下拉（擁有者 2026-10-30）。樣式沿用帳號選單的 .account__menu。
-    //     點選單項之後就收起來（項目自己的事件先跑，這裡在冒泡時才收）；
-    //     點外面、按 Esc、Tab 離開也收。上下鍵在項目間移動。
-    // ZH: 「點在裡面嗎」在捕獲階段先記 —— 與 admin-chrome.js 的 wireToggle 同一個理由。
-    function wireDropdown(toggle, menu) {
-        if (!toggle || !menu) return;
-        function items() { return [].slice.call(menu.querySelectorAll('[role="menuitem"]')); }
-        function setOpen(open) {
-            menu.hidden = !open;
-            toggle.setAttribute('aria-expanded', String(open));
-            if (!open) return;
-            // ZH: 下方放不下就往上開。匯入對話框的「下載範例」在對話框下半部，
-            //     往下開會伸出對話框底（實測 28px）而被 overflow 切掉 —— 要捲才看得到。
-            //     邊界是所在的 <dialog>（沒有就是視窗）。
-            menu.classList.remove('is-up');
-            var box = toggle.closest('dialog');
-            var limit = box ? box.getBoundingClientRect().bottom : window.innerHeight;
-            if (menu.getBoundingClientRect().bottom > limit) menu.classList.add('is-up');
-        }
-        toggle.addEventListener('click', function () { setOpen(menu.hidden); });
-        toggle.addEventListener('keydown', function (ev) {
-            if (ev.key === 'ArrowDown') {
-                ev.preventDefault();
-                setOpen(true);
-                items()[0].focus();
-            }
-        });
-        menu.addEventListener('click', function (ev) {
-            if (ev.target.closest('[role="menuitem"]')) setOpen(false);
-        });
-        menu.addEventListener('keydown', function (ev) {
-            var list = items(), i = list.indexOf(document.activeElement);
-            if (ev.key === 'ArrowDown' || ev.key === 'ArrowUp') {
-                ev.preventDefault();
-                var n = ev.key === 'ArrowDown' ? i + 1 : i - 1;
-                list[(n + list.length) % list.length].focus();
-            } else if (ev.key === 'Escape') {
-                // ZH: 在 <dialog> 裡時 Esc 預設會把整個對話框關掉 —— 這一下只該關選單。
-                ev.preventDefault();
-                ev.stopPropagation();
-                setOpen(false);
-                toggle.focus();
-            } else if (ev.key === 'Tab') {
-                setOpen(false);
-            }
-        });
-        // ZH: 匯入對話框每開一次就重畫一次，舊的選單會離開 DOM ——
-        //     掛在 document 上的監聽發現自己的選單不在了就自己拆掉，不然會越積越多。
-        var inside = false;
-        function onCapture(ev) {
-            if (!menu.isConnected) { detach(); return; }
-            inside = menu.contains(ev.target) || toggle.contains(ev.target);
-        }
-        function onBubble() {
-            if (!menu.isConnected) { detach(); return; }
-            if (!menu.hidden && !inside) setOpen(false);
-        }
-        function detach() {
-            document.removeEventListener('click', onCapture, true);
-            document.removeEventListener('click', onBubble);
-        }
-        document.addEventListener('click', onCapture, true);
-        document.addEventListener('click', onBubble);
-        toggle.addEventListener('keydown', function (ev) {
-            if (ev.key === 'Escape' && !menu.hidden) {
-                ev.preventDefault();      // ZH: 同上 —— 選單開著時 Esc 只關選單
-                ev.stopPropagation();
-                setOpen(false);
-            }
-        });
-    }
-
     async function exportUsers(fmt, btn, label) {
         var lab = label || btn;       // ZH: 下拉按鈕裡還有 ▾，只換文字那一段
         var old = lab.textContent;
@@ -2200,8 +2119,8 @@
     //     選單項一點就收起來了，寫在它身上沒有人看得到。
     $('ux-xlsx').addEventListener('click', function () { exportUsers('xlsx', $('ux-btn'), $('ux-label')); });
     $('ux-csv').addEventListener('click', function () { exportUsers('csv', $('ux-btn'), $('ux-label')); });
-    wireDropdown($('tmp-btn'), $('tmp-btn-menu'));
-    wireDropdown($('ux-btn'), $('ux-btn-menu'));
+    AdminDropdown($('tmp-btn'), $('tmp-btn-menu'));
+    AdminDropdown($('ux-btn'), $('ux-btn-menu'));
 
     // ── 廠商帳號對應（維運）───────────────────────────────────────────────
     //

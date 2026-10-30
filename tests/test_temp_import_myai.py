@@ -41,14 +41,16 @@ def fake_myai(monkeypatch):
 
 
 def _csv(rows):
-    """ZH: 匯入範本的欄位：帳號,信箱,密碼,身分。"""
-    head = "username,email,password,role\n"
-    return (head + "\n".join(",".join(r) for r in rows)).encode("utf-8")
+    """ZH: 匯入範本的欄位：帳號,信箱,密碼,身分,到期日（v4.44 起第 5 欄必填）。
+       這一族測的不是到期日，所以沒給的列補一個一週後的日期。"""
+    soon = (datetime.date.today() + datetime.timedelta(days=7)).isoformat()
+    head = "username,email,password,role,expires\n"
+    return (head + "\n".join(",".join(list(r) + [soon] * (5 - len(r)))
+                             for r in rows)).encode("utf-8")
 
 
 def _post(client, headers, data, *, dry_run=False, myai=False, purpose="長官視察"):
     form = {"purpose": purpose,
-            "expires_on": (datetime.date.today() + datetime.timedelta(days=7)).isoformat(),
             "dry_run": "true" if dry_run else "false"}
     if myai:
         form["provision_myai"] = "true"

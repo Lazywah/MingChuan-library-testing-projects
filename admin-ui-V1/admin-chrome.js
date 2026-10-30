@@ -482,6 +482,98 @@
 
     window.AdminDownload = download;
 
+    // ZH: v4.44 下拉按鈕（擁有者 2026-10-30）。帳號頁工具列、匯入對話框、數據頁共用 ——
+    //     所以放在這裡（每一頁都載），以 window.AdminDropdown 給各頁用。
+    // ZH: 樣式沿用帳號選單的 .account__menu。樣式沿用帳號選單的 .account__menu。
+    //     點選單項之後就收起來（項目自己的事件先跑，這裡在冒泡時才收）；
+    //     點外面、按 Esc、Tab 離開也收。上下鍵在項目間移動。
+    // ZH: 「點在裡面嗎」在捕獲階段先記 —— 與 admin-chrome.js 的 wireToggle 同一個理由。
+    function wireDropdown(toggle, menu) {
+        if (!toggle || !menu) return;
+        function items() { return [].slice.call(menu.querySelectorAll('[role="menuitem"]')); }
+        function setOpen(open) {
+            menu.hidden = !open;
+            toggle.setAttribute('aria-expanded', String(open));
+            if (!open) return;
+            // ZH: 在 <dialog> 裡改用 fixed 定位，讓選單**可以超出對話框**（擁有者 2026-10-30）。
+            //     對話框是 overflow-y:auto，絕對定位的選單會被它切掉、要捲才看得到；
+            //     fixed 的定位基準是視窗，不受對話框的 overflow 影響。
+            //     座標每次打開時現量；對話框捲動時就收起來（不然選單會停在原地跟按鈕分開）。
+            var dlg = toggle.closest('dialog');
+            if (dlg) {
+                var rc = toggle.getBoundingClientRect();
+                menu.style.position = 'fixed';
+                menu.style.top = Math.round(rc.bottom + 8) + 'px';
+                menu.style.left = Math.round(rc.left) + 'px';
+                menu.style.right = 'auto';
+                if (!dlg._ddScroll) {
+                    dlg._ddScroll = true;
+                    dlg.addEventListener('scroll', function () {
+                        [].forEach.call(dlg.querySelectorAll('.adm-dd .account__menu'), function (m) {
+                            m.hidden = true;
+                        });
+                        [].forEach.call(dlg.querySelectorAll('.adm-dd [aria-expanded="true"]'), function (b) {
+                            b.setAttribute('aria-expanded', 'false');
+                        });
+                    });
+                }
+            }
+        }
+        toggle.addEventListener('click', function () { setOpen(menu.hidden); });
+        toggle.addEventListener('keydown', function (ev) {
+            if (ev.key === 'ArrowDown') {
+                ev.preventDefault();
+                setOpen(true);
+                items()[0].focus();
+            }
+        });
+        menu.addEventListener('click', function (ev) {
+            if (ev.target.closest('[role="menuitem"]')) setOpen(false);
+        });
+        menu.addEventListener('keydown', function (ev) {
+            var list = items(), i = list.indexOf(document.activeElement);
+            if (ev.key === 'ArrowDown' || ev.key === 'ArrowUp') {
+                ev.preventDefault();
+                var n = ev.key === 'ArrowDown' ? i + 1 : i - 1;
+                list[(n + list.length) % list.length].focus();
+            } else if (ev.key === 'Escape') {
+                // ZH: 在 <dialog> 裡時 Esc 預設會把整個對話框關掉 —— 這一下只該關選單。
+                ev.preventDefault();
+                ev.stopPropagation();
+                setOpen(false);
+                toggle.focus();
+            } else if (ev.key === 'Tab') {
+                setOpen(false);
+            }
+        });
+        // ZH: 匯入對話框每開一次就重畫一次，舊的選單會離開 DOM ——
+        //     掛在 document 上的監聽發現自己的選單不在了就自己拆掉，不然會越積越多。
+        var inside = false;
+        function onCapture(ev) {
+            if (!menu.isConnected) { detach(); return; }
+            inside = menu.contains(ev.target) || toggle.contains(ev.target);
+        }
+        function onBubble() {
+            if (!menu.isConnected) { detach(); return; }
+            if (!menu.hidden && !inside) setOpen(false);
+        }
+        function detach() {
+            document.removeEventListener('click', onCapture, true);
+            document.removeEventListener('click', onBubble);
+        }
+        document.addEventListener('click', onCapture, true);
+        document.addEventListener('click', onBubble);
+        toggle.addEventListener('keydown', function (ev) {
+            if (ev.key === 'Escape' && !menu.hidden) {
+                ev.preventDefault();      // ZH: 同上 —— 選單開著時 Esc 只關選單
+                ev.stopPropagation();
+                setOpen(false);
+            }
+        });
+    }
+
+    window.AdminDropdown = wireDropdown;
+
     window.AdminMe = function () { return _me; };
 
     async function loadWho() {

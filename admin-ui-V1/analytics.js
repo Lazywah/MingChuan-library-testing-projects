@@ -1055,39 +1055,43 @@
     }
 
     // ── 期間 ──────────────────────────────────────────────────────────────
+    // ZH: v4.44 下拉（擁有者 2026-10-30）。選項每次重畫 —— 切換語言時要跟著換字。
+    //     下拉的值就是「現在看的是哪一段」：起訖有在用就是「自訂」，否則是 DAYS。
+    var CUSTOM_OPEN = false;   // ZH: 選了「自訂」但還沒套用（起訖列要開著，資料還沒換）
+
     function renderPeriods() {
-        // ZH: 用起訖日期時，快選一律不反白（見 analytics.html 的說明）。
-        var presetOn = !rangeOn();
-        $('periods').innerHTML = PERIODS.map(function (p) {
-            var on = presetOn && DAYS === p[0];
-            return '<button class="btn btn--minor' + (on ? ' is-current' : '') + '"'
-                + ' type="button" data-days="' + p[0] + '"'
-                + (on ? ' aria-current="true"' : '') + '>'
-                + esc(T(p[1], p[2])) + '</button>';
-        }).join('');
-        $('periods').querySelectorAll('[data-days]').forEach(function (b) {
-            b.addEventListener('click', function () {
-                DAYS = parseInt(b.dataset.days, 10);
-                // ZH: 按了快選就把起訖清掉 —— 否則下一次請求還是帶著日期，
-                //     畫面反白的是「近 30 天」而資料是 7 月，而且**不會報錯**。
-                RANGE.start = RANGE.end = '';
-                $('r-from').value = ''; $('r-to').value = '';
-                load();
-            });
-        });
-        $('r-clear').hidden = !rangeOn();
+        var sel = $('period');
+        sel.innerHTML = PERIODS.map(function (p) {
+            return '<option value="' + p[0] + '">' + esc(T(p[1], p[2])) + '</option>';
+        }).join('')
+            + '<option value="custom">' + esc(T('an_custom', '自訂期間…')) + '</option>';
+        sel.value = (rangeOn() || CUSTOM_OPEN) ? 'custom' : String(DAYS);
+        $('range').hidden = !(rangeOn() || CUSTOM_OPEN);
     }
 
-    // ZH: 套用起訖。兩個都空就當作清除。
     function wireRange() {
+        $('period').addEventListener('change', function () {
+            var v = $('period').value;
+            if (v === 'custom') {
+                // ZH: 只打開起訖列，**不重打資料** —— 日期還沒選，換了也是同一份。
+                CUSTOM_OPEN = true;
+                $('range').hidden = false;
+                $('r-from').focus();
+                return;
+            }
+            DAYS = parseInt(v, 10);
+            // ZH: 選了快選就把起訖清掉 —— 否則下一次請求還是帶著日期，
+            //     下拉寫的是「近 30 天」而資料是 7 月，而且**不會報錯**。
+            CUSTOM_OPEN = false;
+            RANGE.start = RANGE.end = '';
+            $('r-from').value = ''; $('r-to').value = '';
+            load();
+        });
+        // ZH: 套用起訖。兩個都空就回到原本的快選（等於沒有自訂）。
         $('r-go').addEventListener('click', function () {
             RANGE.start = $('r-from').value;
             RANGE.end = $('r-to').value;
-            load();
-        });
-        $('r-clear').addEventListener('click', function () {
-            RANGE.start = RANGE.end = '';
-            $('r-from').value = ''; $('r-to').value = '';
+            CUSTOM_OPEN = rangeOn();
             load();
         });
     }
@@ -1126,13 +1130,14 @@
     //     改成 fetch → blob → 臨時 <a download> —— 與 V0.5 使用者匯出同一個做法。
     // ZH: 檔名優先取 Content-Disposition（後端已經把區間寫進去了）。
     // ==================================================================
-    async function exportAs(fmt, btn) {
+    async function exportAs(fmt, btn, label) {
         var qs = rangeOn()
             ? 'start=' + encodeURIComponent(RANGE.start) + '&end=' + encodeURIComponent(RANGE.end)
             : 'days=' + DAYS;
-        var old = btn.textContent;
+        var lab = label || btn;       // ZH: 下拉按鈕裡還有 ▾，只換文字那一段
+        var old = lab.textContent;
         btn.disabled = true;
-        btn.textContent = T('an_exporting', '匯出中…');
+        lab.textContent = T('an_exporting', '匯出中…');
         try {
             // ZH: v4.24 收斂到 AdminDownload（唯一真相，見 admin-chrome.js）
             await AdminDownload('/external-ai/admin/consumption/export?fmt=' + fmt + '&' + qs,
@@ -1143,12 +1148,14 @@
             alert(T('an_export_fail', '匯出失敗（{w}）').replace('{w}', e.message));
         } finally {
             btn.disabled = false;
-            btn.textContent = old;
+            lab.textContent = old;
         }
     }
 
-    $('x-xlsx').addEventListener('click', function () { exportAs('xlsx', $('x-xlsx')); });
-    $('x-csv').addEventListener('click', function () { exportAs('csv', $('x-csv')); });
+    // ZH: v4.44「匯出中…」寫在下拉按鈕上 —— 選單項一點就收起來，寫在它身上看不到。
+    $('x-xlsx').addEventListener('click', function () { exportAs('xlsx', $('x-btn'), $('x-label')); });
+    $('x-csv').addEventListener('click', function () { exportAs('csv', $('x-btn'), $('x-label')); });
+    AdminDropdown($('x-btn'), $('x-menu'));
 
     $('sync').addEventListener('click', syncNow);
     wireRange();

@@ -1226,11 +1226,48 @@ def _cell_str(v) -> str:
         return ""
     if isinstance(v, float) and v.is_integer():
         return str(int(v))
+    # ZH: v4.44 到期日欄 —— Excel 裡打的日期是日期型，str() 會變成
+    #     `2026-12-31 00:00:00`。這裡統一成 YYYY-MM-DD。
+    if isinstance(v, (datetime, ddate)):
+        return v.strftime("%Y-%m-%d")
     return str(v).strip()
 
 
+# ZH: v4.44 到期日搬進檔案（擁有者 2026-10-30）—— 每一列自己的到期日。
+#     🔴 空白**不是**永久：要永久就明寫「永久」。理由與原本整批那個二選一相同 ——
+#     「忘了填」不能安靜地變成「開了一批永遠不會消失的帳號」。
+#     舊範例檔（4 欄）匯進來時每一列都會因此被擋下，而不是被當成永久。
+_IMPORT_FOREVER_WORDS = ("永久", "不到期", "permanent", "never", "forever")
+
+
+def _parse_row_expiry(raw: str):
+    """ZH: 一列的到期日 → (date 或 None＝永久, 錯誤訊息或 None)。
+
+    ZH: 接受 2026-12-31、2026/12/31、2026.12.31（月日可不補零）；
+        過去的日子照單筆的規則擋（schemas._check_expires_on）。
+
+    @node job-scheduler/app/routers/admin.py::_parse_row_expiry
+    """
+    t = (raw or "").strip()
+    if not t:
+        return None, "到期日空白（填日期，或寫「永久」）"
+    if t.lower() in _IMPORT_FOREVER_WORDS:
+        return None, None
+    t = t.split(" ")[0].replace("/", "-").replace(".", "-")
+    try:
+        y, m, d = (int(x) for x in t.split("-"))
+        when = ddate(y, m, d)
+    except ValueError:
+        return None, "到期日看不懂（YYYY-MM-DD，或寫「永久」）"
+    try:
+        schemas._check_expires_on(when)
+    except ValueError:
+        return None, "到期日已經過了"
+    return when, None
+
+
 def _parse_import_file(filename: str, blob: bytes) -> list:
-    """ZH: 把上傳的 CSV / XLSX 解成列（[username, email, password, role] 字典）。
+    """ZH: 把上傳的 CSV / XLSX 解成列（username, email, password, role, expires 字典）。
 
     ZH: CSV 編碼：先試 utf-8-sig，再退 cp950 —— 台灣的 Excel 存 CSV
         預設是 Big5，不接的話中文身分欄會整批亂碼。
@@ -1268,13 +1305,14 @@ def _parse_import_file(filename: str, blob: bytes) -> list:
 
     rows = []
     for i, cells in enumerate(grid):
-        c = list(cells) + [""] * (4 - len(cells))
-        if not any(x for x in c[:4]):
+        c = list(cells) + [""] * (5 - len(cells))
+        if not any(x for x in c[:5]):
             continue
         if i == 0 and c[0].strip().lower() in _IMPORT_HEADERS:
             continue
         rows.append({"username": c[0], "email": c[1],
-                     "password": c[2], "role": c[3] or "student"})
+                     "password": c[2], "role": c[3] or "student",
+                     "expires": c[4]})
     return rows
 
 
@@ -1289,9 +1327,13 @@ def temp_import_template(
     @node job-scheduler/app/routers/admin.py::temp_import_template
     """
     from fastapi.responses import Response
-    header = ["帳號名稱", "信箱(可空)", "密碼(可空=系統產生)", "身分(學生/老師/職員/訪客)"]
-    demo = [["visitor01", "guest01@example.edu", "Str0ngPa55", "訪客"],
-            ["visitor02", "", "", "訪客"]]
+    header = ["帳號名稱", "信箱(可空)", "密碼(可空=系統產生)", "身分(學生/老師/職員/訪客)",
+              "到期日(YYYY-MM-DD 或 永久)"]
+    # ZH: v4.44 示範日期用「今天 +30 天」現算 —— 寫死的日期總有一天會變成過去，
+    #     那時照著範例填的人會整批被擋，卻看不出為什麼。
+    soon = (schemas.tw_today() + timedelta(days=30)).isoformat()
+    demo = [["visitor01", "guest01@example.edu", "Str0ngPa55", "訪客", soon],
+            ["visitor02", "", "", "訪客", "永久"]]
     if fmt == "xlsx":
         import openpyxl
         from io import BytesIO
@@ -1302,7 +1344,7 @@ def temp_import_template(
         for r in demo:
             ws.append(r)
         # ZH: 欄寬撐開，不然打開來全被截字。
-        for col, w in zip("ABCD", (16, 28, 24, 28)):
+        for col, w in zip("ABCDE", (16, 28, 24, 28, 28)):
             ws.column_dimensions[col].width = w
         buf = BytesIO()
         wb.save(buf)
@@ -1444,11 +1486,9 @@ async def import_temp_users(
     request: Request,
     file: UploadFile = File(...),
     purpose: str = Form(...),
-    # ZH: v4.28 —— 與單筆建立同契約：到期日與「永久」**二選一，而且一定要選一個**
-    #     （擁有者 2026-09-24）。所以 expires_on 從必填改成可空，
-    #     但「兩個都不給」仍然是錯 —— 理由見下面的驗證。
-    expires_on: str = Form(""),
-    never_expires: bool = Form(False),
+    # ZH: v4.44 到期日搬進檔案的第 5 欄（擁有者 2026-10-30），每一列自己的。
+    #     原本的 expires_on / never_expires 表單欄位拿掉了 —— 兩個地方都能填的話，
+    #     衝突時聽誰的就成了一個沒有人說得準的問題。
     dry_run: bool = Form(False),
     # ZH: v4.20 —— 整批順手開通 MYAI（與單筆那支同一個契約：兩平台同一組密碼）。
     provision_myai: bool = Form(False),
@@ -1457,14 +1497,13 @@ async def import_temp_users(
 ) -> Any:
     """
     ZH: 批次建立臨時帳號（擁有者需求 2026-09-02，改檔案匯入 2026-09-03）。
-        上傳 CSV 或 XLSX：每列 名稱/信箱/密碼/身分；用途與到期日整批共用。
+        上傳 CSV 或 XLSX：每列 名稱/信箱/密碼/身分/到期日；用途整批共用。
         `dry_run=true` 只驗證回報、不寫入。範例檔見 import-template 端點。
 
-    ZH: v4.28 `never_expires=true` 時整批都不設到期日（與一般帳號同形）。
+    ZH: v4.44 到期日改成**每一列**自己的（第 5 欄：日期，或「永久」）。
+        同一個檔案裡可以有些永久、有些有期限。空白一律擋 —— 見 _parse_row_expiry。
         用途（purpose）**仍然必填** —— 永久的臨時帳號如果連理由都沒有，
         半年後就沒有人敢刪它，那正是這個欄位當初存在的原因。
-        🔴 到期日是「整批共用」的欄位，所以永久也是整批的決定：
-        同一個檔案裡不能有些永久有些不永久。要混的話分兩次匯入。
 
     ZH: 🔴 **全有或全無**：任何一列驗不過就整批不建（400 帶逐列錯誤）。
         建到一半停下來的話，管理者得自己對「哪幾個建了」——那正是
@@ -1485,31 +1524,11 @@ async def import_temp_users(
     """
     import secrets as _secrets
     import uuid as _uuid
-    from datetime import date as _date
 
     # ── 共用欄位驗證（multipart 拿不到 pydantic body，這裡手動對齊單筆規則）──
     purpose = (purpose or "").strip()
     if not purpose:
         raise HTTPException(status_code=400, detail="請說明這批臨時帳號的用途")
-    # ZH: 🔴 到期日與「永久」二選一 —— 與 schemas.AdminTempUserCreate.one_of_expiry
-    #     同一條規則，同一個理由：兩個都不給時**不要默默當成永久**。
-    #     那會讓「忘記填日期」變成「一口氣開了 50 個永遠不會消失的帳號」，
-    #     而且沒有任何人會發現（批次比單筆更慘，正因為是一口氣）。
-    #     ⚠ 這裡不能重用 pydantic —— multipart 拿不到 body model，只能手動對齊。
-    expires_on = (expires_on or "").strip()
-    if never_expires and expires_on:
-        raise HTTPException(status_code=400, detail="勾了「永久有效」就不要再填到期日")
-    if not never_expires and not expires_on:
-        raise HTTPException(status_code=400, detail="請填到期日，或勾選「永久有效」")
-    exp_date = None
-    if not never_expires:
-        try:
-            exp_date = _date.fromisoformat(expires_on)
-            schemas._check_expires_on(exp_date)
-        except ValueError as e:
-            raise HTTPException(status_code=400, detail=str(e) or "到期日格式不對（YYYY-MM-DD）")
-    # ZH: 永久 = None，與一般帳號同形（不是一個很遠的日期）。
-    expires_at = None if exp_date is None else schemas.expires_on_to_utc(exp_date)
 
     blob = await file.read()
     try:
@@ -1556,6 +1575,9 @@ async def import_temp_users(
             problems.append("密碼太長（上限 20 字，MYAI 廠商的規則）")
         if provision_myai and not email:
             problems.append("要開通 MYAI 但沒有 Email")
+        exp_date, exp_err = _parse_row_expiry(row.get("expires", ""))
+        if exp_err:
+            problems.append(exp_err)
         role = _IMPORT_ROLES.get(role_raw.lower() if role_raw.isascii() else role_raw)
         if role is None:
             problems.append("身分看不懂（可用：學生/老師/職員/訪客）")
@@ -1563,6 +1585,9 @@ async def import_temp_users(
             errors += 1
         report.append({"line": i, "username": uname, "role": role,
                        "has_email": bool(email), "will_generate_pw": not pw,
+                       # ZH: 預覽要看得到每一列建到哪天 —— 永久是不可逆的決定。
+                       "expires_on": exp_date.isoformat() if exp_date else None,
+                       "never_expires": exp_date is None and not exp_err,
                        "errors": problems})
 
     if dry_run or errors:
@@ -1583,6 +1608,9 @@ async def import_temp_users(
         pw = pw_given or _secrets.token_urlsafe(9)
         role_raw = row["role"].strip() or "student"
         role = _IMPORT_ROLES[role_raw.lower() if role_raw.isascii() else role_raw]
+        # ZH: 驗證那一輪已經擋掉所有錯的，這裡一定解得出來。永久 = None（與一般帳號同形）。
+        exp_date, _ = _parse_row_expiry(row.get("expires", ""))
+        expires_at = None if exp_date is None else schemas.expires_on_to_utc(exp_date)
         user = models.User(
             id=str(_uuid.uuid4()),
             username=uname,
@@ -1612,6 +1640,7 @@ async def import_temp_users(
         ))
         created.append({"username": uname, "role": role,
                         "has_email": bool(email_given),
+                        "expires_on": exp_date.isoformat() if exp_date else None,
                         # ZH: 只有系統產生的才回明文（見 docstring）。
                         "password": (None if pw_given else pw),
                         # ZH: v4.20 —— 開通要等帳號寫進 DB 之後才跑，先佔位。
@@ -1641,13 +1670,12 @@ async def import_temp_users(
         row.pop("_user", None)
         row.pop("_pw", None)
 
-    logger.info("批次匯入臨時帳號 %d 個（到期 %s，用途：%s，檔案 %s）by %s",
-                len(created), exp_date.isoformat() if exp_date else "永久", purpose,
-                file.filename, admin.username)
+    forever = sum(1 for r in created if r["expires_on"] is None)
+    logger.info("批次匯入臨時帳號 %d 個（其中永久 %d，用途：%s，檔案 %s）by %s",
+                len(created), forever, purpose, file.filename, admin.username)
     return {"ok": True, "total": len(created),
-            # ZH: 永久時回 None（前端據此顯示「永久有效」，不要印一個空字串）。
-            "expires_at": expires_at.isoformat() if expires_at else None,
-            "never_expires": expires_at is None,
+            # ZH: 永久的有幾個 —— 完成畫面要講出來（到期日可以延，永久卻要逐一改回去）。
+            "never_expires_count": forever,
             "created": created}
 
 
