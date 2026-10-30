@@ -123,6 +123,46 @@
             .some(function (v) { return v && String(v).toLowerCase().indexOf(q) >= 0; });
     }
 
+    // ══════════════════════════════════════════════════════════════════
+    // ZH: v4.42 排序與分頁（擁有者 2026-10-30：20 人一頁、依數字大小、admin 最後）
+    // ══════════════════════════════════════════════════════════════════
+    // ZH: 帳號名幾乎都是學號／員編。用字串排的話 "9600885" 會排在 "12361114"
+    //     後面（'9' > '1'），看起來像亂的 —— 所以**數字當數字比**。
+    // ZH: 不是數字的（admin 這種）一律排最後，彼此再照字母 —— 擁有者只點名 admin，
+    //     但用「不是數字就排後面」這個判準，日後多一個 root/service 也不會跑到中間。
+    var LIST_PER_PAGE = 20;
+    var LIST_PAGE = 0;
+
+    function userSortKey(u) {
+        var name = String(u.username || '');
+        // ZH: ⚠ parseInt("12a") 會給 12 —— 要**整串都是數字**才算數字帳號。
+        return /^\d+$/.test(name) ? { num: true, v: Number(name) } : { num: false, v: name.toLowerCase() };
+    }
+
+    function sortUsers(rows) {
+        return rows.slice().sort(function (a, b) {
+            var ka = userSortKey(a), kb = userSortKey(b);
+            if (ka.num !== kb.num) return ka.num ? -1 : 1;   // ZH: 數字的在前
+            if (ka.v === kb.v) return 0;
+            return ka.v < kb.v ? -1 : 1;
+        });
+    }
+
+    function listPager(total) {
+        var pages = Math.max(1, Math.ceil(total / LIST_PER_PAGE));
+        if (pages <= 1) return '';
+        var at = LIST_PAGE + 1;
+        return '<div class="adm-inline tu-pager">'
+            + '<button class="btn btn--minor" type="button" id="pp-prev"'
+            + (at <= 1 ? ' disabled' : '') + '>' + esc(T('pf_pg_prev', '上一頁')) + '</button>'
+            + '<span class="footnote">'
+            + esc(T('pf_pg_of', '第 {a} / {b} 頁').replace('{a}', at).replace('{b}', pages))
+            + '</span>'
+            + '<button class="btn btn--minor" type="button" id="pp-next"'
+            + (at >= pages ? ' disabled' : '') + '>' + esc(T('pf_pg_next', '下一頁')) + '</button>'
+            + '</div>';
+    }
+
 
     // ZH: 臨時帳號沒填 email 時，後端會合成一個 `.invalid` 的位址
     //     （`users.email` 是 NOT NULL + UNIQUE，一定要填點什麼；
@@ -137,7 +177,11 @@
 
     function renderList() {
         var q = $('q').value.trim().toLowerCase();
-        var rows = ALL.filter(function (u) { return matches(u, q); });
+        var rows = sortUsers(ALL.filter(function (u) { return matches(u, q); }));
+        // ZH: 刪了人、或搜尋縮短清單時，目前這一頁可能已經不存在 —— 退到最後一頁。
+        var pages = Math.max(1, Math.ceil(rows.length / LIST_PER_PAGE));
+        if (LIST_PAGE > pages - 1) LIST_PAGE = pages - 1;
+        var slice = rows.slice(LIST_PAGE * LIST_PER_PAGE, (LIST_PAGE + 1) * LIST_PER_PAGE);
 
         $('count').textContent = q
             ? T('pp_count_filtered', '{n} / {t} 人')
@@ -163,7 +207,7 @@
             '<div class="adm-tablewrap"><table class="adm-table"><thead><tr>'
             + head.map(function (h) { return '<th>' + esc(T(h[0], h[1])) + '</th>'; }).join('')
             + '</tr></thead><tbody>'
-            + rows.map(function (u) {
+            + slice.map(function (u) {
                 return '<tr class="is-clickable' + (CURRENT && CURRENT.id === u.id ? ' is-picked' : '')
                     + '" data-id="' + esc(u.id) + '" tabindex="0">'
                     + '<td>' + esc(u.username) + '</td>'
@@ -174,7 +218,22 @@
                     + '<td>' + esc(u.last_login_time ? TW.when(u.last_login_time) : '—') + '</td>'
                     + '</tr>';
             }).join('')
-            + '</tbody></table></div>';
+            + '</tbody></table></div>'
+            + listPager(rows.length);
+
+        // ZH: 換頁之後重畫，剛按的那顆鈕已經不在了 —— 焦點放回同一個位置
+        //     （到頭／到尾時那顆變灰，改放另一顆），用鍵盤的人不必從頁首重新 Tab。
+        [['pp-prev', -1], ['pp-next', 1]].forEach(function (p) {
+            var b = $(p[0]);
+            if (!b) return;
+            b.addEventListener('click', function () {
+                LIST_PAGE += p[1];
+                renderList();
+                var back = $(p[0]);
+                if (back && back.disabled) back = $(p[1] < 0 ? 'pp-next' : 'pp-prev');
+                if (back && !back.disabled) back.focus();
+            });
+        });
 
         $('list').querySelectorAll('tr[data-id]').forEach(function (tr) {
             tr.addEventListener('click', function () { pick(tr.dataset.id); });
@@ -2174,6 +2233,8 @@
     $('q').addEventListener('input', function () {
         // ZH: 節流 —— 幾千人的清單每敲一個字就重畫會頓。
         clearTimeout(typing);
+        // ZH: 換關鍵字就回第一頁 —— 不然在第 5 頁搜尋會看到一片空白。
+        LIST_PAGE = 0;
         typing = setTimeout(renderList, 120);
     });
 
