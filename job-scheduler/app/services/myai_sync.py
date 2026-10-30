@@ -1243,7 +1243,11 @@ async def transfer_credit_batch(rows: list[dict], confirm_grant: bool = False) -
 
 GET_CREDIT_BATCH_PATH = "/mcu/gt_sdk/admin_168/user/get_credit_batch"
 GET_CREDIT_CHECK_PATH = "/mcu/gt_sdk/admin_168/user/get_credit_batch_check"
-GET_CREDIT_CONFIRM_PATH = "/mcu/gt_sdk/admin_168/user/get_credit_batch_result"
+# ZH: 🔴 第二段是 `_info` 不是 `_result`（與轉出**不**對稱）。2026-10-30 上線前只送第一段、
+#     從預覽頁的 <form action="get_credit_batch_info"> 讀到的；原本照轉出的命名推成 `_result`，
+#     是錯的。現在第二段送出前會再核對一次預覽頁的 action（見 _reclaim_form_action），
+#     廠商哪天改了，停在第二段之前。
+GET_CREDIT_CONFIRM_PATH = "/mcu/gt_sdk/admin_168/user/get_credit_batch_info"
 
 
 def _assert_reclaim_endpoint(path: str, confirm_reclaim: bool) -> None:
@@ -1286,6 +1290,24 @@ def _echoed_groups(html: str) -> dict:
             r'<input[^>]*\bname="([A-Za-z_]\w*)\[\]"[^>]*\bvalue="([^"]*)"', html, re.I):
         out.setdefault(name, []).append(_html.unescape(value))
     return out
+
+
+def _reclaim_form_action(html: str) -> str:
+    """ZH: 預覽頁上「確定回收」那個表單要送去哪裡（解析成絕對路徑）。
+
+    ZH: 找的是**含回吐欄位**（`name="xxx[]"`）的那個 form —— 頁首還有一個搜尋用的 form，
+        不能拿第一個就用。找不到就回空字串，由呼叫端中止。
+
+    @node job-scheduler/app/services/myai_sync.py::_reclaim_form_action
+    """
+    from urllib.parse import urljoin
+    for attrs, body in re.findall(r"<form\b([^>]*)>(.*?)</form>", html, re.I | re.S):
+        if not re.search(r'name="[A-Za-z_]\w*\[\]"', body):
+            continue
+        m = re.search(r'\baction="([^"]*)"', attrs, re.I)
+        if m:
+            return urljoin(GET_CREDIT_CHECK_PATH, m.group(1).strip())
+    return ""
 
 
 def _reclaim_echo_rows(html: str, sent: list) -> tuple:
@@ -1370,6 +1392,13 @@ async def reclaim_credit_batch(rows: list[dict], confirm_reclaim: bool = False) 
         raise MyaiSyncError(f"回收預覽回應 {r.status_code}")
 
     fields, echoed = _reclaim_echo_rows(r.text, rows)
+    # ZH: 🔴 預覽頁說要送去哪，就核對是不是我們要送的那一支 —— 不一致就停。
+    #     這一條是因為上線前把第二段的路徑猜錯過（見 GET_CREDIT_CONFIRM_PATH）。
+    action = _reclaim_form_action(r.text)
+    if action != GET_CREDIT_CONFIRM_PATH:
+        raise MyaiSyncError(
+            f"廠商回收預覽頁的確認表單送往「{action or '（找不到）'}」，"
+            f"不是預期的 {GET_CREDIT_CONFIRM_PATH} —— 已中止，未扣任何點數")
     enc = _urlencoded(echoed, fields)
 
     async def _confirm(client):

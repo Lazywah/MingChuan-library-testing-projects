@@ -125,6 +125,75 @@ def test_echo_rows_abort_when_the_preview_disagrees(html, why):
     assert "未扣任何點數" in str(e.value), why
 
 
+# ── 預覽頁的確認表單送往哪裡 ──────────────────────────────────────────
+
+# ZH: 2026-10-30 廠商實際回傳的形狀（只留結構）：頁首有一個搜尋用的 form，
+#     真正的確認表單是第二個，action 是**相對路徑**。
+_REAL_PREVIEW = (
+    '<form action="/mcu/gt_sdk/admin_168/user/" method="get" autocomplete="off">'
+    '<input type="text" name="search" value=""></form>'
+    '<form action="get_credit_batch_info" method="post" autocomplete="off">'
+    '<input type="text" readonly name="emails[]" value="a@x.com" />'
+    '<input type="text" readonly name="transferPoints[]" value="100" />'
+    '<input type="hidden" name="remarks[]" value="t" />'
+    '<input type="submit" value="確認" /></form>')
+
+
+def test_form_action_is_the_confirm_form_not_the_search_form():
+    assert M._reclaim_form_action(_REAL_PREVIEW) == M.GET_CREDIT_CONFIRM_PATH
+
+
+def test_confirm_path_is_info_not_result():
+    """ZH: 🔴 與轉出**不**對稱 —— 照轉出的命名推成 `_result` 是錯的（上線前抓到的）。"""
+    assert M.GET_CREDIT_CONFIRM_PATH.endswith("/get_credit_batch_info")
+
+
+class _Resp:
+    def __init__(self, text):
+        self.status_code = 200
+        self.text = text
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("page", [
+    _REAL_PREVIEW.replace("get_credit_batch_info", "get_credit_batch_somethingelse"),
+    _REAL_PREVIEW.replace(' action="get_credit_batch_info"', ""),
+])
+async def test_unexpected_form_action_stops_before_phase_two(monkeypatch, page):
+    """ZH: 🔴 預覽頁的表單送往別處（或找不到）→ 第二段**一次都不能送**。"""
+    calls = []
+
+    async def fake_session(fn, valid):
+        calls.append(fn)
+        return _Resp(page)
+
+    monkeypatch.setattr(M, "_session_request", fake_session)
+    with pytest.raises(M.MyaiSyncError, match="未扣任何點數"):
+        await M.reclaim_credit_batch([{"email": "a@x.com", "points": 100, "remark": "t"}],
+                                     confirm_reclaim=True)
+    assert len(calls) == 1, "只能有第一段（預覽）"
+
+
+@pytest.mark.asyncio
+async def test_matching_form_action_goes_to_the_confirm_path(monkeypatch):
+    """ZH: 對得上才送第二段，而且送往 GET_CREDIT_CONFIRM_PATH。"""
+    posted = []
+
+    class _Client:
+        async def post(self, path, **kw):
+            posted.append(path)
+            return _Resp(_REAL_PREVIEW)
+
+    async def fake_session(fn, valid):
+        return await fn(_Client())
+
+    monkeypatch.setattr(M, "_session_request", fake_session)
+    out = await M.reclaim_credit_batch([{"email": "a@x.com", "points": 100, "remark": "t"}],
+                                       confirm_reclaim=True)
+    assert posted == [M.GET_CREDIT_CHECK_PATH, M.GET_CREDIT_CONFIRM_PATH]
+    assert out["reclaimed"] is True
+
+
 # ── 單人回收 ─────────────────────────────────────────────────────────
 
 @pytest.mark.asyncio
