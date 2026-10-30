@@ -22,7 +22,7 @@ from conftest import make_user, auth_headers
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent / "job-scheduler"))
 from app import crud, models   # noqa: E402
-from app.schemas import tw_today, expires_on_to_utc, TEMP_ACCOUNT_MAX_DAYS   # noqa: E402
+from app.schemas import tw_today, expires_on_to_utc   # noqa: E402
 
 
 @pytest.fixture
@@ -94,15 +94,15 @@ def test_purpose_is_required(client, db, admin_headers):
     assert _create(client, admin_headers, purpose="   ").status_code == 422
 
 
-def test_expiry_date_has_an_upper_bound(client, db, admin_headers):
-    """ZH: 超過 90 天就不叫臨時了，應該走正式開帳號的流程。
+def test_expiry_date_has_no_upper_bound(client, db, admin_headers):
+    """ZH: v4.42 拿掉 90 天上限（擁有者 2026-10-30）——一門課的帳號本來就會跨整個學期。
 
-    ZH: 兩個邊界都釘：第 90 天要過、第 91 天要擋。
-        只釘一邊的話，一個差一的錯誤只會被拓到一半。
+    ZH: 這一條原本是反過來的（第 90 天過、第 91 天擋）。上限拿掉之後它會**反向通過**，
+        所以不是刪掉而是改寫成新的契約：遠到離譜的日期也要收。
     """
-    assert _create(client, admin_headers, expires_on=_day(TEMP_ACCOUNT_MAX_DAYS)).status_code == 200
+    assert _create(client, admin_headers, expires_on=_day(91)).status_code == 200
     assert _create(client, admin_headers, username="guest2",
-                   expires_on=_day(TEMP_ACCOUNT_MAX_DAYS + 1)).status_code == 422
+                   expires_on=_day(365 * 3)).status_code == 200
 
 
 def test_expiry_date_cannot_be_in_the_past(client, db, admin_headers):
@@ -156,11 +156,39 @@ def _expire(db, username="guest1"):
 
 
 def test_expired_account_cannot_log_in(client, db, admin_headers):
-    """ZH: 🔴 到期就登不進來 —— 即時，不等排程。"""
+    """ZH: 🔴 到期就登不進來 —— 即時，不等排程。
+
+    ZH: v4.42 回的是 **403 ＋ 說得出原因的訊息**（擁有者 2026-10-30），
+        不再是跟打錯密碼同一句的 401。這支原本釘 401，那正是這次要換掉的契約。
+    """
     pw = _create(client, admin_headers).json()["password"]
     _expire(db)
     r = client.post("/api/v1/auth/login", data={"username": "guest1", "password": pw})
+    assert r.status_code == 403, r.text
+    detail = r.json()["detail"]
+    assert "使用期限" in detail and "聯絡管理員" in detail, detail
+    assert "沒有被刪除" in detail, "要講出資料還在 —— 不然使用者以為帳號被砍了"
+
+
+def test_wrong_password_on_an_expired_account_still_says_nothing(client, db, admin_headers):
+    """ZH: 🔴 密碼不對時**不能**洩漏「這個帳號存在而且到期了」。
+
+    ZH: 只憑帳號名就回「已到期」的話，外面可以用它來列舉帳號。
+        所以那句話只在密碼已經驗過才出現。
+    """
+    _create(client, admin_headers)
+    _expire(db)
+    r = client.post("/api/v1/auth/login", data={"username": "guest1", "password": "wrong-one"})
     assert r.status_code == 401, r.text
+    assert "使用期限" not in r.json()["detail"]
+
+
+def test_unknown_account_is_indistinguishable(client, db, admin_headers):
+    """ZH: 不存在的帳號與打錯密碼回同一句話（與上一條同一個理由）。"""
+    r = client.post("/api/v1/auth/login",
+                    data={"username": "no-such-user", "password": "whatever"})
+    assert r.status_code == 401
+    assert "使用期限" not in r.json()["detail"]
 
 
 def test_token_issued_before_expiry_stops_working(client, db, admin_headers):

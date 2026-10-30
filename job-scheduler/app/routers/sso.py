@@ -34,7 +34,7 @@ from ..crud import (
     create_sso_user,
     upgrade_to_sso,
 )
-from ..auth import create_access_token
+from ..auth import create_access_token, expired_detail, is_expired
 from ..config import SSO_POLICY, mock_login_allowed, OIDC_ENABLED
 from ..sso_client import get_sso_client, build_oidc_client_if_enabled
 from ..services import alma_service
@@ -144,12 +144,18 @@ def _finalize_sso_login(db: Session, user_info: dict, request: Request = None) -
         alma_role = bool(alma and alma.get("role"))
         user.role_source = "alma" if alma_role else "sso_email"
         db.commit()
-        # ZH: v4.2 預填初次設定（校區/學系/單位）——對得上組織表才寫，
-        #     彈窗照出、本人確認才算完成（onboarded_at 仍由彈窗送出時設）。
+        # ZH: v4.2 預填（校區/學系/單位/常用信箱）——對得上組織表才寫。
+        # ZH: v4.42 預填完就把 onboarded_at 蓋下去（擁有者 2026-10-30）：
+        #     初次登入的彈窗已經整個拿掉了（本來只剩常用信箱，而那一欄 Alma 會給），
+        #     沒有人會再送出它。不蓋的話 onboarded_at 永遠是 NULL，而
+        #     crud.complete_onboarding 把 NULL 當成「初次設定」——
+        #     日後管理者開放一次修改時，那支會走到不檢查解鎖範圍的那一條路。
         if alma:
             applied = crud.apply_alma_profile(db, user, alma)
             if applied:
                 logger.info("Alma 預填 %s：%s", username, "、".join(applied))
+        user.onboarded_at = datetime.now(timezone.utc)
+        db.commit()
         logger.info("SSO 首次登入，建立帳號 username=%s auth_source=%s role=%s(%s)",
                     username, auth_source, role,
                     "Alma user_group=%s" % alma.get("user_group") if alma_role
@@ -198,6 +204,14 @@ def _finalize_sso_login(db: Session, user_info: dict, request: Request = None) -
             status_code=403,
             detail="您的帳號已被停權，無法登入。如有疑問請聯絡管理員。",
         )
+
+    # ZH: v4.42 到期檢查（擁有者 2026-10-30）。🔴 在此之前 SSO 這條路**完全沒看到期**：
+    #     排程還沒把 is_active 設成 0 的那段空窗，到期帳號照樣拿得到 token、被導進平台，
+    #     然後每一個 API 都 403 —— 畫面上像「系統壞了」，而不是「你的帳號到期了」。
+    #     （本機登入那條路一直都有擋，見 auth.authenticate_user。）
+    if is_expired(user):
+        logger.info("已到期帳號嘗試 SSO 登入: %s", user.username)
+        raise HTTPException(status_code=403, detail=expired_detail(user))
 
     # v2.1 修補：SSO 登入也要寫 last_login_* + last_activity（本機 /login 有寫但 SSO 之前漏寫）
     try:

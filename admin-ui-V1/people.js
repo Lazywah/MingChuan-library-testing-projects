@@ -224,9 +224,9 @@
             + '<p class="footnote">' + esc(T('tmp_purpose_hint',
                 '例如「教育部訪視 2026-09-03」。半年後看到一個沒有用途的帳號，沒有人敢刪它。')) + '</p>'
             + field('t-expires', T('tmp_expires_on', '到期日'), twDay(1), 'date',
-                    ' min="' + twDay(0) + '" max="' + twDay(TEMP_MAX_DAYS) + '"')
+                    ' min="' + twDay(0) + '"')
             + '<p class="footnote">' + esc(T('tmp_expires_hint',
-                '選到哪一天，帳號就用到那天結束（台灣時間）。最多 90 天。')) + '</p>'
+                '選到哪一天，帳號就用到那天結束（台灣時間）。')) + '</p>'
             // ZH: v4.20 永久有效（擁有者 2026-09-21）—— 勾了就不設到期日，
             //     與一般帳號同形。用途仍然必填：永久的帳號更需要有人說得出它為什麼在。
             + '<label class="adm-inline" style="margin:.25rem 0 .5rem">'
@@ -391,12 +391,10 @@
         var out = '<span class="adm-pill adm-pill--' + (u.is_active ? 'ok' : 'disabled') + '">'
             + esc(u.is_active ? T('pp_active', '啟用') : T('pp_inactive', '已停用')) + '</span>';
         if (!u.expires_at) {
-            // ZH: v4.20 永久的臨時帳號 —— 沒有到期日，但仍然是為了某個用途開的。
-            //     不標的話它跟一般帳號長得一模一樣，而那正是這個標示要防的事。
-            if (u.temp_purpose) {
-                out += ' <span class="adm-pill adm-pill--temp" title="' + esc(u.temp_purpose) + '">'
-                    + esc(T('tmp_forever_pill', '永久（手動建立）')) + '</span>';
-            }
+            // ZH: v4.42 永久的臨時帳號**不再標**（擁有者 2026-10-30）：
+            //     只有真的有到期日的才顯示到期資訊。v4.20 加這顆標籤的理由是
+            //     「不標就跟一般帳號長得一樣」，但永久帳號本來就等同一般帳號，
+            //     而用途仍然查得到（詳細面板的臨時帳號卡片）。
             return out;
         }
 
@@ -444,7 +442,6 @@
         return TW.date(new Date(Date.now() + (offsetDays || 0) * 86400000));
     }
 
-    var TEMP_MAX_DAYS = 90;   // ZH: 與後端 schemas.TEMP_ACCOUNT_MAX_DAYS 一致
 
 
     // ZH: 臨時帳號的延期。放在詳細面板裡而不是清單上 ——
@@ -453,57 +450,79 @@
     // ZH: 🔴 這個功能存在的理由很具體：使用者送了訓練、帳號在跑完之前到期。
     //     （任務本身照樣跑完 —— 派工不檢查帳號狀態 —— 但他登不進來拿結果。）
     function tempCard(u) {
-        var gone = Date.parse(u.expires_at) <= Date.now();
+        // ZH: v4.42 改成永久之後 expires_at 是 null —— Date.parse(null) 是 NaN，
+        //     NaN <= now 為 false，所以不會誤標「已到期」；寫出來是因為下面還要用它。
+        var forever = !u.expires_at;
+        var gone = !forever && Date.parse(u.expires_at) <= Date.now();
         return '<section class="adm-card adm-card--temp">'
             + '<div class="adm-card__title">' + esc(T('tmp_ext_title', '臨時帳號')) + '</div>'
             + '<div class="kv"><span class="kv__k">' + esc(T('tmp_ext_purpose', '用途')) + '</span>'
             + '<span class="kv__v">' + esc(u.temp_purpose || '—') + '</span></div>'
             + '<div class="kv"><span class="kv__k">' + esc(T('tmp_ext_until', '到期')) + '</span>'
-            + '<span class="kv__v">' + esc(TW.dateTime(u.expires_at))
+            + '<span class="kv__v">'
+            + esc(forever ? T('tmp_ext_never', '不到期（永久有效）') : TW.dateTime(u.expires_at))
             + (gone ? '　<span class="adm-pill adm-pill--expired">'
                 + esc(T('tmp_expired', '已到期')) + '</span>' : '')
             + '</span></div>'
             + '<div class="adm-inline">'
             + '<input class="field__input" id="x-expires" type="date"'
-            + ' min="' + twDay(0) + '" max="' + twDay(TEMP_MAX_DAYS) + '"'
-            // ZH: 預填現在的到期日（已過期就拉到今天）——
-            //     管理者看到的是「現在到哪天」，然後把它往後拉。
-            + ' value="' + esc(extendDefault(u)) + '"'
+            + ' min="' + twDay(0) + '"'
             + ' aria-label="' + esc(T('tmp_ext_until_new', '新的到期日')) + '">'
             + '<button class="btn btn--minor" type="button" id="x-go">'
             + esc(T('tmp_ext_go', '延期')) + '</button>'
             + '</div>'
+            // ZH: v4.42 延期也可以改成永久（擁有者 2026-10-30）——
+            //     以前只能選日期，想讓一個臨時帳號轉正只好設一個很遠的日子，
+            //     而那種帳號到期時沒有人記得它為什麼在。
+            + '<label class="adm-inline">'
+            +   '<input type="checkbox" id="x-forever"> '
+            +   '<span>' + esc(T('tmp_ext_forever', '改成永久有效（不設到期日）')) + '</span>'
+            + '</label>'
             + '<div class="inline-error" id="x-msg" hidden></div>'
             + '</section>';
     }
 
 
-    // ZH: 延期欄位的預設值。字串比大小對 ISO 日期是正確的（等寬、大小端序）。
-    function extendDefault(u) {
-        var today = twDay(0);
-        var cur = u.expires_at ? TW.date(u.expires_at) : '';
-        return (!cur || cur < today) ? today : cur;
-    }
+    // ZH: v4.42 延期的日期欄**留空**（擁有者 2026-10-30）。
+    //     以前預填目前的到期日（過期就拉到今天），但那看起來像「已經幫你選好了」——
+    //     按下去才發現延到今天就結束。留空＝一定要自己挑一天，誤會不了。
+    //     目前的到期日就在上面那一行（「到期 …」），要參考看得到。
 
 
     function wireExtend(u) {
+        // ZH: 勾了永久就不該再挑日期（後端兩個都給會 422）——把日期欄鎖起來並清空。
+        $('x-forever').addEventListener('change', function () {
+            var on = $('x-forever').checked;
+            $('x-expires').disabled = on;
+            if (on) $('x-expires').value = '';
+        });
         $('x-go').addEventListener('click', function () {
-            var expiresOn = $('x-expires').value;
+            var forever = $('x-forever').checked;
+            var expiresOn = forever ? '' : $('x-expires').value;
+            if (!forever && !expiresOn) {
+                say('x-msg', T('tmp_ext_need', '請選一個到期日，或勾「改成永久有效」。'));
+                return;
+            }
+            say('x-msg', '');
             // ZH: v4.10b 延長＝把一個可能已經到期關掉的帳號重新打開
             //     （後端會把 is_active 設回 1）—— 算對帳號的操作，要確認。
-            targetConfirm(T('tmp_ext_title', '確認延長'), null, u.username,
-                          async function (name) { await sendExtend(u, expiresOn, name); });
+            targetConfirm(T('tmp_ext_title', '確認延長'),
+                          forever ? T('tmp_ext_forever_warn',
+                              '這個帳號將**不再到期**，與一般帳號一樣。') : null,
+                          u.username,
+                          async function (name) { await sendExtend(u, expiresOn, name, forever); });
         });
     }
 
-    async function sendExtend(u, expiresOn, name) {
+    async function sendExtend(u, expiresOn, name, forever) {
         {
             try {
                 var out = await api('/admin/users/' + encodeURIComponent(u.id) + '/extend', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ expires_on: expiresOn,
-                                           confirm_username: name }),
+                    body: JSON.stringify(forever
+                        ? { never_expires: true, confirm_username: name }
+                        : { expires_on: expiresOn, confirm_username: name }),
                 });
                 // ZH: 後端會順手把 is_active 設回 1（排程可能已經停用它），
                 //     所以本地的兩個欄位都要跟著更新，否則清單還顯示舊狀態。
@@ -511,8 +530,11 @@
                 u.is_active = 1;
                 renderList();
                 renderDetail();
-                flash('x-msg', T('tmp_ext_done', '已延到 {d}')
-                    .replace('{d}', TW.dateTime(out.expires_at)));
+                // ZH: 改成永久時 expires_at 是 null —— 丟給 TW.dateTime 會變成空白，
+                //     看起來像「延到了，但不知道延到哪天」。兩種結果分開講。
+                flash('x-msg', out.expires_at
+                    ? T('tmp_ext_done', '已延到 {d}').replace('{d}', TW.dateTime(out.expires_at))
+                    : T('tmp_ext_done_forever', '已改成永久有效（不再到期）。'));
             } catch (e) {
                 // ZH: 丟回 targetConfirm 顯示在彈窗裡（彈窗不關，不用重打）。
                 throw new Error(T('tmp_ext_fail', '延期失敗（{w}）').replace('{w}', e.message));
@@ -1586,7 +1608,7 @@
             +   '<span>' + esc(T('tmpi_myai', '同時開通 MYAI 帳號（每一列都要有 Email；密碼與該列同一組）')) + '</span>'
             + '</label>'
             + field('ti-expires', T('tmp_expires_on', '到期日'), twDay(1), 'date',
-                    ' min="' + twDay(0) + '" max="' + twDay(TEMP_MAX_DAYS) + '"')
+                    ' min="' + twDay(0) + '"')
             // ZH: v4.28 永久有效（擁有者 2026-09-24）—— 與單筆那個勾同一個契約。
             //     ⚠ 這是**整批**的決定：同一個檔案裡不能有些永久有些不永久
             //     （到期日本來就是整批共用的欄位）。要混就分兩次匯入。

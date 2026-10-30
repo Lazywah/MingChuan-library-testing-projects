@@ -1090,31 +1090,23 @@
     //     後端做完了、管理端介面做完了,使用者那邊卻打不開表單。）
     async function maybeShowOnboarding(me) {
         if (!me) return;
-        var unlock = me.onboarded_at ? (me.profile_unlock || null) : null;
         // ══════════════════════════════════════════════════════════════
-        // ZH: v4.13 初次登入**只問常用信箱**（擁有者裁定 2026-09-11）。
+        // ZH: v4.42 **初次登入什麼都不問了**（擁有者裁定 2026-10-30）。
         //
-        // ZH: 為什麼拿掉校區／學系／單位：擔心使用者亂填。這些欄位在
-        //     建號當下已由 Alma 預填（apply_alma_profile），準確度比人自己
-        //     挑高得多；Alma 沒有的少數人留白，由管理者補。
-        //     填錯的代價不對稱 —— 一個亂填的學系會靜靜地汙染所有依組織的
-        //     統計，而沒有人看得出那一筆是錯的。
+        // ZH: v4.13 起只剩「常用信箱」一欄，而那一欄 Alma 本來就會給：
+        //     建號當下 crud.apply_alma_profile 寫一次，之後 alma_service
+        //     的定期回填再補一次（兩支都是「空的才寫」）。問等於多擋一個畫面，
+        //     而且使用者打錯字的機會比 Alma 給錯高。
+        // ZH: Alma 查不到信箱的人留空 —— 通知信照樣會寄到學校信箱
+        //     （crud 取信箱時 contact_email 空就退回 email），
+        //     而且帳號選單裡隨時可以自己設。
         //
-        // ZH: 🔴 v4.9 的「補填」模式（組織空著就再問一次）**一併移除**。
-        //     使用者端已經完全不碰組織欄位了，再問也沒有東西可以問；
-        //     要更正一律走「管理員開放一次修改」（下面的 unlock 模式）。
+        // ZH: 🔴 所以這個彈窗現在**只有一種模式**：管理者核可的一次修改（unlock）。
+        //     不再看 onboarded_at —— 新帳號在建號時就由 sso.py 蓋好
+        //     （Alma 已經填完該填的），而舊帳號本來就全部有值。
         // ══════════════════════════════════════════════════════════════
-        if (me.onboarded_at && !unlock) return;   // ZH: 設定過、也沒開放修改 → 不問
-
-        // ZH: 🔴 訪客完全不問（擁有者裁定 2026-09-11）。
-        //     訪客是管理者建立的臨時帳號，信箱在建號當下就填過了
-        //     （匯入範本有「信箱」欄）—— 再問一次常用信箱是多餘的，
-        //     而他多半只用幾天。
-        // ZH: 沒有少給他什麼：常用信箱在帳號選單裡隨時可以自己設。
-        // ZH: ⚠ 用 role 判斷不用 `expires_at` —— 臨時帳號也可能是學生或職員
-        //     （管理者匯入時可指定身分），那些人該照常被問。
-        //     不跳的理由是「訪客不屬於這裡」，不是「帳號會過期」。
-        if (me.role === 'guest' && !unlock) return;
+        var unlock = me.profile_unlock || null;
+        if (!unlock) return;
         try {
             var r = await fetch(API + '/system/org-options', { headers: authHeaders() });
             if (!r.ok) return;                       // ZH: 讀不到選項就不要擋住人
@@ -1253,12 +1245,9 @@
             +   '</div>'
             + '</div>'
             + '<h2 class="onb__title" id="onb-title">'
-            + esc(unlock ? T('onb_edit_title', '修改你的資料')
-                         : T('onb_title', '設定常用信箱')) + '</h2>'
+            + esc(T('onb_edit_title', '修改你的資料')) + '</h2>'
             + '<p class="onb__sub">'
-            + esc(unlock
-                ? T('onb_edit_sub', '管理員開放了一次修改。存檔之後會再次鎖定。')
-                : T('onb_sub', '通知信會寄到這裡。之後在帳號選單隨時可以改。')) + '</p>'
+            + esc(T('onb_edit_sub', '管理員開放了一次修改。存檔之後會再次鎖定。')) + '</p>'
             + '<p class="onb__err" id="onb-err" hidden></p>'
             + (askCampus ? '<div class="onb__field">'
             +   '<label class="onb__label" for="onb-campus">' + esc(T('onb_campus', '校區')) + '</label>'
@@ -1284,27 +1273,11 @@
                   + esc(T('onb_org_missing', '找不到我的單位？告訴管理員')) + '</a>'
                   + '</div>'
                 : '')
-            + (unlock ? '' :
-                // ZH: v4.3 常用信箱（擁有者需求 2026-09-03）：通知信寄到這裡。
-                //     選填、**不在**鎖定契約裡（之後帳號選單隨時可改），
-                //     解鎖模式不出現 —— 它本來就不需要解鎖。
-                '<div class="onb__field">'
-                + '<label class="onb__label" for="onb-contact">'
-                + esc(T('onb_contact', '常用信箱（選填）')) + '</label>'
-                + '<input class="onb__select" id="onb-contact" type="email"'
-                + ' placeholder="' + esc(T('onb_contact_ph', '留空＝用學校信箱')) + '"'
-                + ' value="' + esc((prefill && prefill.contact) || '') + '">'
-                + '<span class="onb__hint">' + esc(T('onb_contact_hint',
-                    '通知信會寄到這裡（也可以填學校信箱）。之後在帳號選單隨時可改。')) + '</span>'
-                + '</div>')
+            // ZH: v4.42 常用信箱那一欄**整塊拿掉**（連同「稍後再說」）——
+            //     初次登入已經不問了，而解鎖模式本來就不顯示它
+            //     （它不在鎖定契約裡，帳號選單隨時可改）。
             + '<button class="btn btn--primary btn--block" type="button" id="onb-go">'
-            + esc(unlock ? T('onb_next', '下一步') : T('onb_save', '儲存')) + '</button>'
-            // ZH: v4.13 「稍後再說」。常用信箱本來就是選填（留空＝用學號信箱），
-            //     而且帳號選單隨時可以改 —— 沒有理由把人卡在這裡。
-            // ZH: 解鎖模式不給：那是管理者核可的一次修改，跳過等於白核可一次。
-            + (unlock ? '' :
-               '<button class="btn btn--ghost btn--block" type="button" id="onb-later">'
-               + esc(T('onb_later', '稍後再說')) + '</button>')
+            + esc(T('onb_next', '下一步')) + '</button>'
             + '</div>';
 
         document.body.appendChild(box);

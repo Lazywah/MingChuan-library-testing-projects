@@ -1185,16 +1185,20 @@ def extend_temp_user(
         payload=json.dumps({
             # ZH: 稽核記錄要看得出管理者**選了哪一天**，
             #     而不是只留一個換算後的 UTC 時間戳。
-            "expires_on": data.expires_on.isoformat(),
-            "new_expires_at": user.expires_at.isoformat(),
+            # ZH: v4.42 改成永久時兩個都是 null，另外記一個旗標 ——
+            #     日後追「這個永久帳號是誰、什麼時候讓它永久的」就靠這一筆。
+            "expires_on": data.expires_on.isoformat() if data.expires_on else None,
+            "new_expires_at": user.expires_at.isoformat() if user.expires_at else None,
+            "never_expires": user.expires_at is None,
         }, ensure_ascii=False),
         timestamp=now,
     ))
     db.commit()
 
-    logger.info("延長臨時帳號 %s 至 %s by %s",
-                user.username, user.expires_at.isoformat(), admin.username)
-    return {"username": user.username, "expires_at": user.expires_at.isoformat()}
+    logger.info("延長臨時帳號 %s 至 %s by %s", user.username,
+                user.expires_at.isoformat() if user.expires_at else "永久", admin.username)
+    return {"username": user.username,
+            "expires_at": user.expires_at.isoformat() if user.expires_at else None}
 
 
 # ZH: 匯入時接受的身分寫法 → 平台角色。中文寫法一併收 ——

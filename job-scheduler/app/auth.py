@@ -123,6 +123,34 @@ def authenticate_user(db: Session, username: str, password: str):
     return user
 
 
+def expired_detail(user) -> str:
+    """ZH: 到期帳號看到的那句話。**只有一份**，登入（本機／SSO）與帶 token 的請求共用。
+
+    ZH: v4.42 擁有者 2026-10-30：原本三個地方各寫一句「臨時帳號已到期」，
+        使用者看完不知道下一步是什麼 —— 多少人因此以為是系統壞了。
+        現在講三件事：什麼時候到期的、資料還在、怎麼辦。
+
+    ZH: 🔴 **不要在這裡講「帳號不存在」或密碼的事** —— 這句話只在密碼已經對了
+        之後才會出現（見 routers/auth.py 的登入流程），不然等於告訴外面哪些帳號存在。
+
+    @node job-scheduler/app/auth.py::expired_detail
+    """
+    exp = getattr(user, "expires_at", None)
+    when = ""
+    if exp is not None:
+        if exp.tzinfo is None:
+            exp = exp.replace(tzinfo=timezone.utc)
+        from .gpu_schedule import TZ_TAIPEI
+        when = exp.astimezone(TZ_TAIPEI).strftime("%Y-%m-%d")
+    zh = ("這個帳號的使用期限" + ("已於 %s " % when if when else "") + "結束，所以登不進來。"
+          "帳號與你的資料都還在，沒有被刪除。需要繼續使用的話，請聯絡管理員延長期限。")
+    en = ("This account's access period has ended%s, so you cannot sign in. "
+          "Your account and data are still here - nothing was deleted. "
+          "Ask an administrator to extend it if you need more time."
+          % ((" on %s" % when) if when else ""))
+    return "ZH: %s | EN: %s" % (zh, en)
+
+
 def is_expired(user) -> bool:
     """ZH: 臨時帳號是否已經過期。
 
@@ -206,7 +234,7 @@ async def get_current_user(
     if is_expired(user):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="ZH: 臨時帳號已到期 | EN: Temporary account has expired"
+            detail=expired_detail(user)
         )
 
     # v2.1 在線狀態修正：每次 API 呼叫節流更新 last_activity（避免每 request 都寫 DB）

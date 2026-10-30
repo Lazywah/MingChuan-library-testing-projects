@@ -125,11 +125,24 @@ def test_dated_import_still_works(client, db, admin_headers):
     assert u.expires_at is not None
 
 
-def test_out_of_range_date_still_rejected(client, db, admin_headers):
-    """ZH: 90 天上限沒有因為多了「永久」而鬆掉 —— 要永久就明講永久。"""
+def test_a_far_future_date_is_accepted(client, db, admin_headers):
+    """ZH: v4.42 拿掉 90 天上限（擁有者 2026-10-30）—— 遠一點的日期也收。
+
+    ZH: 這支原本釘的是「200 天要被擋」。上限拿掉之後它會反向通過，
+        所以改寫成新的契約，而不是刪掉。
+    ZH: ⚠ **過去的日期仍然要擋** —— 見下面那一條，那條界線沒有動。
+    """
     far = (datetime.date.today() + datetime.timedelta(days=200)).isoformat()
     r = _post(client, admin_headers,
               {"purpose": "長官視察", "expires_on": far, "dry_run": "false"})
+    assert r.status_code == 200, r.text
+
+
+def test_a_past_date_is_still_rejected(client, db, admin_headers):
+    """ZH: 下限沒有跟著鬆掉：選一個過去的日子＝建一個一出生就死的帳號。"""
+    past = (datetime.date.today() - datetime.timedelta(days=1)).isoformat()
+    r = _post(client, admin_headers,
+              {"purpose": "長官視察", "expires_on": past, "dry_run": "false"})
     assert r.status_code == 400, r.text
 
 

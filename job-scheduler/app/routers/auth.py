@@ -32,7 +32,7 @@ from datetime import datetime, timedelta, timezone
 import hmac as _hmac
 
 from .. import crud, schemas, models
-from ..auth import (authenticate_user, cookie_name_for, create_access_token,
+from ..auth import (authenticate_user, cookie_name_for, create_access_token, expired_detail,
                     get_current_user, is_expired, require_admin, require_role)
 from ..config import mock_login_allowed
 from ..database import get_db
@@ -170,6 +170,16 @@ async def login(
                 break
 
     if not user:
+        # ZH: v4.42 到期的帳號**密碼是對的**，卻跟打錯密碼收到同一句話
+        #     （authenticate_user 兩種情況都回 None）—— 使用者以為自己記錯密碼，
+        #     一直重試，最後被限流擋下。擁有者 2026-10-30：講清楚。
+        # ZH: 🔴 密碼對了才講。只憑帳號名就回「已到期」等於告訴外面哪些帳號存在。
+        _u = crud.get_user_by_username(db, form_data.username)
+        if (_u is not None and _u.is_active
+                and crud.verify_password(form_data.password, _u.hashed_password)
+                and is_expired(_u)):
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,
+                                detail=expired_detail(_u))
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="ZH: 帳號或密碼錯誤 | EN: Incorrect username or password",

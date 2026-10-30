@@ -152,7 +152,9 @@ class AdminUserUpdate(BaseModel):
 # ZH: 存進 DB 的仍然是 UTC。轉換**只有這一個地方做** —— 兩支端點共用同一個函式，
 #     不要各自算（各自算的兩份遲早會差一天，而那種差異沒有人看得出來）。
 # ==============================================================================
-TEMP_ACCOUNT_MAX_DAYS = 90
+# ZH: v4.42 擁有者 2026-10-30 拿掉 90 天上限 —— 到期日只要不是過去的日子都行。
+#     原本的理由是「再長就不叫臨時了」，但實際用途（整學期的課程帳號）本來就會超過。
+#     永久仍然要明確勾「不設到期日」，不是用一個很遠的日期假裝。
 
 
 def tw_today() -> date:
@@ -172,11 +174,14 @@ def expires_on_to_utc(d: date) -> datetime:
 
 
 def _check_expires_on(v: date) -> date:
-    """ZH: 到期日必須在「今天」到「今天 +90 天」之間。
+    """ZH: 到期日不能是過去的日子。**沒有上限**（v4.42，擁有者 2026-10-30）。
 
-    ZH: 上限沿用原本 days 的 90 天 —— 再長就不叫臨時了，該走正式開帳號的流程。
     ZH: 下限是**今天**而不是明天：選今天＝「今天結束就失效」，那是合理的用法
         （臨時帳號常常就是當天用完）。
+
+    ZH: v4.42 以前上限是 90 天，理由是「再長就不叫臨時了」。實際用途推翻了它 ——
+        一門課的帳號本來就會跨整個學期。要永久仍然得明確勾「不設到期日」，
+        不要用一個很遠的日期假裝永久（那種帳號到期時沒有人記得它為什麼在）。
 
     @node job-scheduler/app/schemas.py::_check_expires_on
     """
@@ -184,10 +189,6 @@ def _check_expires_on(v: date) -> date:
     if v < today:
         raise ValueError(
             "ZH: 到期日不能早於今天 | EN: expiry date cannot be in the past")
-    if v > today + timedelta(days=TEMP_ACCOUNT_MAX_DAYS):
-        raise ValueError(
-            "ZH: 到期日最多只能設到 %d 天後 | "
-            "EN: expiry date can be at most %d days out" % (TEMP_ACCOUNT_MAX_DAYS, TEMP_ACCOUNT_MAX_DAYS))
     return v
 
 
@@ -301,26 +302,44 @@ class AdminExtendTempAccount(BaseModel):
         擁有者 2026-08-24 改成日曆：建立與延期用**同一種輸入**，
         延期就是在日曆上改成一個更後面的日子。
 
-    ZH: 舊註解擔心的「`None` 同時代表不改與永久」在新契約下不成立：
-        `expires_on` 是必填的，None 根本不會出現。
+    ZH: v4.42 可以改成**永久**（擁有者 2026-10-30）：`never_expires=True` 時
+        `expires_on` 留空，到期日整個拿掉（與建立臨時帳號那支同一個寫法）。
+        在此之前只能選一個日期，想讓一個臨時帳號轉正只能設一個很遠的日子。
 
     @node job-scheduler/app/schemas.py::AdminExtendTempAccount
     """
-    expires_on: date
+    expires_on: Optional[date] = None
+    never_expires: bool = False
     # ZH: v4.10b 對既有帳號的操作一律要打出目標帳號確認
     #     （見 admin._require_target_confirm）。
     confirm_username: Optional[str] = None
 
     @field_validator("expires_on")
     @classmethod
-    def expires_on_in_range(cls, v: date) -> date:
+    def expires_on_in_range(cls, v: Optional[date]) -> Optional[date]:
         """@node job-scheduler/app/schemas.py::AdminExtendTempAccount.expires_on_in_range"""
-        return _check_expires_on(v)
+        return v if v is None else _check_expires_on(v)
+
+    @model_validator(mode="after")
+    def one_of_date_or_never(self):
+        """ZH: 兩者**剛好給一個**。都不給等於沒說要改成什麼；
+           兩個都給的話，日期與「永久」互相矛盾，而那時要照哪一個沒有人說得準。
+
+        @node job-scheduler/app/schemas.py::AdminExtendTempAccount.one_of_date_or_never
+        """
+        if self.never_expires and self.expires_on is not None:
+            raise ValueError("ZH: 勾了永久就不要再選日期 | EN: pick a date or never, not both")
+        if not self.never_expires and self.expires_on is None:
+            raise ValueError("ZH: 請選一個到期日，或勾「改成永久有效」 | EN: pick a date, or tick never-expires")
+        return self
 
     @property
-    def expires_at_utc(self) -> datetime:
-        """@node job-scheduler/app/schemas.py::AdminExtendTempAccount.expires_at_utc"""
-        return expires_on_to_utc(self.expires_on)
+    def expires_at_utc(self) -> Optional[datetime]:
+        """ZH: 永久時回 None —— 呼叫端直接寫進 `expires_at`。
+
+        @node job-scheduler/app/schemas.py::AdminExtendTempAccount.expires_at_utc
+        """
+        return None if self.expires_on is None else expires_on_to_utc(self.expires_on)
 
 
 class AdminProvisionUser(BaseModel):
